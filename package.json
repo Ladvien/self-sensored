@@ -1,7 +1,7 @@
 {
-  "name": "healthkit_store_server",
+  "name": "self-sensored",
   "version": "0.0.1",
-  "description": "A NodeJS server meant to grab iOS HealthKit data and store it where I own it.",
+  "description": "A NodeJS server for storing all my personal sensor data.",
   "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -12,6 +12,7 @@
     "url": "git+https://github.com/Ladvien/healthkit_store_server.git"
   },
   "keywords": [
+    "sensors",
     "ios",
     "healthkit",
     "nodejs",
