@@ -1,24 +1,20 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
-const {db_connection} = require('./database/connection');
+const {connection} = require('./database/connection');
 var timeout = require('connect-timeout')
 
 // Server setup.
 var app = express();
 const port = 3000;
 
+
 // Add request parameters.
 app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', 
                   'Origin, X-Requested-With, Content-Type, Accept'); 
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    
-    connection.query('SELECT 1 + 1 AS solution', function (error, results, fields) {
-        if (error) throw error;
-        console.log('The solution is: ', results[0].solution);
-    });
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');    
     next();
 });
 
@@ -33,6 +29,10 @@ app.post('/health/:type', (req, res) => {
     try {
         switch (req.params.type) {
             case 'calories':
+                connection.query('SELECT 1 + 1 AS solution', function (error, results, fields) {
+                    if (error) throw error;
+                    console.log('The solution is: ', results[0].solution);
+                });
                 work.create(req.body)
                 .then((response) =>{
                     res.send(response);
