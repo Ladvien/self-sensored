@@ -1,0 +1,32 @@
+{
+  "name": "healthkit_store_server",
+  "version": "0.0.1",
+  "description": "A NodeJS server meant to grab iOS HealthKit data and store it where I own it.",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ladvien/healthkit_store_server.git"
+  },
+  "keywords": [
+    "ios",
+    "healthkit",
+    "nodejs",
+    "rest"
+  ],
+  "author": "C. Thomas Brittain",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Ladvien/healthkit_store_server/issues"
+  },
+  "homepage": "https://github.com/Ladvien/healthkit_store_server#readme",
+  "dependencies": {
+    "axios": "^0.19.0",
+    "body-parser": "^1.19.0",
+    "connect-timeout": "^1.9.0",
+    "express": "^4.17.1"
+  }
+}
