@@ -9,7 +9,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Ladvien/healthkit_store_server.git"
+    "url": "git+https://github.com/Ladvien/self-sensored.git"
   },
   "keywords": [
     "sensors",
@@ -21,9 +21,9 @@
   "author": "C. Thomas Brittain",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/Ladvien/healthkit_store_server/issues"
+    "url": "https://github.com/Ladvien/self-sensored/issues"
   },
-  "homepage": "https://github.com/Ladvien/healthkit_store_server#readme",
+  "homepage": "https://github.com/Ladvien/self-sensored#readme",
   "dependencies": {
     "axios": "^0.19.0",
     "body-parser": "^1.19.0",
