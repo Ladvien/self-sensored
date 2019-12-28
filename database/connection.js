@@ -15,7 +15,7 @@ var connection = mysql.createConnection({
     host: 'localhost',
     user: username,
     password: password,
-    database: 'test'
+    database: 'self_sensored'
 });
 connection.connect();
 

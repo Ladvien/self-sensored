@@ -21,6 +21,60 @@ app.use((req, res, next) => {
 // Add the middleware.
 app.use(bodyParser.json())
 
+// Create user
+app.post('/user', (req, res) => {
+    if (!req.body) { return { 'message': 'No request provided.' }};
+    try {
+        // Attempt to create a user.
+        connection.query(`INSERT INTO users SET ?;`, req.body, function (error, results, fields) {
+          if (error) {
+            // If there's an error in the insert, notify the caller.
+            res.send({"error": "User creation was unsuccessful.", "message": error });
+          }
+          if (results) {
+            // Look up the newly created record.
+            connection.query('SELECT * FROM users WHERE id = ?', results['insertId'], function(error, results, fields) {
+                if (error) {
+                    // If there's an error retrieving the new record, notify caller.
+                    res.send({"error": "User creation was unsuccessful.", "message": error});
+                }
+                // Return the new record to the user for confirmation of its creation.
+                res.send( {"success": results} );
+            });
+          }
+        });
+    } catch (err) {
+        res.send({'error': 'Error with request shape.', err})
+    }
+});
+
+// Get user.
+app.get('/user', (req, res) => {
+    if (!req.body) { return { 'message': 'No request provided.' }};
+    try {
+        console.log(req.body);
+        // Look up the newly created record.
+        connection.query('SELECT * FROM users WHERE id = ?', req.body['user_id'], function(error, results, fields) {
+            if (error) {
+                // If there's an error retrieving the new record, notify caller.
+                res.send({"error": "User creation was unsuccessful.", "message": error});
+            }
+            // Check if there was a user with that id.
+            console.log(results)
+            if (results.length > 0) {
+                // Return the new record to the user for confirmation of its creation.
+                res.send( {"user": results[0]} );
+            } else {
+                res.send({'error': `no user found with id ${req.body['user_id']}`})
+            }
+
+        });
+    } catch (err) {
+        res.send({'error': 'Error with request shape.', err})
+    }
+});
+
+
 /*
     This route will be used for storing HealthKit data.
 */
@@ -60,4 +114,4 @@ app.listen(port, () => {
 
 
    
-//   connection.end();
+// connection.end();
