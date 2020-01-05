@@ -7,6 +7,7 @@ SHOW tables;
 
 -- ############ DROP FOR REBUILD ##########
 DROP TABLE users;
+DROP TABLE activities;
 
 -- ############ USERS #####################
 
@@ -33,8 +34,8 @@ CREATE TABLE IF NOT EXISTS activities (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
     activity_type VARCHAR(255) NOT NULL,
-    date TIMESTAMP,
-	quantity INT,
+    date DATETIME,
+    quantity INT,
     quantity_type VARCHAR(255) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
