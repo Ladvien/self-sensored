@@ -5,6 +5,9 @@ USE self_sensored;
 
 SHOW tables;
 
+-- ############ DROP FOR REBUILD ##########
+DROP TABLE users;
+
 -- ############ USERS #####################
 
 -- Create users table
@@ -23,4 +26,25 @@ DESCRIBE users;
 -- Check exist records.
 SELECT * FROM users;
 
--- ############ STEPS #####################
+-- ############ ACTIVITIES #####################
+
+-- Create users table
+CREATE TABLE IF NOT EXISTS activities (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    activity_type VARCHAR(255) NOT NULL,
+    date TIMESTAMP,
+	quantity INT,
+    quantity_type VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+     FOREIGN KEY (user_id)
+      REFERENCES users(id)
+)  ENGINE=INNODB; 
+
+-- Show what we created
+DESCRIBE activities;
+
+-- Check exist records.
+SELECT * FROM activities;
+
