@@ -86,10 +86,12 @@ app.post('/activities/:type', (req, res) => {
 
         let entry = req.body[activityType];
         console.log(entry)
+        delete entry['device']
         // Create restingHeartRate entry.
         connection.query(`INSERT INTO ${tableName} SET ?;`, entry, function (error, results, fields) {
             if (error) {
                 // If there's an error in the insert, notify the caller.
+                console.log(error)
                 res.send({"error": "Activities creation was unsuccessful.", "message": error });
             }
             if (results) {
