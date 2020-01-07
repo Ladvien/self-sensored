@@ -74,66 +74,43 @@ app.get('/user', (req, res) => {
     }
 });
 
-
 /*
     This route will be used for storing HealthKit data.
 */
 app.post('/activities/:type', (req, res) => {
     if (!req.body) { return { 'message': 'No request provided.' }};
     try {
-
-        let tableName = 'activities'
-        let activityType = Object.keys(req.body)[0];
-        // Get the entry.
-        let entries = req.body[activityType];
-
-        // Results
-        var successfullyStored = [];
-
-        // for (let index = 0; index < enteries.length; index++) {
-        //     const entry = enteries[index];
-            
-        // }
-
-        entries.forEach(entry => {
-            dbStoreResult = processEntry(entry);
-            if("error" in dbStoreResult) { res.send({ "error": dbStoreResult })};
-        });
-        res.send(dbStoreResult);
-
+        let entry = req.body
+        res.send(storeActivity(entry));
     } catch (err) {
         res.send({'error': 'Error with request shape.', 'error_message': err})
     }
 });
 
-function processEntry(entry) {
-    // TODO: Save device info too.
-    delete entry['device']
-    console.log(entry);
+function storeActivity(entry) {
+        let tableName = 'activities'
+        
+        // TODO: Store device info.
+        delete entry['device'];
 
-    var dbStoreResult = {};
-
-    // Create restingHeartRate entry.
-    connection.query(`INSERT INTO ${tableName} SET ?;`, entry, function (error, results, fields) {
-        if (error) {
-            // If there's an error in the insert, notify the caller.
-            console.log(error)
-            dbStoreResult = {"error": "Activities creation was unsuccessful.", "message": error }
-            break;
-        }
-        if (results) {
-            // Look up the newly created record.
-            connection.query(`SELECT * FROM ${tableName} WHERE id = ?`, results['insertId'], function(error, results, fields) {
-                if (error) {
-                    // If there's an error retrieving the new record, notify caller.
-                    dbStoreResult = {"error": "User creation was unsuccessful.", "message": error};
-                }
-                successfullyStored.push(results);
-                dbStoreResult = { "success": successfullyStored }
-            });
-        }
-    });
-    return dbStoreResult;
+        // Create restingHeartRate entry.
+        connection.query(`INSERT INTO ${tableName} SET ?;`, entry, function (error, results, fields) {
+            if (error) {
+                // If there's an error in the insert, notify the caller.
+                return {"error": "Activities creation was unsuccessful.", "message": error };
+            }
+            if (results) {
+                // Look up the newly created record.
+                connection.query(`SELECT * FROM ${tableName} WHERE id = ?`, results['insertId'], function(error, results, fields) {
+                    if (error) {
+                        // If there's an error retrieving the new record, notify caller.
+                        return {"error": "User creation was unsuccessful.", "message": error};
+                    }
+                    // Return the new record to the user for confirmation of its creation.
+                    return {"success": results};
+                });
+            }
+        });
 }
 
 app.listen(port, () => {
