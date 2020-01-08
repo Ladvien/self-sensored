@@ -49,3 +49,5 @@ DESCRIBE activities;
 -- Check exist records.
 SELECT * FROM activities;
 
+
+

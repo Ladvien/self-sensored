@@ -87,27 +87,52 @@ app.post('/activities/:type', (req, res) => {
     }
 });
 
+function buildWhereClause(objectToConvert) {
+    let keys = Object.keys(objectToConvert);
+    let values = Object.values(objectToConvert);
+    var whereClause = '';
+    for (let index = 0; index < keys.length; index++) {
+        const key = keys[index];
+        const value = values[index];
+        whereClause += `${key} = '${value}'` 
+        if (index !== keys.length - 1) { whereClause += ' AND '} 
+    }
+    return whereClause;
+}
+
 function storeActivity(entry) {
         let tableName = 'activities'
         
         // TODO: Store device info.
         delete entry['device'];
+        whereClause = buildWhereClause(entry);
+        let existsTest = 'COUNT(id)'
 
-        // Create restingHeartRate entry.
-        connection.query(`INSERT INTO ${tableName} SET ?;`, entry, function (error, results, fields) {
-            if (error) {
-                // If there's an error in the insert, notify the caller.
-                return {"error": "Activities creation was unsuccessful.", "message": error };
+        // Check if record already exists.
+        let q = connection.query(`SELECT ${existsTest} FROM ${tableName} WHERE ${whereClause}`, function (error, results, fields){
+            if (error) { 
+                return {"error": "Unable to read from database", "message": error }; 
             }
-            if (results) {
-                // Look up the newly created record.
-                connection.query(`SELECT * FROM ${tableName} WHERE id = ?`, results['insertId'], function(error, results, fields) {
+            if (results[0][existsTest] > 1) {
+                console.log('Record exists.')
+                return {"error": "This record exits" }
+            } else {
+                connection.query(`INSERT INTO ${tableName} SET ?;`, entry, function (error, results, fields) {
                     if (error) {
-                        // If there's an error retrieving the new record, notify caller.
-                        return {"error": "User creation was unsuccessful.", "message": error};
+                        // If there's an error in the insert, notify the caller.
+                        return {"error": "Activities creation was unsuccessful.", "message": error };
                     }
-                    // Return the new record to the user for confirmation of its creation.
-                    return {"success": results};
+                    if (results) {
+                        // Look up the newly created record.
+                        connection.query(`SELECT * FROM ${tableName} WHERE id = ?`, results['insertId'], function(error, results, fields) {
+                            if (error) {
+                                // If there's an error retrieving the new record, notify caller.
+                                return {"error": "User creation was unsuccessful.", "message": error};
+                            }
+                            // Return the new record to the user for confirmation of its creation.
+                            return {"success": results};
+                        });
+                    }
                 });
             }
         });
