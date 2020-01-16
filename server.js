@@ -101,8 +101,8 @@ app.get('/activities/:type/:user_id/:method?', (req, res) => {
                     console.log(result);
                     res.send(result);
                 }).catch((err) => {
-                    console.log(result);
-                    res.send(result);
+                    console.log(err);
+                    res.send(err);
                 });;
                 break;
             default:
@@ -167,18 +167,18 @@ function storeActivity(entry) {
 async function getLatestActivityDate(user_id, activity) {
 
     return new Promise((resolve, reject) => {
+        
         let tableName = 'activities'
+        let sqlAction = 'MAX(date)'
         let whereClause = `user_id = '${user_id}' AND activity_type = '${activity}'`
-        connection.query(`SELECT MAX(date) FROM ${tableName} WHERE ${whereClause}`, function (error, results, fields){
+        connection.query(`SELECT ${sqlAction} FROM ${tableName} WHERE ${whereClause}`, function (error, results, fields){
             if (error) { 
                 reject({"error": "Unable to read from database", "message": error }); 
             }
-            if (results) {
-                console.log(results[0]);
-                resolve({"success": results });
+            if (results[0][sqlAction]) {
+                resolve({"success": results[0][sqlAction]});
             } else {
-                console.log(results[0]);
-                reject()
+                resolve({"success": "no activities"})
             }
         });
     });
