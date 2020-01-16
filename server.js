@@ -4,6 +4,8 @@ const axios = require('axios');
 const {connection} = require('./database/connection');
 var timeout = require('connect-timeout')
 
+var numRequests = 0;
+
 // Server setup.
 var app = express();
 const port = 3000;
@@ -52,7 +54,6 @@ app.post('/user', (req, res) => {
 app.get('/user', (req, res) => {
     if (!req.body) { return { 'message': 'No request provided.' }};
     try {
-        console.log(req.body);
         // Look up the newly created record.
         connection.query('SELECT * FROM users WHERE id = ?', req.body['user_id'], function(error, results, fields) {
             if (error) {
@@ -60,7 +61,6 @@ app.get('/user', (req, res) => {
                 res.send({"error": "User creation was unsuccessful.", "message": error});
             }
             // Check if there was a user with that id.
-            console.log(results)
             if (results.length > 0) {
                 // Return the new record to the user for confirmation of its creation.
                 res.send( {"user": results[0]} );
@@ -82,6 +82,32 @@ app.post('/activities/:type', (req, res) => {
     try {
         let entry = req.body
         res.send(storeActivity(entry));
+    } catch (err) {
+        res.send({'error': 'Error with request shape.', 'error_message': err})
+    }
+});
+
+app.get('/activities/:type/:user_id/:method?', (req, res) => {
+    if (!req.body) { return { 'message': 'No request provided.' }};
+    try {
+        let method =  req.params.method;
+        let user_id = req.params.user_id;
+        let activity = req.params.type;
+        switch (method) {
+            // Get the lastest record for user and activity.
+            case 'latest':
+                getLatestActivityDate(user_id, activity)
+                .then((result) => {
+                    console.log(result);
+                    res.send(result);
+                }).catch((err) => {
+                    console.log(result);
+                    res.send(result);
+                });;
+                break;
+            default:
+                break;
+        }
     } catch (err) {
         res.send({'error': 'Error with request shape.', 'error_message': err})
     }
@@ -113,8 +139,7 @@ function storeActivity(entry) {
             if (error) { 
                 return {"error": "Unable to read from database", "message": error }; 
             }
-            if (results[0][existsTest] > 1) {
-                console.log('Record exists.')
+            if (results[0][existsTest] > 0) {
                 return {"error": "This record exits" }
             } else {
                 connection.query(`INSERT INTO ${tableName} SET ?;`, entry, function (error, results, fields) {
@@ -130,12 +155,34 @@ function storeActivity(entry) {
                                 return {"error": "User creation was unsuccessful.", "message": error};
                             }
                             // Return the new record to the user for confirmation of its creation.
+                            console.log(results);
                             return {"success": results};
                         });
                     }
                 });
             }
         });
+}
+
+async function getLatestActivityDate(user_id, activity) {
+
+    return new Promise((resolve, reject) => {
+        let tableName = 'activities'
+        let whereClause = `user_id = '${user_id}' AND activity_type = '${activity}'`
+        connection.query(`SELECT MAX(date) FROM ${tableName} WHERE ${whereClause}`, function (error, results, fields){
+            if (error) { 
+                reject({"error": "Unable to read from database", "message": error }); 
+            }
+            if (results) {
+                console.log(results[0]);
+                resolve({"success": results });
+            } else {
+                console.log(results[0]);
+                reject()
+            }
+        });
+    });
+    
 }
 
 app.listen(port, () => {

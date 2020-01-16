@@ -5,11 +5,9 @@ USE self_sensored;
 
 SHOW tables;
 
--- ############ DROP FOR REBUILD ##########
-DROP TABLE users;
-DROP TABLE activities;
-
 -- ############ USERS #####################
+
+DROP TABLE users;
 
 -- Create users table
 CREATE TABLE IF NOT EXISTS users (
@@ -29,6 +27,8 @@ SELECT * FROM users;
 
 -- ############ ACTIVITIES #####################
 
+DROP TABLE activities;
+
 -- Create users table
 CREATE TABLE IF NOT EXISTS activities (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -44,10 +44,10 @@ CREATE TABLE IF NOT EXISTS activities (
 )  ENGINE=INNODB; 
 
 -- Show what we created
-DESCRIBE activities;
+-- DESCRIBE activities;
 
 -- Check exist records.
-SELECT * FROM activities;
+SELECT * FROM activities ORDER BY date DESC;
 
 
 
