@@ -50,4 +50,3 @@ CREATE TABLE IF NOT EXISTS activities (
 SELECT * FROM activities ORDER BY date DESC;
 
 
-
