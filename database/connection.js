@@ -11,12 +11,12 @@ if (password === '' || username == '') {
 };
 
 
-var connection = mysql.createConnection({
+var connection = mysql.createPool({
+    connectionLimit: 50,
     host: 'localhost',
     user: username,
     password: password,
     database: 'self_sensored'
 });
-connection.connect();
 
 module.exports = {connection}
