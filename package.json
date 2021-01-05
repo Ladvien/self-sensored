@@ -25,7 +25,7 @@
   },
   "homepage": "https://github.com/Ladvien/self-sensored#readme",
   "dependencies": {
-    "axios": "^0.19.0",
+    "axios": "^0.21.1",
     "body-parser": "^1.19.0",
     "connect-timeout": "^1.9.0",
     "express": "^4.17.1",
