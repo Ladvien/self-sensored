@@ -1,15 +1,11 @@
 const express = require('express');
-const bodyParser = require('body-parser');
-const axios = require('axios');
-const {connection} = require('./database/connection');
-var timeout = require('connect-timeout')
+const { body, validationResult } = require('express-validator');
 
-var numRequests = 0;
+const { Users } = require('./database/db.js');
 
 // Server setup.
 var app = express();
 const port = 3000;
-
 
 // Add request parameters.
 app.use((req, res, next) => {
@@ -21,35 +17,29 @@ app.use((req, res, next) => {
 });
 
 // Add the middleware.
-app.use(express.bodyParser.urlencoded());
-app.use(express.bodyParser.json());
+app.use(express.urlencoded({extended: true}));
+app.use(express.json());
 
 // Create user
-app.post('/user', (req, res) => {
+app.post('/users', body('email').isEmail(), async (req, res) => {
     if (!req.body) { return { 'message': 'No request provided.' }};
+    
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    
     try {
-        // Attempt to create a user.
-        connection.query(`INSERT INTO users SET ?;`, req.body, function (error, results, fields) {
-          if (error) {
-            // If there's an error in the insert, notify the caller.
-            res.send({"error": "User creation was unsuccessful.", "message": error });
-          }
-          if (results) {
-            // Look up the newly created record.
-            connection.query('SELECT * FROM users WHERE id = ?', results['insertId'], function(error, results, fields) {
-                if (error) {
-                    // If there's an error retrieving the new record, notify caller.
-                    res.send({"error": "User creation was unsuccessful.", "message": error});
-                }
-                // Return the new record to the user for confirmation of its creation.
-                res.send( {"success": results} );
-            });
-          }
-        });
+        const jane = await Users.create(req.body);
+        res.status(201);
+        res.send(jane);
     } catch (err) {
-        res.send({'error': 'Error with request shape.', err})
+        res.status(500);
+        res.send({'error': 'Error with request shape.'})
     }
 });
+
+
 
 app.listen(port, () => {
     console.log(`Started on port ${port}`);
