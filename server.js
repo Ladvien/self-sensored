@@ -21,7 +21,8 @@ app.use((req, res, next) => {
 });
 
 // Add the middleware.
-app.use(bodyParser.json())
+app.use(express.bodyParser.urlencoded());
+app.use(express.bodyParser.json());
 
 // Create user
 app.post('/user', (req, res) => {
@@ -50,153 +51,7 @@ app.post('/user', (req, res) => {
     }
 });
 
-// Get user.
-app.get('/user', (req, res) => {
-    if (!req.body) { return { 'message': 'No request provided.' }};
-    try {
-        // Look up the newly created record.
-        connection.query('SELECT * FROM users WHERE id = ?', req.body['user_id'], function(error, results, fields) {
-            if (error) {
-                // If there's an error retrieving the new record, notify caller.
-                res.send({"error": "User creation was unsuccessful.", "message": error});
-            }
-            // Check if there was a user with that id.
-            if (results.length > 0) {
-                // Return the new record to the user for confirmation of its creation.
-                res.send( {"user": results[0]} );
-            } else {
-                res.send({'error': `no user found with id ${req.body['user_id']}`})
-            }
-
-        });
-    } catch (err) {
-        res.send({'error': 'Error with request shape.', err})
-    }
-});
-
-/*
-    This route will be used for storing HealthKit data.
-*/
-app.post('/activities/:type', (req, res) => {
-    if (!req.body) { return { 'message': 'No request provided.' }};
-    try {
-        let entry = req.body
-        storeActivity(entry)
-        .then((result) => {
-            res.send(result);
-        }).catch((err) => {
-            res(err);
-        });
-    } catch (err) {
-        res.send({'error': 'Error with request shape.', 'error_message': err})
-    }
-});
-
-app.get('/activities/:type/:user_id/:method?', (req, res) => {
-    if (!req.body) { return { 'message': 'No request provided.' }};
-    try {
-        let method =  req.params.method;
-        let user_id = req.params.user_id;
-        let activity = req.params.type;
-        switch (method) {
-            // Get the lastest record for user and activity.
-            case 'latest':
-                getLatestActivityDate(user_id, activity)
-                .then((result) => {
-                    console.log(result);
-                    res.send(result);
-                }).catch((err) => {
-                    console.log(err);
-                    res.send(err);
-                });;
-                break;
-            default:
-                break;
-        }
-    } catch (err) {
-        res.send({'error': 'Error with request shape.', 'error_message': err})
-    }
-});
-
-function buildWhereClause(objectToConvert) {
-    let keys = Object.keys(objectToConvert);
-    let values = Object.values(objectToConvert);
-    var whereClause = '';
-    for (let index = 0; index < keys.length; index++) {
-        const key = keys[index];
-        const value = values[index];
-        whereClause += `${key} = '${value}'` 
-        if (index !== keys.length - 1) { whereClause += ' AND '} 
-    }
-    return whereClause;
-}
-
-function storeActivity(entry) {
-
-    return new Promise((resolve, reject) => {
-        let tableName = 'activities'
-        
-        // TODO: Store device info.
-        delete entry['device'];
-        whereClause = buildWhereClause(entry);
-        let existsTest = 'COUNT(id)'
-
-        // Check if record already exists.
-        connection.query(`SELECT ${existsTest} FROM ${tableName} WHERE ${whereClause}`, function (error, results, fields){
-            if (error) { 
-                reject({"error": "Unable to read from database", "message": error }); 
-            }
-            if (results[0][existsTest] > 0) {
-                console.log('Record exists');
-                resolve({"error": "This record exits" });
-            } else {
-                connection.query(`INSERT INTO ${tableName} SET ?;`, entry, function (error, results, fields) {
-                    if (error) {
-                        // If there's an error in the insert, notify the caller.
-                        reject({"error": "Activities creation was unsuccessful.", "message": error });
-                    }
-                    if (results) {
-                        // Look up the newly created record.
-                        connection.query(`SELECT * FROM ${tableName} WHERE id = ?`, results['insertId'], function(error, results, fields) {
-                            if (error) {
-                                // If there's an error retrieving the new record, notify caller.
-                                reject({"error": "User creation was unsuccessful.", "message": error});
-                            }
-                            // Return the new record to the user for confirmation of its creation.
-                            console.log(results);
-                            resolve({"success": results});
-                        });
-                    }
-                });
-            }
-        });
-    });
-}
-
-function getLatestActivityDate(user_id, activity) {
-
-    return new Promise((resolve, reject) => {
-        let tableName = 'activities'
-        let sqlAction = 'MAX(date)'
-        let whereClause = `user_id = '${user_id}' AND activity_type = '${activity}'`
-        connection.query(`SELECT ${sqlAction} FROM ${tableName} WHERE ${whereClause}`, function (error, results, fields){
-            if (error) { 
-                reject({"error": "Unable to read from database", "message": error }); 
-            }
-            if (results[0][sqlAction]) {
-                resolve({"success": results[0][sqlAction]});
-            } else {
-                resolve({"success": "no activities"})
-            }
-        });
-    });
-    
-}
-
 app.listen(port, () => {
     console.log(`Started on port ${port}`);
 });
 
-
-   
-// connection.end();
