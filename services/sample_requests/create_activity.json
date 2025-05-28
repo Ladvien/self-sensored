@@ -1,9 +1,0 @@
-{
-    "HKQuantityTypeIdentifierRestingHeartRate" : {
-    "user_id": 1,
-    "quantity_type" : "count\/min",
-    "quantity" : 59,
-    "date" : "2019-12-31T00:00:11-0600",
-    "activity_type" : "HKQuantityTypeIdentifierRestingHeartRate"
-  }
-}
