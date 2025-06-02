@@ -15,6 +15,7 @@ dependencies = [
     "python-dotenv (>=1.1.0,<2.0.0)",
     "uvicorn (>=0.34.2,<0.35.0)",
     "asyncpg (>=0.30.0,<0.31.0)",
+    "poethepoet (>=0.34.0,<0.35.0)",
 
 ]
 
@@ -22,3 +23,7 @@ dependencies = [
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+
+[tool.poe.tasks]
+dev = "poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 --log-level debug"
