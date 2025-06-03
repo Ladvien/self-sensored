@@ -2,19 +2,19 @@
 CREATE SCHEMA IF NOT EXISTS apple_health;
 
 -- Core Tables
-CREATE TABLE apple_health.health_payload (
+CREATE TABLE IF NOT EXISTS apple_health.health_payload (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     received_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 
-CREATE TABLE apple_health.health_metric (
+CREATE TABLE IF NOT EXISTS apple_health.health_metric (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     payload_id UUID REFERENCES apple_health.health_payload(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     units TEXT NOT NULL
 );
 
-CREATE TABLE apple_health.quantity_timestamp (
+CREATE TABLE IF NOT EXISTS apple_health.quantity_timestamp (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES apple_health.health_metric(id) ON DELETE CASCADE,
     date TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -23,7 +23,7 @@ CREATE TABLE apple_health.quantity_timestamp (
 );
 
 -- Specialized Metrics
-CREATE TABLE apple_health.blood_pressure_data (
+CREATE TABLE IF NOT EXISTS apple_health.blood_pressure_data (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES apple_health.health_metric(id) ON DELETE CASCADE,
     date TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -31,7 +31,7 @@ CREATE TABLE apple_health.blood_pressure_data (
     diastolic DOUBLE PRECISION NOT NULL
 );
 
-CREATE TABLE apple_health.heart_rate_data (
+CREATE TABLE IF NOT EXISTS apple_health.heart_rate_data (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES apple_health.health_metric(id) ON DELETE CASCADE,
     date TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -40,7 +40,7 @@ CREATE TABLE apple_health.heart_rate_data (
     max DOUBLE PRECISION
 );
 
-CREATE TABLE apple_health.sleep_analysis_data (
+CREATE TABLE IF NOT EXISTS apple_health.sleep_analysis_data (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES apple_health.health_metric(id) ON DELETE CASCADE,
     date DATE NOT NULL,
@@ -54,7 +54,7 @@ CREATE TABLE apple_health.sleep_analysis_data (
     in_bed_source TEXT
 );
 
-CREATE TABLE apple_health.blood_glucose_data (
+CREATE TABLE IF NOT EXISTS apple_health.blood_glucose_data (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES apple_health.health_metric(id) ON DELETE CASCADE,
     date TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -62,7 +62,7 @@ CREATE TABLE apple_health.blood_glucose_data (
     meal_time TEXT CHECK (meal_time IN ('Before Meal', 'After Meal', 'Unspecified'))
 );
 
-CREATE TABLE apple_health.sexual_activity_data (
+CREATE TABLE IF NOT EXISTS apple_health.sexual_activity_data (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES apple_health.health_metric(id) ON DELETE CASCADE,
     date TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -71,7 +71,7 @@ CREATE TABLE apple_health.sexual_activity_data (
     protection_not_used DOUBLE PRECISION
 );
 
-CREATE TABLE apple_health.hygiene_event_data (
+CREATE TABLE IF NOT EXISTS apple_health.hygiene_event_data (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES apple_health.health_metric(id) ON DELETE CASCADE,
     date TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -79,7 +79,7 @@ CREATE TABLE apple_health.hygiene_event_data (
     value TEXT CHECK (value IN ('Complete', 'Incomplete'))
 );
 
-CREATE TABLE apple_health.insulin_delivery_data (
+CREATE TABLE IF NOT EXISTS apple_health.insulin_delivery_data (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES apple_health.health_metric(id) ON DELETE CASCADE,
     date TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -88,7 +88,7 @@ CREATE TABLE apple_health.insulin_delivery_data (
 );
 
 -- Mental Health
-CREATE TABLE apple_health.symptom_data (
+CREATE TABLE IF NOT EXISTS apple_health.symptom_data (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES apple_health.health_metric(id) ON DELETE CASCADE,
     "start" TIMESTAMP WITH TIME ZONE,
@@ -99,7 +99,7 @@ CREATE TABLE apple_health.symptom_data (
     source TEXT
 );
 
-CREATE TABLE apple_health.state_of_mind_data (
+CREATE TABLE IF NOT EXISTS apple_health.state_of_mind_data (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES apple_health.health_metric(id) ON DELETE CASCADE,
     "start" TIMESTAMP WITH TIME ZONE,
@@ -113,7 +113,7 @@ CREATE TABLE apple_health.state_of_mind_data (
 );
 
 -- ECG & Notifications
-CREATE TABLE apple_health.ecg_data (
+CREATE TABLE IF NOT EXISTS apple_health.ecg_data (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES apple_health.health_metric(id) ON DELETE CASCADE,
     "start" TIMESTAMP WITH TIME ZONE,
@@ -127,7 +127,7 @@ CREATE TABLE apple_health.ecg_data (
     voltage_measurements JSONB
 );
 
-CREATE TABLE apple_health.heart_rate_notification (
+CREATE TABLE IF NOT EXISTS apple_health.heart_rate_notification (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES apple_health.health_metric(id) ON DELETE CASCADE,
     "start" TIMESTAMP WITH TIME ZONE,
@@ -138,7 +138,7 @@ CREATE TABLE apple_health.heart_rate_notification (
 );
 
 -- Workouts
-CREATE TABLE apple_health.workout (
+CREATE TABLE IF NOT EXISTS apple_health.workout (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     payload_id UUID REFERENCES apple_health.health_payload(id) ON DELETE CASCADE,
     name TEXT,
@@ -147,7 +147,7 @@ CREATE TABLE apple_health.workout (
     elevation JSONB
 );
 
-CREATE TABLE apple_health.workout_value (
+CREATE TABLE IF NOT EXISTS apple_health.workout_value (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workout_id UUID REFERENCES apple_health.workout(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
@@ -155,7 +155,7 @@ CREATE TABLE apple_health.workout_value (
     units TEXT
 );
 
-CREATE TABLE apple_health.workout_point (
+CREATE TABLE IF NOT EXISTS apple_health.workout_point (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workout_id UUID REFERENCES apple_health.workout(id) ON DELETE CASCADE,
     stream TEXT CHECK (stream IN ('heart_rate_data', 'heart_rate_recovery')),
@@ -164,7 +164,7 @@ CREATE TABLE apple_health.workout_point (
     units TEXT
 );
 
-CREATE TABLE apple_health.workout_route_point (
+CREATE TABLE IF NOT EXISTS apple_health.workout_route_point (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workout_id UUID REFERENCES apple_health.workout(id) ON DELETE CASCADE,
     lat DOUBLE PRECISION,
