@@ -56,13 +56,13 @@ class HealthMetric(TZBaseModel):
 # ---- Specialized Metrics ----
 
 
-class BloodPressureData(TZBaseModel):
+class BloodPressure(TZBaseModel):
     date: datetime
     systolic: float
     diastolic: float
 
 
-class HeartRateData(TZBaseModel):
+class HeartRate(TZBaseModel):
     date: datetime
     min: Optional[float] = Field(None, alias="Min")
     avg: Optional[float] = Field(None, alias="Avg")
@@ -71,7 +71,7 @@ class HeartRateData(TZBaseModel):
     source: Optional[str] = None
 
 
-class SleepAnalysisData(TZBaseModel):
+class SleepAnalysis(TZBaseModel):
     start_date: datetime = Field(..., alias="startDate")
     end_date: datetime = Field(..., alias="endDate")
     value: Optional[str] = None
@@ -79,27 +79,27 @@ class SleepAnalysisData(TZBaseModel):
     source: Optional[str] = None
 
 
-class BloodGlucoseData(TZBaseModel):
+class BloodGlucose(TZBaseModel):
     date: datetime
     qty: float
     meal_time: Literal["Before Meal", "After Meal", "Unspecified"]
 
 
-class SexualActivityData(TZBaseModel):
+class SexualActivity(TZBaseModel):
     date: datetime
     unspecified: float = Field(..., alias="Unspecified")
     protection_used: float = Field(..., alias="Protection Used")
     protection_not_used: float = Field(..., alias="Protection Not Used")
 
 
-class HygieneEventData(TZBaseModel):
+class HygieneEvent(TZBaseModel):
     timestamp: datetime = Field(alias="date")
     qty: Optional[float] = None
     value: Optional[str] = None
     source: Optional[str] = None
 
 
-class InsulinDeliveryData(TZBaseModel):
+class InsulinDelivery(TZBaseModel):
     date: datetime
     qty: float
     reason: Literal["Bolus", "Basal"]
@@ -131,7 +131,7 @@ class HeartRateNotification(TZBaseModel):
 # ---- Symptoms ----
 
 
-class SymptomData(TZBaseModel):
+class Symptom(TZBaseModel):
     start: datetime
     end: datetime
     name: str
@@ -143,7 +143,7 @@ class SymptomData(TZBaseModel):
 # ---- State of Mind ----
 
 
-class StateOfMindData(TZBaseModel):
+class StateOfMind(TZBaseModel):
     id: str
     start: datetime
     end: datetime
@@ -164,7 +164,7 @@ class VoltageMeasurement(TZBaseModel):
     units: str
 
 
-class ECGData(TZBaseModel):
+class ECG(TZBaseModel):
     start: datetime
     end: datetime
     classification: str
@@ -185,7 +185,7 @@ class WorkoutPoint(TZBaseModel):
     units: str
 
 
-class WorkoutData(TZBaseModel):
+class Workout(TZBaseModel):
     name: str
     start: datetime
     end: datetime
@@ -214,7 +214,7 @@ class WorkoutData(TZBaseModel):
 
 class HealthPayload(TZBaseModel):
     metrics: List[HealthMetric]
-    workouts: Optional[List[WorkoutData]] = Field(default_factory=list)
+    workouts: Optional[List[Workout]] = Field(default_factory=list)
 
 
 class WrappedHealthPayload(TZBaseModel):
@@ -224,18 +224,18 @@ class WrappedHealthPayload(TZBaseModel):
 # ---- Dispatch Utilities ----
 
 SPECIALIZED_METRICS = {
-    "blood_pressure": BloodPressureData,
-    "heart_rate": HeartRateData,
-    "sleep_analysis": SleepAnalysisData,
-    "blood_glucose": BloodGlucoseData,
-    "sexual_activity": SexualActivityData,
-    "handwashing": HygieneEventData,
-    "toothbrushing": HygieneEventData,
-    "insulin_delivery": InsulinDeliveryData,
+    "blood_pressure": BloodPressure,
+    "heart_rate": HeartRate,
+    "sleep_analysis": SleepAnalysis,
+    "blood_glucose": BloodGlucose,
+    "sexual_activity": SexualActivity,
+    "handwashing": HygieneEvent,
+    "toothbrushing": HygieneEvent,
+    "insulin_delivery": InsulinDelivery,
     "heart_rate_notifications": HeartRateNotification,
-    "symptoms": SymptomData,
-    "state_of_mind": StateOfMindData,
-    "ecg": ECGData,
+    "symptoms": Symptom,
+    "state_of_mind": StateOfMind,
+    "ecg": ECG,
 }
 
 
