@@ -1,5 +1,5 @@
 -- Apple Health Schema
--- DROP SCHEMA IF EXISTS apple_health CASCADE;
+DROP SCHEMA IF EXISTS apple_health CASCADE;
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
@@ -277,3 +277,34 @@ CREATE INDEX IF NOT EXISTS idx_sleep_analysis_start_date ON apple_health.sleep_a
 
 -- Payload index for cleanup queries
 CREATE INDEX IF NOT EXISTS idx_health_payload_received_at ON apple_health.health_payload(received_at DESC);
+
+-- Add unique constraints to enable idempotent operations
+
+-- Add unique constraints
+ALTER TABLE apple_health.health_metric 
+ADD CONSTRAINT uq_health_metric_payload_name 
+UNIQUE (payload_id, name);
+
+ALTER TABLE apple_health.heart_rate 
+ADD CONSTRAINT uq_heart_rate_metric_date 
+UNIQUE (metric_id, date);
+
+ALTER TABLE apple_health.blood_pressure 
+ADD CONSTRAINT uq_blood_pressure_metric_date 
+UNIQUE (metric_id, date);
+
+ALTER TABLE apple_health.sleep_analysis 
+ADD CONSTRAINT uq_sleep_analysis_metric_start 
+UNIQUE (metric_id, start_date);
+
+ALTER TABLE apple_health.quantity_timestamp 
+ADD CONSTRAINT uq_quantity_timestamp_metric_date_source 
+UNIQUE (metric_id, date, source);
+
+-- Add payload hash column and constraint
+ALTER TABLE apple_health.health_payload 
+ADD COLUMN payload_hash TEXT;
+
+ALTER TABLE apple_health.health_payload 
+ADD CONSTRAINT uq_health_payload_hash 
+UNIQUE (payload_hash);
