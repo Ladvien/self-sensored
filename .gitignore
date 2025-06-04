@@ -274,3 +274,5 @@ output/
 /target
 /models
 talking.log
+
+logs/*

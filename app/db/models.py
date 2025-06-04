@@ -69,12 +69,14 @@ class QuantityTimestamp(Base, AppleHealthMixin):
     __table_args__ = {"schema": "apple_health"}
 
     id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
+    date = Column(
+        DateTime(timezone=True), primary_key=True, nullable=False
+    )  # Part of composite PK
     metric_id = Column(
         UUID,
         ForeignKey("apple_health.health_metric.id", ondelete="CASCADE"),
         nullable=False,
     )
-    date = Column(DateTime(timezone=True), nullable=False)
     qty = Column(Float, nullable=False)
     source = Column(Text)
 
@@ -82,10 +84,7 @@ class QuantityTimestamp(Base, AppleHealthMixin):
     metric = relationship("HealthMetric", back_populates="quantity_data")
 
     def __repr__(self):
-        return (
-            f"<QuantityTimestamp(id={self.id}, date={self.date}, "
-            f"qty={self.qty}, source={self.source})>"
-        )
+        return f"<QuantityTimestamp(id={self.id}, date={self.date}, qty={self.qty}, source={self.source})>"
 
 
 class BloodPressure(Base, AppleHealthMixin):

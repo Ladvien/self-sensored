@@ -1,6 +1,5 @@
-
 -- Apple Health Schema
-DROP SCHEMA IF EXISTS apple_health CASCADE;
+-- DROP SCHEMA IF EXISTS apple_health CASCADE;
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
@@ -20,13 +19,88 @@ CREATE TABLE IF NOT EXISTS apple_health.health_metric (
     units TEXT NOT NULL
 );
 
+-- PARTITIONED quantity_timestamp table
 CREATE TABLE IF NOT EXISTS apple_health.quantity_timestamp (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    metric_id UUID REFERENCES apple_health.health_metric(id) ON DELETE CASCADE,
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    metric_id UUID NOT NULL REFERENCES apple_health.health_metric(id) ON DELETE CASCADE,
     date TIMESTAMP WITH TIME ZONE NOT NULL,
     qty DOUBLE PRECISION NOT NULL,
-    source TEXT
-);
+    source TEXT,
+    PRIMARY KEY (id, date)
+) PARTITION BY RANGE (date);
+
+-- Create yearly partitions for quantity_timestamp
+CREATE TABLE IF NOT EXISTS apple_health.quantity_timestamp_2012 
+PARTITION OF apple_health.quantity_timestamp
+FOR VALUES FROM ('2012-01-01') TO ('2013-01-01');
+
+CREATE TABLE IF NOT EXISTS apple_health.quantity_timestamp_2013 
+PARTITION OF apple_health.quantity_timestamp
+FOR VALUES FROM ('2013-01-01') TO ('2014-01-01');
+
+CREATE TABLE IF NOT EXISTS apple_health.quantity_timestamp_2014 
+PARTITION OF apple_health.quantity_timestamp
+FOR VALUES FROM ('2014-01-01') TO ('2015-01-01');
+
+CREATE TABLE IF NOT EXISTS apple_health.quantity_timestamp_2015 
+PARTITION OF apple_health.quantity_timestamp
+FOR VALUES FROM ('2015-01-01') TO ('2016-01-01');
+
+CREATE TABLE IF NOT EXISTS apple_health.quantity_timestamp_2016 
+PARTITION OF apple_health.quantity_timestamp
+FOR VALUES FROM ('2016-01-01') TO ('2017-01-01');
+
+CREATE TABLE IF NOT EXISTS apple_health.quantity_timestamp_2017 
+PARTITION OF apple_health.quantity_timestamp
+FOR VALUES FROM ('2017-01-01') TO ('2018-01-01');
+
+CREATE TABLE IF NOT EXISTS apple_health.quantity_timestamp_2018 
+PARTITION OF apple_health.quantity_timestamp
+FOR VALUES FROM ('2018-01-01') TO ('2019-01-01');
+
+CREATE TABLE IF NOT EXISTS apple_health.quantity_timestamp_2019 
+PARTITION OF apple_health.quantity_timestamp
+FOR VALUES FROM ('2019-01-01') TO ('2020-01-01');
+
+CREATE TABLE IF NOT EXISTS apple_health.quantity_timestamp_2020 
+PARTITION OF apple_health.quantity_timestamp
+FOR VALUES FROM ('2020-01-01') TO ('2021-01-01');
+
+CREATE TABLE IF NOT EXISTS apple_health.quantity_timestamp_2021 
+PARTITION OF apple_health.quantity_timestamp
+FOR VALUES FROM ('2021-01-01') TO ('2022-01-01');
+
+CREATE TABLE IF NOT EXISTS apple_health.quantity_timestamp_2022 
+PARTITION OF apple_health.quantity_timestamp
+FOR VALUES FROM ('2022-01-01') TO ('2023-01-01');
+
+CREATE TABLE IF NOT EXISTS apple_health.quantity_timestamp_2023 
+PARTITION OF apple_health.quantity_timestamp
+FOR VALUES FROM ('2023-01-01') TO ('2024-01-01');
+
+CREATE TABLE IF NOT EXISTS apple_health.quantity_timestamp_2024 
+PARTITION OF apple_health.quantity_timestamp
+FOR VALUES FROM ('2024-01-01') TO ('2025-01-01');
+
+CREATE TABLE IF NOT EXISTS apple_health.quantity_timestamp_2025 
+PARTITION OF apple_health.quantity_timestamp
+FOR VALUES FROM ('2025-01-01') TO ('2026-01-01');
+
+CREATE TABLE IF NOT EXISTS apple_health.quantity_timestamp_2026 
+PARTITION OF apple_health.quantity_timestamp
+FOR VALUES FROM ('2026-01-01') TO ('2027-01-01');
+
+CREATE TABLE IF NOT EXISTS apple_health.quantity_timestamp_2027 
+PARTITION OF apple_health.quantity_timestamp
+FOR VALUES FROM ('2027-01-01') TO ('2028-01-01');
+
+CREATE TABLE IF NOT EXISTS apple_health.quantity_timestamp_2028 
+PARTITION OF apple_health.quantity_timestamp
+FOR VALUES FROM ('2028-01-01') TO ('2029-01-01');
+
+-- Default partition for dates outside range
+CREATE TABLE IF NOT EXISTS apple_health.quantity_timestamp_default 
+PARTITION OF apple_health.quantity_timestamp DEFAULT;
 
 -- Specialized Metrics
 CREATE TABLE IF NOT EXISTS apple_health.blood_pressure(
@@ -182,3 +256,24 @@ CREATE TABLE IF NOT EXISTS apple_health.workout_route_point (
     altitude DOUBLE PRECISION,
     timestamp TIMESTAMP WITH TIME ZONE
 );
+
+-- Performance Indexes
+-- Core performance indexes
+CREATE INDEX IF NOT EXISTS idx_health_metric_payload_id ON apple_health.health_metric(payload_id);
+CREATE INDEX IF NOT EXISTS idx_health_metric_name ON apple_health.health_metric(name);
+
+-- Quantity timestamp indexes (on partitioned table)
+CREATE INDEX IF NOT EXISTS idx_quantity_timestamp_metric_id ON apple_health.quantity_timestamp(metric_id);
+CREATE INDEX IF NOT EXISTS idx_quantity_timestamp_date ON apple_health.quantity_timestamp(date DESC);
+CREATE INDEX IF NOT EXISTS idx_quantity_timestamp_metric_date ON apple_health.quantity_timestamp(metric_id, date DESC);
+
+-- Specialized table indexes
+CREATE INDEX IF NOT EXISTS idx_heart_rate_metric_id ON apple_health.heart_rate(metric_id);
+CREATE INDEX IF NOT EXISTS idx_heart_rate_date ON apple_health.heart_rate(date DESC);
+CREATE INDEX IF NOT EXISTS idx_blood_pressure_metric_id ON apple_health.blood_pressure(metric_id);
+CREATE INDEX IF NOT EXISTS idx_blood_pressure_date ON apple_health.blood_pressure(date DESC);
+CREATE INDEX IF NOT EXISTS idx_sleep_analysis_metric_id ON apple_health.sleep_analysis(metric_id);
+CREATE INDEX IF NOT EXISTS idx_sleep_analysis_start_date ON apple_health.sleep_analysis(start_date DESC);
+
+-- Payload index for cleanup queries
+CREATE INDEX IF NOT EXISTS idx_health_payload_received_at ON apple_health.health_payload(received_at DESC);

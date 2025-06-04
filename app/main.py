@@ -4,10 +4,12 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 
+from app.logging_config import setup_logging
 from app.api.v1.endpoints import router as api_router
 from app import db
 
 load_dotenv()
+
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
@@ -28,6 +30,7 @@ async def run_schema_ddl():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    setup_logging()
     await run_schema_ddl()
     yield
 

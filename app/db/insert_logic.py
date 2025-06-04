@@ -69,9 +69,7 @@ async def insert_health_data(payload: HealthPayload, db: AsyncSession):
             await db.flush()
 
         except Exception as e:
+            await db.rollback()
             logger.warning(f"Skipping metric '{metric.name}' due to error: {e}")
 
-    try:
         await db.commit()
-    finally:
-        await db.close()
