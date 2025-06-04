@@ -28,10 +28,9 @@ async def run_schema_ddl():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Run startup tasks
     await run_schema_ddl()
     yield
-    # Run shutdown tasks (if any)
 
 
 app = FastAPI(lifespan=lifespan)
+app.include_router(api_router, prefix="/api/v1")

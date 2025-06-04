@@ -1,10 +1,15 @@
 from datetime import datetime, date
-from typing import List, Optional, Dict, Any, Literal, Union
+from typing import List, Optional, Dict, Any, Literal, Type, Union
 from pydantic import BaseModel, Field, ConfigDict
+from rich import print
+import logging
 
 
 class TZBaseModel(BaseModel):
-    model_config = ConfigDict(str_to_datetime_mode="iso8601")
+    model_config = ConfigDict(str_to_datetime_mode="iso8601", populate_by_name=True)
+
+    def get_date(self) -> datetime:
+        return getattr(self, "date", getattr(self, "timestamp", None))
 
 
 # ---- Reusable Value Types ----
@@ -59,21 +64,19 @@ class BloodPressureData(TZBaseModel):
 
 class HeartRateData(TZBaseModel):
     date: datetime
-    min: float = Field(..., alias="Min")
-    avg: float = Field(..., alias="Avg")
-    max: float = Field(..., alias="Max")
+    min: Optional[float] = Field(None, alias="Min")
+    avg: Optional[float] = Field(None, alias="Avg")
+    max: Optional[float] = Field(None, alias="Max")
+    context: Optional[str] = None
+    source: Optional[str] = None
 
 
 class SleepAnalysisData(TZBaseModel):
-    date: date
-    asleep: float
-    sleep_start: datetime
-    sleep_end: datetime
-    sleep_source: str
-    in_bed: float
-    in_bed_start: datetime
-    in_bed_end: datetime
-    in_bed_source: str
+    start_date: datetime = Field(..., alias="startDate")
+    end_date: datetime = Field(..., alias="endDate")
+    value: Optional[str] = None
+    qty: Optional[float] = None
+    source: Optional[str] = None
 
 
 class BloodGlucoseData(TZBaseModel):
@@ -90,9 +93,10 @@ class SexualActivityData(TZBaseModel):
 
 
 class HygieneEventData(TZBaseModel):
-    date: datetime
-    qty: float
-    value: Literal["Complete", "Incomplete"]
+    timestamp: datetime = Field(alias="date")
+    qty: Optional[float] = None
+    value: Optional[str] = None
+    source: Optional[str] = None
 
 
 class InsulinDeliveryData(TZBaseModel):
@@ -185,7 +189,7 @@ class WorkoutData(TZBaseModel):
     name: str
     start: datetime
     end: datetime
-    heart_rate_data: Optional[List[WorkoutPoint]] = None
+    heart_rate: Optional[List[WorkoutPoint]] = None
     heart_rate_recovery: Optional[List[WorkoutPoint]] = None
     route: Optional[List[RoutePoint]] = None
     total_energy: Optional[WorkoutValue] = None
@@ -220,37 +224,38 @@ class WrappedHealthPayload(TZBaseModel):
 # ---- Dispatch Utilities ----
 
 SPECIALIZED_METRICS = {
-    "blood pressure": BloodPressureData,
-    "heart rate": HeartRateData,
-    "sleep analysis": SleepAnalysisData,
-    "blood glucose": BloodGlucoseData,
-    "sexual activity": SexualActivityData,
+    "blood_pressure": BloodPressureData,
+    "heart_rate": HeartRateData,
+    "sleep_analysis": SleepAnalysisData,
+    "blood_glucose": BloodGlucoseData,
+    "sexual_activity": SexualActivityData,
     "handwashing": HygieneEventData,
     "toothbrushing": HygieneEventData,
-    "insulin delivery": InsulinDeliveryData,
-    "heart rate notifications": HeartRateNotification,
+    "insulin_delivery": InsulinDeliveryData,
+    "heart_rate_notifications": HeartRateNotification,
     "symptoms": SymptomData,
-    "state of mind": StateOfMindData,
+    "state_of_mind": StateOfMindData,
     "ecg": ECGData,
 }
 
-import logging
 
 logger = logging.getLogger(__name__)
 
 
 def parse_metric(metric: HealthMetric) -> List[TZBaseModel]:
-    model_cls = SPECIALIZED_METRICS.get(metric.name.lower())
-    parsed = []
-
-    for entry in metric.data:
+    model_cls: Optional[Type[TZBaseModel]] = SPECIALIZED_METRICS.get(
+        metric.name.lower()
+    )
+    parsed: List[TZBaseModel] = []
+    for i, entry in enumerate(metric.data):
         try:
-            if model_cls:
-                parsed.append(model_cls(**entry))
-            else:
-                parsed.append(QuantityTimestamp(**entry))
+            # Dispatch to specialized or default model
+            model = model_cls(**entry) if model_cls else QuantityTimestamp(**entry)
+            parsed.append(model)
         except Exception as e:
-            logger.warning(f"Skipping invalid entry in '{metric.name}': {e}")
+            logger.warning(
+                f"Skipping invalid entry #{i} in metric '{metric.name}': {e}\nEntry: {entry}"
+            )
 
     return parsed
 

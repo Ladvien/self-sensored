@@ -1,3 +1,9 @@
+
+-- Apple Health Schema
+DROP SCHEMA IF EXISTS apple_health CASCADE;
+
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
 -- Create schema
 CREATE SCHEMA IF NOT EXISTS apple_health;
 
@@ -23,7 +29,7 @@ CREATE TABLE IF NOT EXISTS apple_health.quantity_timestamp (
 );
 
 -- Specialized Metrics
-CREATE TABLE IF NOT EXISTS apple_health.blood_pressure_data (
+CREATE TABLE IF NOT EXISTS apple_health.blood_pressure(
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES apple_health.health_metric(id) ON DELETE CASCADE,
     date TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -31,30 +37,34 @@ CREATE TABLE IF NOT EXISTS apple_health.blood_pressure_data (
     diastolic DOUBLE PRECISION NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS apple_health.heart_rate_data (
+CREATE TABLE IF NOT EXISTS apple_health.heart_rate (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES apple_health.health_metric(id) ON DELETE CASCADE,
     date TIMESTAMP WITH TIME ZONE NOT NULL,
     min DOUBLE PRECISION,
     avg DOUBLE PRECISION,
-    max DOUBLE PRECISION
+    max DOUBLE PRECISION,
+    context TEXT,
+    source TEXT
 );
 
-CREATE TABLE IF NOT EXISTS apple_health.sleep_analysis_data (
+CREATE TABLE IF NOT EXISTS apple_health.sleep_analysis (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES apple_health.health_metric(id) ON DELETE CASCADE,
-    date DATE NOT NULL,
+    start_date TIMESTAMPTZ NOT NULL,
+    end_date TIMESTAMPTZ NOT NULL,
     asleep DOUBLE PRECISION,
-    "sleep_start" TIMESTAMP WITH TIME ZONE,
-    "sleep_end" TIMESTAMP WITH TIME ZONE,
     sleep_source TEXT,
     in_bed DOUBLE PRECISION,
     "in_bed_start" TIMESTAMP WITH TIME ZONE,
     "in_bed_end" TIMESTAMP WITH TIME ZONE,
-    in_bed_source TEXT
+    in_bed_source TEXT,
+    qty DOUBLE PRECISION,
+    value TEXT,
+    source TEXT
 );
 
-CREATE TABLE IF NOT EXISTS apple_health.blood_glucose_data (
+CREATE TABLE IF NOT EXISTS apple_health.blood_glucose(
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES apple_health.health_metric(id) ON DELETE CASCADE,
     date TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -62,7 +72,7 @@ CREATE TABLE IF NOT EXISTS apple_health.blood_glucose_data (
     meal_time TEXT CHECK (meal_time IN ('Before Meal', 'After Meal', 'Unspecified'))
 );
 
-CREATE TABLE IF NOT EXISTS apple_health.sexual_activity_data (
+CREATE TABLE IF NOT EXISTS apple_health.sexual_activity(
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES apple_health.health_metric(id) ON DELETE CASCADE,
     date TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -71,7 +81,7 @@ CREATE TABLE IF NOT EXISTS apple_health.sexual_activity_data (
     protection_not_used DOUBLE PRECISION
 );
 
-CREATE TABLE IF NOT EXISTS apple_health.hygiene_event_data (
+CREATE TABLE IF NOT EXISTS apple_health.hygiene_event(
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES apple_health.health_metric(id) ON DELETE CASCADE,
     date TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -79,7 +89,7 @@ CREATE TABLE IF NOT EXISTS apple_health.hygiene_event_data (
     value TEXT CHECK (value IN ('Complete', 'Incomplete'))
 );
 
-CREATE TABLE IF NOT EXISTS apple_health.insulin_delivery_data (
+CREATE TABLE IF NOT EXISTS apple_health.insulin_delivery(
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES apple_health.health_metric(id) ON DELETE CASCADE,
     date TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -88,7 +98,7 @@ CREATE TABLE IF NOT EXISTS apple_health.insulin_delivery_data (
 );
 
 -- Mental Health
-CREATE TABLE IF NOT EXISTS apple_health.symptom_data (
+CREATE TABLE IF NOT EXISTS apple_health.symptom(
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES apple_health.health_metric(id) ON DELETE CASCADE,
     "start" TIMESTAMP WITH TIME ZONE,
@@ -99,7 +109,7 @@ CREATE TABLE IF NOT EXISTS apple_health.symptom_data (
     source TEXT
 );
 
-CREATE TABLE IF NOT EXISTS apple_health.state_of_mind_data (
+CREATE TABLE IF NOT EXISTS apple_health.state_of_mind(
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES apple_health.health_metric(id) ON DELETE CASCADE,
     "start" TIMESTAMP WITH TIME ZONE,
@@ -113,7 +123,7 @@ CREATE TABLE IF NOT EXISTS apple_health.state_of_mind_data (
 );
 
 -- ECG & Notifications
-CREATE TABLE IF NOT EXISTS apple_health.ecg_data (
+CREATE TABLE IF NOT EXISTS apple_health.ecg(
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     metric_id UUID REFERENCES apple_health.health_metric(id) ON DELETE CASCADE,
     "start" TIMESTAMP WITH TIME ZONE,
@@ -158,7 +168,7 @@ CREATE TABLE IF NOT EXISTS apple_health.workout_value (
 CREATE TABLE IF NOT EXISTS apple_health.workout_point (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     workout_id UUID REFERENCES apple_health.workout(id) ON DELETE CASCADE,
-    stream TEXT CHECK (stream IN ('heart_rate_data', 'heart_rate_recovery')),
+    stream TEXT CHECK (stream IN ('heart_rate', 'heart_rate_recovery')),
     date TIMESTAMP WITH TIME ZONE,
     qty DOUBLE PRECISION,
     units TEXT

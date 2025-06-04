@@ -1,8 +1,8 @@
-from contextlib import asynccontextmanager
-from app.db.database import AsyncSessionLocal
+from app.db.session import AsyncSessionLocal
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import AsyncGenerator
 
 
-@asynccontextmanager
-async def get_db():
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         yield session

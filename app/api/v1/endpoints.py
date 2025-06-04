@@ -1,29 +1,24 @@
-from fastapi import APIRouter, status, Request
+from fastapi import APIRouter, status, Request, Depends
 from fastapi.responses import JSONResponse
-from app.models.health import parse_payload
+from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 import re
 from rich import print
 
+import app.api.models as api_models
+from app.dependencies import get_db
+from app.db.insert_logic import insert_health_data
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-# ---- Timezone Normalizer ----
 
 
 def normalize_datetime_strings(payload: dict) -> dict:
     def fix_datetime_string(dt_str: str) -> str:
         dt_str = dt_str.strip()
-
-        # Fix 1: Insert "T" between date and time if missing
         dt_str = re.sub(r"^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})", r"\1T\2", dt_str)
-
-        # Fix 2: Ensure timezone has colon (e.g., -0500 → -05:00)
         dt_str = re.sub(r"([+-]\d{2})(\d{2})$", r"\1:\2", dt_str)
-
-        # Fix 3: Remove space between time and timezone if present (e.g., T18:08:49 -05:00 → T18:08:49-05:00)
         dt_str = re.sub(r"(T\d{2}:\d{2}:\d{2})\s+([+-]\d{2}:\d{2})", r"\1\2", dt_str)
-
         return dt_str
 
     def walk(obj):
@@ -41,24 +36,20 @@ def normalize_datetime_strings(payload: dict) -> dict:
     return walk(payload)
 
 
-# ---- /sync Endpoint ----
-
-
 @router.post("/sync", status_code=status.HTTP_201_CREATED)
-async def receive_health_data(request: Request):
+async def receive_health_data(request: Request, db: AsyncSession = Depends(get_db)):
     try:
         raw = await request.json()
         normalized = normalize_datetime_strings(raw)
-        parsed_data = parse_payload(normalized["data"])
+        parsed = api_models.parse_payload(normalized["data"])
 
         print(
-            f"Received {len(parsed_data.metrics)} metrics and {len(parsed_data.workouts)} workouts"
+            f"Received {len(parsed.metrics)} metrics and {len(parsed.workouts)} workouts"
         )
 
-        print(parsed_data.metrics)
+        await insert_health_data(parsed, db)
 
-        # Insert storage logic here
-        return {"message": "Data received successfully"}
+        return {"message": "Data received and stored successfully"}
     except Exception as e:
-        logger.exception("Failed to parse payload")
+        logger.exception("Failed to process /sync payload")
         return JSONResponse(status_code=400, content={"error": str(e)})
