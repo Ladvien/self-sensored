@@ -166,6 +166,7 @@ CREATE TABLE IF NOT EXISTS apple_health.hygiene_event(
     date TIMESTAMP WITH TIME ZONE NOT NULL,
     qty DOUBLE PRECISION,
     value TEXT CHECK (value IN ('Complete', 'Incomplete')),
+    source TEXT,
     CONSTRAINT uq_hygiene_event_metric_date UNIQUE (metric_id, date)
 );
 

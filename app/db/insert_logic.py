@@ -1,13 +1,12 @@
-# app/db/insert_logic.py - Complete Idempotent Implementation
-
 import hashlib
 import json
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Type
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy import select
 from uuid import uuid4
 import logging
+from itertools import islice
 
 from app.api.models import HealthPayload, HealthMetric
 import app.db.models as db_models
@@ -92,62 +91,63 @@ async def insert_health_data(
     metrics_skipped = 0
 
     try:
-        async with db.begin():
-            # Insert new payload
-            payload_id = uuid4()
-            payload_stmt = insert(db_models.HealthPayload).values(
-                id=payload_id, payload_hash=payload_hash
-            )
+        # Insert new payload
+        payload_id = uuid4()
+        payload_stmt = insert(db_models.HealthPayload).values(
+            id=payload_id, payload_hash=payload_hash
+        )
 
-            # Use on_conflict_do_update to handle race conditions
-            payload_stmt = payload_stmt.on_conflict_do_update(
-                index_elements=["payload_hash"],
-                set_=dict(received_at=payload_stmt.excluded.received_at),
-            ).returning(db_models.HealthPayload.id)
+        # Use on_conflict_do_update to handle race conditions
+        payload_stmt = payload_stmt.on_conflict_do_update(
+            index_elements=["payload_hash"],
+            set_=dict(received_at=payload_stmt.excluded.received_at),
+        ).returning(db_models.HealthPayload.id)
 
-            result = await db.execute(payload_stmt)
-            actual_payload_id = result.scalar_one()
+        result = await db.execute(payload_stmt)
+        actual_payload_id = result.scalar_one()
 
-            # If the ID differs, another process inserted it
-            if actual_payload_id != payload_id:
-                logger.info("Payload inserted by concurrent process")
-                return {
-                    "status": "duplicate",
-                    "message": "Payload processed by another request",
-                    "payload_id": str(actual_payload_id),
-                    "metrics_processed": 0,
-                    "metrics_skipped": len(payload.metrics),
-                }
-
-            # Process each metric
-            for metric in payload.metrics:
-                was_processed = await insert_metric_idempotent(
-                    metric, actual_payload_id, db
-                )
-                if was_processed:
-                    metrics_processed += 1
-                else:
-                    metrics_skipped += 1
-
-            # Process workouts if present
-            if hasattr(payload, "workouts") and payload.workouts:
-                for workout in payload.workouts:
-                    await insert_workout_idempotent(workout, actual_payload_id, db)
-
-            status = "success" if metrics_skipped == 0 else "partial_success"
-
-            logger.info(
-                f"Processed payload {payload_hash[:8]}...: "
-                f"{metrics_processed} metrics added, {metrics_skipped} skipped"
-            )
-
+        # If the ID differs, another process inserted it
+        if actual_payload_id != payload_id:
+            logger.info("Payload inserted by concurrent process")
             return {
-                "status": status,
-                "message": f"Data processed: {metrics_processed} new metrics, {metrics_skipped} duplicates",
+                "status": "duplicate",
+                "message": "Payload processed by another request",
                 "payload_id": str(actual_payload_id),
-                "metrics_processed": metrics_processed,
-                "metrics_skipped": metrics_skipped,
+                "metrics_processed": 0,
+                "metrics_skipped": len(payload.metrics),
             }
+
+        # Process each metric
+        for metric in payload.metrics:
+            was_processed = await insert_metric_idempotent(
+                metric, actual_payload_id, db
+            )
+            if was_processed:
+                metrics_processed += 1
+            else:
+                metrics_skipped += 1
+
+        # Process workouts if present
+        if hasattr(payload, "workouts") and payload.workouts:
+            for workout in payload.workouts:
+                await insert_workout_idempotent(workout, actual_payload_id, db)
+
+        status = "success" if metrics_skipped == 0 else "partial_success"
+
+        logger.info(
+            f"Processed payload {payload_hash[:8]}...: "
+            f"{metrics_processed} metrics added, {metrics_skipped} skipped"
+        )
+
+        await db.commit()
+
+        return {
+            "status": status,
+            "message": f"Data processed: {metrics_processed} new metrics, {metrics_skipped} duplicates",
+            "payload_id": str(actual_payload_id),
+            "metrics_processed": metrics_processed,
+            "metrics_skipped": metrics_skipped,
+        }
 
     except Exception as e:
         logger.error(f"Failed to process payload: {e}", exc_info=True)
@@ -207,7 +207,7 @@ async def insert_metric_idempotent(
         actual_metric_id = result.scalar_one_or_none()
 
         if not actual_metric_id:
-            # Metric was inserted by another process
+            logger.info(f"Skipped insert for {metric.name} due to existing entry")
             return False
 
         # Insert metric data
@@ -219,7 +219,7 @@ async def insert_metric_idempotent(
                 await insert_quantity_data_idempotent(metric.data, actual_metric_id, db)
             else:
                 await insert_specialized_data_idempotent(
-                    metric.data, actual_metric_id, db_model_cls, metric_type
+                    metric.data, actual_metric_id, db_model_cls, metric_type, db
                 )
 
         return True
@@ -229,11 +229,19 @@ async def insert_metric_idempotent(
         return False
 
 
-async def insert_quantity_data_idempotent(
-    data_entries: List[Any], metric_id: str, db: AsyncSession
-):
-    """Insert quantity timestamp data with duplicate handling"""
+def chunked_iterable(iterable, size):
+    it = iter(iterable)
+    while chunk := list(islice(it, size)):
+        yield chunk
 
+
+async def insert_quantity_data_idempotent(
+    data_entries: List[Any], metric_id: str, db: AsyncSession, batch_size: int = 500
+) -> None:
+    """
+    Insert quantity data records into the database idempotently.
+    Conflicts on (metric_id, date, source) are resolved by updating qty and id.
+    """
     if not data_entries:
         return
 
@@ -251,15 +259,17 @@ async def insert_quantity_data_idempotent(
         except Exception as e:
             logger.warning(f"Skipping invalid quantity entry: {e}")
 
-    if records:
-        stmt = insert(db_models.QuantityTimestamp).values(records)
+    if not records:
+        return
+
+    for chunk in chunked_iterable(records, batch_size):
+        stmt = insert(db_models.QuantityTimestamp).values(chunk)
         stmt = stmt.on_conflict_do_update(
             index_elements=["metric_id", "date", "source"],
-            set_=dict(
-                qty=stmt.excluded.qty,
-                # Update timestamp to track last update
-                id=stmt.excluded.id,  # This ensures we keep track of updates
-            ),
+            set_={
+                "qty": stmt.excluded.qty,
+                "id": stmt.excluded.id,
+            },
         )
         await db.execute(stmt)
 
@@ -267,12 +277,15 @@ async def insert_quantity_data_idempotent(
 async def insert_specialized_data_idempotent(
     data_entries: List[Any],
     metric_id: str,
-    model_cls: type,
+    model_cls: Type,
     metric_type: str,
     db: AsyncSession,
-):
-    """Insert specialized health data with model-specific conflict resolution"""
-
+    batch_size: int = 500,
+) -> None:
+    """
+    Insert specialized data records into the database idempotently.
+    Conflict handling is determined dynamically based on the metric_type.
+    """
     if not data_entries:
         return
 
@@ -280,8 +293,15 @@ async def insert_specialized_data_idempotent(
     for entry in data_entries:
         try:
             record = entry.model_dump(exclude={"id"}, exclude_unset=True)
-            record["id"] = uuid4()
-            record["metric_id"] = metric_id
+            # Rename timestamp to date for DB compatibility
+            if "timestamp" in record:
+                record["date"] = record.pop("timestamp")
+            record.update(
+                {
+                    "id": uuid4(),
+                    "metric_id": metric_id,
+                }
+            )
             records.append(record)
         except Exception as e:
             logger.warning(f"Skipping invalid {metric_type} entry: {e}")
@@ -289,88 +309,51 @@ async def insert_specialized_data_idempotent(
     if not records:
         return
 
-    stmt = insert(model_cls).values(records)
-
-    # Define conflict resolution based on model type
+    # Define conflict handlers for different metric types
+    # You should adjust these index_elements and set_ fields based on your actual DB unique constraints and update logic
     conflict_handlers = {
-        "heart_rate": {
-            "index_elements": ["metric_id", "date", "context"],
-            "set_": ["min", "avg", "max", "source"],
-        },
-        "blood_pressure": {
-            "index_elements": ["metric_id", "date"],
-            "set_": ["systolic", "diastolic"],
-        },
-        "sleep_analysis": {
-            "index_elements": ["metric_id", "start_date", "end_date"],
-            "set_": ["value", "qty", "source"],
-        },
-        "blood_glucose": {
-            "index_elements": ["metric_id", "date", "meal_time"],
-            "set_": ["qty"],
-        },
-        "sexual_activity": {
-            "index_elements": ["metric_id", "date"],
-            "set_": ["unspecified", "protection_used", "protection_not_used"],
-        },
         "handwashing": {
             "index_elements": ["metric_id", "date"],
-            "set_": ["qty", "value"],
+            "set_": ["qty", "value", "source"],
         },
         "toothbrushing": {
-            "index_elements": ["metric_id", "date"],
-            "set_": ["qty", "value"],
+            "index_elements": ["metric_id", "timestamp"],
+            "set_": ["qty", "value", "source"],
         },
-        "insulin_delivery": {
-            "index_elements": ["metric_id", "date", "reason"],
-            "set_": ["qty"],
-        },
-        "symptom": {
-            "index_elements": ["metric_id", "start", "name"],
-            "set_": ["end", "severity", "user_entered", "source"],
-        },
-        "state_of_mind": {
-            "index_elements": ["metric_id", "start", "kind"],
-            "set_": [
-                "end",
-                "valence",
-                "valence_classification",
-                "labels",
-                "associations",
-                "metadata",
-            ],
-        },
-        "ecg": {
-            "index_elements": ["metric_id", "start"],
-            "set_": [
-                "end",
-                "classification",
-                "severity",
-                "average_heart_rate",
-                "number_of_voltage_measurements",
-                "voltage_measurements",
-                "sampling_frequency",
-                "source",
-            ],
+        "blood_pressure": {
+            "index_elements": ["metric_id", "timestamp"],
+            "set_": ["systolic", "diastolic", "source"],
         },
         "heart_rate_notifications": {
-            "index_elements": ["metric_id", "start", "end"],
-            "set_": ["threshold", "heart_rate", "heart_rate_variation"],
+            "index_elements": ["metric_id", "timestamp"],
+            "set_": ["value", "source"],
         },
+        "symptom": {
+            "index_elements": ["metric_id", "timestamp"],
+            "set_": ["severity", "notes", "source"],
+        },
+        "state_of_mind": {
+            "index_elements": ["metric_id", "timestamp"],
+            "set_": ["mood", "notes", "source"],
+        },
+        # Add more specialized handlers as necessary based on your schema...
     }
 
     handler = conflict_handlers.get(metric_type)
-    if handler:
-        # Build the set_ dict dynamically
-        set_dict = {field: getattr(stmt.excluded, field) for field in handler["set_"]}
-        stmt = stmt.on_conflict_do_update(
-            index_elements=handler["index_elements"], set_=set_dict
-        )
-    else:
-        # Default: do nothing on conflict
-        stmt = stmt.on_conflict_do_nothing()
 
-    await db.execute(stmt)
+    for chunk in chunked_iterable(records, batch_size):
+        stmt = insert(model_cls).values(chunk)
+        if handler:
+            stmt = stmt.on_conflict_do_update(
+                index_elements=handler["index_elements"],
+                set_={
+                    field: getattr(stmt.excluded, field) for field in handler["set_"]
+                },
+            )
+        else:
+            # Default to do nothing on conflict if no handler is defined
+            stmt = stmt.on_conflict_do_nothing()
+        await db.execute(stmt)
 
 
 async def insert_workout_idempotent(workout: Any, payload_id: str, db: AsyncSession):
@@ -458,54 +441,54 @@ async def insert_workout_idempotent(workout: Any, payload_id: str, db: AsyncSess
 
 
 async def insert_workout_points(
-    points: List[Any], workout_id: str, stream: str, db: AsyncSession
+    points: List[Any],
+    workout_id: str,
+    stream: str,
+    db: AsyncSession,
+    batch_size: int = 500,
 ):
-    """Insert workout point data (heart rate, etc.)"""
-
     if not points:
         return
 
-    records = []
-    for point in points:
-        records.append(
-            {
-                "id": uuid4(),
-                "workout_id": workout_id,
-                "stream": stream,
-                "date": point.date,
-                "qty": point.qty,
-                "units": point.units,
-            }
-        )
+    records = [
+        {
+            "id": uuid4(),
+            "workout_id": workout_id,
+            "stream": stream,
+            "date": p.date,
+            "qty": p.qty,
+            "units": p.units,
+        }
+        for p in points
+    ]
 
-    if records:
-        stmt = insert(db_models.WorkoutPoint).values(records)
+    for chunk in chunked_iterable(records, batch_size):
+        stmt = insert(db_models.WorkoutPoint).values(chunk)
         stmt = stmt.on_conflict_do_nothing(
             index_elements=["workout_id", "stream", "date"]
         )
         await db.execute(stmt)
 
 
-async def insert_route_points(points: List[Any], workout_id: str, db: AsyncSession):
-    """Insert workout route points"""
-
+async def insert_route_points(
+    points: List[Any], workout_id: str, db: AsyncSession, batch_size: int = 500
+):
     if not points:
         return
 
-    records = []
-    for point in points:
-        records.append(
-            {
-                "id": uuid4(),
-                "workout_id": workout_id,
-                "lat": point.lat,
-                "lon": point.lon,
-                "altitude": point.altitude,
-                "timestamp": point.timestamp,
-            }
-        )
+    records = [
+        {
+            "id": uuid4(),
+            "workout_id": workout_id,
+            "lat": p.lat,
+            "lon": p.lon,
+            "altitude": p.altitude,
+            "timestamp": p.timestamp,
+        }
+        for p in points
+    ]
 
-    if records:
-        stmt = insert(db_models.WorkoutRoutePoint).values(records)
+    for chunk in chunked_iterable(records, batch_size):
+        stmt = insert(db_models.WorkoutRoutePoint).values(chunk)
         stmt = stmt.on_conflict_do_nothing(index_elements=["workout_id", "timestamp"])
         await db.execute(stmt)

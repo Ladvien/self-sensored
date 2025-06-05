@@ -23,6 +23,7 @@ Base = declarative_base()
 
 class AppleHealthMixin:
     """Common fields for all Apple Health tables"""
+
     __table_args__ = {"schema": "apple_health"}
     id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
 
@@ -31,13 +32,12 @@ class HealthPayload(Base, AppleHealthMixin):
     __tablename__ = "health_payload"
     __table_args__ = (
         UniqueConstraint("payload_hash", name="uq_health_payload_hash"),
-        {"schema": "apple_health"}
+        {"schema": "apple_health"},
     )
 
-    id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
     received_at = Column(DateTime(timezone=True), server_default=func.now())
     payload_hash = Column(Text, nullable=False)
-    
+
     # Relationships
     metrics = relationship(
         "HealthMetric", back_populates="payload", cascade="all, delete-orphan"
@@ -54,20 +54,23 @@ class HealthMetric(Base, AppleHealthMixin):
     __tablename__ = "health_metric"
     __table_args__ = (
         UniqueConstraint("payload_id", "name", name="uq_health_metric_payload_name"),
-        UniqueConstraint("payload_id", "name", "data_hash", name="uq_health_metric_data"),
+        UniqueConstraint(
+            "payload_id", "name", "data_hash", name="uq_health_metric_data"
+        ),
         Index("idx_health_metric_payload_id", "payload_id"),
         Index("idx_health_metric_name", "name"),
-        {"schema": "apple_health"}
+        {"schema": "apple_health"},
     )
 
-    id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
     payload_id = Column(
-        UUID, ForeignKey("apple_health.health_payload.id", ondelete="CASCADE"), nullable=False
+        UUID,
+        ForeignKey("apple_health.health_payload.id", ondelete="CASCADE"),
+        nullable=False,
     )
     name = Column(Text, nullable=False)
     units = Column(Text, nullable=False)
     data_hash = Column(Text)  # Hash of metric data for deduplication
-    
+
     # Relationships
     payload = relationship("HealthPayload", back_populates="metrics")
     quantity_data = relationship(
@@ -100,9 +103,7 @@ class HealthMetric(Base, AppleHealthMixin):
     state_of_mind = relationship(
         "StateOfMind", back_populates="metric", cascade="all, delete-orphan"
     )
-    ecg = relationship(
-        "ECG", back_populates="metric", cascade="all, delete-orphan"
-    )
+    ecg = relationship("ECG", back_populates="metric", cascade="all, delete-orphan")
     heart_rate_notifications = relationship(
         "HeartRateNotification", back_populates="metric", cascade="all, delete-orphan"
     )
@@ -114,14 +115,18 @@ class HealthMetric(Base, AppleHealthMixin):
 class QuantityTimestamp(Base, AppleHealthMixin):
     __tablename__ = "quantity_timestamp"
     __table_args__ = (
-        UniqueConstraint("metric_id", "date", "source", name="uq_quantity_timestamp_metric_date_source"),
+        UniqueConstraint(
+            "metric_id",
+            "date",
+            "source",
+            name="uq_quantity_timestamp_metric_date_source",
+        ),
         Index("idx_quantity_timestamp_metric_id", "metric_id"),
         Index("idx_quantity_timestamp_date", "date"),
         Index("idx_quantity_timestamp_metric_date", "metric_id", "date"),
-        {"schema": "apple_health"}
+        {"schema": "apple_health"},
     )
 
-    id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
     date = Column(DateTime(timezone=True), nullable=False)
     metric_id = Column(
         UUID,
@@ -144,17 +149,18 @@ class BloodPressure(Base, AppleHealthMixin):
         UniqueConstraint("metric_id", "date", name="uq_blood_pressure_metric_date"),
         Index("idx_blood_pressure_metric_id", "metric_id"),
         Index("idx_blood_pressure_date", "date"),
-        {"schema": "apple_health"}
+        {"schema": "apple_health"},
     )
 
-    id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
     metric_id = Column(
-        UUID, ForeignKey("apple_health.health_metric.id", ondelete="CASCADE"), nullable=False
+        UUID,
+        ForeignKey("apple_health.health_metric.id", ondelete="CASCADE"),
+        nullable=False,
     )
     date = Column(DateTime(timezone=True), nullable=False)
     systolic = Column(Float, nullable=False)
     diastolic = Column(Float, nullable=False)
-    
+
     # Relationship
     metric = relationship("HealthMetric", back_populates="blood_pressure")
 
@@ -165,15 +171,18 @@ class BloodPressure(Base, AppleHealthMixin):
 class HeartRate(Base, AppleHealthMixin):
     __tablename__ = "heart_rate"
     __table_args__ = (
-        UniqueConstraint("metric_id", "date", "context", name="uq_heart_rate_metric_date_context"),
+        UniqueConstraint(
+            "metric_id", "date", "context", name="uq_heart_rate_metric_date_context"
+        ),
         Index("idx_heart_rate_metric_id", "metric_id"),
         Index("idx_heart_rate_date", "date"),
-        {"schema": "apple_health"}
+        {"schema": "apple_health"},
     )
 
-    id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
     metric_id = Column(
-        UUID, ForeignKey("apple_health.health_metric.id", ondelete="CASCADE"), nullable=False
+        UUID,
+        ForeignKey("apple_health.health_metric.id", ondelete="CASCADE"),
+        nullable=False,
     )
     date = Column(DateTime(timezone=True), nullable=False)
     min = Column(Float)
@@ -181,7 +190,7 @@ class HeartRate(Base, AppleHealthMixin):
     max = Column(Float)
     context = Column(Text)
     source = Column(Text)
-    
+
     # Relationship
     metric = relationship("HealthMetric", back_populates="heart_rate")
 
@@ -192,22 +201,25 @@ class HeartRate(Base, AppleHealthMixin):
 class SleepAnalysis(Base, AppleHealthMixin):
     __tablename__ = "sleep_analysis"
     __table_args__ = (
-        UniqueConstraint("metric_id", "start_date", "end_date", name="uq_sleep_analysis_metric_dates"),
+        UniqueConstraint(
+            "metric_id", "start_date", "end_date", name="uq_sleep_analysis_metric_dates"
+        ),
         Index("idx_sleep_analysis_metric_id", "metric_id"),
         Index("idx_sleep_analysis_start_date", "start_date"),
-        {"schema": "apple_health"}
+        {"schema": "apple_health"},
     )
 
-    id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
     metric_id = Column(
-        UUID, ForeignKey("apple_health.health_metric.id", ondelete="CASCADE"), nullable=False
+        UUID,
+        ForeignKey("apple_health.health_metric.id", ondelete="CASCADE"),
+        nullable=False,
     )
     start_date = Column(DateTime(timezone=True), nullable=False)
     end_date = Column(DateTime(timezone=True), nullable=False)
     value = Column(Text)
     qty = Column(Float)
     source = Column(Text)
-    
+
     # Relationship
     metric = relationship("HealthMetric", back_populates="sleep_analysis")
 
@@ -218,18 +230,23 @@ class SleepAnalysis(Base, AppleHealthMixin):
 class BloodGlucose(Base, AppleHealthMixin):
     __tablename__ = "blood_glucose"
     __table_args__ = (
-        UniqueConstraint("metric_id", "date", "meal_time", name="uq_blood_glucose_metric_date_meal"),
-        {"schema": "apple_health"}
+        UniqueConstraint(
+            "metric_id", "date", "meal_time", name="uq_blood_glucose_metric_date_meal"
+        ),
+        {"schema": "apple_health"},
     )
 
-    id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
     metric_id = Column(
-        UUID, ForeignKey("apple_health.health_metric.id", ondelete="CASCADE"), nullable=False
+        UUID,
+        ForeignKey("apple_health.health_metric.id", ondelete="CASCADE"),
+        nullable=False,
     )
     date = Column(DateTime(timezone=True), nullable=False)
     qty = Column(Float, nullable=False)
-    meal_time = Column(Text, nullable=False)  # 'Before Meal', 'After Meal', 'Unspecified'
-    
+    meal_time = Column(
+        Text, nullable=False
+    )  # 'Before Meal', 'After Meal', 'Unspecified'
+
     # Relationship
     metric = relationship("HealthMetric", back_populates="blood_glucose")
 
@@ -238,18 +255,19 @@ class SexualActivity(Base, AppleHealthMixin):
     __tablename__ = "sexual_activity"
     __table_args__ = (
         UniqueConstraint("metric_id", "date", name="uq_sexual_activity_metric_date"),
-        {"schema": "apple_health"}
+        {"schema": "apple_health"},
     )
 
-    id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
     metric_id = Column(
-        UUID, ForeignKey("apple_health.health_metric.id", ondelete="CASCADE"), nullable=False
+        UUID,
+        ForeignKey("apple_health.health_metric.id", ondelete="CASCADE"),
+        nullable=False,
     )
     date = Column(DateTime(timezone=True), nullable=False)
     unspecified = Column(Float)
     protection_used = Column(Float)
     protection_not_used = Column(Float)
-    
+
     # Relationship
     metric = relationship("HealthMetric", back_populates="sexual_activity")
 
@@ -258,36 +276,41 @@ class HygieneEvent(Base, AppleHealthMixin):
     __tablename__ = "hygiene_event"
     __table_args__ = (
         UniqueConstraint("metric_id", "date", name="uq_hygiene_event_metric_date"),
-        {"schema": "apple_health"}
+        {"schema": "apple_health"},
     )
 
     id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
     metric_id = Column(
-        UUID, ForeignKey("apple_health.health_metric.id", ondelete="CASCADE"), nullable=False
+        UUID,
+        ForeignKey("apple_health.health_metric.id", ondelete="CASCADE"),
+        nullable=False,
     )
-    date = Column(DateTime(timezone=True), nullable=False)
+    date = Column(DateTime(timezone=True), nullable=False)  # only date column
     qty = Column(Float)
-    value = Column(Text)  # 'Complete', 'Incomplete'
-    
-    # Relationship
+    source = Column(Text)
+    value = Column(Text)
+
     metric = relationship("HealthMetric", back_populates="hygiene_events")
 
 
 class InsulinDelivery(Base, AppleHealthMixin):
     __tablename__ = "insulin_delivery"
     __table_args__ = (
-        UniqueConstraint("metric_id", "date", "reason", name="uq_insulin_delivery_metric_date_reason"),
-        {"schema": "apple_health"}
+        UniqueConstraint(
+            "metric_id", "date", "reason", name="uq_insulin_delivery_metric_date_reason"
+        ),
+        {"schema": "apple_health"},
     )
 
-    id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
     metric_id = Column(
-        UUID, ForeignKey("apple_health.health_metric.id", ondelete="CASCADE"), nullable=False
+        UUID,
+        ForeignKey("apple_health.health_metric.id", ondelete="CASCADE"),
+        nullable=False,
     )
     date = Column(DateTime(timezone=True), nullable=False)
     qty = Column(Float, nullable=False)
     reason = Column(Text, nullable=False)  # 'Bolus', 'Basal'
-    
+
     # Relationship
     metric = relationship("HealthMetric", back_populates="insulin_delivery")
 
@@ -295,13 +318,16 @@ class InsulinDelivery(Base, AppleHealthMixin):
 class Symptom(Base, AppleHealthMixin):
     __tablename__ = "symptom"
     __table_args__ = (
-        UniqueConstraint("metric_id", "start", "name", name="uq_symptom_metric_start_name"),
-        {"schema": "apple_health"}
+        UniqueConstraint(
+            "metric_id", "start", "name", name="uq_symptom_metric_start_name"
+        ),
+        {"schema": "apple_health"},
     )
 
-    id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
     metric_id = Column(
-        UUID, ForeignKey("apple_health.health_metric.id", ondelete="CASCADE"), nullable=False
+        UUID,
+        ForeignKey("apple_health.health_metric.id", ondelete="CASCADE"),
+        nullable=False,
     )
     start = Column(DateTime(timezone=True), nullable=False)
     end = Column(DateTime(timezone=True), nullable=False)
@@ -309,31 +335,27 @@ class Symptom(Base, AppleHealthMixin):
     severity = Column(Text, nullable=False)
     user_entered = Column(Boolean, nullable=False)
     source = Column(Text)
-    
+
     # Relationship
     metric = relationship("HealthMetric", back_populates="symptoms")
 
 
 class StateOfMind(Base, AppleHealthMixin):
     __tablename__ = "state_of_mind"
-    __table_args__ = (
-        UniqueConstraint("metric_id", "start", "kind", name="uq_state_of_mind_metric_start_kind"),
-        {"schema": "apple_health"}
-    )
+    __table_args__ = {"schema": "apple_health"}
 
-    id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
     metric_id = Column(
-        UUID, ForeignKey("apple_health.health_metric.id", ondelete="CASCADE"), nullable=False
+        UUID, ForeignKey("apple_health.health_metric.id", ondelete="CASCADE")
     )
-    start = Column(DateTime(timezone=True), nullable=False)
-    end = Column(DateTime(timezone=True), nullable=False)
-    kind = Column(Text, nullable=False)
+    start = Column(DateTime(timezone=True))
+    end = Column(DateTime(timezone=True))
+    kind = Column(Text)
     valence = Column(Float)
     valence_classification = Column(Float)
-    metadata = Column(JSON)
+    metadata_json = Column("metadata", JSON)  # Maps to 'metadata' column in DB
     labels = Column(ARRAY(Text))
     associations = Column(ARRAY(Text))
-    
+
     # Relationship
     metric = relationship("HealthMetric", back_populates="state_of_mind")
 
@@ -342,12 +364,13 @@ class ECG(Base, AppleHealthMixin):
     __tablename__ = "ecg"
     __table_args__ = (
         UniqueConstraint("metric_id", "start", name="uq_ecg_metric_start"),
-        {"schema": "apple_health"}
+        {"schema": "apple_health"},
     )
 
-    id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
     metric_id = Column(
-        UUID, ForeignKey("apple_health.health_metric.id", ondelete="CASCADE"), nullable=False
+        UUID,
+        ForeignKey("apple_health.health_metric.id", ondelete="CASCADE"),
+        nullable=False,
     )
     start = Column(DateTime(timezone=True), nullable=False)
     end = Column(DateTime(timezone=True), nullable=False)
@@ -358,7 +381,7 @@ class ECG(Base, AppleHealthMixin):
     sampling_frequency = Column(Float)
     source = Column(Text)
     voltage_measurements = Column(JSON)
-    
+
     # Relationship
     metric = relationship("HealthMetric", back_populates="ecg")
 
@@ -366,20 +389,23 @@ class ECG(Base, AppleHealthMixin):
 class HeartRateNotification(Base, AppleHealthMixin):
     __tablename__ = "heart_rate_notification"
     __table_args__ = (
-        UniqueConstraint("metric_id", "start", "end", name="uq_heart_rate_notification_metric_times"),
-        {"schema": "apple_health"}
+        UniqueConstraint(
+            "metric_id", "start", "end", name="uq_heart_rate_notification_metric_times"
+        ),
+        {"schema": "apple_health"},
     )
 
-    id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
     metric_id = Column(
-        UUID, ForeignKey("apple_health.health_metric.id", ondelete="CASCADE"), nullable=False
+        UUID,
+        ForeignKey("apple_health.health_metric.id", ondelete="CASCADE"),
+        nullable=False,
     )
     start = Column(DateTime(timezone=True), nullable=False)
     end = Column(DateTime(timezone=True), nullable=False)
     threshold = Column(Float)
     heart_rate = Column(JSON)
     heart_rate_variation = Column(JSON)
-    
+
     # Relationship
     metric = relationship("HealthMetric", back_populates="heart_rate_notifications")
 
@@ -387,19 +413,22 @@ class HeartRateNotification(Base, AppleHealthMixin):
 class Workout(Base, AppleHealthMixin):
     __tablename__ = "workout"
     __table_args__ = (
-        UniqueConstraint("payload_id", "name", "start", name="uq_workout_payload_name_start"),
-        {"schema": "apple_health"}
+        UniqueConstraint(
+            "payload_id", "name", "start", name="uq_workout_payload_name_start"
+        ),
+        {"schema": "apple_health"},
     )
 
-    id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
     payload_id = Column(
-        UUID, ForeignKey("apple_health.health_payload.id", ondelete="CASCADE"), nullable=False
+        UUID,
+        ForeignKey("apple_health.health_payload.id", ondelete="CASCADE"),
+        nullable=False,
     )
     name = Column(Text, nullable=False)
     start = Column(DateTime(timezone=True), nullable=False)
     end = Column(DateTime(timezone=True), nullable=False)
     elevation = Column(JSON)
-    
+
     # Relationships
     payload = relationship("HealthPayload", back_populates="workouts")
     workout_values = relationship(
@@ -417,17 +446,16 @@ class WorkoutValue(Base, AppleHealthMixin):
     __tablename__ = "workout_value"
     __table_args__ = (
         UniqueConstraint("workout_id", "name", name="uq_workout_value_workout_name"),
-        {"schema": "apple_health"}
+        {"schema": "apple_health"},
     )
 
-    id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
     workout_id = Column(
         UUID, ForeignKey("apple_health.workout.id", ondelete="CASCADE"), nullable=False
     )
     name = Column(Text, nullable=False)
     qty = Column(Float)
     units = Column(Text)
-    
+
     # Relationship
     workout = relationship("Workout", back_populates="workout_values")
 
@@ -435,11 +463,12 @@ class WorkoutValue(Base, AppleHealthMixin):
 class WorkoutPoint(Base, AppleHealthMixin):
     __tablename__ = "workout_point"
     __table_args__ = (
-        UniqueConstraint("workout_id", "stream", "date", name="uq_workout_point_workout_stream_date"),
-        {"schema": "apple_health"}
+        UniqueConstraint(
+            "workout_id", "stream", "date", name="uq_workout_point_workout_stream_date"
+        ),
+        {"schema": "apple_health"},
     )
 
-    id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
     workout_id = Column(
         UUID, ForeignKey("apple_health.workout.id", ondelete="CASCADE"), nullable=False
     )
@@ -447,7 +476,7 @@ class WorkoutPoint(Base, AppleHealthMixin):
     date = Column(DateTime(timezone=True), nullable=False)
     qty = Column(Float)
     units = Column(Text)
-    
+
     # Relationship
     workout = relationship("Workout", back_populates="workout_points")
 
@@ -455,11 +484,12 @@ class WorkoutPoint(Base, AppleHealthMixin):
 class WorkoutRoutePoint(Base, AppleHealthMixin):
     __tablename__ = "workout_route_point"
     __table_args__ = (
-        UniqueConstraint("workout_id", "timestamp", name="uq_workout_route_point_workout_timestamp"),
-        {"schema": "apple_health"}
+        UniqueConstraint(
+            "workout_id", "timestamp", name="uq_workout_route_point_workout_timestamp"
+        ),
+        {"schema": "apple_health"},
     )
 
-    id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
     workout_id = Column(
         UUID, ForeignKey("apple_health.workout.id", ondelete="CASCADE"), nullable=False
     )
@@ -467,7 +497,7 @@ class WorkoutRoutePoint(Base, AppleHealthMixin):
     lon = Column(Float, nullable=False)
     altitude = Column(Float)
     timestamp = Column(DateTime(timezone=True), nullable=False)
-    
+
     # Relationship
     workout = relationship("Workout", back_populates="route_points")
 

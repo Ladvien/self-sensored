@@ -1,6 +1,6 @@
 from datetime import datetime, date
 from typing import List, Optional, Dict, Any, Literal, Type, Union
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator, root_validator
 from rich import print
 import logging
 
@@ -97,6 +97,13 @@ class HygieneEvent(TZBaseModel):
     qty: Optional[float] = None
     value: Optional[str] = None
     source: Optional[str] = None
+
+    @model_validator(mode="before")
+    def handle_multiple_aliases(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        # If no "date" key but "timestamp" key exists, assign it to "date"
+        if "date" not in values and "timestamp" in values:
+            values["date"] = values["timestamp"]
+        return values
 
 
 class InsulinDelivery(TZBaseModel):
