@@ -1,3 +1,5 @@
+# app/db/insert_logic.py - Fixed to work with your original structure and new improvements
+
 import hashlib
 import json
 from typing import Dict, Any, Optional, List, Type
@@ -13,7 +15,7 @@ import app.db.models as db_models
 
 logger = logging.getLogger(__name__)
 
-# Map API model names to SQLAlchemy model classes
+# Map API model names to SQLAlchemy model classes (your original mapping)
 SPECIALIZED_DB_MODELS = {
     "blood_pressure": db_models.BloodPressure,
     "heart_rate": db_models.HeartRate,
@@ -139,7 +141,13 @@ async def insert_health_data(
             f"{metrics_processed} metrics added, {metrics_skipped} skipped"
         )
 
-        await db.commit()
+        try:
+            # Your insert operations
+            await db.commit()
+        except Exception as e:
+            logger.error(f"Transaction failed: {e}")
+            await db.rollback()  # This is crucial
+            raise
 
         return {
             "status": status,
@@ -236,7 +244,11 @@ def chunked_iterable(iterable, size):
 
 
 async def insert_quantity_data_idempotent(
-    data_entries: List[Any], metric_id: str, db: AsyncSession, batch_size: int = 500
+    data_entries: List[Any],
+    metric_id: str,
+    db: AsyncSession,
+    batch_size: int = 500,
+    max_params: int = 200,
 ) -> None:
     """
     Insert quantity data records into the database idempotently.
@@ -261,8 +273,11 @@ async def insert_quantity_data_idempotent(
 
     if not records:
         return
+    effective_batch_size = (
+        min(batch_size, max_params // len(records[0].keys())) if records else batch_size
+    )
 
-    for chunk in chunked_iterable(records, batch_size):
+    for chunk in chunked_iterable(records, effective_batch_size):
         stmt = insert(db_models.QuantityTimestamp).values(chunk)
         stmt = stmt.on_conflict_do_update(
             index_elements=["metric_id", "date", "source"],
@@ -281,6 +296,7 @@ async def insert_specialized_data_idempotent(
     metric_type: str,
     db: AsyncSession,
     batch_size: int = 500,
+    max_params: int = 200,
 ) -> None:
     """
     Insert specialized data records into the database idempotently.
@@ -310,38 +326,55 @@ async def insert_specialized_data_idempotent(
         return
 
     # Define conflict handlers for different metric types
-    # You should adjust these index_elements and set_ fields based on your actual DB unique constraints and update logic
     conflict_handlers = {
         "handwashing": {
             "index_elements": ["metric_id", "date"],
             "set_": ["qty", "value", "source"],
         },
         "toothbrushing": {
-            "index_elements": ["metric_id", "timestamp"],
+            "index_elements": ["metric_id", "date"],
             "set_": ["qty", "value", "source"],
         },
         "blood_pressure": {
-            "index_elements": ["metric_id", "timestamp"],
+            "index_elements": ["metric_id", "date"],
             "set_": ["systolic", "diastolic", "source"],
         },
+        "heart_rate": {
+            "index_elements": ["metric_id", "date", "context"],
+            "set_": ["min", "avg", "max", "source"],
+        },
         "heart_rate_notifications": {
-            "index_elements": ["metric_id", "timestamp"],
-            "set_": ["value", "source"],
+            "index_elements": ["metric_id", "start", "end"],
+            "set_": ["threshold", "heart_rate", "heart_rate_variation", "source"],
         },
         "symptom": {
-            "index_elements": ["metric_id", "timestamp"],
-            "set_": ["severity", "notes", "source"],
+            "index_elements": ["metric_id", "start", "name"],
+            "set_": ["end", "severity", "user_entered", "source"],
         },
         "state_of_mind": {
-            "index_elements": ["metric_id", "timestamp"],
-            "set_": ["mood", "notes", "source"],
+            "index_elements": ["metric_id", "start", "kind"],
+            "set_": [
+                "end",
+                "valence",
+                "valence_classification",
+                "metadata_json",
+                "labels",
+                "associations",
+                "source",
+            ],
         },
-        # Add more specialized handlers as necessary based on your schema...
     }
 
     handler = conflict_handlers.get(metric_type)
 
-    for chunk in chunked_iterable(records, batch_size):
+    # Calculate safe batch size based on parameter limits
+    effective_batch_size = (
+        max(1, min(batch_size, max_params // len(records[0].keys())))
+        if records
+        else batch_size
+    )
+
+    for chunk in chunked_iterable(records, effective_batch_size):
         stmt = insert(model_cls).values(chunk)
         if handler:
             stmt = stmt.on_conflict_do_update(
@@ -353,7 +386,15 @@ async def insert_specialized_data_idempotent(
         else:
             # Default to do nothing on conflict if no handler is defined
             stmt = stmt.on_conflict_do_nothing()
-        await db.execute(stmt)
+        try:
+            logger.info(f"Attempting to insert {len(chunk)} {metric_type} records")
+            logger.debug(f"Sample record structure: {chunk[0] if chunk else 'None'}")
+            await db.execute(stmt)
+        except Exception as e:
+            logger.error(f"FIRST FAILURE in {metric_type}: {type(e).__name__}: {e}")
+            logger.error(f"Failed record sample: {chunk[0] if chunk else 'None'}")
+            logger.error(f"SQL: {stmt}")
+            raise  # This will poison the transaction, but we'll see the root cause
 
 
 async def insert_workout_idempotent(workout: Any, payload_id: str, db: AsyncSession):
@@ -446,6 +487,7 @@ async def insert_workout_points(
     stream: str,
     db: AsyncSession,
     batch_size: int = 500,
+    max_params: int = 200,
 ):
     if not points:
         return
@@ -462,7 +504,12 @@ async def insert_workout_points(
         for p in points
     ]
 
-    for chunk in chunked_iterable(records, batch_size):
+    # Calculate safe batch size based on parameter limits
+    effective_batch_size = (
+        min(batch_size, max_params // len(records[0].keys())) if records else batch_size
+    )
+
+    for chunk in chunked_iterable(records, effective_batch_size):
         stmt = insert(db_models.WorkoutPoint).values(chunk)
         stmt = stmt.on_conflict_do_nothing(
             index_elements=["workout_id", "stream", "date"]
@@ -471,7 +518,11 @@ async def insert_workout_points(
 
 
 async def insert_route_points(
-    points: List[Any], workout_id: str, db: AsyncSession, batch_size: int = 500
+    points: List[Any],
+    workout_id: str,
+    db: AsyncSession,
+    batch_size: int = 500,
+    max_params: int = 200,
 ):
     if not points:
         return
@@ -488,7 +539,13 @@ async def insert_route_points(
         for p in points
     ]
 
-    for chunk in chunked_iterable(records, batch_size):
+    # Calculate safe batch size based on parameter limits
+    effective_batch_size = (
+        min(batch_size, max_params // len(records[0].keys())) if records else batch_size
+    )
+
+    for chunk in chunked_iterable(records, effective_batch_size):
+
         stmt = insert(db_models.WorkoutRoutePoint).values(chunk)
         stmt = stmt.on_conflict_do_nothing(index_elements=["workout_id", "timestamp"])
         await db.execute(stmt)

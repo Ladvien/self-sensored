@@ -1,4 +1,4 @@
-# app/db/models.py
+# app/db/models.py - Minimal fix to avoid the column conflict
 
 from sqlalchemy import (
     Column,
@@ -279,13 +279,12 @@ class HygieneEvent(Base, AppleHealthMixin):
         {"schema": "apple_health"},
     )
 
-    id = Column(UUID, primary_key=True, server_default=func.gen_random_uuid())
     metric_id = Column(
         UUID,
         ForeignKey("apple_health.health_metric.id", ondelete="CASCADE"),
         nullable=False,
     )
-    date = Column(DateTime(timezone=True), nullable=False)  # only date column
+    date = Column(DateTime(timezone=True), nullable=False)
     qty = Column(Float)
     source = Column(Text)
     value = Column(Text)

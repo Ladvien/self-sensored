@@ -1,6 +1,8 @@
+# app/api/models.py - Fixed to handle different data structures properly
+
 from datetime import datetime, date
 from typing import List, Optional, Dict, Any, Literal, Type, Union
-from pydantic import BaseModel, Field, ConfigDict, model_validator, root_validator
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 from rich import print
 import logging
 
