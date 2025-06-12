@@ -1,4 +1,4 @@
-# app/db/insert_logic.py - Fixed to work with your original structure and new improvements
+# app/db/insert_logic.py - Fixed to work with corrected models
 
 import hashlib
 import json
@@ -15,7 +15,7 @@ import app.db.models as db_models
 
 logger = logging.getLogger(__name__)
 
-# Map API model names to SQLAlchemy model classes (your original mapping)
+# Map API model names to SQLAlchemy model classes (corrected mapping)
 SPECIALIZED_DB_MODELS = {
     "blood_pressure": db_models.BloodPressure,
     "heart_rate": db_models.HeartRate,
@@ -26,6 +26,7 @@ SPECIALIZED_DB_MODELS = {
     "toothbrushing": db_models.HygieneEvent,
     "insulin_delivery": db_models.InsulinDelivery,
     "symptom": db_models.Symptom,
+    "symptoms": db_models.Symptom,  # Handle both singular and plural
     "state_of_mind": db_models.StateOfMind,
     "ecg": db_models.ECG,
     "heart_rate_notifications": db_models.HeartRateNotification,
@@ -141,13 +142,7 @@ async def insert_health_data(
             f"{metrics_processed} metrics added, {metrics_skipped} skipped"
         )
 
-        try:
-            # Your insert operations
-            await db.commit()
-        except Exception as e:
-            logger.error(f"Transaction failed: {e}")
-            await db.rollback()  # This is crucial
-            raise
+        await db.commit()
 
         return {
             "status": status,
@@ -263,7 +258,7 @@ async def insert_quantity_data_idempotent(
             record = {
                 "id": uuid4(),
                 "metric_id": metric_id,
-                "date": entry.get_date(),
+                "date": entry.get_primary_date(),
                 "qty": entry.qty,
                 "source": getattr(entry, "source", None),
             }
@@ -273,6 +268,7 @@ async def insert_quantity_data_idempotent(
 
     if not records:
         return
+        
     effective_batch_size = (
         min(batch_size, max_params // len(records[0].keys())) if records else batch_size
     )
@@ -309,9 +305,16 @@ async def insert_specialized_data_idempotent(
     for entry in data_entries:
         try:
             record = entry.model_dump(exclude={"id"}, exclude_unset=True)
-            # Rename timestamp to date for DB compatibility
+            
+            # Handle field mapping from API models to DB models
             if "timestamp" in record:
                 record["date"] = record.pop("timestamp")
+            
+            # Special handling for state_of_mind metadata field
+            if metric_type == "state_of_mind" and "metadata" in record:
+                # Map API 'metadata' field to DB 'metadata_json' attribute
+                record["metadata_json"] = record.pop("metadata")
+                
             record.update(
                 {
                     "id": uuid4(),
@@ -337,7 +340,7 @@ async def insert_specialized_data_idempotent(
         },
         "blood_pressure": {
             "index_elements": ["metric_id", "date"],
-            "set_": ["systolic", "diastolic", "source"],
+            "set_": ["systolic", "diastolic"],
         },
         "heart_rate": {
             "index_elements": ["metric_id", "date", "context"],
@@ -345,9 +348,13 @@ async def insert_specialized_data_idempotent(
         },
         "heart_rate_notifications": {
             "index_elements": ["metric_id", "start", "end"],
-            "set_": ["threshold", "heart_rate", "heart_rate_variation", "source"],
+            "set_": ["threshold", "heart_rate", "heart_rate_variation"],
         },
         "symptom": {
+            "index_elements": ["metric_id", "start", "name"],
+            "set_": ["end", "severity", "user_entered", "source"],
+        },
+        "symptoms": {
             "index_elements": ["metric_id", "start", "name"],
             "set_": ["end", "severity", "user_entered", "source"],
         },
@@ -360,8 +367,29 @@ async def insert_specialized_data_idempotent(
                 "metadata_json",
                 "labels",
                 "associations",
-                "source",
             ],
+        },
+        "sleep_analysis": {
+            "index_elements": ["metric_id", "start_date", "end_date"],
+            "set_": ["value", "qty", "source"],
+        },
+        "blood_glucose": {
+            "index_elements": ["metric_id", "date", "meal_time"],
+            "set_": ["qty"],
+        },
+        "sexual_activity": {
+            "index_elements": ["metric_id", "date"],
+            "set_": ["unspecified", "protection_used", "protection_not_used"],
+        },
+        "insulin_delivery": {
+            "index_elements": ["metric_id", "date", "reason"],
+            "set_": ["qty"],
+        },
+        "ecg": {
+            "index_elements": ["metric_id", "start"],
+            "set_": ["end", "classification", "severity", "average_heart_rate", 
+                     "number_of_voltage_measurements", "sampling_frequency", 
+                     "source", "voltage_measurements"],
         },
     }
 
@@ -387,14 +415,12 @@ async def insert_specialized_data_idempotent(
             # Default to do nothing on conflict if no handler is defined
             stmt = stmt.on_conflict_do_nothing()
         try:
-            logger.info(f"Attempting to insert {len(chunk)} {metric_type} records")
-            logger.debug(f"Sample record structure: {chunk[0] if chunk else 'None'}")
+            logger.debug(f"Inserting {len(chunk)} {metric_type} records")
             await db.execute(stmt)
         except Exception as e:
-            logger.error(f"FIRST FAILURE in {metric_type}: {type(e).__name__}: {e}")
+            logger.error(f"Failed to insert {metric_type}: {type(e).__name__}: {e}")
             logger.error(f"Failed record sample: {chunk[0] if chunk else 'None'}")
-            logger.error(f"SQL: {stmt}")
-            raise  # This will poison the transaction, but we'll see the root cause
+            raise
 
 
 async def insert_workout_idempotent(workout: Any, payload_id: str, db: AsyncSession):
@@ -545,7 +571,6 @@ async def insert_route_points(
     )
 
     for chunk in chunked_iterable(records, effective_batch_size):
-
         stmt = insert(db_models.WorkoutRoutePoint).values(chunk)
         stmt = stmt.on_conflict_do_nothing(index_elements=["workout_id", "timestamp"])
         await db.execute(stmt)

@@ -11,7 +11,12 @@ class TZBaseModel(BaseModel):
     model_config = ConfigDict(str_to_datetime_mode="iso8601", populate_by_name=True)
 
     def get_date(self) -> datetime:
+        """Get the primary date field from this model"""
         return getattr(self, "date", getattr(self, "timestamp", None))
+
+    def get_primary_date(self) -> datetime:
+        """Alias for get_date for compatibility"""
+        return self.get_date()
 
 
 # ---- Reusable Value Types ----
@@ -80,6 +85,10 @@ class SleepAnalysis(TZBaseModel):
     qty: Optional[float] = None
     source: Optional[str] = None
 
+    def get_primary_date(self) -> datetime:
+        """For sleep analysis, use start_date as primary date"""
+        return self.start_date
+
 
 class BloodGlucose(TZBaseModel):
     date: datetime
@@ -106,6 +115,10 @@ class HygieneEvent(TZBaseModel):
         if "date" not in values and "timestamp" in values:
             values["date"] = values["timestamp"]
         return values
+
+    def get_primary_date(self) -> datetime:
+        """For hygiene events, use timestamp as primary date"""
+        return self.timestamp
 
 
 class InsulinDelivery(TZBaseModel):
@@ -136,6 +149,10 @@ class HeartRateNotification(TZBaseModel):
     heart_rate: List[HRSubMeasurement]
     heart_rate_variation: List[HRVSubMeasurement]
 
+    def get_primary_date(self) -> datetime:
+        """For notifications, use start as primary date"""
+        return self.start
+
 
 # ---- Symptoms ----
 
@@ -147,6 +164,10 @@ class Symptom(TZBaseModel):
     severity: str
     user_entered: bool
     source: str
+
+    def get_primary_date(self) -> datetime:
+        """For symptoms, use start as primary date"""
+        return self.start
 
 
 # ---- State of Mind ----
@@ -162,6 +183,10 @@ class StateOfMind(TZBaseModel):
     valence: float
     valence_classification: float
     metadata: Dict[str, str]
+
+    def get_primary_date(self) -> datetime:
+        """For state of mind, use start as primary date"""
+        return self.start
 
 
 # ---- ECG ----
@@ -183,6 +208,10 @@ class ECG(TZBaseModel):
     voltage_measurements: List[VoltageMeasurement]
     sampling_frequency: float
     source: str
+
+    def get_primary_date(self) -> datetime:
+        """For ECG, use start as primary date"""
+        return self.start
 
 
 # ---- Workouts ----

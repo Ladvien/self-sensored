@@ -1,5 +1,5 @@
 -- Apple Health Schema with Full Idempotency Support
-DROP SCHEMA IF EXISTS apple_health CASCADE;
+-- DROP SCHEMA IF EXISTS apple_health CASCADE;
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 

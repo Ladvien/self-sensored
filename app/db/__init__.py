@@ -7,4 +7,5 @@ from .models import (
     BloodPressure,
     HeartRate,
     SleepAnalysis,
+    Base,
 )

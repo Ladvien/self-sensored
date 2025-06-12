@@ -1,4 +1,4 @@
-# app/db/models.py - Minimal fix to avoid the column conflict
+# app/db/models.py - Fixed to match SQL schema exactly
 
 from sqlalchemy import (
     Column,
@@ -341,7 +341,12 @@ class Symptom(Base, AppleHealthMixin):
 
 class StateOfMind(Base, AppleHealthMixin):
     __tablename__ = "state_of_mind"
-    __table_args__ = {"schema": "apple_health"}
+    __table_args__ = (
+        UniqueConstraint(
+            "metric_id", "start", "kind", name="uq_state_of_mind_metric_start_kind"
+        ),
+        {"schema": "apple_health"},
+    )
 
     metric_id = Column(
         UUID, ForeignKey("apple_health.health_metric.id", ondelete="CASCADE")
@@ -351,7 +356,8 @@ class StateOfMind(Base, AppleHealthMixin):
     kind = Column(Text)
     valence = Column(Float)
     valence_classification = Column(Float)
-    metadata_json = Column("metadata", JSON)  # Maps to 'metadata' column in DB
+    # Use a different attribute name but map to 'metadata' column in DB
+    metadata_json = Column("metadata", JSON)
     labels = Column(ARRAY(Text))
     associations = Column(ARRAY(Text))
 
@@ -502,3 +508,20 @@ class WorkoutRoutePoint(Base, AppleHealthMixin):
 
     def __repr__(self):
         return f"<WorkoutRoutePoint(lat={self.lat}, lon={self.lon}, timestamp={self.timestamp})>"
+
+
+# Model registry for dynamic access (used by insert logic)
+MODEL_REGISTRY = {
+    "quantity_timestamp": QuantityTimestamp,
+    "blood_pressure": BloodPressure,
+    "heart_rate": HeartRate,
+    "sleep_analysis": SleepAnalysis,
+    "blood_glucose": BloodGlucose,
+    "sexual_activity": SexualActivity,
+    "hygiene_event": HygieneEvent,
+    "insulin_delivery": InsulinDelivery,
+    "symptom": Symptom,
+    "state_of_mind": StateOfMind,
+    "ecg": ECG,
+    "heart_rate_notification": HeartRateNotification,
+}
