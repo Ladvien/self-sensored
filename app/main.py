@@ -17,10 +17,6 @@ DATABASE_URL = os.getenv(
 )
 
 
-app = FastAPI()
-
-app.include_router(api_router, prefix="/api/v1")
-
 engine = create_async_engine(DATABASE_URL, echo=False)
 
 
