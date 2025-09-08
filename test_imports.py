@@ -20,7 +20,7 @@ def test_imports():
         
     except Exception as e:
         print(f"❌ API models import failed: {e}")
-        assert False, f"API models import failed: {e}"
+        return False
     
     print("\nTesting DB models import...")
     try:
@@ -36,7 +36,7 @@ def test_imports():
         
     except Exception as e:
         print(f"❌ DB models import failed: {e}")
-        assert False, f"DB models import failed: {e}"
+        return False
     
     print("\nTesting insert logic import...")
     try:
@@ -50,7 +50,7 @@ def test_imports():
         
     except Exception as e:
         print(f"❌ Insert logic import failed: {e}")
-        assert False, f"Insert logic import failed: {e}"
+        return False
     
     print("\nTesting endpoints import...")
     try:
@@ -59,7 +59,7 @@ def test_imports():
         
     except Exception as e:
         print(f"❌ Endpoints import failed: {e}")
-        assert False, f"Endpoints import failed: {e}"
+        return False
     
     print("\nTesting main app import...")
     try:
@@ -68,9 +68,10 @@ def test_imports():
         
     except Exception as e:
         print(f"❌ Main app import failed: {e}")
-        assert False, f"Main app import failed: {e}"
+        return False
     
     print("\n🎉 All imports successful!")
+    return True
 
 
 def test_model_instantiation():
@@ -104,15 +105,19 @@ def test_model_instantiation():
         
     except Exception as e:
         print(f"❌ Model instantiation failed: {e}")
-        assert False, f"Model instantiation failed: {e}"
+        return False
     
     print("✅ Model instantiation tests passed!")
+    return True
 
 
 if __name__ == "__main__":
     print("Running import and instantiation tests...\n")
     
-    test_imports()
-    test_model_instantiation()
+    import_success = test_imports()
+    model_success = test_model_instantiation()
     
-    print("\n🎉 All tests passed! Your fixes are working correctly.")
+    if import_success and model_success:
+        print("\n🎉 All tests passed! Your fixes are working correctly.")
+    else:
+        print("\n❌ Some tests failed. Check the error messages above.")

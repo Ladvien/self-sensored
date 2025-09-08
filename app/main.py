@@ -10,12 +10,11 @@ from app import db
 
 load_dotenv()
 
-
+# Update DATABASE_URL to use STORY-008 infrastructure
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql+asyncpg://self_sensored_user:S3curePa$$123@192.168.1.104:5432/self_sensored",
+    "postgresql+asyncpg://health_user:dev_password_123@localhost:5432/health_export_dev",
 )
-
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 
