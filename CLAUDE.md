@@ -120,10 +120,28 @@ Implement comprehensive monitoring with:
 - Data quality monitoring for anomalous values
 - Alert management for system health issues
 
+## Technology Evolution Context
+
+This project underwent a complex technology evolution that is important for developers to understand:
+
+### Migration History:
+1. **Original Implementation (2024)**: Working Python/FastAPI implementation with comprehensive health data models, database schema with partitioning, and production-ready features
+2. **Architecture Planning Phase**: Detailed 36KB ARCHITECTURE.md specification created targeting Rust/Actix-web stack for performance and modern architecture
+3. **Implementation Deletion**: Previous Python implementation was completely removed (commit 306dc0d), leaving only architectural documentation
+4. **Strategic Decision (STORY-001)**: Multi-agent analysis revealed technology stack contradiction and evaluated two paths:
+   - **Path A (Chosen)**: Restore and enhance Python implementation (197 story points, 6-8 weeks)
+   - **Path B**: Complete Rust rewrite per ARCHITECTURE.md (222 story points, 8-10 weeks)
+
+### Decision Rationale:
+- **Proven Foundation**: Previous Python implementation demonstrated solid domain understanding with 15+ health metric types
+- **Lower Risk**: Building on existing business logic vs greenfield rewrite
+- **Resource Efficiency**: 25% less effort with faster time to market
+- **Architecture Compliance**: Python stack enhanced to meet all architectural requirements (security, caching, monitoring)
+
 ## Project Status
 
-**Current Phase**: Strategic Decision Complete - Path A Implementation
-**Decision**: Python Enhancement chosen over Rust rewrite (see DECISION.md)
+**Current Phase**: Technology Migration/Implementation (Path A Enhancement)
+**Decision**: Python Enhancement chosen over Rust rewrite (see MIGRATION.md)
 **Next Steps**: 
 1. Restore Python implementation (STORY-004A)
 2. Setup database infrastructure (STORY-008)
@@ -131,7 +149,7 @@ Implement comprehensive monitoring with:
 4. Add rate limiting and caching (STORY-006A, STORY-007A)
 
 **Key Files**:
-- `DECISION.md` - Strategic technology decision rationale
+- `MIGRATION.md` - Technology evolution and strategic decision documentation
 - `BACKLOG.md` - Complete project backlog with stories
-- `ARCHITECTURE.md` - Original architecture specification
+- `ARCHITECTURE.md` - Original architecture specification (Rust-based)
 - `team_chat.md` - Multi-agent analysis findings
