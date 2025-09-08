@@ -1,8 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: health-export
-  labels:
-    name: health-export
-    purpose: health-data-api
-    environment: production

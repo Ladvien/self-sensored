@@ -4,14 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **Health Export REST API** system designed to receive and store health data from the Auto Health Export iOS application. The project underwent strategic technology decision-making and is now in the **implementation phase** following **Path A: Python Enhancement** strategy. A working Python implementation previously existed but was deleted, and is being restored and enhanced with missing architectural components.
+This is a **Health Export REST API** system designed to receive and store health data from the Auto Health Export iOS application. The project is built with Rust, Actix-web, SQLx, and PostgreSQL following modern architectural patterns for production deployment.
 
-## Technology Stack (Chosen Path A)
+## Technology Stack
 
-- **Language**: Python 3.13
-- **Web Framework**: FastAPI  
-- **Database**: PostgreSQL 15+ with PostGIS extension
-- **ORM/Query Builder**: SQLAlchemy + Asyncpg
+- **Language**: Rust
+- **Web Framework**: Actix-web 4.x
+- **Database**: PostgreSQL 17+ with PostGIS extension
+- **ORM/Query Builder**: SQLx
 - **Cache**: Redis
 - **Container Orchestration**: Kubernetes
 - **Monitoring**: Prometheus + Grafana
@@ -19,30 +19,92 @@ This is a **Health Export REST API** system designed to receive and store health
 
 ## Commands
 
-Python-based commands for development and deployment:
+Rust-based commands for development and deployment:
 
 ```bash
-# Install dependencies
-poetry install
+# Build the project
+cargo build
+
+# Build for release
+cargo build --release
 
 # Run the development server
-uvicorn app.main:app --reload
+cargo run
 
 # Run tests
-pytest
+cargo test
 
-# Run database migrations (when implemented)
-alembic upgrade head
+# Run specific test
+cargo test test_name
 
-# Run linting
-ruff check .
+# Run integration tests
+cargo test --test integration_tests
+
+# Check for compile errors without building
+cargo check
 
 # Format code
-black .
+cargo fmt
 
-# Run with docker-compose for development
-docker-compose up
+# Run linting
+cargo clippy
+
+# Run linting with strict rules
+cargo clippy -- -D warnings
+
+# Install SQLx CLI for migrations
+cargo install sqlx-cli --features postgres
+
+# Run database migrations
+sqlx migrate run
+
+# Create new migration
+sqlx migrate add migration_name
+
+# Revert last migration
+sqlx migrate revert
 ```
+
+## Database Testing Rules - MANDATORY
+
+**⚠️ CRITICAL: ALL database connections and testing MUST use the remote PostgreSQL server at 192.168.1.104**
+
+### Database Connection Requirements:
+- **Production Database**: `postgresql://self_sensored:37om3i*t3XfSZ0@192.168.1.104:5432/self_sensored`
+- **Test Database**: `postgresql://self_sensored:37om3i*t3XfSZ0@192.168.1.104:5432/self_sensored_test`
+- **NO localhost connections**: Never use localhost, 127.0.0.1, or local database connections
+- **NO containers**: Do not use any containerized database solutions
+- **Remote only**: All database operations must connect to 192.168.1.104
+
+### Testing Database Configuration:
+```env
+# .env file MUST contain these exact values:
+DATABASE_URL=postgresql://self_sensored:37om3i*t3XfSZ0@192.168.1.104:5432/self_sensored
+TEST_DATABASE_URL=postgresql://self_sensored:37om3i*t3XfSZ0@192.168.1.104:5432/self_sensored_test
+```
+
+### Database Testing Commands:
+```bash
+# Test main database connection
+PGPASSWORD='37om3i*t3XfSZ0' psql -h 192.168.1.104 -U self_sensored -d self_sensored -c "SELECT version();"
+
+# Test test database connection  
+PGPASSWORD='37om3i*t3XfSZ0' psql -h 192.168.1.104 -U self_sensored -d self_sensored_test -c "SELECT version();"
+
+# Verify PostGIS functionality
+PGPASSWORD='37om3i*t3XfSZ0' psql -h 192.168.1.104 -U self_sensored -d self_sensored -c "SELECT PostGIS_version();"
+
+# Test UUID generation
+PGPASSWORD='37om3i*t3XfSZ0' psql -h 192.168.1.104 -U self_sensored -d self_sensored -c "SELECT gen_random_uuid();"
+```
+
+### Rust Application Configuration:
+- SQLx connection pools MUST point to 192.168.1.104
+- All migrations MUST run against 192.168.1.104
+- Integration tests MUST use the test database at 192.168.1.104
+- No mocking or local database substitutes allowed
+
+**This is a hard requirement - any code that attempts to connect to localhost or containers will be rejected.**
 
 ## Architecture Overview
 
