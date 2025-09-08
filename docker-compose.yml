@@ -1,0 +1,173 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 15 with PostGIS extension for geospatial data
+  postgres:
+    image: postgis/postgis:15-3.3
+    container_name: health_export_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: health_export_dev
+      POSTGRES_USER: health_user
+      POSTGRES_PASSWORD: dev_password_123
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+      - ./database/backups:/backups
+    networks:
+      - health_export_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U health_user -d health_export_dev"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_stat_statements
+      -c pg_stat_statements.track=all
+      -c log_destination=stderr
+      -c log_statement=mod
+      -c log_min_duration_statement=1000
+      -c max_connections=100
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c work_mem=4MB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+
+  # Redis 7.x for caching and rate limiting
+  redis:
+    image: redis:7.2-alpine
+    container_name: health_export_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./redis/config/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      - health_export_network
+    command: redis-server /usr/local/etc/redis/redis.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    sysctls:
+      - net.core.somaxconn=65535
+
+  # Redis Commander - Web-based Redis management interface (development only)
+  redis-commander:
+    image: ghcr.io/joeferner/redis-commander:latest
+    container_name: health_export_redis_commander
+    restart: unless-stopped
+    environment:
+      REDIS_HOSTS: "local:redis:6379"
+    ports:
+      - "8081:8081"
+    networks:
+      - health_export_network
+    depends_on:
+      redis:
+        condition: service_healthy
+    profiles:
+      - debug
+
+  # pgAdmin 4 - Web-based PostgreSQL management interface (development only)
+  pgadmin:
+    image: dpage/pgadmin4:8.2
+    container_name: health_export_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@healthexport.local
+      PGADMIN_DEFAULT_PASSWORD: admin_password_123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    ports:
+      - "8080:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./database/pgadmin/servers.json:/pgadmin4/servers.json:ro
+    networks:
+      - health_export_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - debug
+
+  # Prometheus for metrics collection (development monitoring)
+  prometheus:
+    image: prom/prometheus:v2.48.1
+    container_name: health_export_prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+      - '--storage.tsdb.retention.time=30d'
+    ports:
+      - "9090:9090"
+    volumes:
+      - prometheus_data:/prometheus
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/rules:/etc/prometheus/rules:ro
+    networks:
+      - health_export_network
+    profiles:
+      - monitoring
+
+  # Grafana for metrics visualization (development monitoring)
+  grafana:
+    image: grafana/grafana:10.2.3
+    container_name: health_export_grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: grafana_admin_123
+      GF_SECURITY_ALLOW_EMBEDDING: true
+      GF_AUTH_ANONYMOUS_ENABLED: true
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-simple-json-datasource
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - health_export_network
+    depends_on:
+      - prometheus
+    profiles:
+      - monitoring
+
+volumes:
+  postgres_data:
+    name: health_export_postgres_data
+  redis_data:
+    name: health_export_redis_data  
+  pgadmin_data:
+    name: health_export_pgadmin_data
+  prometheus_data:
+    name: health_export_prometheus_data
+  grafana_data:
+    name: health_export_grafana_data
+
+networks:
+  health_export_network:
+    name: health_export_network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16

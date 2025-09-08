@@ -1,0 +1,87 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: health-export
+  labels:
+    app: redis
+    component: cache
+data:
+  redis.conf: |
+    # Redis Configuration for Health Export API
+    # Production Environment Configuration
+    
+    # Network and Security
+    bind 0.0.0.0
+    port 6379
+    tcp-backlog 511
+    timeout 300
+    tcp-keepalive 300
+    
+    # Authentication (password required in production)
+    requirepass ${REDIS_PASSWORD}
+    
+    # Memory Management
+    maxmemory 384mb
+    maxmemory-policy allkeys-lru
+    
+    # Persistence Configuration
+    # Enable both RDB and AOF for maximum durability in production
+    save 900 1
+    save 300 10
+    save 60 10000
+    
+    # RDB Configuration
+    rdbcompression yes
+    rdbchecksum yes
+    dbfilename dump.rdb
+    dir /data
+    
+    # AOF Configuration
+    appendonly yes
+    appendfilename "appendonly.aof"
+    appendfsync everysec
+    no-appendfsync-on-rewrite no
+    auto-aof-rewrite-percentage 100
+    auto-aof-rewrite-min-size 64mb
+    
+    # Logging
+    loglevel notice
+    logfile ""
+    syslog-enabled yes
+    syslog-ident redis
+    
+    # Database Configuration
+    databases 16
+    
+    # Performance Tuning
+    hash-max-ziplist-entries 512
+    hash-max-ziplist-value 64
+    list-max-ziplist-size -2
+    list-compress-depth 0
+    set-max-intset-entries 512
+    zset-max-ziplist-entries 128
+    zset-max-ziplist-value 64
+    hll-sparse-max-bytes 3000
+    
+    # Slow Log Configuration
+    slowlog-log-slower-than 10000
+    slowlog-max-len 128
+    
+    # Client Configuration
+    timeout 0
+    
+    # Security Settings
+    protected-mode yes
+    
+    # Disable dangerous commands in production
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+    rename-command DEBUG ""
+    rename-command SHUTDOWN SHUTDOWN_SAFELY
+    
+    # Memory optimization
+    activerehashing yes
+    
+    # Key tracking for cache invalidation
+    notify-keyspace-events Ex

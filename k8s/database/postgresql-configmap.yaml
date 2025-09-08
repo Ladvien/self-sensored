@@ -1,0 +1,133 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgresql-config
+  namespace: health-export
+  labels:
+    app: postgresql
+    component: database
+data:
+  postgresql.conf: |
+    # PostgreSQL Configuration for Health Export API
+    # Production Settings
+    
+    # Connection Settings
+    listen_addresses = '*'
+    port = 5432
+    max_connections = 200
+    
+    # Memory Settings
+    shared_buffers = 512MB
+    effective_cache_size = 2GB
+    work_mem = 8MB
+    maintenance_work_mem = 128MB
+    
+    # WAL Settings
+    wal_level = replica
+    max_wal_size = 2GB
+    min_wal_size = 1GB
+    wal_buffers = 32MB
+    checkpoint_completion_target = 0.9
+    
+    # Query Planner
+    random_page_cost = 1.1
+    effective_io_concurrency = 200
+    
+    # Logging
+    log_destination = 'stderr'
+    logging_collector = on
+    log_directory = 'log'
+    log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log'
+    log_statement = 'mod'
+    log_min_duration_statement = 1000
+    log_checkpoints = on
+    log_connections = on
+    log_disconnections = on
+    log_lock_waits = on
+    log_temp_files = 0
+    
+    # Performance Extensions
+    shared_preload_libraries = 'pg_stat_statements'
+    
+    # Statistics
+    track_activities = on
+    track_counts = on
+    track_io_timing = on
+    track_functions = all
+    
+    # Autovacuum
+    autovacuum = on
+    autovacuum_naptime = 15s
+    autovacuum_vacuum_threshold = 50
+    autovacuum_analyze_threshold = 50
+    autovacuum_vacuum_scale_factor = 0.1
+    autovacuum_analyze_scale_factor = 0.1
+    autovacuum_vacuum_cost_delay = 10ms
+    autovacuum_vacuum_cost_limit = 1000
+    
+    # Time Zone
+    timezone = 'UTC'
+    log_timezone = 'UTC'
+    
+    # Locale
+    datestyle = 'iso, mdy'
+    default_text_search_config = 'pg_catalog.english'
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgresql-init-scripts
+  namespace: health-export
+  labels:
+    app: postgresql
+    component: database
+data:
+  01-init-extensions.sql: |
+    -- Health Export API Database Initialization
+    -- Enable required PostgreSQL extensions
+    
+    -- Enable PostGIS for geospatial data (workout routes)
+    CREATE EXTENSION IF NOT EXISTS postgis;
+    
+    -- Enable UUID generation for primary keys
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    
+    -- Enable pgcrypto for additional cryptographic functions
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;
+    
+    -- Enable pg_stat_statements for query performance monitoring
+    CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+    
+    -- Verify extensions are installed
+    SELECT 
+        e.extname AS "Extension Name",
+        e.extversion AS "Version",
+        n.nspname AS "Schema"
+    FROM pg_extension e 
+    LEFT JOIN pg_namespace n ON n.oid = e.extnamespace
+    WHERE e.extname IN ('postgis', 'uuid-ossp', 'pgcrypto', 'pg_stat_statements')
+    ORDER BY e.extname;
+    
+    -- Create the apple_health schema for data organization
+    CREATE SCHEMA IF NOT EXISTS apple_health;
+    
+    -- Set default permissions
+    GRANT USAGE ON SCHEMA apple_health TO health_user;
+    GRANT CREATE ON SCHEMA apple_health TO health_user;
+    
+  02-create-dev-user.sql: |
+    -- Create development user if not exists
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'health_dev') THEN
+            CREATE ROLE health_dev WITH LOGIN PASSWORD 'dev_secure_password_2024';
+        END IF;
+    END
+    $$;
+    
+    -- Grant necessary privileges
+    GRANT USAGE ON SCHEMA apple_health TO health_dev;
+    GRANT CREATE ON SCHEMA apple_health TO health_dev;
+    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA apple_health TO health_dev;
+    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA apple_health TO health_dev;
