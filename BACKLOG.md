@@ -89,39 +89,6 @@ Implement efficient batch processing for health metrics with proper grouping, va
 
 ---
 
-#### Story: HEA-006 - Metric-Specific Storage Handlers
-**Priority:** High  
-**Story Points:** 8  
-**Assigned Agent:** Backend Engineer
-
-**Description:**
-Implement specialized storage handlers for each health metric type with proper validation and data transformation.
-
-**Acceptance Criteria:**
-- [ ] Heart rate metrics stored with context
-- [ ] Blood pressure validation enforces medical ranges
-- [ ] Sleep metrics calculate efficiency correctly
-- [ ] Activity metrics aggregate daily totals
-- [ ] Workout routes stored with PostGIS geometry
-- [ ] All metrics support source tracking
-- [ ] Raw JSON preserved for debugging
-
-**Tasks:**
-1. Implement metric-specific validators
-2. Create data transformation pipelines
-3. Add PostGIS geometry handling for routes
-4. Write unit tests for each metric type in `tests/models/`
-5. Create integration tests with sample data
-
-**Definition of Done:**
-- All metric types store correctly
-- Validation rejects invalid ranges
-- GPS routes queryable by geographic bounds
-- Data integrity maintained
-- Performance within SLA
-- All tests in `tests/models/` pass
-
----
 
 ### Parallel Track 4: Monitoring & Observability
 

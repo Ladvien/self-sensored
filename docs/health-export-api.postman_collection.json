@@ -1,0 +1,894 @@
+{
+  "info": {
+    "name": "Health Export API",
+    "description": "Comprehensive collection for testing the Health Export REST API endpoints. This collection includes examples for all endpoints including health data ingestion, querying, and export functionality.\n\n## Setup Instructions\n\n1. **Import Collection**: Import this JSON file into Postman\n2. **Set Variables**: Configure the collection variables:\n   - `base_url`: API base URL (default: https://api.health-export.com)\n   - `api_key`: Your API key (UUID or hashed format)\n3. **Test Environment**: Start with health check endpoints to verify connectivity\n4. **Rate Limits**: Be aware of 100 requests/hour limit per API key\n\n## Authentication\n\nAll requests (except health checks) use Bearer token authentication:\n```\nAuthorization: Bearer {{api_key}}\n```\n\n## Rate Limiting\n\n- 100 requests/hour per API key\n- Monitor `X-RateLimit-*` headers in responses\n- Implement backoff strategy for 429 responses",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "health-export-api-collection",
+    "version": {
+      "major": 1,
+      "minor": 0,
+      "patch": 0
+    }
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://api.health-export.com",
+      "type": "string",
+      "description": "Base URL for the Health Export API"
+    },
+    {
+      "key": "api_key",
+      "value": "550e8400-e29b-41d4-a716-446655440000",
+      "type": "string",
+      "description": "Your API key (UUID format for iOS Auto Export or hashed format for internal use)"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{api_key}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Health Checks",
+      "description": "Basic health check endpoints that don't require authentication",
+      "item": [
+        {
+          "name": "Basic Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Simple health check endpoint that returns service status. This endpoint doesn't require authentication and can be used to verify API connectivity."
+          },
+          "response": [
+            {
+              "name": "Healthy Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/health",
+                  "host": ["{{base_url}}"],
+                  "path": ["health"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"status\": \"healthy\",\n  \"timestamp\": \"2025-01-15T10:30:00Z\",\n  \"service\": \"self-sensored-api\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "API Status with DB Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "status"]
+            },
+            "description": "Detailed API status including database connectivity check. Requires authentication."
+          },
+          "response": [
+            {
+              "name": "Operational Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{api_key}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/status",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "status"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-RateLimit-Limit",
+                  "value": "100"
+                },
+                {
+                  "key": "X-RateLimit-Remaining",
+                  "value": "99"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"status\": \"operational\",\n    \"timestamp\": \"2025-01-15T10:30:00Z\",\n    \"service\": \"self-sensored-api\",\n    \"version\": \"0.1.0\",\n    \"database\": {\n      \"status\": \"connected\"\n    },\n    \"environment\": \"production\"\n  },\n  \"error\": null,\n  \"timestamp\": \"2025-01-15T10:30:00Z\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Data Ingestion",
+      "description": "Endpoints for ingesting health data from devices and applications",
+      "item": [
+        {
+          "name": "Ingest Health Data - Standard Format",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"metrics\": [\n      {\n        \"type\": \"HeartRate\",\n        \"recorded_at\": \"2025-01-15T08:30:00Z\",\n        \"min_bpm\": 65,\n        \"avg_bpm\": 72,\n        \"max_bpm\": 85,\n        \"source\": \"Apple Watch Series 7\",\n        \"context\": \"resting\"\n      },\n      {\n        \"type\": \"BloodPressure\",\n        \"recorded_at\": \"2025-01-15T09:15:00Z\",\n        \"systolic\": 120,\n        \"diastolic\": 80,\n        \"pulse\": 68,\n        \"source\": \"Manual Entry\"\n      },\n      {\n        \"type\": \"Sleep\",\n        \"recorded_at\": \"2025-01-15T07:30:00Z\",\n        \"sleep_start\": \"2025-01-14T23:15:00Z\",\n        \"sleep_end\": \"2025-01-15T07:30:00Z\",\n        \"total_sleep_minutes\": 495,\n        \"deep_sleep_minutes\": 120,\n        \"rem_sleep_minutes\": 95,\n        \"awake_minutes\": 30,\n        \"efficiency_percentage\": 0.94,\n        \"source\": \"Apple Watch Series 7\"\n      },\n      {\n        \"type\": \"Activity\",\n        \"date\": \"2025-01-15\",\n        \"steps\": 8542,\n        \"distance_meters\": 6234.5,\n        \"calories_burned\": 2150.0,\n        \"active_minutes\": 65,\n        \"flights_climbed\": 12,\n        \"source\": \"iPhone\"\n      }\n    ],\n    \"workouts\": [\n      {\n        \"workout_type\": \"Running\",\n        \"start_time\": \"2025-01-15T07:00:00Z\",\n        \"end_time\": \"2025-01-15T07:45:00Z\",\n        \"total_energy_kcal\": 320.5,\n        \"distance_meters\": 5500.0,\n        \"avg_heart_rate\": 155,\n        \"max_heart_rate\": 175,\n        \"source\": \"Apple Watch Series 7\"\n      },\n      {\n        \"workout_type\": \"Strength Training\",\n        \"start_time\": \"2025-01-15T18:30:00Z\",\n        \"end_time\": \"2025-01-15T19:15:00Z\",\n        \"total_energy_kcal\": 180.0,\n        \"avg_heart_rate\": 120,\n        \"max_heart_rate\": 140,\n        \"source\": \"Apple Watch Series 7\"\n      }\n    ]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ingest",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ingest"]
+            },
+            "description": "Ingest health data using the standard JSON format. Supports batch processing of multiple health metrics and workouts in a single request."
+          },
+          "response": [
+            {
+              "name": "Successful Ingestion",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{api_key}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"data\": {\n    \"metrics\": [...],\n    \"workouts\": [...]\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ingest",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "ingest"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "X-RateLimit-Limit",
+                  "value": "100"
+                },
+                {
+                  "key": "X-RateLimit-Remaining",
+                  "value": "95"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"success\": true,\n    \"processed_count\": 6,\n    \"failed_count\": 0,\n    \"processing_time_ms\": 1250,\n    \"errors\": []\n  },\n  \"error\": null,\n  \"timestamp\": \"2025-01-15T10:30:00Z\"\n}"
+            },
+            {
+              "name": "Partial Success with Validation Errors",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{api_key}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"data\": {\n    \"metrics\": [...],\n    \"workouts\": [...]\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ingest",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "ingest"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": false,\n  \"data\": {\n    \"success\": false,\n    \"processed_count\": 23,\n    \"failed_count\": 2,\n    \"processing_time_ms\": 1180,\n    \"errors\": [\n      {\n        \"metric_type\": \"HeartRate\",\n        \"error_message\": \"Heart rate 350 BPM exceeds maximum of 300\",\n        \"index\": 5\n      },\n      {\n        \"metric_type\": \"Workout\",\n        \"error_message\": \"Workout duration cannot exceed 24 hours\",\n        \"index\": 1\n      }\n    ]\n  },\n  \"error\": \"2 metrics failed validation\",\n  \"timestamp\": \"2025-01-15T10:30:00Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Ingest Health Data - iOS Auto Export Format",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"metrics\": {\n      \"HKQuantityTypeIdentifierHeartRate\": [\n        {\n          \"sourceName\": \"Apple Watch\",\n          \"sourceVersion\": \"8.0\",\n          \"device\": \"Apple Watch Series 7\",\n          \"type\": \"HKQuantityTypeIdentifierHeartRate\",\n          \"unit\": \"count/min\",\n          \"value\": \"72\",\n          \"startDate\": \"2025-01-15 08:30:00 +0000\",\n          \"endDate\": \"2025-01-15 08:30:00 +0000\"\n        },\n        {\n          \"sourceName\": \"Apple Watch\",\n          \"sourceVersion\": \"8.0\",\n          \"device\": \"Apple Watch Series 7\",\n          \"type\": \"HKQuantityTypeIdentifierHeartRate\",\n          \"unit\": \"count/min\",\n          \"value\": \"155\",\n          \"startDate\": \"2025-01-15 14:15:00 +0000\",\n          \"endDate\": \"2025-01-15 14:15:00 +0000\"\n        }\n      ],\n      \"HKQuantityTypeIdentifierBloodPressureSystolic\": [\n        {\n          \"sourceName\": \"Health\",\n          \"type\": \"HKQuantityTypeIdentifierBloodPressureSystolic\",\n          \"unit\": \"mmHg\",\n          \"value\": \"120\",\n          \"startDate\": \"2025-01-15 09:15:00 +0000\",\n          \"endDate\": \"2025-01-15 09:15:00 +0000\"\n        }\n      ],\n      \"HKQuantityTypeIdentifierBloodPressureDiastolic\": [\n        {\n          \"sourceName\": \"Health\",\n          \"type\": \"HKQuantityTypeIdentifierBloodPressureDiastolic\",\n          \"unit\": \"mmHg\",\n          \"value\": \"80\",\n          \"startDate\": \"2025-01-15 09:15:00 +0000\",\n          \"endDate\": \"2025-01-15 09:15:00 +0000\"\n        }\n      ],\n      \"HKQuantityTypeIdentifierStepCount\": [\n        {\n          \"sourceName\": \"iPhone\",\n          \"type\": \"HKQuantityTypeIdentifierStepCount\",\n          \"unit\": \"count\",\n          \"value\": \"8542\",\n          \"startDate\": \"2025-01-15 00:00:00 +0000\",\n          \"endDate\": \"2025-01-15 23:59:59 +0000\"\n        }\n      ]\n    },\n    \"workouts\": [\n      {\n        \"workoutActivityType\": \"HKWorkoutActivityTypeRunning\",\n        \"sourceName\": \"Apple Watch\",\n        \"sourceVersion\": \"8.0\",\n        \"device\": \"Apple Watch Series 7\",\n        \"startDate\": \"2025-01-15 07:00:00 +0000\",\n        \"endDate\": \"2025-01-15 07:45:00 +0000\",\n        \"duration\": 45.0,\n        \"totalEnergyBurned\": 320.5,\n        \"totalDistance\": 5.5,\n        \"metadata\": {\n          \"HKAverageHeartRate\": 155,\n          \"HKMaximumHeartRate\": 175\n        }\n      }\n    ]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ingest",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ingest"]
+            },
+            "description": "Ingest health data using the iOS Auto Health Export format. The API automatically detects and converts iOS format to internal format."
+          },
+          "response": [
+            {
+              "name": "iOS Format Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{api_key}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"data\": {\n    \"metrics\": {...},\n    \"workouts\": [...]\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ingest",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "ingest"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"success\": true,\n    \"processed_count\": 5,\n    \"failed_count\": 0,\n    \"processing_time_ms\": 890,\n    \"errors\": []\n  },\n  \"error\": null,\n  \"timestamp\": \"2025-01-15T10:30:00Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Ingest Single Heart Rate Metric",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"metrics\": [\n      {\n        \"type\": \"HeartRate\",\n        \"recorded_at\": \"{{$isoTimestamp}}\",\n        \"avg_bpm\": 72,\n        \"source\": \"Apple Watch\",\n        \"context\": \"resting\"\n      }\n    ],\n    \"workouts\": []\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ingest",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ingest"]
+            },
+            "description": "Simple example for ingesting a single heart rate metric. Uses Postman's dynamic timestamp variable."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Data Query",
+      "description": "Endpoints for querying and retrieving stored health metrics",
+      "item": [
+        {
+          "name": "Get Heart Rate Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/data/heart-rate?start_date=2025-01-01T00:00:00Z&end_date=2025-01-15T23:59:59Z&limit=50&sort=desc",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "data", "heart-rate"],
+              "query": [
+                {
+                  "key": "start_date",
+                  "value": "2025-01-01T00:00:00Z",
+                  "description": "Start date for filtering (ISO 8601 format)"
+                },
+                {
+                  "key": "end_date",
+                  "value": "2025-01-15T23:59:59Z",
+                  "description": "End date for filtering (ISO 8601 format)"
+                },
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Number of records to return (max 1000)"
+                },
+                {
+                  "key": "sort",
+                  "value": "desc",
+                  "description": "Sort order: asc or desc"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number for pagination",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Query heart rate data with optional filtering by date range and pagination support."
+          },
+          "response": [
+            {
+              "name": "Heart Rate Data Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{api_key}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/data/heart-rate?start_date=2025-01-01T00:00:00Z&limit=50",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "data", "heart-rate"],
+                  "query": [
+                    {
+                      "key": "start_date",
+                      "value": "2025-01-01T00:00:00Z"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "50"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"data\": [\n      {\n        \"user_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n        \"recorded_at\": \"2025-01-15T08:30:00Z\",\n        \"heart_rate\": 72,\n        \"resting_heart_rate\": 65,\n        \"context\": \"resting\",\n        \"source_device\": \"Apple Watch Series 7\",\n        \"created_at\": \"2025-01-15T08:31:00Z\"\n      }\n    ],\n    \"pagination\": {\n      \"page\": 1,\n      \"limit\": 50,\n      \"has_next\": false,\n      \"has_prev\": false\n    },\n    \"total_count\": 1\n  },\n  \"error\": null,\n  \"timestamp\": \"2025-01-15T10:30:00Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Blood Pressure Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/data/blood-pressure?start_date=2025-01-01T00:00:00Z&limit=100&sort=desc",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "data", "blood-pressure"],
+              "query": [
+                {
+                  "key": "start_date",
+                  "value": "2025-01-01T00:00:00Z"
+                },
+                {
+                  "key": "limit",
+                  "value": "100"
+                },
+                {
+                  "key": "sort",
+                  "value": "desc"
+                }
+              ]
+            },
+            "description": "Query blood pressure data including systolic/diastolic readings and pulse data."
+          }
+        },
+        {
+          "name": "Get Sleep Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/data/sleep?start_date=2025-01-01T00:00:00Z&limit=30",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "data", "sleep"],
+              "query": [
+                {
+                  "key": "start_date",
+                  "value": "2025-01-01T00:00:00Z"
+                },
+                {
+                  "key": "limit",
+                  "value": "30"
+                }
+              ]
+            },
+            "description": "Query sleep data including sleep periods, sleep stage breakdowns, and efficiency."
+          }
+        },
+        {
+          "name": "Get Daily Activity Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/data/activity?start_date=2025-01-01T00:00:00Z&limit=100",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "data", "activity"],
+              "query": [
+                {
+                  "key": "start_date",
+                  "value": "2025-01-01T00:00:00Z"
+                },
+                {
+                  "key": "limit",
+                  "value": "100"
+                }
+              ]
+            },
+            "description": "Query daily activity summaries including steps, distance, calories, active minutes."
+          }
+        },
+        {
+          "name": "Get Workout Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/data/workouts?start_date=2025-01-01T00:00:00Z&workout_type=Running&limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "data", "workouts"],
+              "query": [
+                {
+                  "key": "start_date",
+                  "value": "2025-01-01T00:00:00Z"
+                },
+                {
+                  "key": "workout_type",
+                  "value": "Running",
+                  "description": "Filter by specific workout type"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Query workout sessions with optional filtering by workout type."
+          }
+        },
+        {
+          "name": "Get Health Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/data/summary?start_date=2025-01-01T00:00:00Z&end_date=2025-01-15T23:59:59Z",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "data", "summary"],
+              "query": [
+                {
+                  "key": "start_date",
+                  "value": "2025-01-01T00:00:00Z"
+                },
+                {
+                  "key": "end_date",
+                  "value": "2025-01-15T23:59:59Z"
+                }
+              ]
+            },
+            "description": "Get aggregated health statistics and analytics for a specified date range."
+          },
+          "response": [
+            {
+              "name": "Health Summary Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{api_key}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/data/summary?start_date=2025-01-01T00:00:00Z",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "data", "summary"],
+                  "query": [
+                    {
+                      "key": "start_date",
+                      "value": "2025-01-01T00:00:00Z"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": true,\n  \"data\": {\n    \"user_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n    \"date_range\": {\n      \"start\": \"2025-01-01T00:00:00Z\",\n      \"end\": \"2025-01-15T23:59:59Z\"\n    },\n    \"heart_rate_stats\": {\n      \"avg_resting\": 65,\n      \"avg_active\": 145,\n      \"max_recorded\": 185,\n      \"total_readings\": 2180\n    },\n    \"sleep_stats\": {\n      \"avg_duration_hours\": 7.8,\n      \"avg_efficiency\": 0.91,\n      \"total_nights\": 14\n    },\n    \"activity_stats\": {\n      \"avg_daily_steps\": 9250,\n      \"total_distance_km\": 127.5,\n      \"avg_calories_per_day\": 2340,\n      \"active_days\": 13\n    },\n    \"workout_stats\": {\n      \"total_workouts\": 8,\n      \"total_duration_hours\": 6.5,\n      \"total_calories\": 2450,\n      \"most_common_type\": \"Running\"\n    }\n  },\n  \"error\": null,\n  \"timestamp\": \"2025-01-15T10:30:00Z\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Data Export",
+      "description": "Endpoints for exporting health data in various formats",
+      "item": [
+        {
+          "name": "Export All Data (JSON)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/export/all?format=json&start_date=2025-01-01T00:00:00Z&end_date=2025-01-15T23:59:59Z&metric_types=HeartRate,BloodPressure,Sleep",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "export", "all"],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "json",
+                  "description": "Export format: json or csv"
+                },
+                {
+                  "key": "start_date",
+                  "value": "2025-01-01T00:00:00Z"
+                },
+                {
+                  "key": "end_date",
+                  "value": "2025-01-15T23:59:59Z"
+                },
+                {
+                  "key": "metric_types",
+                  "value": "HeartRate,BloodPressure,Sleep",
+                  "description": "Comma-separated list of metric types"
+                },
+                {
+                  "key": "include_raw",
+                  "value": "false",
+                  "description": "Include raw metadata fields",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Export all health data for the authenticated user in JSON format with filtering options."
+          }
+        },
+        {
+          "name": "Export All Data (CSV)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/export/all?format=csv&start_date=2025-01-01T00:00:00Z",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "export", "all"],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "csv"
+                },
+                {
+                  "key": "start_date",
+                  "value": "2025-01-01T00:00:00Z"
+                }
+              ]
+            },
+            "description": "Export all health data in CSV format for easy analysis in spreadsheet applications."
+          }
+        },
+        {
+          "name": "Export Heart Rate Data Only",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/export/heart-rate?format=json&start_date=2025-01-01T00:00:00Z",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "export", "heart-rate"],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "json"
+                },
+                {
+                  "key": "start_date",
+                  "value": "2025-01-01T00:00:00Z"
+                },
+                {
+                  "key": "include_raw",
+                  "value": "false",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Export only heart rate metrics with optional raw metadata inclusion."
+          }
+        },
+        {
+          "name": "Export Activity Analytics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/export/activity-analytics?format=json&start_date=2025-01-01T00:00:00Z",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "export", "activity-analytics"],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "json"
+                },
+                {
+                  "key": "start_date",
+                  "value": "2025-01-01T00:00:00Z"
+                }
+              ]
+            },
+            "description": "Export processed activity analytics and summary statistics."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Error Examples",
+      "description": "Examples of common error scenarios for testing error handling",
+      "item": [
+        {
+          "name": "401 - Missing Authorization",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "status"]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Example request without authorization to demonstrate 401 error handling."
+          },
+          "response": [
+            {
+              "name": "Unauthorized Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/status",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "status"]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"success\": false,\n  \"data\": null,\n  \"error\": \"Missing Authorization header\",\n  \"timestamp\": \"2025-01-15T10:30:00Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "400 - Invalid JSON Payload",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"metrics\": [\n      {\n        \"type\": \"HeartRate\",\n        \"recorded_at\": \"invalid-date-format\",\n        \"avg_bpm\": \"not-a-number\"\n      }\n    ],\n    \"workouts\": [\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ingest",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ingest"]
+            },
+            "description": "Example of malformed JSON to demonstrate 400 error handling."
+          }
+        },
+        {
+          "name": "413 - Payload Too Large",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "// This would be a very large payload exceeding 100MB limit\n// Not practical to include in collection, but demonstrates the endpoint"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ingest",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ingest"]
+            },
+            "description": "Conceptual example of payload too large error (413)."
+          }
+        },
+        {
+          "name": "422 - Validation Error",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data\": {\n    \"metrics\": [\n      {\n        \"type\": \"HeartRate\",\n        \"recorded_at\": \"2025-01-15T08:30:00Z\",\n        \"avg_bpm\": 350,\n        \"source\": \"Apple Watch\"\n      },\n      {\n        \"type\": \"BloodPressure\",\n        \"recorded_at\": \"2025-01-15T09:15:00Z\",\n        \"systolic\": 300,\n        \"diastolic\": 200,\n        \"source\": \"Manual Entry\"\n      }\n    ],\n    \"workouts\": []\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ingest",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ingest"]
+            },
+            "description": "Example with invalid health metric values to demonstrate validation errors."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rate Limiting Tests",
+      "description": "Requests for testing rate limiting behavior",
+      "item": [
+        {
+          "name": "Check Rate Limit Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "status"]
+            },
+            "description": "Check current rate limit status in response headers."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Rate limit headers present\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"X-RateLimit-Limit\")).to.exist;",
+                  "    pm.expect(pm.response.headers.get(\"X-RateLimit-Remaining\")).to.exist;",
+                  "    pm.expect(pm.response.headers.get(\"X-RateLimit-Reset\")).to.exist;",
+                  "});",
+                  "",
+                  "pm.test(\"Log rate limit info\", function () {",
+                  "    console.log(\"Rate Limit:\", pm.response.headers.get(\"X-RateLimit-Limit\"));",
+                  "    console.log(\"Remaining:\", pm.response.headers.get(\"X-RateLimit-Remaining\"));",
+                  "    console.log(\"Reset:\", pm.response.headers.get(\"X-RateLimit-Reset\"));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rapid Requests (Rate Limit Test)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Use this request with Postman Runner to test rate limiting. Note: /health endpoint is not rate limited, use /api/v1/status for actual rate limit testing."
+          }
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Log request details for debugging",
+          "console.log(`Making ${pm.request.method} request to ${pm.request.url.toString()}`);",
+          "",
+          "// Add request timestamp",
+          "pm.request.headers.add({",
+          "    key: 'X-Request-Timestamp',",
+          "    value: new Date().toISOString()",
+          "});"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global tests for all requests",
+          "pm.test(\"Response time is reasonable\", function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(10000);",
+          "});",
+          "",
+          "pm.test(\"Response has proper content type\", function () {",
+          "    if (pm.response.code !== 429 && pm.response.code !== 413) {",
+          "        pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+          "    }",
+          "});",
+          "",
+          "// Log rate limit information if present",
+          "const rateLimit = pm.response.headers.get(\"X-RateLimit-Remaining\");",
+          "if (rateLimit !== null) {",
+          "    console.log(`Rate limit remaining: ${rateLimit}`);",
+          "}",
+          "",
+          "// Handle rate limit errors",
+          "if (pm.response.code === 429) {",
+          "    const retryAfter = pm.response.headers.get(\"Retry-After\");",
+          "    console.log(`Rate limited! Retry after ${retryAfter} seconds`);",
+          "}",
+          "",
+          "// Log response for debugging",
+          "if (pm.response.code >= 400) {",
+          "    console.log(`Error ${pm.response.code}:`, pm.response.text());",
+          "}"
+        ]
+      }
+    }
+  ]
+}
