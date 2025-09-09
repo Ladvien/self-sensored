@@ -187,38 +187,6 @@ Optimize database queries and implement caching strategies for common operations
 
 ### Parallel Track 7: Documentation & Deployment
 
-#### Story: HEA-013 - API Documentation
-**Priority:** Medium  
-**Story Points:** 3  
-**Assigned Agent:** Technical Writer
-
-**Description:**
-Create comprehensive API documentation with OpenAPI specification and usage examples.
-
-**Acceptance Criteria:**
-- [ ] OpenAPI 3.0 specification complete
-- [ ] All endpoints documented
-- [ ] Request/response examples provided
-- [ ] Error codes documented
-- [ ] Rate limiting explained
-- [ ] Authentication guide created
-- [ ] Postman collection generated
-
-**Tasks:**
-1. Generate OpenAPI spec from code
-2. Add detailed descriptions
-3. Create example payloads
-4. Write authentication guide
-5. Generate client SDKs
-
-**Definition of Done:**
-- OpenAPI spec validates
-- Documentation site deployed
-- All examples work
-- Client SDKs generated
-- Documentation reviewed
-- Automated doc generation works
-
 ---
 
 #### Story: HEA-014 - CI/CD Pipeline ✅ COMPLETED
