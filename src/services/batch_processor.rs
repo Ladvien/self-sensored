@@ -2,9 +2,7 @@ use sqlx::{PgPool, Postgres, QueryBuilder};
 use tracing::{info, instrument};
 use uuid::Uuid;
 
-use crate::models::{
-    HealthMetric, IngestPayload, ProcessingError,
-};
+use crate::models::{HealthMetric, IngestPayload, ProcessingError};
 
 /// Batch processing service for health data
 pub struct BatchProcessor {
@@ -161,15 +159,24 @@ impl BatchProcessor {
         }
 
         let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
-            "INSERT INTO heart_rate_metrics (user_id, recorded_at, min_bpm, avg_bpm, max_bpm, context, source) "
+            "INSERT INTO heart_rate_metrics (user_id, recorded_at, heart_rate, resting_heart_rate, context, source_device) "
         );
 
         query_builder.push_values(metrics.iter(), |mut b, metric| {
+            // Use avg_bpm as the primary heart_rate value, or max_bpm if no avg
+            let heart_rate = metric.avg_bpm.or(metric.max_bpm).unwrap_or(0);
+            // Use min_bpm as resting heart rate if it's significantly different
+            let resting_heart_rate = if metric.min_bpm.is_some() && metric.min_bpm != metric.avg_bpm
+            {
+                metric.min_bpm
+            } else {
+                None
+            };
+
             b.push_bind(user_id)
                 .push_bind(metric.recorded_at)
-                .push_bind(metric.min_bpm)
-                .push_bind(metric.avg_bpm)
-                .push_bind(metric.max_bpm)
+                .push_bind(heart_rate)
+                .push_bind(resting_heart_rate)
                 .push_bind(&metric.context)
                 .push_bind(&metric.source);
         });

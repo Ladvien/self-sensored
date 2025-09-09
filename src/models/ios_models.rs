@@ -91,10 +91,8 @@ impl IosIngestPayload {
                     }
                     "sleep_analysis" => {
                         // Handle sleep data
-                        let start_time =
-                            parse_ios_date(&data_point.start).unwrap_or(recorded_at);
-                        let end_time =
-                            parse_ios_date(&data_point.end).unwrap_or(recorded_at);
+                        let start_time = parse_ios_date(&data_point.start).unwrap_or(recorded_at);
+                        let end_time = parse_ios_date(&data_point.end).unwrap_or(recorded_at);
 
                         let total_minutes = (end_time - start_time).num_minutes() as i32;
 

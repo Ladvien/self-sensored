@@ -77,9 +77,7 @@ impl RateLimiter {
                 }
             }
             Err(e) => {
-                log::warn!(
-                    "Failed to create Redis client, falling back to in-memory store: {e}"
-                );
+                log::warn!("Failed to create Redis client, falling back to in-memory store: {e}");
             }
         }
 
@@ -352,7 +350,6 @@ impl RateLimiter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     #[tokio::test]
     async fn test_rate_limiter_in_memory_basic() {

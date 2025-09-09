@@ -159,79 +159,155 @@ impl AuthService {
     }
 
     /// Authenticate an API key and return the auth context
+    /// Supports both UUID-based keys (Auto Export format) and hashed keys
     pub async fn authenticate(&self, api_key: &str) -> Result<AuthContext, AuthError> {
-        // First, get all active API keys (we need to check hashes)
-        let api_keys = sqlx::query!(
-            r#"
-            SELECT 
-                ak.id,
-                ak.user_id,
-                ak.name,
-                ak.key_hash,
-                ak.created_at,
-                ak.last_used_at,
-                ak.expires_at,
-                ak.is_active,
-                ak.scopes,
-                u.id as user_id_check,
-                u.email,
-                u.full_name,
-                u.created_at as user_created_at,
-                u.updated_at as user_updated_at,
-                u.is_active as user_is_active
-            FROM api_keys ak
-            JOIN users u ON ak.user_id = u.id
-            WHERE (ak.is_active IS NULL OR ak.is_active = true) AND (u.is_active IS NULL OR u.is_active = true)
-            "#
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        // Check if the API key is a UUID (Auto Export format)
+        // Auto Export sends the API key ID directly as the Bearer token
+        if let Ok(api_key_uuid) = Uuid::parse_str(api_key) {
+            // Direct UUID lookup for Auto Export compatibility
+            let row = sqlx::query!(
+                r#"
+                SELECT 
+                    ak.id,
+                    ak.user_id,
+                    ak.name,
+                    ak.key_hash,
+                    ak.created_at,
+                    ak.last_used_at,
+                    ak.expires_at,
+                    ak.is_active,
+                    ak.scopes,
+                    u.id as user_id_check,
+                    u.email,
+                    u.full_name,
+                    u.created_at as user_created_at,
+                    u.updated_at as user_updated_at,
+                    u.is_active as user_is_active
+                FROM api_keys ak
+                JOIN users u ON ak.user_id = u.id
+                WHERE ak.id = $1
+                    AND (ak.is_active IS NULL OR ak.is_active = true) 
+                    AND (u.is_active IS NULL OR u.is_active = true)
+                "#,
+                api_key_uuid
+            )
+            .fetch_optional(&self.pool)
+            .await?;
 
-        // Find the matching API key by verifying hashes
-        for row in api_keys {
-            match self.verify_api_key(api_key, &row.key_hash) {
-                Ok(true) => {
-                    // Check if key is expired
-                    if let Some(expires_at) = row.expires_at {
-                        if expires_at < Utc::now() {
-                            return Err(AuthError::ApiKeyExpired);
-                        }
+            if let Some(row) = row {
+                // Check if key is expired
+                if let Some(expires_at) = row.expires_at {
+                    if expires_at < Utc::now() {
+                        return Err(AuthError::ApiKeyExpired);
                     }
-
-                    // Update last_used_at
-                    self.update_last_used(row.id).await?;
-
-                    // Create auth context
-                    let user = User {
-                        id: row.user_id,
-                        email: row.email,
-                        full_name: row.full_name,
-                        created_at: row.user_created_at,
-                        updated_at: row.user_updated_at,
-                        is_active: row.user_is_active,
-                    };
-
-                    let api_key = ApiKey {
-                        id: row.id,
-                        user_id: row.user_id,
-                        name: row.name,
-                        created_at: row.created_at,
-                        last_used_at: row.last_used_at,
-                        expires_at: row.expires_at,
-                        is_active: row.is_active,
-                        scopes: row.scopes,
-                    };
-
-                    return Ok(AuthContext { user, api_key });
                 }
-                Ok(false) => {
-                    // Wrong password, continue to next key
-                    continue;
-                }
-                Err(e) => {
-                    // Hash parsing or other error, log and continue to next key
-                    tracing::warn!("Failed to verify API key {}: {}", row.id, e);
-                    continue;
+
+                // Update last_used_at
+                self.update_last_used(row.id).await?;
+
+                // Create auth context
+                let user = User {
+                    id: row.user_id,
+                    email: row.email,
+                    full_name: row.full_name,
+                    created_at: row.user_created_at,
+                    updated_at: row.user_updated_at,
+                    is_active: row.user_is_active,
+                };
+
+                let api_key = ApiKey {
+                    id: row.id,
+                    user_id: row.user_id,
+                    name: row.name,
+                    created_at: row.created_at,
+                    last_used_at: row.last_used_at,
+                    expires_at: row.expires_at,
+                    is_active: row.is_active,
+                    scopes: row.scopes,
+                };
+
+                tracing::info!("Auto Export API key authenticated: id={}", api_key_uuid);
+                return Ok(AuthContext { user, api_key });
+            }
+        }
+
+        // If not a UUID, check against hashed keys (for our generated keys)
+        // This maintains backward compatibility with hashed API keys
+        if api_key.starts_with("hea_") {
+            let api_keys = sqlx::query!(
+                r#"
+                SELECT 
+                    ak.id,
+                    ak.user_id,
+                    ak.name,
+                    ak.key_hash,
+                    ak.created_at,
+                    ak.last_used_at,
+                    ak.expires_at,
+                    ak.is_active,
+                    ak.scopes,
+                    u.id as user_id_check,
+                    u.email,
+                    u.full_name,
+                    u.created_at as user_created_at,
+                    u.updated_at as user_updated_at,
+                    u.is_active as user_is_active
+                FROM api_keys ak
+                JOIN users u ON ak.user_id = u.id
+                WHERE (ak.is_active IS NULL OR ak.is_active = true) 
+                    AND (u.is_active IS NULL OR u.is_active = true)
+                    AND ak.key_hash LIKE '$argon2%'
+                "#
+            )
+            .fetch_all(&self.pool)
+            .await?;
+
+            // Find the matching API key by verifying hashes
+            for row in api_keys {
+                match self.verify_api_key(api_key, &row.key_hash) {
+                    Ok(true) => {
+                        // Check if key is expired
+                        if let Some(expires_at) = row.expires_at {
+                            if expires_at < Utc::now() {
+                                return Err(AuthError::ApiKeyExpired);
+                            }
+                        }
+
+                        // Update last_used_at
+                        self.update_last_used(row.id).await?;
+
+                        // Create auth context
+                        let user = User {
+                            id: row.user_id,
+                            email: row.email,
+                            full_name: row.full_name,
+                            created_at: row.user_created_at,
+                            updated_at: row.user_updated_at,
+                            is_active: row.user_is_active,
+                        };
+
+                        let api_key = ApiKey {
+                            id: row.id,
+                            user_id: row.user_id,
+                            name: row.name,
+                            created_at: row.created_at,
+                            last_used_at: row.last_used_at,
+                            expires_at: row.expires_at,
+                            is_active: row.is_active,
+                            scopes: row.scopes,
+                        };
+
+                        return Ok(AuthContext { user, api_key });
+                    }
+                    Ok(false) => {
+                        // Wrong password, continue to next key
+                        continue;
+                    }
+                    Err(e) => {
+                        // Hash parsing or other error, log and continue to next key
+                        tracing::warn!("Failed to verify API key {}: {}", row.id, e);
+                        continue;
+                    }
                 }
             }
         }
@@ -355,6 +431,7 @@ impl AuthService {
     }
 
     /// Log an audit event
+    #[allow(clippy::too_many_arguments)]
     pub async fn log_audit_event(
         &self,
         user_id: Option<Uuid>,

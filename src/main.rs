@@ -18,10 +18,13 @@ async fn main() -> std::io::Result<()> {
     // Load environment variables from .env file
     dotenv().ok();
 
-    // Initialize logging with debug level
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
-        .init();
+    // Initialize logging with environment-configurable level
+    let log_level = env::var("RUST_LOG")
+        .unwrap_or_else(|_| "info".to_string())
+        .parse()
+        .unwrap_or(tracing::Level::INFO);
+
+    tracing_subscriber::fmt().with_max_level(log_level).init();
 
     // Load configuration from environment variables
     let database_url =

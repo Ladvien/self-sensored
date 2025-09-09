@@ -8,9 +8,7 @@ use std::time::Instant;
 use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
 
-use crate::models::{
-    ApiResponse, IngestPayload, IngestResponse, IosIngestPayload,
-};
+use crate::models::{ApiResponse, IngestPayload, IngestResponse, IosIngestPayload};
 use crate::services::auth::AuthContext;
 use crate::services::batch_processor::{BatchProcessingResult, BatchProcessor};
 

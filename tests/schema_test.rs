@@ -74,7 +74,9 @@ mod schema_tests {
         ];
 
         for table_name in core_tables {
-            let query = "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = $1)".to_string();
+            let query =
+                "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = $1)"
+                    .to_string();
 
             let result = sqlx::query(&query)
                 .bind(table_name)
@@ -209,9 +211,7 @@ mod schema_tests {
         .expect("Failed to insert test heart rate");
 
         let heart_rate_id: uuid::Uuid = heart_rate_result.get("id");
-        println!(
-            "✓ Successfully inserted heart rate metric: {heart_rate_id}"
-        );
+        println!("✓ Successfully inserted heart rate metric: {heart_rate_id}");
 
         // Rollback transaction to clean up test data
         tx.rollback().await.expect("Failed to rollback transaction");
@@ -259,9 +259,7 @@ mod schema_tests {
         .expect("Failed to insert workout with geometry");
 
         let workout_id: uuid::Uuid = workout_result.get("id");
-        println!(
-            "✓ Successfully inserted workout with PostGIS geometry: {workout_id}"
-        );
+        println!("✓ Successfully inserted workout with PostGIS geometry: {workout_id}");
 
         tx.rollback().await.expect("Failed to rollback transaction");
         pool.close().await;
