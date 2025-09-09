@@ -126,38 +126,6 @@ Implement comprehensive Prometheus metrics for monitoring API performance, data 
 
 ---
 
-#### Story: HEA-008 - Structured Logging Implementation
-**Priority:** Medium  
-**Story Points:** 3  
-**Assigned Agent:** Backend Engineer
-
-**Description:**
-Implement structured JSON logging with tracing for debugging and monitoring.
-
-**Acceptance Criteria:**
-- [ ] All log entries in JSON format
-- [ ] Request ID propagation
-- [ ] Sensitive data masking
-- [ ] Log levels configurable at runtime
-- [ ] Integration with Datadog/CloudWatch
-- [ ] Performance impact < 1ms
-
-**Tasks:**
-1. Configure tracing subscriber
-2. Implement request ID middleware
-3. Add sensitive data filters
-4. Create log aggregation queries
-5. Write tests in `tests/middleware/logging_test.rs`
-
-**Definition of Done:**
-- All components use structured logging
-- No PII in logs
-- Log queries return results in < 1 second
-- Runtime log level changes work
-- Tests verify log format
-- All tests pass
-
----
 
 ### Parallel Track 5: Testing & Quality Assurance
 
