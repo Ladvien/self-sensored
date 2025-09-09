@@ -74,7 +74,7 @@ where
 
     forward_ready!(service);
 
-    fn call(&self, mut req: ServiceRequest) -> Self::Future {
+    fn call(&self, req: ServiceRequest) -> Self::Future {
         let service = self.service.clone();
         
         Box::pin(async move {
@@ -260,15 +260,14 @@ pub fn log_error_with_context(
     request_id: Option<Uuid>,
     additional_fields: Option<HashMap<String, Value>>,
 ) {
-    let mut span_fields = Vec::new();
-    
-    if let Some(id) = request_id {
-        span_fields.push(("request_id", json!(id.to_string())));
-    }
-    
+    // Log additional context fields if provided
     if let Some(fields) = additional_fields {
         for (key, value) in fields {
-            span_fields.push((key.as_str(), mask_sensitive_data(value)));
+            tracing::error!(
+                field_name = key,
+                field_value = ?mask_sensitive_data(value),
+                "Additional context field"
+            );
         }
     }
 

@@ -109,7 +109,15 @@ async fn main() -> std::io::Result<()> {
                     // Health data export endpoints
                     .route("/export/all", web::get().to(handlers::export::export_health_data))
                     .route("/export/heart-rate", web::get().to(handlers::export::export_heart_rate_data))
-                    .route("/export/activity-analytics", web::get().to(handlers::export::export_activity_summary)),
+                    .route("/export/activity-analytics", web::get().to(handlers::export::export_activity_summary))
+                    // Admin endpoints for logging management
+                    .service(
+                        web::scope("/admin")
+                            .route("/logging/level", web::get().to(handlers::admin::get_log_level))
+                            .route("/logging/level", web::put().to(handlers::admin::set_log_level))
+                            .route("/logging/stats", web::get().to(handlers::admin::get_logging_stats))
+                            .route("/logging/test", web::post().to(handlers::admin::generate_test_logs))
+                    ),
             )
     })
     .workers(workers)

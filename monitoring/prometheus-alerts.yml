@@ -1,0 +1,200 @@
+groups:
+- name: health_export_api_alerts
+  rules:
+  # High Error Rate Alerts
+  - alert: HighHTTPErrorRate
+    expr: rate(health_export_http_requests_total{status_code=~"5.."}[5m]) / rate(health_export_http_requests_total[5m]) > 0.1
+    for: 2m
+    labels:
+      severity: critical
+      service: health-export-api
+      component: http
+    annotations:
+      summary: "High HTTP error rate detected"
+      description: "HTTP error rate is {{ $value | humanizePercentage }} for the last 5 minutes, which is above the 10% threshold."
+
+  - alert: HighIngestErrorRate
+    expr: rate(health_export_errors_total{endpoint="/api/v1/ingest"}[5m]) > 10
+    for: 3m
+    labels:
+      severity: warning
+      service: health-export-api
+      component: ingestion
+    annotations:
+      summary: "High ingestion error rate"
+      description: "Ingestion endpoint is experiencing {{ $value }} errors per second over the last 5 minutes."
+
+  # Performance Alerts
+  - alert: HighResponseTime
+    expr: histogram_quantile(0.95, rate(health_export_http_request_duration_seconds_bucket[5m])) > 1.0
+    for: 5m
+    labels:
+      severity: warning
+      service: health-export-api
+      component: performance
+    annotations:
+      summary: "High HTTP response time"
+      description: "95th percentile response time is {{ $value | humanizeDuration }} which exceeds 1 second threshold."
+
+  - alert: SlowBatchProcessing
+    expr: histogram_quantile(0.95, rate(health_export_batch_processing_duration_seconds_bucket[5m])) > 30
+    for: 5m
+    labels:
+      severity: warning
+      service: health-export-api
+      component: batch-processing
+    annotations:
+      summary: "Slow batch processing detected"
+      description: "95th percentile batch processing time is {{ $value | humanizeDuration }}, exceeding 30 second threshold."
+
+  # Database Connection Pool Alerts  
+  - alert: HighDatabaseConnectionUsage
+    expr: (health_export_db_connections_active / (health_export_db_connections_active + health_export_db_connections_idle)) > 0.8
+    for: 3m
+    labels:
+      severity: warning
+      service: health-export-api
+      component: database
+    annotations:
+      summary: "High database connection pool utilization"
+      description: "Database connection pool utilization is {{ $value | humanizePercentage }}, exceeding 80% threshold."
+
+  - alert: DatabaseConnectionPoolExhausted
+    expr: health_export_db_connections_idle == 0
+    for: 1m
+    labels:
+      severity: critical
+      service: health-export-api
+      component: database
+    annotations:
+      summary: "Database connection pool exhausted"
+      description: "No idle database connections available. All connections are in use."
+
+  - alert: HighDatabaseConnectionWaitTime
+    expr: histogram_quantile(0.95, rate(health_export_db_connection_wait_time_seconds_bucket[5m])) > 1.0
+    for: 3m
+    labels:
+      severity: warning
+      service: health-export-api
+      component: database
+    annotations:
+      summary: "High database connection wait time"
+      description: "95th percentile database connection wait time is {{ $value | humanizeDuration }}, exceeding 1 second."
+
+  # Service Health Alerts
+  - alert: ServiceDown
+    expr: up{job="health-export-api"} == 0
+    for: 1m
+    labels:
+      severity: critical
+      service: health-export-api
+      component: service
+    annotations:
+      summary: "Health Export API service is down"
+      description: "Health Export API service has been down for more than 1 minute."
+
+  - alert: NoIngestActivity
+    expr: rate(health_export_ingest_requests_total[30m]) == 0
+    for: 30m
+    labels:
+      severity: warning
+      service: health-export-api
+      component: ingestion
+    annotations:
+      summary: "No ingestion activity detected"
+      description: "No health data ingestion requests received in the last 30 minutes."
+
+  # Business Logic Alerts
+  - alert: HighValidationFailureRate
+    expr: rate(health_export_ingest_metrics_processed_total{status="failed"}[5m]) / rate(health_export_ingest_metrics_processed_total[5m]) > 0.2
+    for: 5m
+    labels:
+      severity: warning
+      service: health-export-api
+      component: validation
+    annotations:
+      summary: "High validation failure rate"
+      description: "{{ $value | humanizePercentage }} of health metrics are failing validation, exceeding 20% threshold."
+
+  - alert: LowActiveUserCount
+    expr: health_export_active_users_24h < 10
+    for: 10m
+    labels:
+      severity: info
+      service: health-export-api
+      component: business
+    annotations:
+      summary: "Low active user count"
+      description: "Only {{ $value }} active users in the last 24 hours, which may indicate service issues."
+
+  # Rate Limiting Alerts
+  - alert: HighRateLimitingActivity
+    expr: rate(health_export_rate_limited_requests_total[5m]) > 5
+    for: 3m
+    labels:
+      severity: warning
+      service: health-export-api
+      component: rate-limiting
+    annotations:
+      summary: "High rate limiting activity"
+      description: "Rate limiting is blocking {{ $value }} requests per second, indicating potential abuse or misconfigured clients."
+
+  # Authentication Alerts
+  - alert: HighAuthenticationFailureRate
+    expr: rate(health_export_auth_attempts_total{result="failure"}[5m]) / rate(health_export_auth_attempts_total[5m]) > 0.1
+    for: 5m
+    labels:
+      severity: warning
+      service: health-export-api
+      component: authentication
+    annotations:
+      summary: "High authentication failure rate"
+      description: "{{ $value | humanizePercentage }} of authentication attempts are failing, which may indicate brute force attacks."
+
+  # Data Volume Alerts
+  - alert: UnusuallyHighDataVolume
+    expr: rate(health_export_data_volume_bytes_total[5m]) > 100000000  # 100MB/s
+    for: 5m
+    labels:
+      severity: warning
+      service: health-export-api
+      component: data-volume
+    annotations:
+      summary: "Unusually high data volume"
+      description: "Data ingestion rate is {{ $value | humanizeBytes }}/second, which is unusually high and may indicate data quality issues."
+
+  - alert: NoDataIngestion
+    expr: rate(health_export_data_volume_bytes_total{operation="received"}[30m]) == 0
+    for: 30m
+    labels:
+      severity: warning
+      service: health-export-api
+      component: data-ingestion
+    annotations:
+      summary: "No data ingestion detected"
+      description: "No data has been ingested for the last 30 minutes."
+
+- name: health_export_api_capacity_alerts
+  rules:
+  # Capacity Planning Alerts
+  - alert: HighThroughputNearingCapacity
+    expr: rate(health_export_http_requests_total[5m]) > 80  # 80 RPS threshold
+    for: 10m
+    labels:
+      severity: info
+      service: health-export-api
+      component: capacity
+    annotations:
+      summary: "High throughput - approaching capacity limits"
+      description: "Current request rate is {{ $value }} RPS, approaching the designed capacity limit."
+
+  - alert: LargeMetricsBatchesFrequent
+    expr: rate(health_export_batch_processing_duration_seconds_bucket{batch_size_bucket="xlarge",le="+Inf"}[5m]) > 1
+    for: 10m
+    labels:
+      severity: info
+      service: health-export-api
+      component: capacity
+    annotations:
+      summary: "Frequent large metric batches detected"
+      description: "Large metric batches (>1000 metrics) are being processed at {{ $value }} batches per second, indicating potential capacity concerns."
