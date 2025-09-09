@@ -1,0 +1,1945 @@
+openapi: 3.0.3
+info:
+  title: Health Export REST API
+  description: |
+    Production-ready REST API to receive and store health data from the Auto Health Export iOS application.
+    
+    ## Overview
+    The Health Export API provides endpoints for:
+    - Ingesting health data from iOS applications (especially Auto Health Export app)
+    - Querying stored health metrics with filtering and pagination
+    - Exporting health data in JSON or CSV formats
+    - Managing authentication via Bearer tokens
+    
+    ## Key Features
+    - **High Data Integrity**: Individual transactions per metric ensure data consistency
+    - **Scalable Architecture**: Supports 10,000+ users with partitioned storage
+    - **HIPAA-Compliant**: Secure handling of health data with comprehensive audit logging
+    - **Dual Format Support**: Native support for iOS Auto Health Export format + standard JSON
+    - **Rate Limited**: 100 requests/hour per API key (configurable)
+    - **Large Payloads**: Supports up to 100MB payloads with 10,000+ metrics per request
+    
+    ## Authentication
+    All API endpoints (except health checks) require Bearer token authentication:
+    ```
+    Authorization: Bearer <your-api-key>
+    ```
+    
+    ## Rate Limiting
+    - **Requests**: 100 per hour per API key
+    - **Payload Size**: 100MB maximum
+    - **Metrics per Request**: 10,000 maximum
+    
+    When rate limits are exceeded, the API returns HTTP 429 with retry information.
+    
+  version: "1.0.0"
+  contact:
+    name: Health Export Team
+    email: team@example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.health-export.com
+    description: Production server
+  - url: https://staging-api.health-export.com
+    description: Staging server
+  - url: http://localhost:8080
+    description: Development server
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health Checks
+      summary: Basic health check
+      description: Simple health check endpoint that returns service status
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: "2025-01-15T10:30:00Z"
+                  service:
+                    type: string
+                    example: "self-sensored-api"
+              example:
+                status: "healthy"
+                timestamp: "2025-01-15T10:30:00Z"
+                service: "self-sensored-api"
+
+  /api/v1/status:
+    get:
+      tags:
+        - Health Checks
+      summary: API status with database connectivity
+      description: Comprehensive API status including database connectivity check
+      operationId: apiStatus
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: API status information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "operational"
+                  timestamp:
+                    type: string
+                    format: date-time
+                  service:
+                    type: string
+                    example: "self-sensored-api"
+                  version:
+                    type: string
+                    example: "0.1.0"
+                  database:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        enum: [connected, disconnected]
+                        example: "connected"
+                  environment:
+                    type: string
+                    example: "production"
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /api/v1/ingest:
+    post:
+      tags:
+        - Data Ingestion
+      summary: Ingest health data
+      description: |
+        Main endpoint for ingesting health data. Supports both iOS Auto Health Export format 
+        and standard JSON format. Processes large batches efficiently with partial success handling.
+        
+        ## Supported Formats
+        - **iOS Auto Health Export**: Native format from the iOS app
+        - **Standard JSON**: Generic health metrics format
+        
+        ## Features
+        - **Batch Processing**: Process up to 10,000 metrics per request
+        - **Partial Success**: Valid metrics are processed even if some fail validation
+        - **Deduplication**: SHA256 hash prevents duplicate data ingestion
+        - **Audit Trail**: All requests logged with processing status
+        
+        ## Validation
+        Each metric type has specific validation rules:
+        - Heart rate: 20-300 BPM
+        - Blood pressure: Systolic 60-250, Diastolic 40-150
+        - Sleep: Logical time periods and efficiency 0-100%
+        - Activity: Non-negative values within reasonable ranges
+        - Workouts: Duration < 24 hours, reasonable energy/distance values
+      operationId: ingestHealthData
+      security:
+        - BearerAuth: []
+      requestBody:
+        description: Health data to ingest
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/IngestPayload'
+                - $ref: '#/components/schemas/IosIngestPayload'
+            examples:
+              standard_format:
+                summary: Standard JSON format
+                value:
+                  data:
+                    metrics:
+                      - type: "HeartRate"
+                        recorded_at: "2025-01-15T08:30:00Z"
+                        min_bpm: 65
+                        avg_bpm: 72
+                        max_bpm: 85
+                        source: "Apple Watch"
+                        context: "resting"
+                      - type: "BloodPressure"
+                        recorded_at: "2025-01-15T09:15:00Z"
+                        systolic: 120
+                        diastolic: 80
+                        pulse: 68
+                        source: "Manual Entry"
+                    workouts:
+                      - workout_type: "Running"
+                        start_time: "2025-01-15T07:00:00Z"
+                        end_time: "2025-01-15T07:45:00Z"
+                        total_energy_kcal: 320.5
+                        distance_meters: 5500.0
+                        avg_heart_rate: 155
+                        max_heart_rate: 175
+                        source: "Apple Watch"
+              ios_format:
+                summary: iOS Auto Health Export format
+                value:
+                  data:
+                    metrics:
+                      HKQuantityTypeIdentifierHeartRate:
+                        - sourceName: "Apple Watch"
+                          sourceVersion: "8.0"
+                          device: "Apple Watch Series 7"
+                          type: "HKQuantityTypeIdentifierHeartRate"
+                          unit: "count/min"
+                          value: "72"
+                          startDate: "2025-01-15 08:30:00 +0000"
+                          endDate: "2025-01-15 08:30:00 +0000"
+                      HKQuantityTypeIdentifierBloodPressureSystolic:
+                        - sourceName: "Health"
+                          type: "HKQuantityTypeIdentifierBloodPressureSystolic"
+                          unit: "mmHg"
+                          value: "120"
+                          startDate: "2025-01-15 09:15:00 +0000"
+                          endDate: "2025-01-15 09:15:00 +0000"
+                      HKQuantityTypeIdentifierBloodPressureDiastolic:
+                        - sourceName: "Health"
+                          type: "HKQuantityTypeIdentifierBloodPressureDiastolic"
+                          unit: "mmHg"
+                          value: "80"
+                          startDate: "2025-01-15 09:15:00 +0000"
+                          endDate: "2025-01-15 09:15:00 +0000"
+                    workouts:
+                      - workoutActivityType: "HKWorkoutActivityTypeRunning"
+                        sourceName: "Apple Watch"
+                        sourceVersion: "8.0"
+                        device: "Apple Watch Series 7"
+                        startDate: "2025-01-15 07:00:00 +0000"
+                        endDate: "2025-01-15 07:45:00 +0000"
+                        duration: 45.0
+                        totalEnergyBurned: 320.5
+                        totalDistance: 5.5
+                        metadata:
+                          HKAverageHeartRate: 155
+                          HKMaximumHeartRate: 175
+      responses:
+        '200':
+          description: Data ingested successfully (may include partial failures)
+          headers:
+            X-RateLimit-Limit:
+              description: Request limit per hour
+              schema:
+                type: integer
+                example: 100
+            X-RateLimit-Remaining:
+              description: Remaining requests in current window
+              schema:
+                type: integer
+                example: 95
+            X-RateLimit-Reset:
+              description: Time when rate limit resets (Unix timestamp)
+              schema:
+                type: integer
+                example: 1642248600
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/IngestResponse'
+              examples:
+                full_success:
+                  summary: All metrics processed successfully
+                  value:
+                    success: true
+                    data:
+                      success: true
+                      processed_count: 25
+                      failed_count: 0
+                      processing_time_ms: 1250
+                      errors: []
+                    error: null
+                    timestamp: "2025-01-15T10:30:00Z"
+                partial_success:
+                  summary: Some metrics failed validation
+                  value:
+                    success: false
+                    data:
+                      success: false
+                      processed_count: 23
+                      failed_count: 2
+                      processing_time_ms: 1180
+                      errors:
+                        - metric_type: "HeartRate"
+                          error_message: "Heart rate 350 BPM exceeds maximum of 300"
+                          index: 5
+                        - metric_type: "Workout"
+                          error_message: "Workout duration cannot exceed 24 hours"
+                          index: 1
+                    error: "2 metrics failed validation"
+                    timestamp: "2025-01-15T10:30:00Z"
+        '400':
+          description: Bad request - invalid JSON or validation errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              examples:
+                invalid_json:
+                  summary: Invalid JSON format
+                  value:
+                    success: false
+                    data: null
+                    error: "Invalid JSON format: expected value at line 5 column 12"
+                    timestamp: "2025-01-15T10:30:00Z"
+                too_many_metrics:
+                  summary: Exceeds metric limit
+                  value:
+                    success: false
+                    data: null
+                    error: "Too many metrics: 15000 exceeds limit of 10000"
+                    timestamp: "2025-01-15T10:30:00Z"
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '413':
+          description: Payload too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              example:
+                success: false
+                data: null
+                error: "Payload size 120MB exceeds maximum of 100MB"
+                timestamp: "2025-01-15T10:30:00Z"
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/data/heart-rate:
+    get:
+      tags:
+        - Data Query
+      summary: Query heart rate data
+      description: |
+        Retrieve heart rate metrics with optional filtering by date range and pagination.
+        Returns heart rate data including min/avg/max BPM, context, and source device.
+      operationId: getHeartRateData
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StartDate'
+        - $ref: '#/components/parameters/EndDate'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Heart rate data retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/QueryResponseHeartRate'
+              example:
+                success: true
+                data:
+                  data:
+                    - user_id: "550e8400-e29b-41d4-a716-446655440000"
+                      recorded_at: "2025-01-15T08:30:00Z"
+                      heart_rate: 72
+                      resting_heart_rate: 65
+                      context: "resting"
+                      source_device: "Apple Watch Series 7"
+                      created_at: "2025-01-15T08:31:00Z"
+                    - user_id: "550e8400-e29b-41d4-a716-446655440000"
+                      recorded_at: "2025-01-15T09:15:00Z"
+                      heart_rate: 155
+                      resting_heart_rate: 65
+                      context: "exercise"
+                      source_device: "Apple Watch Series 7"
+                      created_at: "2025-01-15T09:16:00Z"
+                  pagination:
+                    page: 1
+                    limit: 100
+                    has_next: false
+                    has_prev: false
+                  total_count: 2
+                error: null
+                timestamp: "2025-01-15T10:30:00Z"
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /api/v1/data/blood-pressure:
+    get:
+      tags:
+        - Data Query
+      summary: Query blood pressure data
+      description: |
+        Retrieve blood pressure metrics including systolic/diastolic readings and pulse data.
+      operationId: getBloodPressureData
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StartDate'
+        - $ref: '#/components/parameters/EndDate'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Blood pressure data retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/QueryResponseBloodPressure'
+              example:
+                success: true
+                data:
+                  data:
+                    - user_id: "550e8400-e29b-41d4-a716-446655440000"
+                      recorded_at: "2025-01-15T09:15:00Z"
+                      systolic: 120
+                      diastolic: 80
+                      pulse: 68
+                      source_device: "Manual Entry"
+                      created_at: "2025-01-15T09:16:00Z"
+                  pagination:
+                    page: 1
+                    limit: 100
+                    has_next: false
+                    has_prev: false
+                  total_count: 1
+                error: null
+                timestamp: "2025-01-15T10:30:00Z"
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/v1/data/sleep:
+    get:
+      tags:
+        - Data Query
+      summary: Query sleep data
+      description: |
+        Retrieve sleep metrics including sleep periods, sleep stage breakdowns (deep/REM/light), 
+        and sleep efficiency calculations.
+      operationId: getSleepData
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StartDate'
+        - $ref: '#/components/parameters/EndDate'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Sleep data retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/QueryResponseSleep'
+              example:
+                success: true
+                data:
+                  data:
+                    - user_id: "550e8400-e29b-41d4-a716-446655440000"
+                      sleep_start: "2025-01-14T23:15:00Z"
+                      sleep_end: "2025-01-15T07:30:00Z"
+                      duration_minutes: 495
+                      deep_sleep_minutes: 120
+                      rem_sleep_minutes: 95
+                      light_sleep_minutes: 250
+                      awake_minutes: 30
+                      sleep_efficiency: 0.94
+                      source_device: "Apple Watch Series 7"
+                      created_at: "2025-01-15T07:35:00Z"
+                  pagination:
+                    page: 1
+                    limit: 100
+                    has_next: false
+                    has_prev: false
+                  total_count: 1
+                error: null
+                timestamp: "2025-01-15T10:30:00Z"
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/v1/data/activity:
+    get:
+      tags:
+        - Data Query
+      summary: Query daily activity data
+      description: |
+        Retrieve daily activity summaries including steps, distance, calories burned, 
+        active minutes, and flights climbed.
+      operationId: getActivityData
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StartDate'
+        - $ref: '#/components/parameters/EndDate'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Sort'
+      responses:
+        '200':
+          description: Activity data retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/QueryResponseActivity'
+              example:
+                success: true
+                data:
+                  data:
+                    - user_id: "550e8400-e29b-41d4-a716-446655440000"
+                      recorded_date: "2025-01-15"
+                      steps: 8542
+                      distance_meters: 6234.5
+                      calories_burned: 2150
+                      active_minutes: 65
+                      flights_climbed: 12
+                      source_device: "iPhone"
+                      created_at: "2025-01-15T23:59:59Z"
+                  pagination:
+                    page: 1
+                    limit: 100
+                    has_next: false
+                    has_prev: false
+                  total_count: 1
+                error: null
+                timestamp: "2025-01-15T10:30:00Z"
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/v1/data/workouts:
+    get:
+      tags:
+        - Data Query
+      summary: Query workout data
+      description: |
+        Retrieve workout sessions including type, duration, energy expenditure, distance,
+        heart rate metrics, and associated GPS route data (stored in PostGIS).
+      operationId: getWorkoutData
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StartDate'
+        - $ref: '#/components/parameters/EndDate'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Sort'
+        - name: workout_type
+          in: query
+          description: Filter by workout type (e.g., Running, Cycling, Swimming)
+          schema:
+            type: string
+            example: "Running"
+      responses:
+        '200':
+          description: Workout data retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/QueryResponseWorkout'
+              example:
+                success: true
+                data:
+                  data:
+                    - user_id: "550e8400-e29b-41d4-a716-446655440000"
+                      workout_type: "Running"
+                      start_time: "2025-01-15T07:00:00Z"
+                      end_time: "2025-01-15T07:45:00Z"
+                      duration_minutes: 45
+                      total_energy_kcal: 320.5
+                      distance_meters: 5500.0
+                      avg_heart_rate: 155
+                      max_heart_rate: 175
+                      source_device: "Apple Watch Series 7"
+                      created_at: "2025-01-15T07:50:00Z"
+                      route_id: "123e4567-e89b-12d3-a456-426614174000"
+                  pagination:
+                    page: 1
+                    limit: 100
+                    has_next: false
+                    has_prev: false
+                  total_count: 1
+                error: null
+                timestamp: "2025-01-15T10:30:00Z"
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/v1/data/summary:
+    get:
+      tags:
+        - Data Query
+      summary: Get health summary and analytics
+      description: |
+        Retrieve aggregated health statistics and analytics for a specified date range.
+        Includes averages, trends, and summary statistics across all health metrics.
+      operationId: getHealthSummary
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StartDate'
+        - $ref: '#/components/parameters/EndDate'
+      responses:
+        '200':
+          description: Health summary retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/HealthSummary'
+              example:
+                success: true
+                data:
+                  user_id: "550e8400-e29b-41d4-a716-446655440000"
+                  date_range:
+                    start: "2025-01-01T00:00:00Z"
+                    end: "2025-01-15T23:59:59Z"
+                  heart_rate_stats:
+                    avg_resting: 65
+                    avg_active: 145
+                    max_recorded: 185
+                    total_readings: 2180
+                  sleep_stats:
+                    avg_duration_hours: 7.8
+                    avg_efficiency: 0.91
+                    total_nights: 14
+                  activity_stats:
+                    avg_daily_steps: 9250
+                    total_distance_km: 127.5
+                    avg_calories_per_day: 2340
+                    active_days: 13
+                  workout_stats:
+                    total_workouts: 8
+                    total_duration_hours: 6.5
+                    total_calories: 2450
+                    most_common_type: "Running"
+                error: null
+                timestamp: "2025-01-15T10:30:00Z"
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/v1/export/all:
+    get:
+      tags:
+        - Data Export
+      summary: Export all health data
+      description: |
+        Export all health data for the authenticated user in JSON or CSV format.
+        Supports filtering by date range and metric types.
+      operationId: exportHealthData
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: format
+          in: query
+          description: Export format
+          schema:
+            type: string
+            enum: [json, csv]
+            default: json
+            example: json
+        - $ref: '#/components/parameters/StartDate'
+        - $ref: '#/components/parameters/EndDate'
+        - name: metric_types
+          in: query
+          description: Comma-separated list of metric types to include
+          schema:
+            type: string
+            example: "HeartRate,BloodPressure,Sleep"
+        - name: include_raw
+          in: query
+          description: Include raw metadata fields
+          schema:
+            type: boolean
+            default: false
+            example: false
+      responses:
+        '200':
+          description: Health data exported successfully
+          headers:
+            Content-Disposition:
+              description: Attachment filename
+              schema:
+                type: string
+                example: 'attachment; filename="health_data_2025-01-15.json"'
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ExportResponse'
+            text/csv:
+              schema:
+                type: string
+                description: CSV formatted health data
+              example: |
+                metric_type,recorded_at,value,unit,source_device
+                HeartRate,2025-01-15T08:30:00Z,72,bpm,Apple Watch Series 7
+                BloodPressure,2025-01-15T09:15:00Z,"120/80",mmHg,Manual Entry
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/v1/export/heart-rate:
+    get:
+      tags:
+        - Data Export
+      summary: Export heart rate data
+      description: |
+        Export only heart rate metrics in JSON or CSV format with optional filtering.
+      operationId: exportHeartRateData
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: format
+          in: query
+          description: Export format
+          schema:
+            type: string
+            enum: [json, csv]
+            default: json
+        - $ref: '#/components/parameters/StartDate'
+        - $ref: '#/components/parameters/EndDate'
+        - name: include_raw
+          in: query
+          description: Include raw metadata fields
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Heart rate data exported successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ExportResponse'
+            text/csv:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /api/v1/export/activity-analytics:
+    get:
+      tags:
+        - Data Export
+      summary: Export activity analytics
+      description: |
+        Export processed activity analytics and summary statistics in JSON or CSV format.
+      operationId: exportActivityAnalytics
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: format
+          in: query
+          description: Export format
+          schema:
+            type: string
+            enum: [json, csv]
+            default: json
+        - $ref: '#/components/parameters/StartDate'
+        - $ref: '#/components/parameters/EndDate'
+      responses:
+        '200':
+          description: Activity analytics exported successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ExportResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        Bearer token authentication using API keys. Two formats supported:
+        - UUID format (for Auto Health Export iOS app): `123e4567-e89b-12d3-a456-426614174000`
+        - Hashed format (for internal use): Argon2 hashed string
+        
+        Example: `Authorization: Bearer 550e8400-e29b-41d4-a716-446655440000`
+
+  parameters:
+    StartDate:
+      name: start_date
+      in: query
+      description: Start date for filtering (ISO 8601 format)
+      schema:
+        type: string
+        format: date-time
+        example: "2025-01-01T00:00:00Z"
+    
+    EndDate:
+      name: end_date
+      in: query
+      description: End date for filtering (ISO 8601 format)
+      schema:
+        type: string
+        format: date-time
+        example: "2025-01-15T23:59:59Z"
+    
+    Page:
+      name: page
+      in: query
+      description: Page number for pagination (starts from 1)
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+        example: 1
+    
+    Limit:
+      name: limit
+      in: query
+      description: Number of items per page (maximum 1000)
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 1000
+        default: 100
+        example: 100
+    
+    Sort:
+      name: sort
+      in: query
+      description: Sort order for results
+      schema:
+        type: string
+        enum: [asc, desc]
+        default: desc
+        example: desc
+
+  schemas:
+    ApiResponse:
+      type: object
+      required:
+        - success
+        - timestamp
+      properties:
+        success:
+          type: boolean
+          description: Indicates if the request was successful
+          example: true
+        data:
+          description: Response data (null for errors unless error_with_data)
+        error:
+          type: string
+          nullable: true
+          description: Error message if success is false
+          example: null
+        timestamp:
+          type: string
+          format: date-time
+          description: Response timestamp in ISO 8601 format
+          example: "2025-01-15T10:30:00Z"
+
+    IngestPayload:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          $ref: '#/components/schemas/IngestData'
+      description: Standard format health data payload
+
+    IngestData:
+      type: object
+      required:
+        - metrics
+        - workouts
+      properties:
+        metrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/HealthMetric'
+          description: Array of health metrics
+          maxItems: 10000
+        workouts:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkoutData'
+          description: Array of workout sessions
+          maxItems: 1000
+
+    IosIngestPayload:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            metrics:
+              type: object
+              additionalProperties:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IosHealthMetric'
+              description: iOS health metrics grouped by HealthKit type
+              example:
+                HKQuantityTypeIdentifierHeartRate:
+                  - sourceName: "Apple Watch"
+                    sourceVersion: "8.0"
+                    device: "Apple Watch Series 7"
+                    type: "HKQuantityTypeIdentifierHeartRate"
+                    unit: "count/min"
+                    value: "72"
+                    startDate: "2025-01-15 08:30:00 +0000"
+                    endDate: "2025-01-15 08:30:00 +0000"
+            workouts:
+              type: array
+              items:
+                $ref: '#/components/schemas/IosWorkoutData'
+              description: Array of iOS workout data
+      description: iOS Auto Health Export format payload
+
+    IosHealthMetric:
+      type: object
+      required:
+        - type
+        - value
+        - unit
+        - startDate
+        - endDate
+      properties:
+        sourceName:
+          type: string
+          example: "Apple Watch"
+        sourceVersion:
+          type: string
+          example: "8.0"
+        device:
+          type: string
+          example: "Apple Watch Series 7"
+        type:
+          type: string
+          description: HealthKit identifier
+          example: "HKQuantityTypeIdentifierHeartRate"
+        unit:
+          type: string
+          example: "count/min"
+        value:
+          type: string
+          description: Metric value as string
+          example: "72"
+        startDate:
+          type: string
+          description: Start date in iOS format
+          example: "2025-01-15 08:30:00 +0000"
+        endDate:
+          type: string
+          description: End date in iOS format
+          example: "2025-01-15 08:30:00 +0000"
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Additional iOS metadata
+
+    IosWorkoutData:
+      type: object
+      required:
+        - workoutActivityType
+        - startDate
+        - endDate
+      properties:
+        workoutActivityType:
+          type: string
+          description: HealthKit workout activity type
+          example: "HKWorkoutActivityTypeRunning"
+        sourceName:
+          type: string
+          example: "Apple Watch"
+        sourceVersion:
+          type: string
+          example: "8.0"
+        device:
+          type: string
+          example: "Apple Watch Series 7"
+        startDate:
+          type: string
+          example: "2025-01-15 07:00:00 +0000"
+        endDate:
+          type: string
+          example: "2025-01-15 07:45:00 +0000"
+        duration:
+          type: number
+          description: Duration in minutes
+          example: 45.0
+        totalEnergyBurned:
+          type: number
+          description: Energy burned in kcal
+          example: 320.5
+        totalDistance:
+          type: number
+          description: Distance in kilometers
+          example: 5.5
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Additional workout metadata
+          properties:
+            HKAverageHeartRate:
+              type: integer
+              example: 155
+            HKMaximumHeartRate:
+              type: integer
+              example: 175
+
+    HealthMetric:
+      oneOf:
+        - allOf:
+            - type: object
+              properties:
+                type:
+                  type: string
+                  enum: [HeartRate]
+            - $ref: '#/components/schemas/HeartRateMetric'
+        - allOf:
+            - type: object
+              properties:
+                type:
+                  type: string
+                  enum: [BloodPressure]
+            - $ref: '#/components/schemas/BloodPressureMetric'
+        - allOf:
+            - type: object
+              properties:
+                type:
+                  type: string
+                  enum: [Sleep]
+            - $ref: '#/components/schemas/SleepMetric'
+        - allOf:
+            - type: object
+              properties:
+                type:
+                  type: string
+                  enum: [Activity]
+            - $ref: '#/components/schemas/ActivityMetric'
+        - allOf:
+            - type: object
+              properties:
+                type:
+                  type: string
+                  enum: [Workout]
+            - $ref: '#/components/schemas/WorkoutData'
+      discriminator:
+        propertyName: type
+        mapping:
+          HeartRate: '#/components/schemas/HeartRateMetric'
+          BloodPressure: '#/components/schemas/BloodPressureMetric'
+          Sleep: '#/components/schemas/SleepMetric'
+          Activity: '#/components/schemas/ActivityMetric'
+          Workout: '#/components/schemas/WorkoutData'
+
+    HeartRateMetric:
+      type: object
+      required:
+        - recorded_at
+      properties:
+        recorded_at:
+          type: string
+          format: date-time
+          description: When the heart rate was recorded
+          example: "2025-01-15T08:30:00Z"
+        min_bpm:
+          type: integer
+          minimum: 20
+          maximum: 300
+          description: Minimum heart rate in BPM
+          example: 65
+        avg_bpm:
+          type: integer
+          minimum: 20
+          maximum: 300
+          description: Average heart rate in BPM
+          example: 72
+        max_bpm:
+          type: integer
+          minimum: 20
+          maximum: 300
+          description: Maximum heart rate in BPM
+          example: 85
+        source:
+          type: string
+          description: Source device or application
+          example: "Apple Watch Series 7"
+        context:
+          type: string
+          description: Context of measurement
+          enum: [resting, exercise, recovery, sleep]
+          example: "resting"
+
+    BloodPressureMetric:
+      type: object
+      required:
+        - recorded_at
+        - systolic
+        - diastolic
+      properties:
+        recorded_at:
+          type: string
+          format: date-time
+          description: When the blood pressure was recorded
+          example: "2025-01-15T09:15:00Z"
+        systolic:
+          type: integer
+          minimum: 60
+          maximum: 250
+          description: Systolic pressure in mmHg
+          example: 120
+        diastolic:
+          type: integer
+          minimum: 40
+          maximum: 150
+          description: Diastolic pressure in mmHg
+          example: 80
+        pulse:
+          type: integer
+          minimum: 20
+          maximum: 300
+          description: Pulse rate in BPM
+          example: 68
+        source:
+          type: string
+          description: Source device or method
+          example: "Manual Entry"
+
+    SleepMetric:
+      type: object
+      required:
+        - recorded_at
+        - sleep_start
+        - sleep_end
+        - total_sleep_minutes
+      properties:
+        recorded_at:
+          type: string
+          format: date-time
+          description: When the sleep data was recorded
+          example: "2025-01-15T07:30:00Z"
+        sleep_start:
+          type: string
+          format: date-time
+          description: Sleep start time
+          example: "2025-01-14T23:15:00Z"
+        sleep_end:
+          type: string
+          format: date-time
+          description: Sleep end time
+          example: "2025-01-15T07:30:00Z"
+        total_sleep_minutes:
+          type: integer
+          minimum: 0
+          maximum: 1440
+          description: Total sleep duration in minutes
+          example: 495
+        deep_sleep_minutes:
+          type: integer
+          minimum: 0
+          description: Deep sleep duration in minutes
+          example: 120
+        rem_sleep_minutes:
+          type: integer
+          minimum: 0
+          description: REM sleep duration in minutes
+          example: 95
+        awake_minutes:
+          type: integer
+          minimum: 0
+          description: Time awake during sleep period in minutes
+          example: 30
+        efficiency_percentage:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Sleep efficiency as decimal (0.0-1.0)
+          example: 0.94
+        source:
+          type: string
+          description: Source device
+          example: "Apple Watch Series 7"
+
+    ActivityMetric:
+      type: object
+      required:
+        - date
+      properties:
+        date:
+          type: string
+          format: date
+          description: Date of activity (YYYY-MM-DD)
+          example: "2025-01-15"
+        steps:
+          type: integer
+          minimum: 0
+          description: Daily step count
+          example: 8542
+        distance_meters:
+          type: number
+          minimum: 0
+          description: Distance traveled in meters
+          example: 6234.5
+        calories_burned:
+          type: number
+          minimum: 0
+          description: Calories burned
+          example: 2150.0
+        active_minutes:
+          type: integer
+          minimum: 0
+          description: Active minutes
+          example: 65
+        flights_climbed:
+          type: integer
+          minimum: 0
+          description: Flights of stairs climbed
+          example: 12
+        source:
+          type: string
+          description: Source device
+          example: "iPhone"
+
+    WorkoutData:
+      type: object
+      required:
+        - workout_type
+        - start_time
+        - end_time
+      properties:
+        workout_type:
+          type: string
+          description: Type of workout
+          example: "Running"
+        start_time:
+          type: string
+          format: date-time
+          description: Workout start time
+          example: "2025-01-15T07:00:00Z"
+        end_time:
+          type: string
+          format: date-time
+          description: Workout end time
+          example: "2025-01-15T07:45:00Z"
+        total_energy_kcal:
+          type: number
+          minimum: 0
+          maximum: 10000
+          description: Energy burned in kcal
+          example: 320.5
+        distance_meters:
+          type: number
+          minimum: 0
+          maximum: 1000000
+          description: Distance covered in meters
+          example: 5500.0
+        avg_heart_rate:
+          type: integer
+          minimum: 20
+          maximum: 300
+          description: Average heart rate in BPM
+          example: 155
+        max_heart_rate:
+          type: integer
+          minimum: 20
+          maximum: 300
+          description: Maximum heart rate in BPM
+          example: 175
+        source:
+          type: string
+          description: Source device
+          example: "Apple Watch Series 7"
+
+    IngestResponse:
+      type: object
+      required:
+        - success
+        - processed_count
+        - failed_count
+        - processing_time_ms
+        - errors
+      properties:
+        success:
+          type: boolean
+          description: Whether all metrics were processed successfully
+          example: true
+        processed_count:
+          type: integer
+          description: Number of metrics successfully processed
+          example: 25
+        failed_count:
+          type: integer
+          description: Number of metrics that failed processing
+          example: 0
+        processing_time_ms:
+          type: integer
+          description: Processing time in milliseconds
+          example: 1250
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProcessingError'
+          description: List of processing errors
+
+    ProcessingError:
+      type: object
+      required:
+        - metric_type
+        - error_message
+      properties:
+        metric_type:
+          type: string
+          description: Type of metric that failed
+          example: "HeartRate"
+        error_message:
+          type: string
+          description: Detailed error message
+          example: "Heart rate 350 BPM exceeds maximum of 300"
+        index:
+          type: integer
+          description: Index of failed metric in request array
+          example: 5
+
+    PaginationInfo:
+      type: object
+      required:
+        - page
+        - limit
+        - has_next
+        - has_prev
+      properties:
+        page:
+          type: integer
+          description: Current page number
+          example: 1
+        limit:
+          type: integer
+          description: Items per page
+          example: 100
+        has_next:
+          type: boolean
+          description: Whether there are more pages
+          example: false
+        has_prev:
+          type: boolean
+          description: Whether there are previous pages
+          example: false
+
+    QueryResponseHeartRate:
+      type: object
+      required:
+        - data
+        - pagination
+        - total_count
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/HeartRateRecord'
+        pagination:
+          $ref: '#/components/schemas/PaginationInfo'
+        total_count:
+          type: integer
+          example: 150
+
+    QueryResponseBloodPressure:
+      type: object
+      required:
+        - data
+        - pagination
+        - total_count
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/BloodPressureRecord'
+        pagination:
+          $ref: '#/components/schemas/PaginationInfo'
+        total_count:
+          type: integer
+
+    QueryResponseSleep:
+      type: object
+      required:
+        - data
+        - pagination
+        - total_count
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SleepRecord'
+        pagination:
+          $ref: '#/components/schemas/PaginationInfo'
+        total_count:
+          type: integer
+
+    QueryResponseActivity:
+      type: object
+      required:
+        - data
+        - pagination
+        - total_count
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActivityRecord'
+        pagination:
+          $ref: '#/components/schemas/PaginationInfo'
+        total_count:
+          type: integer
+
+    QueryResponseWorkout:
+      type: object
+      required:
+        - data
+        - pagination
+        - total_count
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkoutRecord'
+        pagination:
+          $ref: '#/components/schemas/PaginationInfo'
+        total_count:
+          type: integer
+
+    HeartRateRecord:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        recorded_at:
+          type: string
+          format: date-time
+          example: "2025-01-15T08:30:00Z"
+        heart_rate:
+          type: integer
+          example: 72
+        resting_heart_rate:
+          type: integer
+          example: 65
+        context:
+          type: string
+          example: "resting"
+        source_device:
+          type: string
+          example: "Apple Watch Series 7"
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-01-15T08:31:00Z"
+
+    BloodPressureRecord:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        recorded_at:
+          type: string
+          format: date-time
+        systolic:
+          type: integer
+          example: 120
+        diastolic:
+          type: integer
+          example: 80
+        pulse:
+          type: integer
+          example: 68
+        source_device:
+          type: string
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+
+    SleepRecord:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        sleep_start:
+          type: string
+          format: date-time
+        sleep_end:
+          type: string
+          format: date-time
+        duration_minutes:
+          type: integer
+          example: 495
+        deep_sleep_minutes:
+          type: integer
+          example: 120
+        rem_sleep_minutes:
+          type: integer
+          example: 95
+        light_sleep_minutes:
+          type: integer
+          example: 250
+        awake_minutes:
+          type: integer
+          example: 30
+        sleep_efficiency:
+          type: number
+          example: 0.94
+        source_device:
+          type: string
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+
+    ActivityRecord:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        recorded_date:
+          type: string
+          format: date
+          example: "2025-01-15"
+        steps:
+          type: integer
+          example: 8542
+        distance_meters:
+          type: number
+          example: 6234.5
+        calories_burned:
+          type: integer
+          example: 2150
+        active_minutes:
+          type: integer
+          example: 65
+        flights_climbed:
+          type: integer
+          example: 12
+        source_device:
+          type: string
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+
+    WorkoutRecord:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        workout_type:
+          type: string
+          example: "Running"
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        duration_minutes:
+          type: integer
+          example: 45
+        total_energy_kcal:
+          type: number
+          example: 320.5
+        distance_meters:
+          type: number
+          example: 5500.0
+        avg_heart_rate:
+          type: integer
+          example: 155
+        max_heart_rate:
+          type: integer
+          example: 175
+        source_device:
+          type: string
+        route_id:
+          type: string
+          format: uuid
+          description: Reference to GPS route stored in PostGIS
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        created_at:
+          type: string
+          format: date-time
+
+    HealthSummary:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        date_range:
+          type: object
+          properties:
+            start:
+              type: string
+              format: date-time
+            end:
+              type: string
+              format: date-time
+        heart_rate_stats:
+          type: object
+          properties:
+            avg_resting:
+              type: integer
+              example: 65
+            avg_active:
+              type: integer
+              example: 145
+            max_recorded:
+              type: integer
+              example: 185
+            total_readings:
+              type: integer
+              example: 2180
+        sleep_stats:
+          type: object
+          properties:
+            avg_duration_hours:
+              type: number
+              example: 7.8
+            avg_efficiency:
+              type: number
+              example: 0.91
+            total_nights:
+              type: integer
+              example: 14
+        activity_stats:
+          type: object
+          properties:
+            avg_daily_steps:
+              type: integer
+              example: 9250
+            total_distance_km:
+              type: number
+              example: 127.5
+            avg_calories_per_day:
+              type: integer
+              example: 2340
+            active_days:
+              type: integer
+              example: 13
+        workout_stats:
+          type: object
+          properties:
+            total_workouts:
+              type: integer
+              example: 8
+            total_duration_hours:
+              type: number
+              example: 6.5
+            total_calories:
+              type: integer
+              example: 2450
+            most_common_type:
+              type: string
+              example: "Running"
+
+    ExportResponse:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        export_format:
+          type: string
+          enum: [json, csv]
+        date_range:
+          type: string
+          description: Date range of exported data
+          example: "2025-01-01 to 2025-01-15"
+        metric_types:
+          type: array
+          items:
+            type: string
+          example: ["HeartRate", "BloodPressure", "Sleep", "Activity"]
+        record_count:
+          type: integer
+          description: Number of records exported
+          example: 1250
+        export_timestamp:
+          type: string
+          format: date-time
+        data:
+          type: string
+          description: Exported data as JSON string or CSV content
+
+    RateLimitInfo:
+      type: object
+      properties:
+        requests_remaining:
+          type: integer
+          description: Requests remaining in current window
+          example: 85
+        requests_limit:
+          type: integer
+          description: Total requests allowed per window
+          example: 100
+        reset_time:
+          type: string
+          format: date-time
+          description: When the rate limit window resets
+          example: "2025-01-15T11:30:00Z"
+        retry_after:
+          type: integer
+          description: Seconds until rate limit resets
+          example: 3600
+
+  responses:
+    UnauthorizedError:
+      description: Authentication required or invalid token
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ApiResponse'
+              - type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Invalid or missing authentication token"
+          examples:
+            missing_token:
+              summary: Missing Authorization header
+              value:
+                success: false
+                data: null
+                error: "Missing Authorization header"
+                timestamp: "2025-01-15T10:30:00Z"
+            invalid_token:
+              summary: Invalid token format
+              value:
+                success: false
+                data: null
+                error: "Invalid token format. Expected: Bearer <token>"
+                timestamp: "2025-01-15T10:30:00Z"
+            expired_token:
+              summary: Expired or revoked token
+              value:
+                success: false
+                data: null
+                error: "Token expired or revoked"
+                timestamp: "2025-01-15T10:30:00Z"
+
+    RateLimitError:
+      description: Rate limit exceeded
+      headers:
+        X-RateLimit-Limit:
+          description: Request limit per hour
+          schema:
+            type: integer
+        X-RateLimit-Remaining:
+          description: Remaining requests (0 when limited)
+          schema:
+            type: integer
+        X-RateLimit-Reset:
+          description: Unix timestamp when limit resets
+          schema:
+            type: integer
+        Retry-After:
+          description: Seconds to wait before retrying
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ApiResponse'
+              - type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Rate limit exceeded. Try again in 3600 seconds."
+          example:
+            success: false
+            data: null
+            error: "Rate limit exceeded. Try again in 3600 seconds."
+            timestamp: "2025-01-15T10:30:00Z"
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ApiResponse'
+              - type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "An internal server error occurred"
+          example:
+            success: false
+            data: null
+            error: "An internal server error occurred. Please try again later."
+            timestamp: "2025-01-15T10:30:00Z"
+
+  examples:
+    FullHealthDataBatch:
+      summary: Complete health data batch with all metric types
+      description: Example showing all supported health metric types in a single request
+      value:
+        data:
+          metrics:
+            - type: "HeartRate"
+              recorded_at: "2025-01-15T08:30:00Z"
+              min_bpm: 65
+              avg_bpm: 72
+              max_bpm: 85
+              source: "Apple Watch Series 7"
+              context: "resting"
+            - type: "HeartRate"
+              recorded_at: "2025-01-15T14:15:00Z"
+              min_bpm: 140
+              avg_bpm: 155
+              max_bpm: 175
+              source: "Apple Watch Series 7"
+              context: "exercise"
+            - type: "BloodPressure"
+              recorded_at: "2025-01-15T09:15:00Z"
+              systolic: 120
+              diastolic: 80
+              pulse: 68
+              source: "Manual Entry"
+            - type: "Sleep"
+              recorded_at: "2025-01-15T07:30:00Z"
+              sleep_start: "2025-01-14T23:15:00Z"
+              sleep_end: "2025-01-15T07:30:00Z"
+              total_sleep_minutes: 495
+              deep_sleep_minutes: 120
+              rem_sleep_minutes: 95
+              awake_minutes: 30
+              efficiency_percentage: 0.94
+              source: "Apple Watch Series 7"
+            - type: "Activity"
+              date: "2025-01-15"
+              steps: 8542
+              distance_meters: 6234.5
+              calories_burned: 2150.0
+              active_minutes: 65
+              flights_climbed: 12
+              source: "iPhone"
+          workouts:
+            - workout_type: "Running"
+              start_time: "2025-01-15T07:00:00Z"
+              end_time: "2025-01-15T07:45:00Z"
+              total_energy_kcal: 320.5
+              distance_meters: 5500.0
+              avg_heart_rate: 155
+              max_heart_rate: 175
+              source: "Apple Watch Series 7"
+            - workout_type: "Strength Training"
+              start_time: "2025-01-15T18:30:00Z"
+              end_time: "2025-01-15T19:15:00Z"
+              total_energy_kcal: 180.0
+              avg_heart_rate: 120
+              max_heart_rate: 140
+              source: "Apple Watch Series 7"
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Health Checks
+    description: Service health and status endpoints
+  - name: Data Ingestion
+    description: Endpoints for ingesting health data from devices and applications
+  - name: Data Query
+    description: Endpoints for querying and retrieving stored health metrics
+  - name: Data Export
+    description: Endpoints for exporting health data in various formats

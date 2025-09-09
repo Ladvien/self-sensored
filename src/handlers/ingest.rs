@@ -5,12 +5,18 @@ use sqlx::PgPool;
 use std::future::Future;
 use std::pin::Pin;
 use std::time::Instant;
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
-use crate::models::{ApiResponse, IngestPayload, IngestResponse, IosIngestPayload};
+use crate::models::{ApiResponse, IngestPayload, IngestResponse, IosIngestPayload, HealthMetric, IngestData};
 use crate::services::auth::AuthContext;
 use crate::services::batch_processor::{BatchProcessingResult, BatchProcessor};
+use crate::middleware::metrics::Metrics;
+
+/// Maximum payload size (100MB)
+const MAX_PAYLOAD_SIZE: usize = 100 * 1024 * 1024;
+/// Maximum number of metrics per request
+const MAX_METRICS_PER_REQUEST: usize = 10_000;
 
 /// Custom extractor that logs raw JSON payload before deserialization
 pub struct LoggedJson<T>(pub T);
@@ -30,6 +36,13 @@ where
             let mut body = web::BytesMut::new();
             while let Some(chunk) = payload.next().await {
                 let chunk = chunk?;
+                // Check if adding this chunk would exceed the size limit
+                if body.len() + chunk.len() > MAX_PAYLOAD_SIZE {
+                    error!("Payload size exceeds limit: {} bytes", body.len() + chunk.len());
+                    return Err(actix_web::error::ErrorPayloadTooLarge(
+                        format!("Payload exceeds maximum size of {} MB", MAX_PAYLOAD_SIZE / (1024 * 1024))
+                    ));
+                }
                 body.extend_from_slice(&chunk);
             }
 
@@ -63,11 +76,25 @@ pub async fn ingest_handler(
 ) -> Result<HttpResponse> {
     let start_time = Instant::now();
 
+    // Record ingest request start
+    Metrics::record_ingest_request();
+    Metrics::record_data_volume("ingest", "received", raw_payload.len() as u64);
+
     // Extract client IP for audit logging
     let client_ip = req
         .peer_addr()
         .map(|addr| addr.ip().to_string())
         .unwrap_or_else(|| "unknown".to_string());
+
+    // Check payload size limit first
+    if raw_payload.len() > MAX_PAYLOAD_SIZE {
+        error!("Payload size {} exceeds limit", raw_payload.len());
+        Metrics::record_error("payload_too_large", "/api/v1/ingest", "error");
+        return Ok(HttpResponse::PayloadTooLarge().json(ApiResponse::<()>::error(
+            format!("Payload size {} bytes exceeds maximum of {} MB", 
+                raw_payload.len(), MAX_PAYLOAD_SIZE / (1024 * 1024))
+        )));
+    }
 
     // Parse the raw payload - try iOS format first, then standard format
     let payload_str = String::from_utf8_lossy(&raw_payload);
@@ -92,6 +119,7 @@ pub async fn ingest_handler(
                         error!("Failed to parse payload in both iOS and standard formats");
                         error!("Standard format error: {}", standard_error);
                         error!("Raw payload: {}", payload_str);
+                        Metrics::record_error("json_parse", "/api/v1/ingest", "error");
                         return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
                             format!("Invalid JSON format: {standard_error}"),
                         )));
@@ -100,17 +128,87 @@ pub async fn ingest_handler(
             }
         };
 
+    // Validate payload constraints
+    let total_metrics = internal_payload.data.metrics.len() + internal_payload.data.workouts.len();
+    if total_metrics > MAX_METRICS_PER_REQUEST {
+        error!("Too many metrics: {} exceeds limit of {}", total_metrics, MAX_METRICS_PER_REQUEST);
+        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
+            format!("Too many metrics: {} exceeds limit of {}", total_metrics, MAX_METRICS_PER_REQUEST)
+        )));
+    }
+
+    // Validate individual metrics and workouts
+    let mut all_validation_errors = validate_metrics(&internal_payload.data.metrics);
+    all_validation_errors.extend(validate_workouts(&internal_payload.data.workouts));
+    
+    let mut processed_payload = internal_payload;
+    
+    // If we have validation errors, filter out invalid metrics but continue processing valid ones
+    if !all_validation_errors.is_empty() {
+        warn!("Validation errors found: {} items failed validation, continuing with valid metrics", all_validation_errors.len());
+        
+        // Filter out invalid metrics for processing, but report the errors
+        let valid_metrics: Vec<HealthMetric> = processed_payload.data.metrics.into_iter()
+            .enumerate()
+            .filter_map(|(index, metric)| {
+                match metric.validate() {
+                    Ok(()) => Some(metric),
+                    Err(_) => {
+                        debug!("Excluding invalid metric at index {}", index);
+                        None
+                    }
+                }
+            })
+            .collect();
+        
+        let valid_workouts: Vec<crate::models::WorkoutData> = processed_payload.data.workouts.into_iter()
+            .enumerate()
+            .filter_map(|(index, workout)| {
+                match validate_single_workout(&workout) {
+                    Ok(()) => Some(workout),
+                    Err(_) => {
+                        debug!("Excluding invalid workout at index {}", index);
+                        None
+                    }
+                }
+            })
+            .collect();
+        
+        // Update payload with only valid data
+        processed_payload = IngestPayload {
+            data: IngestData {
+                metrics: valid_metrics,
+                workouts: valid_workouts,
+            }
+        };
+        
+        // If no valid data remains after filtering, return error
+        if processed_payload.data.metrics.is_empty() && processed_payload.data.workouts.is_empty() {
+            error!("No valid metrics remaining after validation");
+            return Ok(HttpResponse::BadRequest().json(ApiResponse::<IngestResponse>::error_with_data(
+                "All metrics failed validation".to_string(),
+                IngestResponse {
+                    success: false,
+                    processed_count: 0,
+                    failed_count: all_validation_errors.len(),
+                    processing_time_ms: start_time.elapsed().as_millis() as u64,
+                    errors: all_validation_errors,
+                }
+            )));
+        }
+    }
+
     info!(
         user_id = %auth.user.id,
         api_key_id = %auth.api_key.id,
         client_ip = %client_ip,
-        metric_count = internal_payload.data.metrics.len(),
-        workout_count = internal_payload.data.workouts.len(),
+        metric_count = processed_payload.data.metrics.len(),
+        workout_count = processed_payload.data.workouts.len(),
         "Starting health data ingestion"
     );
 
-    // Store raw payload for backup and audit purposes
-    let raw_id = match store_raw_payload(&pool, &auth, &internal_payload, &client_ip).await {
+    // Store raw payload for backup and audit purposes (use processed payload to avoid storing invalid data)
+    let raw_id = match store_raw_payload(&pool, &auth, &processed_payload, &client_ip).await {
         Ok(id) => id,
         Err(e) => {
             error!(
@@ -128,9 +226,15 @@ pub async fn ingest_handler(
 
     // Process the batch data
     let processor = BatchProcessor::new(pool.get_ref().clone());
-    let result = processor
-        .process_batch(auth.user.id, internal_payload)
+    let mut result = processor
+        .process_batch(auth.user.id, processed_payload)
         .await;
+    
+    // Add validation errors to the processing result
+    if !all_validation_errors.is_empty() {
+        result.errors.extend(all_validation_errors);
+        result.failed_count += result.errors.len() - result.failed_count; // Add validation failures to count
+    }
 
     let processing_time = start_time.elapsed().as_millis() as u64;
 
@@ -153,6 +257,16 @@ pub async fn ingest_handler(
         errors: result.errors,
     };
 
+    // Record final metrics
+    let duration = start_time.elapsed();
+    let status = if response.success { "success" } else { "partial_failure" };
+    Metrics::record_ingest_duration(duration, status);
+    Metrics::record_data_volume("ingest", "processed", response.processed_count as u64);
+    
+    if response.failed_count > 0 {
+        Metrics::record_error("validation", "/api/v1/ingest", "warning");
+    }
+
     info!(
         user_id = %auth.user.id,
         processed_count = response.processed_count,
@@ -162,6 +276,82 @@ pub async fn ingest_handler(
     );
 
     Ok(HttpResponse::Ok().json(ApiResponse::success(response)))
+}
+
+/// Validate all metrics and return detailed errors
+fn validate_metrics(metrics: &[HealthMetric]) -> Vec<crate::models::ProcessingError> {
+    let mut errors = Vec::new();
+    
+    for (index, metric) in metrics.iter().enumerate() {
+        if let Err(validation_error) = metric.validate() {
+            errors.push(crate::models::ProcessingError {
+                metric_type: metric.metric_type().to_string(),
+                error_message: validation_error,
+                index: Some(index),
+            });
+        }
+    }
+    
+    errors
+}
+
+/// Validate all workouts and return detailed errors
+fn validate_workouts(workouts: &[crate::models::WorkoutData]) -> Vec<crate::models::ProcessingError> {
+    let mut errors = Vec::new();
+    
+    for (index, workout) in workouts.iter().enumerate() {
+        if let Err(validation_error) = validate_single_workout(workout) {
+            errors.push(crate::models::ProcessingError {
+                metric_type: "Workout".to_string(),
+                error_message: validation_error,
+                index: Some(index),
+            });
+        }
+    }
+    
+    errors
+}
+
+/// Validate a single workout
+fn validate_single_workout(workout: &crate::models::WorkoutData) -> Result<(), String> {
+    if workout.start_time >= workout.end_time {
+        return Err("Workout end_time must be after start_time".to_string());
+    }
+    
+    let duration = workout.end_time - workout.start_time;
+    if duration.num_hours() > 24 {
+        return Err("Workout duration cannot exceed 24 hours".to_string());
+    }
+    
+    if let Some(calories) = workout.total_energy_kcal {
+        if calories < 0.0 || calories > 10000.0 {
+            return Err(format!("total_energy_kcal {} is out of reasonable range (0-10000)", calories));
+        }
+    }
+    
+    if let Some(distance) = workout.distance_meters {
+        if distance < 0.0 || distance > 1000000.0 { // Max 1000km
+            return Err(format!("distance_meters {} is out of reasonable range (0-1000000)", distance));
+        }
+    }
+    
+    if let Some(hr) = workout.avg_heart_rate {
+        if !(20..=300).contains(&hr) {
+            return Err(format!("avg_heart_rate {} is out of range (20-300)", hr));
+        }
+    }
+    
+    if let Some(hr) = workout.max_heart_rate {
+        if !(20..=300).contains(&hr) {
+            return Err(format!("max_heart_rate {} is out of range (20-300)", hr));
+        }
+    }
+    
+    if workout.workout_type.is_empty() {
+        return Err("workout_type cannot be empty".to_string());
+    }
+    
+    Ok(())
 }
 
 /// Store raw payload for backup and audit purposes

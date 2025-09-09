@@ -1,0 +1,362 @@
+name: Continuous Integration
+
+on:
+  pull_request:
+    branches: [main, master, develop]
+  push:
+    branches: [main, master, develop]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run cargo check
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: --all-features --verbose
+
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: rustfmt
+
+      - name: Run cargo fmt
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --all-features -- -D warnings
+
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgis/postgis:15-3.3
+        env:
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_USER: testuser
+          POSTGRES_DB: health_export_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Install SQLx CLI
+        run: cargo install sqlx-cli --no-default-features --features native-tls,postgres
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Setup test environment
+        env:
+          DATABASE_URL: postgresql://testuser:testpass@localhost:5432/health_export_test
+          TEST_DATABASE_URL: postgresql://testuser:testpass@localhost:5432/health_export_test
+          REDIS_URL: redis://localhost:6379
+        run: |
+          echo "DATABASE_URL=postgresql://testuser:testpass@localhost:5432/health_export_test" >> $GITHUB_ENV
+          echo "TEST_DATABASE_URL=postgresql://testuser:testpass@localhost:5432/health_export_test" >> $GITHUB_ENV
+          echo "REDIS_URL=redis://localhost:6379" >> $GITHUB_ENV
+          echo "RUST_LOG=debug" >> $GITHUB_ENV
+          echo "DATABASE_MAX_CONNECTIONS=5" >> $GITHUB_ENV
+          echo "DATABASE_MIN_CONNECTIONS=1" >> $GITHUB_ENV
+          echo "RATE_LIMIT_REQUESTS_PER_HOUR=1000" >> $GITHUB_ENV
+          echo "RATE_LIMIT_BANDWIDTH_MB_PER_HOUR=100" >> $GITHUB_ENV
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: postgresql://testuser:testpass@localhost:5432/health_export_test
+        run: |
+          sqlx database create || true
+          sqlx migrate run
+
+      - name: Verify SQLx queries
+        env:
+          DATABASE_URL: postgresql://testuser:testpass@localhost:5432/health_export_test
+        run: |
+          cargo sqlx prepare --check
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql://testuser:testpass@localhost:5432/health_export_test
+          TEST_DATABASE_URL: postgresql://testuser:testpass@localhost:5432/health_export_test
+          REDIS_URL: redis://localhost:6379
+          RUST_LOG: debug
+        run: |
+          cargo test --verbose --all-features
+
+      - name: Run integration tests
+        env:
+          DATABASE_URL: postgresql://testuser:testpass@localhost:5432/health_export_test
+          TEST_DATABASE_URL: postgresql://testuser:testpass@localhost:5432/health_export_test
+          REDIS_URL: redis://localhost:6379
+        run: |
+          cargo test --test '*' --verbose
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run security audit
+        run: cargo audit
+
+      - name: Run cargo deny (licensing and advisories)
+        uses: EmbarkStudios/cargo-deny-action@v1
+        with:
+          log-level: warn
+          command: check
+          arguments: --all-features
+
+  build:
+    name: Build Release
+    runs-on: ubuntu-latest
+    needs: [check, fmt, clippy, test, security]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release binary
+        run: cargo build --release --verbose
+
+      - name: Upload binary artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: self-sensored-binary
+          path: target/release/self-sensored
+          retention-days: 30
+
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgis/postgis:15-3.3
+        env:
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_USER: testuser
+          POSTGRES_DB: health_export_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: llvm-tools-preview
+
+      - name: Install SQLx CLI
+        run: cargo install sqlx-cli --no-default-features --features native-tls,postgres
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Setup test environment
+        env:
+          DATABASE_URL: postgresql://testuser:testpass@localhost:5432/health_export_test
+        run: |
+          echo "DATABASE_URL=postgresql://testuser:testpass@localhost:5432/health_export_test" >> $GITHUB_ENV
+          echo "TEST_DATABASE_URL=postgresql://testuser:testpass@localhost:5432/health_export_test" >> $GITHUB_ENV
+          echo "REDIS_URL=redis://localhost:6379" >> $GITHUB_ENV
+          sqlx database create || true
+          sqlx migrate run
+
+      - name: Generate code coverage
+        env:
+          DATABASE_URL: postgresql://testuser:testpass@localhost:5432/health_export_test
+          TEST_DATABASE_URL: postgresql://testuser:testpass@localhost:5432/health_export_test
+          REDIS_URL: redis://localhost:6379
+        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: lcov.info
+          fail_ci_if_error: false

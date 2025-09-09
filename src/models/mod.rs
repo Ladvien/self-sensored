@@ -38,4 +38,13 @@ impl<T> ApiResponse<T> {
             timestamp: Utc::now(),
         }
     }
+
+    pub fn error_with_data(message: String, data: T) -> Self {
+        Self {
+            success: false,
+            data: Some(data),
+            error: Some(message),
+            timestamp: Utc::now(),
+        }
+    }
 }

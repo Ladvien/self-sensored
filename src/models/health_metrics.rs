@@ -48,6 +48,15 @@ pub struct ActivityMetric {
     pub source: Option<String>,
 }
 
+/// GPS coordinate for workout routes
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct GpsCoordinate {
+    pub latitude: f64,
+    pub longitude: f64,
+    pub altitude_meters: Option<f64>,
+    pub recorded_at: DateTime<Utc>,
+}
+
 /// Workout data with GPS tracking
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct WorkoutData {
@@ -59,7 +68,108 @@ pub struct WorkoutData {
     pub avg_heart_rate: Option<i16>,
     pub max_heart_rate: Option<i16>,
     pub source: Option<String>,
-    // GPS route stored separately in PostGIS
+    pub route_points: Option<Vec<GpsCoordinate>>, // GPS route data
+}
+
+impl GpsCoordinate {
+    pub fn validate(&self) -> Result<(), String> {
+        if !(-90.0..=90.0).contains(&self.latitude) {
+            return Err(format!(
+                "latitude {} is out of range (-90 to 90)",
+                self.latitude
+            ));
+        }
+        if !(-180.0..=180.0).contains(&self.longitude) {
+            return Err(format!(
+                "longitude {} is out of range (-180 to 180)",
+                self.longitude
+            ));
+        }
+        Ok(())
+    }
+
+    /// Convert to PostGIS POINT string
+    pub fn to_postgis_point(&self) -> String {
+        format!("POINT({} {})", self.longitude, self.latitude)
+    }
+}
+
+impl WorkoutData {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.end_time <= self.start_time {
+            return Err("end_time must be after start_time".to_string());
+        }
+
+        if self.workout_type.is_empty() {
+            return Err("workout_type cannot be empty".to_string());
+        }
+
+        if let Some(energy) = self.total_energy_kcal {
+            if energy < 0.0 {
+                return Err("total_energy_kcal cannot be negative".to_string());
+            }
+        }
+
+        if let Some(distance) = self.distance_meters {
+            if distance < 0.0 {
+                return Err("distance_meters cannot be negative".to_string());
+            }
+        }
+
+        if let Some(hr) = self.avg_heart_rate {
+            if !(20..=300).contains(&hr) {
+                return Err(format!("avg_heart_rate {} is out of range (20-300)", hr));
+            }
+        }
+
+        if let Some(hr) = self.max_heart_rate {
+            if !(20..=300).contains(&hr) {
+                return Err(format!("max_heart_rate {} is out of range (20-300)", hr));
+            }
+        }
+
+        // Validate GPS route if provided
+        if let Some(route_points) = &self.route_points {
+            for (i, point) in route_points.iter().enumerate() {
+                if let Err(e) = point.validate() {
+                    return Err(format!("route point {}: {}", i, e));
+                }
+            }
+
+            // Ensure GPS points are within workout time bounds
+            for (i, point) in route_points.iter().enumerate() {
+                if point.recorded_at < self.start_time || point.recorded_at > self.end_time {
+                    return Err(format!(
+                        "route point {} timestamp is outside workout duration", i
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Convert route points to PostGIS LINESTRING
+    pub fn route_to_linestring(&self) -> Option<String> {
+        if let Some(points) = &self.route_points {
+            if points.len() < 2 {
+                return None; // Need at least 2 points for a line
+            }
+
+            let coords: Vec<String> = points.iter()
+                .map(|p| format!("{} {}", p.longitude, p.latitude))
+                .collect();
+            
+            Some(format!("LINESTRING({})", coords.join(", ")))
+        } else {
+            None
+        }
+    }
+
+    /// Calculate duration in seconds
+    pub fn duration_seconds(&self) -> i64 {
+        (self.end_time - self.start_time).num_seconds()
+    }
 }
 
 /// Tagged union for all health metric types
@@ -128,9 +238,10 @@ impl HeartRateMetric {
 
 impl BloodPressureMetric {
     pub fn validate(&self) -> Result<(), String> {
-        if self.systolic < 40 || self.systolic > 250 {
+        // Medical ranges as specified in story requirements
+        if self.systolic < 50 || self.systolic > 250 {
             return Err(format!(
-                "systolic {} is out of range (40-250)",
+                "systolic {} is out of range (50-250)",
                 self.systolic
             ));
         }
@@ -140,6 +251,15 @@ impl BloodPressureMetric {
                 self.diastolic
             ));
         }
+        
+        // Validate systolic is higher than diastolic (basic medical check)
+        if self.systolic <= self.diastolic {
+            return Err(format!(
+                "systolic {} must be higher than diastolic {}",
+                self.systolic, self.diastolic
+            ));
+        }
+        
         if let Some(pulse) = self.pulse {
             if !(20..=300).contains(&pulse) {
                 return Err(format!("pulse {pulse} is out of range (20-300)"));
@@ -168,7 +288,36 @@ impl SleepMetric {
             }
         }
 
+        // Validate sleep component totals don't exceed total sleep time
+        let component_total = self.deep_sleep_minutes.unwrap_or(0) 
+            + self.rem_sleep_minutes.unwrap_or(0) 
+            + self.awake_minutes.unwrap_or(0);
+        
+        if component_total > calculated_duration {
+            return Err(format!(
+                "Sleep components total ({} minutes) exceeds sleep duration ({} minutes)",
+                component_total, calculated_duration
+            ));
+        }
+
         Ok(())
+    }
+
+    /// Calculate sleep efficiency based on sleep components
+    pub fn calculate_efficiency(&self) -> f32 {
+        let total_duration = (self.sleep_end - self.sleep_start).num_minutes() as f32;
+        if total_duration <= 0.0 {
+            return 0.0;
+        }
+
+        // Efficiency = (actual sleep time / time in bed) * 100
+        let actual_sleep = self.total_sleep_minutes as f32;
+        (actual_sleep / total_duration * 100.0).min(100.0).max(0.0)
+    }
+
+    /// Get the efficiency percentage, calculating if not provided
+    pub fn get_efficiency_percentage(&self) -> f32 {
+        self.efficiency_percentage.unwrap_or_else(|| self.calculate_efficiency())
     }
 }
 
@@ -200,7 +349,7 @@ impl HealthMetric {
             HealthMetric::BloodPressure(metric) => metric.validate(),
             HealthMetric::Sleep(metric) => metric.validate(),
             HealthMetric::Activity(metric) => metric.validate(),
-            HealthMetric::Workout(_) => Ok(()), // Workouts have simpler validation
+            HealthMetric::Workout(workout) => workout.validate(),
         }
     }
 

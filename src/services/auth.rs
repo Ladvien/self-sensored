@@ -9,6 +9,8 @@ use sqlx::PgPool;
 use thiserror::Error;
 use uuid::Uuid;
 
+use super::rate_limiter::{RateLimiter, RateLimitError};
+
 #[derive(Debug, Error)]
 pub enum AuthError {
     #[error("Invalid API key")]
@@ -25,6 +27,8 @@ pub enum AuthError {
     HashingError(String),
     #[error("Invalid UUID: {0}")]
     UuidError(#[from] uuid::Error),
+    #[error("Rate limit exceeded: {0}")]
+    RateLimitExceeded(#[from] RateLimitError),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,14 +63,19 @@ pub struct AuthContext {
 pub struct AuthService {
     pool: PgPool,
     argon2: Argon2<'static>,
+    rate_limiter: Option<RateLimiter>,
 }
 
 impl AuthService {
     pub fn new(pool: PgPool) -> Self {
+        Self::new_with_rate_limiter(pool, None)
+    }
+
+    pub fn new_with_rate_limiter(pool: PgPool, rate_limiter: Option<RateLimiter>) -> Self {
         // Configure Argon2 with recommended settings for API key hashing
         let argon2 = Argon2::default();
 
-        Self { pool, argon2 }
+        Self { pool, argon2, rate_limiter }
     }
 
     /// Get a reference to the database pool for testing purposes
@@ -160,7 +169,14 @@ impl AuthService {
 
     /// Authenticate an API key and return the auth context
     /// Supports both UUID-based keys (Auto Export format) and hashed keys
-    pub async fn authenticate(&self, api_key: &str) -> Result<AuthContext, AuthError> {
+    /// Includes comprehensive audit logging for all authentication attempts
+    /// Enforces rate limiting per API key if rate limiter is configured
+    pub async fn authenticate(
+        &self,
+        api_key: &str,
+        ip_address: Option<std::net::IpAddr>,
+        user_agent: Option<&str>,
+    ) -> Result<AuthContext, AuthError> {
         // Check if the API key is a UUID (Auto Export format)
         // Auto Export sends the API key ID directly as the Bearer token
         if let Ok(api_key_uuid) = Uuid::parse_str(api_key) {
@@ -198,8 +214,28 @@ impl AuthService {
                 // Check if key is expired
                 if let Some(expires_at) = row.expires_at {
                     if expires_at < Utc::now() {
+                        // Log failed authentication due to expiration
+                        self.log_audit_event(
+                            Some(row.user_id),
+                            Some(row.id),
+                            "authentication_failed",
+                            Some("api_key_expired"),
+                            ip_address,
+                            user_agent,
+                            Some(serde_json::json!({
+                                "reason": "api_key_expired",
+                                "key_type": "uuid",
+                                "expires_at": expires_at
+                            })),
+                        ).await.ok(); // Don't fail auth on audit log failure
+                        
                         return Err(AuthError::ApiKeyExpired);
                     }
+                }
+
+                // Check rate limiting before allowing authentication
+                if let Some(ref rate_limiter) = self.rate_limiter {
+                    rate_limiter.check_rate_limit(row.id).await?;
                 }
 
                 // Update last_used_at
@@ -226,7 +262,26 @@ impl AuthService {
                     scopes: row.scopes,
                 };
 
-                tracing::info!("Auto Export API key authenticated: id={}", api_key_uuid);
+                // Log successful authentication
+                self.log_audit_event(
+                    Some(user.id),
+                    Some(api_key.id),
+                    "authentication_success",
+                    Some("uuid_api_key"),
+                    ip_address,
+                    user_agent,
+                    Some(serde_json::json!({
+                        "key_type": "uuid",
+                        "key_name": api_key.name,
+                        "scopes": api_key.scopes
+                    })),
+                ).await.ok(); // Don't fail auth on audit log failure
+
+                tracing::info!(
+                    user_id = %user.id,
+                    api_key_id = %api_key.id,
+                    "Auto Export API key authenticated successfully"
+                );
                 return Ok(AuthContext { user, api_key });
             }
         }
@@ -269,8 +324,28 @@ impl AuthService {
                         // Check if key is expired
                         if let Some(expires_at) = row.expires_at {
                             if expires_at < Utc::now() {
+                                // Log failed authentication due to expiration
+                                self.log_audit_event(
+                                    Some(row.user_id),
+                                    Some(row.id),
+                                    "authentication_failed",
+                                    Some("api_key_expired"),
+                                    ip_address,
+                                    user_agent,
+                                    Some(serde_json::json!({
+                                        "reason": "api_key_expired",
+                                        "key_type": "hashed",
+                                        "expires_at": expires_at
+                                    })),
+                                ).await.ok(); // Don't fail auth on audit log failure
+                                
                                 return Err(AuthError::ApiKeyExpired);
                             }
+                        }
+
+                        // Check rate limiting before allowing authentication
+                        if let Some(ref rate_limiter) = self.rate_limiter {
+                            rate_limiter.check_rate_limit(row.id).await?;
                         }
 
                         // Update last_used_at
@@ -297,6 +372,26 @@ impl AuthService {
                             scopes: row.scopes,
                         };
 
+                        // Log successful authentication
+                        self.log_audit_event(
+                            Some(user.id),
+                            Some(api_key.id),
+                            "authentication_success",
+                            Some("hashed_api_key"),
+                            ip_address,
+                            user_agent,
+                            Some(serde_json::json!({
+                                "key_type": "hashed",
+                                "key_name": api_key.name,
+                                "scopes": api_key.scopes
+                            })),
+                        ).await.ok(); // Don't fail auth on audit log failure
+
+                        tracing::info!(
+                            user_id = %user.id,
+                            api_key_id = %api_key.id,
+                            "Hashed API key authenticated successfully"
+                        );
                         return Ok(AuthContext { user, api_key });
                     }
                     Ok(false) => {
@@ -311,6 +406,37 @@ impl AuthService {
                 }
             }
         }
+
+        // Log failed authentication attempt
+        self.log_audit_event(
+            None,
+            None,
+            "authentication_failed",
+            Some("invalid_api_key"),
+            ip_address,
+            user_agent,
+            Some(serde_json::json!({
+                "reason": "invalid_api_key",
+                "key_format": if api_key.len() == 36 && Uuid::parse_str(api_key).is_ok() { 
+                    "uuid" 
+                } else if api_key.starts_with("hea_") { 
+                    "hashed" 
+                } else { 
+                    "unknown" 
+                }
+            })),
+        ).await.ok(); // Don't fail auth on audit log failure
+
+        tracing::warn!(
+            "Authentication failed for invalid API key with format: {}",
+            if api_key.len() == 36 && Uuid::parse_str(api_key).is_ok() { 
+                "uuid" 
+            } else if api_key.starts_with("hea_") { 
+                "hashed" 
+            } else { 
+                "unknown" 
+            }
+        );
 
         Err(AuthError::InvalidApiKey)
     }
@@ -464,5 +590,22 @@ impl AuthService {
         .await?;
 
         Ok(())
+    }
+
+    /// Get rate limit status for an API key
+    pub async fn get_rate_limit_status(
+        &self,
+        api_key_id: Uuid,
+    ) -> Result<Option<super::rate_limiter::RateLimitInfo>, AuthError> {
+        if let Some(ref rate_limiter) = self.rate_limiter {
+            Ok(Some(rate_limiter.get_rate_limit_status(api_key_id).await?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Check if rate limiting is enabled
+    pub fn is_rate_limiting_enabled(&self) -> bool {
+        self.rate_limiter.is_some()
     }
 }

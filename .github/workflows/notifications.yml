@@ -1,0 +1,303 @@
+name: Team Notifications
+
+on:
+  workflow_run:
+    workflows: ["Continuous Integration", "Deployment Pipeline"]
+    types:
+      - completed
+
+jobs:
+  notify-team:
+    name: Notify Team of Workflow Results
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Get workflow information
+        id: workflow_info
+        run: |
+          echo "workflow_name=${{ github.event.workflow_run.name }}" >> $GITHUB_OUTPUT
+          echo "workflow_conclusion=${{ github.event.workflow_run.conclusion }}" >> $GITHUB_OUTPUT
+          echo "workflow_url=${{ github.event.workflow_run.html_url }}" >> $GITHUB_OUTPUT
+          echo "commit_sha=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
+          echo "branch_name=${{ github.event.workflow_run.head_branch }}" >> $GITHUB_OUTPUT
+          echo "actor=${{ github.event.workflow_run.actor.login }}" >> $GITHUB_OUTPUT
+
+      - name: Set status message and emoji
+        id: status_message
+        run: |
+          case "${{ steps.workflow_info.outputs.workflow_conclusion }}" in
+            "success")
+              echo "status_emoji=✅" >> $GITHUB_OUTPUT
+              echo "status_text=PASSED" >> $GITHUB_OUTPUT
+              echo "status_color=good" >> $GITHUB_OUTPUT
+              ;;
+            "failure")
+              echo "status_emoji=❌" >> $GITHUB_OUTPUT
+              echo "status_text=FAILED" >> $GITHUB_OUTPUT
+              echo "status_color=danger" >> $GITHUB_OUTPUT
+              ;;
+            "cancelled")
+              echo "status_emoji=⏹️" >> $GITHUB_OUTPUT
+              echo "status_text=CANCELLED" >> $GITHUB_OUTPUT
+              echo "status_color=warning" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "status_emoji=❓" >> $GITHUB_OUTPUT
+              echo "status_text=UNKNOWN" >> $GITHUB_OUTPUT
+              echo "status_color=warning" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Send Slack notification
+        if: vars.SLACK_WEBHOOK_URL != ''
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          custom_payload: |
+            {
+              "attachments": [
+                {
+                  "color": "${{ steps.status_message.outputs.status_color }}",
+                  "blocks": [
+                    {
+                      "type": "header",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "${{ steps.status_message.outputs.status_emoji }} ${{ steps.workflow_info.outputs.workflow_name }} ${{ steps.status_message.outputs.status_text }}"
+                      }
+                    },
+                    {
+                      "type": "section",
+                      "fields": [
+                        {
+                          "type": "mrkdwn",
+                          "text": "*Repository:*\n${{ github.repository }}"
+                        },
+                        {
+                          "type": "mrkdwn",
+                          "text": "*Branch:*\n${{ steps.workflow_info.outputs.branch_name }}"
+                        },
+                        {
+                          "type": "mrkdwn",
+                          "text": "*Triggered by:*\n${{ steps.workflow_info.outputs.actor }}"
+                        },
+                        {
+                          "type": "mrkdwn",
+                          "text": "*Commit:*\n`${{ steps.workflow_info.outputs.commit_sha }}`"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "actions",
+                      "elements": [
+                        {
+                          "type": "button",
+                          "text": {
+                            "type": "plain_text",
+                            "text": "View Workflow"
+                          },
+                          "url": "${{ steps.workflow_info.outputs.workflow_url }}"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+
+      - name: Send Discord notification
+        if: vars.DISCORD_WEBHOOK_URL != ''
+        uses: sarisia/actions-status-discord@v1
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          title: "${{ steps.workflow_info.outputs.workflow_name }} ${{ steps.status_message.outputs.status_text }}"
+          description: |
+            **Repository:** ${{ github.repository }}
+            **Branch:** ${{ steps.workflow_info.outputs.branch_name }}
+            **Triggered by:** ${{ steps.workflow_info.outputs.actor }}
+            **Commit:** `${{ steps.workflow_info.outputs.commit_sha }}`
+          color: |
+            ${{ 
+              steps.workflow_info.outputs.workflow_conclusion == 'success' && 0x00ff00 ||
+              steps.workflow_info.outputs.workflow_conclusion == 'failure' && 0xff0000 ||
+              0xffff00
+            }}
+          url: ${{ steps.workflow_info.outputs.workflow_url }}
+
+      - name: Send email notification (on failure)
+        if: steps.workflow_info.outputs.workflow_conclusion == 'failure' && vars.NOTIFICATION_EMAIL != ''
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "❌ ${{ steps.workflow_info.outputs.workflow_name }} Failed - ${{ github.repository }}"
+          to: ${{ vars.NOTIFICATION_EMAIL }}
+          from: "Health Export CI/CD <noreply@health-export.com>"
+          html_body: |
+            <h2>❌ Workflow Failed</h2>
+            <p><strong>Workflow:</strong> ${{ steps.workflow_info.outputs.workflow_name }}</p>
+            <p><strong>Repository:</strong> ${{ github.repository }}</p>
+            <p><strong>Branch:</strong> ${{ steps.workflow_info.outputs.branch_name }}</p>
+            <p><strong>Triggered by:</strong> ${{ steps.workflow_info.outputs.actor }}</p>
+            <p><strong>Commit:</strong> <code>${{ steps.workflow_info.outputs.commit_sha }}</code></p>
+            <p><a href="${{ steps.workflow_info.outputs.workflow_url }}">View Workflow Details</a></p>
+            <hr>
+            <p><em>This is an automated notification from the Health Export CI/CD system.</em></p>
+
+  deployment-notification:
+    name: Deployment Status Notification
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.name == 'Deployment Pipeline' && github.event.workflow_run.conclusion == 'success'
+    
+    steps:
+      - name: Get deployment information
+        id: deployment_info
+        run: |
+          # Determine environment based on branch/tag
+          if [[ "${{ github.event.workflow_run.head_branch }}" =~ ^refs/tags/ ]]; then
+            echo "environment=production" >> $GITHUB_OUTPUT
+          else
+            echo "environment=staging" >> $GITHUB_OUTPUT
+          fi
+          echo "commit_sha=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
+          echo "branch_name=${{ github.event.workflow_run.head_branch }}" >> $GITHUB_OUTPUT
+
+      - name: Send deployment success notification
+        if: vars.SLACK_WEBHOOK_URL != ''
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          custom_payload: |
+            {
+              "attachments": [
+                {
+                  "color": "good",
+                  "blocks": [
+                    {
+                      "type": "header",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "🚀 Deployment Successful to ${{ steps.deployment_info.outputs.environment }}"
+                      }
+                    },
+                    {
+                      "type": "section",
+                      "fields": [
+                        {
+                          "type": "mrkdwn",
+                          "text": "*Environment:*\n${{ steps.deployment_info.outputs.environment }}"
+                        },
+                        {
+                          "type": "mrkdwn",
+                          "text": "*Version:*\n`${{ steps.deployment_info.outputs.commit_sha }}`"
+                        },
+                        {
+                          "type": "mrkdwn",
+                          "text": "*Branch:*\n${{ steps.deployment_info.outputs.branch_name }}"
+                        },
+                        {
+                          "type": "mrkdwn",
+                          "text": "*Deployed at:*\n$(date)"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+
+  critical-failure-alert:
+    name: Critical Failure Alert
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.name == 'Deployment Pipeline'
+    
+    steps:
+      - name: Send critical failure alert
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          custom_payload: |
+            {
+              "attachments": [
+                {
+                  "color": "danger",
+                  "blocks": [
+                    {
+                      "type": "header",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "🚨 CRITICAL: Deployment Failed"
+                      }
+                    },
+                    {
+                      "type": "section",
+                      "text": {
+                        "type": "mrkdwn",
+                        "text": "*Immediate action required!*\n\nThe deployment pipeline has failed. This may impact production services."
+                      }
+                    },
+                    {
+                      "type": "section",
+                      "fields": [
+                        {
+                          "type": "mrkdwn",
+                          "text": "*Repository:*\n${{ github.repository }}"
+                        },
+                        {
+                          "type": "mrkdwn",
+                          "text": "*Branch:*\n${{ github.event.workflow_run.head_branch }}"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "actions",
+                      "elements": [
+                        {
+                          "type": "button",
+                          "text": {
+                            "type": "plain_text",
+                            "text": "View Failed Deployment"
+                          },
+                          "url": "${{ github.event.workflow_run.html_url }}",
+                          "style": "danger"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+
+      - name: Create GitHub issue for deployment failure
+        if: github.event.workflow_run.conclusion == 'failure'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Deployment Failed - ${new Date().toISOString()}`,
+              body: `## Deployment Failure Alert
+              
+              **Workflow:** ${{ github.event.workflow_run.name }}
+              **Branch:** ${{ github.event.workflow_run.head_branch }}
+              **Commit:** ${{ github.event.workflow_run.head_sha }}
+              **Workflow URL:** ${{ github.event.workflow_run.html_url }}
+              
+              ### Next Steps
+              - [ ] Investigate failure logs
+              - [ ] Verify system health
+              - [ ] Consider rollback if production is affected
+              - [ ] Fix underlying issue
+              - [ ] Re-run deployment
+              
+              **Priority:** Critical
+              `,
+              labels: ['bug', 'deployment', 'critical']
+            })

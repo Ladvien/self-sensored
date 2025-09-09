@@ -34,7 +34,7 @@ struct InMemoryRateLimit {
 }
 
 /// Rate limiting service with Redis backend and in-memory fallback
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RateLimiter {
     redis_client: Option<RedisClient>,
     fallback_store: Arc<Mutex<HashMap<String, InMemoryRateLimit>>>,

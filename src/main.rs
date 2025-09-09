@@ -1,16 +1,18 @@
-use actix_web::{web, App, HttpServer};
+use actix_web::{middleware::Compress, web, App, HttpServer};
 use dotenv::dotenv;
 use std::env;
 use tracing::{info, warn};
 
+mod config;
 mod db;
 mod handlers;
 mod middleware;
 mod models;
 mod services;
 
-use db::database::create_connection_pool;
-use middleware::{AuthMiddleware, RequestLogger};
+use config::LoggingConfig;
+use db::database::{create_connection_pool, update_db_pool_metrics};
+use middleware::{AuthMiddleware, CompressionAndCaching, MetricsMiddleware, StructuredLogger};
 use services::auth::AuthService;
 
 #[actix_web::main]
@@ -18,13 +20,11 @@ async fn main() -> std::io::Result<()> {
     // Load environment variables from .env file
     dotenv().ok();
 
-    // Initialize logging with environment-configurable level
-    let log_level = env::var("RUST_LOG")
-        .unwrap_or_else(|_| "info".to_string())
-        .parse()
-        .unwrap_or(tracing::Level::INFO);
-
-    tracing_subscriber::fmt().with_max_level(log_level).init();
+    // Initialize structured logging with JSON format
+    let logging_config = LoggingConfig::from_env();
+    logging_config
+        .init()
+        .expect("Failed to initialize structured logging");
 
     // Load configuration from environment variables
     let database_url =
@@ -70,6 +70,17 @@ async fn main() -> std::io::Result<()> {
     let auth_service = AuthService::new(pool.clone());
     info!("AuthService initialized");
 
+    // Start database metrics monitoring task
+    let pool_for_metrics = pool.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(10));
+        loop {
+            interval.tick().await;
+            update_db_pool_metrics(&pool_for_metrics);
+        }
+    });
+    info!("Database metrics monitoring started");
+
     // Start HTTP server
     HttpServer::new(move || {
         App::new()
@@ -77,13 +88,28 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(auth_service.clone()))
             // Increase payload size limit to 100MB for large health data uploads
             .app_data(web::PayloadConfig::new(100 * 1024 * 1024))
-            .wrap(RequestLogger)
+            .wrap(Compress::default())  // Add gzip compression
+            .wrap(CompressionAndCaching)  // Add caching headers
+            .wrap(MetricsMiddleware)
+            .wrap(StructuredLogger)
             .wrap(AuthMiddleware)
             .route("/health", web::get().to(handlers::health::health_check))
+            .route("/metrics", web::get().to(middleware::metrics::metrics_handler))
             .service(
                 web::scope("/api/v1")
                     .route("/status", web::get().to(handlers::health::api_status))
-                    .route("/ingest", web::post().to(handlers::ingest::ingest_handler)),
+                    .route("/ingest", web::post().to(handlers::ingest::ingest_handler))
+                    // Health data query endpoints
+                    .route("/data/heart-rate", web::get().to(handlers::query::get_heart_rate_data))
+                    .route("/data/blood-pressure", web::get().to(handlers::query::get_blood_pressure_data))
+                    .route("/data/sleep", web::get().to(handlers::query::get_sleep_data))
+                    .route("/data/activity", web::get().to(handlers::query::get_activity_data))
+                    .route("/data/workouts", web::get().to(handlers::query::get_workout_data))
+                    .route("/data/summary", web::get().to(handlers::query::get_health_summary))
+                    // Health data export endpoints
+                    .route("/export/all", web::get().to(handlers::export::export_health_data))
+                    .route("/export/heart-rate", web::get().to(handlers::export::export_heart_rate_data))
+                    .route("/export/activity-analytics", web::get().to(handlers::export::export_activity_summary)),
             )
     })
     .workers(workers)

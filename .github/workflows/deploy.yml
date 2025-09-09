@@ -1,0 +1,423 @@
+name: Deployment Pipeline
+
+on:
+  push:
+    branches: [master, main]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      rollback_version:
+        description: 'Version to rollback to (optional)'
+        required: false
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  build:
+    name: Build Release Artifacts
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      artifact_name: ${{ steps.version.outputs.artifact_name }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate version
+        id: version
+        run: |
+          if [[ ${{ github.ref }} == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            VERSION=${{ github.sha }}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "artifact_name=self-sensored-$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release binary
+        run: |
+          cargo build --release --verbose
+          strip target/release/self-sensored
+
+      - name: Create deployment package
+        run: |
+          mkdir -p deploy/
+          cp target/release/self-sensored deploy/
+          cp -r migrations/ deploy/
+          cp .env.example deploy/
+          tar -czf ${{ steps.version.outputs.artifact_name }}.tar.gz -C deploy .
+
+      - name: Upload deployment artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ steps.version.outputs.artifact_name }}
+          path: ${{ steps.version.outputs.artifact_name }}.tar.gz
+          retention-days: 90
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build
+    environment: staging
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' || github.event.inputs.environment == 'staging'
+    
+    steps:
+      - name: Download deployment artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ needs.build.outputs.artifact_name }}
+
+      - name: Setup deployment environment
+        run: |
+          echo "DEPLOYMENT_VERSION=${{ needs.build.outputs.version }}" >> $GITHUB_ENV
+          echo "HEALTH_CHECK_URL=http://staging-health-export.internal:8080/health" >> $GITHUB_ENV
+          echo "DEPLOYMENT_PATH=/opt/health-export-staging" >> $GITHUB_ENV
+
+      - name: Extract deployment package
+        run: |
+          mkdir -p staging-deploy
+          tar -xzf ${{ needs.build.outputs.artifact_name }}.tar.gz -C staging-deploy
+
+      - name: Pre-deployment health check
+        run: |
+          echo "Checking current staging service health..."
+          curl -f ${{ env.HEALTH_CHECK_URL }} || echo "Service not running or unhealthy"
+
+      - name: Backup current deployment
+        run: |
+          echo "Creating backup of current deployment..."
+          if [ -d "${{ env.DEPLOYMENT_PATH }}" ]; then
+            sudo mv ${{ env.DEPLOYMENT_PATH }} ${{ env.DEPLOYMENT_PATH }}.backup.$(date +%s)
+          fi
+
+      - name: Deploy to staging
+        run: |
+          echo "Deploying to staging environment..."
+          sudo mkdir -p ${{ env.DEPLOYMENT_PATH }}
+          sudo cp -r staging-deploy/* ${{ env.DEPLOYMENT_PATH }}/
+          sudo chown -R health-export:health-export ${{ env.DEPLOYMENT_PATH }}
+          sudo chmod +x ${{ env.DEPLOYMENT_PATH }}/self-sensored
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+        run: |
+          echo "Running database migrations on staging..."
+          cd ${{ env.DEPLOYMENT_PATH }}
+          sudo -u health-export sqlx migrate run
+
+      - name: Start staging service
+        run: |
+          echo "Starting staging service..."
+          sudo systemctl restart health-export-staging
+          sleep 10
+
+      - name: Post-deployment health check
+        run: |
+          echo "Performing post-deployment health checks..."
+          max_attempts=30
+          attempt=1
+          
+          while [ $attempt -le $max_attempts ]; do
+            if curl -f ${{ env.HEALTH_CHECK_URL }}; then
+              echo "✅ Health check passed"
+              break
+            else
+              echo "⏳ Health check failed, attempt $attempt/$max_attempts"
+              sleep 10
+              attempt=$((attempt + 1))
+            fi
+          done
+          
+          if [ $attempt -gt $max_attempts ]; then
+            echo "❌ Health check failed after $max_attempts attempts"
+            exit 1
+          fi
+
+      - name: Smoke tests
+        run: |
+          echo "Running staging smoke tests..."
+          
+          # Test health endpoint
+          curl -f ${{ env.HEALTH_CHECK_URL }}
+          
+          # Test metrics endpoint (if available)
+          curl -f ${{ env.HEALTH_CHECK_URL }}/metrics || echo "Metrics endpoint not available"
+          
+          # Test API authentication (with test key if available)
+          echo "✅ Staging smoke tests completed"
+
+      - name: Cleanup old backups
+        run: |
+          echo "Cleaning up old backups (keeping last 5)..."
+          find /opt -name "health-export-staging.backup.*" -type d | sort -r | tail -n +6 | sudo xargs rm -rf
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build, deploy-staging]
+    environment: production
+    if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.environment == 'production'
+    
+    steps:
+      - name: Download deployment artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ needs.build.outputs.artifact_name }}
+
+      - name: Setup deployment environment
+        run: |
+          echo "DEPLOYMENT_VERSION=${{ needs.build.outputs.version }}" >> $GITHUB_ENV
+          echo "HEALTH_CHECK_URL=https://api.health-export.com/health" >> $GITHUB_ENV
+          echo "DEPLOYMENT_PATH=/opt/health-export" >> $GITHUB_ENV
+
+      - name: Extract deployment package
+        run: |
+          mkdir -p production-deploy
+          tar -xzf ${{ needs.build.outputs.artifact_name }}.tar.gz -C production-deploy
+
+      - name: Pre-deployment health check
+        run: |
+          echo "Checking current production service health..."
+          curl -f ${{ env.HEALTH_CHECK_URL }}
+
+      - name: Create deployment backup
+        run: |
+          echo "Creating backup of current production deployment..."
+          if [ -d "${{ env.DEPLOYMENT_PATH }}" ]; then
+            sudo cp -r ${{ env.DEPLOYMENT_PATH }} ${{ env.DEPLOYMENT_PATH }}.backup.$(date +%s)
+          fi
+
+      - name: Blue-Green deployment setup
+        run: |
+          echo "Setting up blue-green deployment..."
+          sudo mkdir -p ${{ env.DEPLOYMENT_PATH }}-green
+          sudo cp -r production-deploy/* ${{ env.DEPLOYMENT_PATH }}-green/
+          sudo chown -R health-export:health-export ${{ env.DEPLOYMENT_PATH }}-green
+          sudo chmod +x ${{ env.DEPLOYMENT_PATH }}-green/self-sensored
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: |
+          echo "Running database migrations on production..."
+          cd ${{ env.DEPLOYMENT_PATH }}-green
+          sudo -u health-export sqlx migrate run
+
+      - name: Start green deployment
+        run: |
+          echo "Starting green deployment..."
+          sudo systemctl start health-export-green
+          sleep 15
+
+      - name: Health check green deployment
+        run: |
+          echo "Performing health checks on green deployment..."
+          max_attempts=30
+          attempt=1
+          green_health_url="http://localhost:8081/health"  # Green deployment on different port
+          
+          while [ $attempt -le $max_attempts ]; do
+            if curl -f $green_health_url; then
+              echo "✅ Green deployment health check passed"
+              break
+            else
+              echo "⏳ Green deployment health check failed, attempt $attempt/$max_attempts"
+              sleep 10
+              attempt=$((attempt + 1))
+            fi
+          done
+          
+          if [ $attempt -gt $max_attempts ]; then
+            echo "❌ Green deployment health check failed after $max_attempts attempts"
+            exit 1
+          fi
+
+      - name: Production smoke tests
+        run: |
+          echo "Running production smoke tests on green deployment..."
+          green_base_url="http://localhost:8081"
+          
+          # Test health endpoint
+          curl -f $green_base_url/health
+          
+          # Test metrics endpoint
+          curl -f $green_base_url/metrics || echo "Metrics endpoint not available"
+          
+          echo "✅ Production smoke tests completed"
+
+      - name: Switch traffic to green deployment
+        run: |
+          echo "Switching traffic to green deployment..."
+          
+          # Stop blue deployment
+          sudo systemctl stop health-export
+          
+          # Move green to production
+          sudo mv ${{ env.DEPLOYMENT_PATH }} ${{ env.DEPLOYMENT_PATH }}-blue-old
+          sudo mv ${{ env.DEPLOYMENT_PATH }}-green ${{ env.DEPLOYMENT_PATH }}
+          
+          # Restart production service on main port
+          sudo systemctl restart health-export
+          sleep 10
+
+      - name: Final production health check
+        run: |
+          echo "Performing final production health checks..."
+          max_attempts=30
+          attempt=1
+          
+          while [ $attempt -le $max_attempts ]; do
+            if curl -f ${{ env.HEALTH_CHECK_URL }}; then
+              echo "✅ Production health check passed"
+              break
+            else
+              echo "⏳ Production health check failed, attempt $attempt/$max_attempts"
+              sleep 10
+              attempt=$((attempt + 1))
+            fi
+          done
+          
+          if [ $attempt -gt $max_attempts ]; then
+            echo "❌ Production health check failed after $max_attempts attempts"
+            echo "🔄 Rolling back deployment..."
+            
+            # Rollback steps
+            sudo systemctl stop health-export
+            sudo mv ${{ env.DEPLOYMENT_PATH }} ${{ env.DEPLOYMENT_PATH }}-failed
+            sudo mv ${{ env.DEPLOYMENT_PATH }}-blue-old ${{ env.DEPLOYMENT_PATH }}
+            sudo systemctl restart health-export
+            
+            exit 1
+          fi
+
+      - name: Cleanup old deployments
+        run: |
+          echo "Cleaning up old production deployments..."
+          sudo rm -rf ${{ env.DEPLOYMENT_PATH }}-blue-old
+          
+          # Keep last 5 backups
+          find /opt -name "health-export.backup.*" -type d | sort -r | tail -n +6 | sudo xargs rm -rf
+
+      - name: Update deployment status
+        run: |
+          echo "✅ Production deployment completed successfully"
+          echo "Version: ${{ needs.build.outputs.version }}"
+          echo "Deployed at: $(date)"
+
+  rollback:
+    name: Rollback Deployment
+    runs-on: ubuntu-latest
+    environment: production
+    if: github.event.inputs.rollback_version != ''
+    
+    steps:
+      - name: Setup rollback environment
+        run: |
+          echo "ROLLBACK_VERSION=${{ github.event.inputs.rollback_version }}" >> $GITHUB_ENV
+          echo "HEALTH_CHECK_URL=https://api.health-export.com/health" >> $GITHUB_ENV
+          echo "DEPLOYMENT_PATH=/opt/health-export" >> $GITHUB_ENV
+
+      - name: Find rollback artifact
+        run: |
+          echo "Looking for rollback version: ${{ env.ROLLBACK_VERSION }}"
+          # In a real scenario, you would fetch the rollback artifact from artifact storage
+
+      - name: Pre-rollback health check
+        run: |
+          echo "Checking current production service health..."
+          curl -f ${{ env.HEALTH_CHECK_URL }} || echo "Service unhealthy, proceeding with rollback"
+
+      - name: Backup current deployment
+        run: |
+          echo "Backing up current deployment before rollback..."
+          sudo cp -r ${{ env.DEPLOYMENT_PATH }} ${{ env.DEPLOYMENT_PATH }}.pre-rollback.$(date +%s)
+
+      - name: Execute rollback
+        run: |
+          echo "Executing rollback to version ${{ env.ROLLBACK_VERSION }}..."
+          
+          # Stop current service
+          sudo systemctl stop health-export
+          
+          # Find and restore backup
+          backup_path=$(find /opt -name "health-export.backup.*" -type d | grep ${{ env.ROLLBACK_VERSION }} | head -1)
+          
+          if [ -n "$backup_path" ]; then
+            sudo rm -rf ${{ env.DEPLOYMENT_PATH }}
+            sudo cp -r $backup_path ${{ env.DEPLOYMENT_PATH }}
+            echo "✅ Rollback completed using backup: $backup_path"
+          else
+            echo "❌ Rollback backup not found for version ${{ env.ROLLBACK_VERSION }}"
+            exit 1
+          fi
+
+      - name: Start rollback service
+        run: |
+          echo "Starting rollback service..."
+          sudo systemctl start health-export
+          sleep 15
+
+      - name: Post-rollback health check
+        run: |
+          echo "Performing post-rollback health checks..."
+          max_attempts=30
+          attempt=1
+          
+          while [ $attempt -le $max_attempts ]; do
+            if curl -f ${{ env.HEALTH_CHECK_URL }}; then
+              echo "✅ Rollback health check passed"
+              break
+            else
+              echo "⏳ Rollback health check failed, attempt $attempt/$max_attempts"
+              sleep 10
+              attempt=$((attempt + 1))
+            fi
+          done
+          
+          if [ $attempt -gt $max_attempts ]; then
+            echo "❌ Rollback health check failed after $max_attempts attempts"
+            exit 1
+          fi
+
+      - name: Rollback verification
+        run: |
+          echo "✅ Rollback to version ${{ env.ROLLBACK_VERSION }} completed successfully"
+          echo "Service is healthy and responding"

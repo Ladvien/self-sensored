@@ -48,38 +48,6 @@ Implement the complete PostgreSQL database schema with PostGIS extension for hea
 
 ### Parallel Track 2: Core API Development
 
-#### Story: HEA-003 - Authentication Service Implementation
-**Priority:** Critical  
-**Story Points:** 8  
-**Assigned Agent:** Security Engineer
-
-**Description:**
-Implement dual-format API key authentication supporting both Auto Health Export UUID format and internal hashed keys as specified in ARCHITECTURE.md.
-
-**Acceptance Criteria:**
-- [ ] UUID-based authentication works for Auto Export keys
-- [ ] Argon2 hashing implemented for internal keys
-- [ ] API key creation endpoint with secure generation
-- [ ] Key expiration and revocation logic implemented
-- [ ] Last used timestamp updates correctly
-- [ ] Audit logging for all authentication attempts
-- [ ] Rate limiting per API key implemented
-- [ ] Authentication middleware properly extracts context
-
-**Tasks:**
-1. Complete `src/services/auth.rs` implementation
-2. Implement auth middleware enhancements
-3. Create comprehensive test suite in `tests/services/auth_test.rs`
-4. Add integration tests for both key formats
-5. Implement audit log analysis tools
-
-**Definition of Done:**
-- Both authentication formats work correctly
-- 100% test coverage for auth service
-- Security scan shows no vulnerabilities
-- Performance: <10ms for authentication check
-- Audit logs capture all required fields
-- Tests in `tests/services/auth_test.rs` pass
 
 ---
 
@@ -226,72 +194,6 @@ Implement structured JSON logging with tracing for debugging and monitoring.
 
 ### Parallel Track 5: Testing & Quality Assurance
 
-#### Story: HEA-009 - Integration Test Suite
-**Priority:** High  
-**Story Points:** 8  
-**Assigned Agent:** QA Engineer
-
-**Description:**
-Create comprehensive integration tests covering all API endpoints and data flows.
-
-**Acceptance Criteria:**
-- [ ] Test database setup and teardown
-- [ ] All endpoints have integration tests
-- [ ] Both JSON format variations tested
-- [ ] Error scenarios covered
-- [ ] Performance benchmarks included
-- [ ] Load testing scenarios defined
-- [ ] Test data generators created
-
-**Tasks:**
-1. Set up test database with migrations
-2. Create test fixtures and factories
-3. Write endpoint integration tests in `tests/integration/`
-4. Implement load testing with vegeta
-5. Create data generation utilities
-
-**Definition of Done:**
-- 80% code coverage achieved
-- All happy paths tested
-- All error paths tested
-- Load tests pass at 100 RPS
-- Test execution < 5 minutes
-- All tests in `tests/integration/` pass
-
----
-
-#### Story: HEA-010 - End-to-End Testing
-**Priority:** Medium  
-**Story Points:** 5  
-**Assigned Agent:** QA Engineer
-
-**Description:**
-Implement end-to-end tests simulating real Auto Health Export app behavior.
-
-**Acceptance Criteria:**
-- [ ] Simulates real app JSON payloads
-- [ ] Tests complete data flow
-- [ ] Verifies data integrity
-- [ ] Tests rate limiting behavior
-- [ ] Tests authentication flows
-- [ ] Performance regression detection
-
-**Tasks:**
-1. Capture real app payloads
-2. Create E2E test scenarios in `tests/e2e/`
-3. Implement test client mimicking app behavior
-4. Add performance regression tests
-5. Create test reporting dashboard
-
-**Definition of Done:**
-- E2E tests cover critical paths
-- Tests run in CI/CD pipeline
-- Performance baselines established
-- Flaky test rate < 1%
-- Test reports generated
-- All tests in `tests/e2e/` pass
-
----
 
 ### Parallel Track 6: Performance & Optimization
 

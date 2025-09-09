@@ -1,39 +1,46 @@
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::time::Duration;
 use tracing::{error, info};
+use crate::middleware::metrics::Metrics;
 
 /// Create a PostgreSQL connection pool with configuration from environment
 pub async fn create_connection_pool(database_url: &str) -> Result<PgPool, sqlx::Error> {
-    info!("Creating PostgreSQL connection pool");
+    info!("Creating optimized PostgreSQL connection pool");
 
     let max_connections = std::env::var("DATABASE_MAX_CONNECTIONS")
-        .unwrap_or_else(|_| "20".to_string())
+        .unwrap_or_else(|_| "50".to_string()) // Increased from 20 for better concurrency
         .parse::<u32>()
-        .unwrap_or(20);
+        .unwrap_or(50);
 
     let min_connections = std::env::var("DATABASE_MIN_CONNECTIONS")
-        .unwrap_or_else(|_| "5".to_string())
+        .unwrap_or_else(|_| "10".to_string()) // Increased from 5 to maintain ready connections
         .parse::<u32>()
-        .unwrap_or(5);
-
-    let connect_timeout = std::env::var("DATABASE_CONNECT_TIMEOUT")
-        .unwrap_or_else(|_| "10".to_string())
-        .parse::<u64>()
         .unwrap_or(10);
 
-    let idle_timeout = std::env::var("DATABASE_IDLE_TIMEOUT")
-        .unwrap_or_else(|_| "300".to_string())
+    let connect_timeout = std::env::var("DATABASE_CONNECT_TIMEOUT")
+        .unwrap_or_else(|_| "5".to_string()) // Reduced from 10 for faster failures
         .parse::<u64>()
-        .unwrap_or(300);
+        .unwrap_or(5);
+
+    let idle_timeout = std::env::var("DATABASE_IDLE_TIMEOUT")
+        .unwrap_or_else(|_| "600".to_string()) // Increased from 300 to reduce connection churn
+        .parse::<u64>()
+        .unwrap_or(600);
 
     let max_lifetime = std::env::var("DATABASE_MAX_LIFETIME")
-        .unwrap_or_else(|_| "3600".to_string())
+        .unwrap_or_else(|_| "1800".to_string()) // Reduced from 3600 for better connection health
         .parse::<u64>()
-        .unwrap_or(3600);
+        .unwrap_or(1800);
+
+    // New: Test connection timeout for faster health checks
+    let test_timeout = std::env::var("DATABASE_TEST_TIMEOUT")
+        .unwrap_or_else(|_| "3".to_string())
+        .parse::<u64>()
+        .unwrap_or(3);
 
     info!(
-        "Database pool config: max_conn={}, min_conn={}, connect_timeout={}s, idle_timeout={}s, max_lifetime={}s",
-        max_connections, min_connections, connect_timeout, idle_timeout, max_lifetime
+        "Optimized database pool config: max_conn={}, min_conn={}, connect_timeout={}s, idle_timeout={}s, max_lifetime={}s, test_timeout={}s",
+        max_connections, min_connections, connect_timeout, idle_timeout, max_lifetime, test_timeout
     );
 
     match PgPoolOptions::new()
@@ -42,6 +49,7 @@ pub async fn create_connection_pool(database_url: &str) -> Result<PgPool, sqlx::
         .acquire_timeout(Duration::from_secs(connect_timeout))
         .idle_timeout(Some(Duration::from_secs(idle_timeout)))
         .max_lifetime(Some(Duration::from_secs(max_lifetime)))
+        .test_before_acquire(true) // Ensure connections are healthy
         .connect(database_url)
         .await
     {
@@ -94,4 +102,22 @@ pub async fn test_database_connection(pool: &PgPool) -> Result<(), sqlx::Error> 
 
     info!("All database tests passed successfully");
     Ok(())
+}
+
+/// Monitor database connection pool metrics and update Prometheus metrics
+pub fn update_db_pool_metrics(pool: &PgPool) {
+    let size = pool.size();
+    let idle = pool.num_idle();
+    
+    // Update Prometheus metrics
+    Metrics::update_db_connection_metrics(size as u64, idle as u64);
+    
+    // Log if pool utilization is high
+    let utilization = ((size - idle) as f64 / size as f64) * 100.0;
+    if utilization > 80.0 {
+        tracing::warn!(
+            "High database pool utilization: {:.1}% ({}/{} connections active)",
+            utilization, size - idle, size
+        );
+    }
 }

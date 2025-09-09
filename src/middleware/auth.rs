@@ -57,20 +57,26 @@ where
                 return service.call(req).await;
             }
 
-            // Get client IP for logging
-            let client_ip = req
+            // Extract client IP and user agent for audit logging
+            let client_ip_str = req
                 .connection_info()
                 .peer_addr()
                 .unwrap_or("unknown")
                 .to_string();
+            
+            let client_ip = client_ip_str.parse::<std::net::IpAddr>().ok();
+            let user_agent = req
+                .headers()
+                .get("user-agent")
+                .and_then(|h| h.to_str().ok());
 
             // Log all request details for debugging
             tracing::debug!(
                 "Auth middleware processing request: method={} path={} client_ip={} user_agent={:?} content_type={:?}",
                 req.method(),
                 req.path(),
-                client_ip,
-                req.headers().get("user-agent"),
+                client_ip_str,
+                user_agent,
                 req.headers().get("content-type")
             );
 
@@ -96,13 +102,13 @@ where
                         if let Some(auth_service) =
                             req.app_data::<actix_web::web::Data<AuthService>>()
                         {
-                            match auth_service.authenticate(token).await {
+                            match auth_service.authenticate(token, client_ip, user_agent).await {
                                 Ok(auth_context) => {
                                     tracing::info!(
                                         "Authentication successful: user_id={} api_key_id={} client_ip={}",
                                         auth_context.user.id,
                                         auth_context.api_key.id,
-                                        client_ip
+                                        client_ip_str
                                     );
                                     // Store auth context in request extensions for use by handlers
                                     req.extensions_mut().insert(auth_context);
@@ -112,7 +118,7 @@ where
                                     tracing::warn!(
                                         "Authentication failed: {} - client_ip={} token_prefix={}",
                                         e,
-                                        client_ip,
+                                        client_ip_str,
                                         &token[..token.len().min(10)]
                                     );
                                     return Err(actix_web::error::ErrorUnauthorized(
@@ -129,17 +135,17 @@ where
                     } else {
                         tracing::warn!(
                             "Authorization header doesn't start with 'Bearer ': client_ip={}",
-                            client_ip
+                            client_ip_str
                         );
                     }
                 } else {
                     tracing::warn!(
                         "Authorization header contains invalid UTF-8: client_ip={}",
-                        client_ip
+                        client_ip_str
                     );
                 }
             } else {
-                tracing::warn!("Missing Authorization header: client_ip={}", client_ip);
+                tracing::warn!("Missing Authorization header: client_ip={}", client_ip_str);
             }
 
             // No valid Bearer token found

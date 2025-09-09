@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use futures::future::join_all;
 
 use crate::models::{HealthMetric, IngestPayload, ProcessingError};
+use crate::middleware::metrics::Metrics;
 
 /// Batch processing service for health data
 pub struct BatchProcessor {
@@ -95,6 +96,9 @@ impl BatchProcessor {
         let start_time = Instant::now();
         let initial_memory = self.estimate_memory_usage();
         
+        // Record batch processing start
+        let total_metrics = payload.data.metrics.len() + payload.data.workouts.len();
+        
         self.reset_counters();
 
         let mut result = BatchProcessingResult {
@@ -106,8 +110,7 @@ impl BatchProcessor {
             memory_peak_mb: None,
         };
 
-        // Validate payload size first
-        let total_metrics = payload.data.metrics.len() + payload.data.workouts.len();
+        // Validate payload size first - total_metrics already calculated above
         info!(
             user_id = %user_id,
             total_metrics = total_metrics,
@@ -127,8 +130,17 @@ impl BatchProcessor {
         }
 
         // Calculate final metrics
-        result.processing_time_ms = start_time.elapsed().as_millis() as u64;
+        let duration = start_time.elapsed();
+        result.processing_time_ms = duration.as_millis() as u64;
         result.memory_peak_mb = Some(self.estimate_memory_usage() - initial_memory);
+
+        // Record batch processing metrics
+        let status = if result.failed_count == 0 { "success" } else { "partial_failure" };
+        Metrics::record_batch_processing_duration("mixed", total_metrics, duration);
+        Metrics::record_metrics_processed("mixed", result.processed_count as u64, status);
+        if result.failed_count > 0 {
+            Metrics::record_error("batch_processing", "/api/v1/ingest", "warning");
+        }
 
         info!(
             user_id = %user_id,
