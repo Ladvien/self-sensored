@@ -251,6 +251,7 @@ impl IosIngestPayload {
                     avg_heart_rate,
                     max_heart_rate,
                     source: ios_workout.source.clone(),
+                    route_points: None, // iOS data typically doesn't include detailed GPS routes
                 };
                 internal_workouts.push(workout);
             }

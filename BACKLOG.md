@@ -230,38 +230,6 @@ Optimize database queries and implement caching strategies for common operations
 
 ---
 
-#### Story: HEA-012 - API Response Time Optimization
-**Priority:** Medium  
-**Story Points:** 5  
-**Assigned Agent:** Performance Engineer
-
-**Description:**
-Optimize API response times through profiling and targeted improvements.
-
-**Acceptance Criteria:**
-- [ ] Response time P99 < 500ms
-- [ ] Memory usage optimized
-- [ ] CPU profiling completed
-- [ ] Async operations optimized
-- [ ] Payload compression implemented
-- [ ] CDN integration configured
-
-**Tasks:**
-1. Profile with flamegraph
-2. Optimize hot paths
-3. Implement gzip compression
-4. Add response caching headers
-5. Write benchmark tests in `tests/performance/api_test.rs`
-
-**Definition of Done:**
-- P99 latency < 500ms at 100 RPS
-- Memory usage < 500MB under load
-- CPU usage < 50% at peak
-- Compression reduces payload by 70%
-- Benchmarks show improvement
-- All performance tests pass
-
----
 
 ### Parallel Track 7: Documentation & Deployment
 

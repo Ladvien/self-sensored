@@ -214,7 +214,7 @@ impl SleepRecord {
             rem_sleep_minutes: metric.rem_sleep_minutes,
             light_sleep_minutes: None, // Not provided by API model
             awake_minutes: metric.awake_minutes,
-            sleep_efficiency: Some(sqlx::types::BigDecimal::from(efficiency)),
+            sleep_efficiency: Some(sqlx::types::BigDecimal::from_str(&efficiency.to_string()).unwrap()),
             source_device: metric.source,
             raw_data: Some(raw_json),
             metadata: None,
@@ -236,7 +236,7 @@ impl From<crate::models::health_metrics::SleepMetric> for SleepRecord {
             rem_sleep_minutes: metric.rem_sleep_minutes,
             light_sleep_minutes: None, // Not provided by API model
             awake_minutes: metric.awake_minutes,
-            sleep_efficiency: Some(sqlx::types::BigDecimal::from(efficiency)),
+            sleep_efficiency: Some(sqlx::types::BigDecimal::from_str(&efficiency.to_string()).unwrap()),
             source_device: metric.source,
             raw_data: None,
             metadata: None,
@@ -252,7 +252,7 @@ impl ActivityRecord {
             user_id: Uuid::nil(), // Will be set by caller
             recorded_date: metric.date,
             steps: metric.steps,
-            distance_meters: metric.distance_meters.map(|v| sqlx::types::BigDecimal::from(v)),
+            distance_meters: metric.distance_meters.map(|v| sqlx::types::BigDecimal::from_str(&v.to_string()).unwrap()),
             calories_burned: metric.calories_burned.map(|v| v as i32),
             active_minutes: metric.active_minutes,
             flights_climbed: metric.flights_climbed,
@@ -312,7 +312,7 @@ impl From<crate::models::health_metrics::ActivityMetric> for ActivityRecord {
             user_id: Uuid::nil(), // Will be set by caller
             recorded_date: metric.date,
             steps: metric.steps,
-            distance_meters: metric.distance_meters.map(|v| sqlx::types::BigDecimal::from(v)),
+            distance_meters: metric.distance_meters.map(|v| sqlx::types::BigDecimal::from_str(&v.to_string()).unwrap()),
             calories_burned: metric.calories_burned.map(|v| v as i32),
             active_minutes: metric.active_minutes,
             flights_climbed: metric.flights_climbed,
@@ -339,7 +339,7 @@ impl WorkoutRecord {
             distance_meters: workout.distance_meters.map(|v| sqlx::types::BigDecimal::from(v)),
             average_heart_rate: workout.avg_heart_rate.map(|v| v as i32),
             max_heart_rate: workout.max_heart_rate.map(|v| v as i32),
-            total_energy_kcal: workout.total_energy_kcal.map(|v| sqlx::types::BigDecimal::from(v)),
+            total_energy_kcal: workout.total_energy_kcal.map(|v| sqlx::types::BigDecimal::from_str(&v.to_string()).unwrap()),
             active_energy_kcal: None,  // Not provided by API model
             step_count: None,  // Not provided by API model
             duration_seconds,
@@ -361,7 +361,7 @@ impl WorkoutRecord {
                     point_order: i as i32,
                     latitude: point.latitude,
                     longitude: point.longitude,
-                    altitude_meters: point.altitude_meters.map(|v| sqlx::types::BigDecimal::from(v)),
+                    altitude_meters: point.altitude_meters.map(|v| sqlx::types::BigDecimal::from_str(&v.to_string()).unwrap()),
                     recorded_at: point.recorded_at,
                     created_at: Utc::now(),
                 }
@@ -386,7 +386,7 @@ impl From<crate::models::health_metrics::WorkoutData> for WorkoutRecord {
             distance_meters: workout.distance_meters.map(|v| sqlx::types::BigDecimal::from(v)),
             average_heart_rate: workout.avg_heart_rate.map(|v| v as i32),
             max_heart_rate: workout.max_heart_rate.map(|v| v as i32),
-            total_energy_kcal: workout.total_energy_kcal.map(|v| sqlx::types::BigDecimal::from(v)),
+            total_energy_kcal: workout.total_energy_kcal.map(|v| sqlx::types::BigDecimal::from_str(&v.to_string()).unwrap()),
             active_energy_kcal: None,  // Not provided by API model
             step_count: None,  // Not provided by API model
             duration_seconds,
