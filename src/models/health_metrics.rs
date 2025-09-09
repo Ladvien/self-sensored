@@ -140,7 +140,8 @@ impl WorkoutData {
             for (i, point) in route_points.iter().enumerate() {
                 if point.recorded_at < self.start_time || point.recorded_at > self.end_time {
                     return Err(format!(
-                        "route point {} timestamp is outside workout duration", i
+                        "route point {} timestamp is outside workout duration",
+                        i
                     ));
                 }
             }
@@ -156,10 +157,11 @@ impl WorkoutData {
                 return None; // Need at least 2 points for a line
             }
 
-            let coords: Vec<String> = points.iter()
+            let coords: Vec<String> = points
+                .iter()
                 .map(|p| format!("{} {}", p.longitude, p.latitude))
                 .collect();
-            
+
             Some(format!("LINESTRING({})", coords.join(", ")))
         } else {
             None
@@ -251,7 +253,7 @@ impl BloodPressureMetric {
                 self.diastolic
             ));
         }
-        
+
         // Validate systolic is higher than diastolic (basic medical check)
         if self.systolic <= self.diastolic {
             return Err(format!(
@@ -259,7 +261,7 @@ impl BloodPressureMetric {
                 self.systolic, self.diastolic
             ));
         }
-        
+
         if let Some(pulse) = self.pulse {
             if !(20..=300).contains(&pulse) {
                 return Err(format!("pulse {pulse} is out of range (20-300)"));
@@ -289,10 +291,10 @@ impl SleepMetric {
         }
 
         // Validate sleep component totals don't exceed total sleep time
-        let component_total = self.deep_sleep_minutes.unwrap_or(0) 
-            + self.rem_sleep_minutes.unwrap_or(0) 
+        let component_total = self.deep_sleep_minutes.unwrap_or(0)
+            + self.rem_sleep_minutes.unwrap_or(0)
             + self.awake_minutes.unwrap_or(0);
-        
+
         if component_total > calculated_duration {
             return Err(format!(
                 "Sleep components total ({} minutes) exceeds sleep duration ({} minutes)",
@@ -317,7 +319,8 @@ impl SleepMetric {
 
     /// Get the efficiency percentage, calculating if not provided
     pub fn get_efficiency_percentage(&self) -> f32 {
-        self.efficiency_percentage.unwrap_or_else(|| self.calculate_efficiency())
+        self.efficiency_percentage
+            .unwrap_or_else(|| self.calculate_efficiency())
     }
 }
 

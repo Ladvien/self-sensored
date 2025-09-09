@@ -1,4 +1,5 @@
 use actix_web::{web, HttpResponse, Result};
+use bigdecimal::ToPrimitive;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
@@ -6,7 +7,7 @@ use std::fmt::Write as FmtWrite;
 use tracing::{error, info, instrument};
 use uuid::Uuid;
 
-use crate::models::{ApiResponse, db::*};
+use crate::models::{db::*, ApiResponse};
 use crate::services::auth::AuthContext;
 
 /// Export format options
@@ -16,7 +17,7 @@ pub struct ExportParams {
     pub format: Option<String>,
     /// Start date for filtering (ISO 8601 format)
     pub start_date: Option<DateTime<Utc>>,
-    /// End date for filtering (ISO 8601 format) 
+    /// End date for filtering (ISO 8601 format)
     pub end_date: Option<DateTime<Utc>>,
     /// Metric types to include (comma-separated)
     pub metric_types: Option<String>,
@@ -45,7 +46,7 @@ pub async fn export_health_data(
 ) -> Result<HttpResponse> {
     let format = params.format.as_deref().unwrap_or("json").to_lowercase();
     let include_raw = params.include_raw.unwrap_or(false);
-    
+
     let start_date = params.start_date.unwrap_or_else(|| {
         Utc::now() - chrono::Duration::days(365) // Default to last year
     });
@@ -55,8 +56,13 @@ pub async fn export_health_data(
     let metric_types = if let Some(types) = &params.metric_types {
         types.split(',').map(|s| s.trim().to_string()).collect()
     } else {
-        vec!["heart_rate".to_string(), "blood_pressure".to_string(), 
-             "sleep".to_string(), "activity".to_string(), "workouts".to_string()]
+        vec![
+            "heart_rate".to_string(),
+            "blood_pressure".to_string(),
+            "sleep".to_string(),
+            "activity".to_string(),
+            "workouts".to_string(),
+        ]
     };
 
     info!(
@@ -69,11 +75,31 @@ pub async fn export_health_data(
     );
 
     match format.as_str() {
-        "csv" => export_as_csv(&pool, auth, start_date, end_date, &metric_types, include_raw).await,
-        "json" => export_as_json(&pool, auth, start_date, end_date, &metric_types, include_raw).await,
-        _ => Ok(HttpResponse::BadRequest().json(
-            ApiResponse::<()>::error("Invalid format. Supported formats: json, csv".to_string())
-        ))
+        "csv" => {
+            export_as_csv(
+                &pool,
+                auth,
+                start_date,
+                end_date,
+                &metric_types,
+                include_raw,
+            )
+            .await
+        }
+        "json" => {
+            export_as_json(
+                &pool,
+                auth,
+                start_date,
+                end_date,
+                &metric_types,
+                include_raw,
+            )
+            .await
+        }
+        _ => Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
+            "Invalid format. Supported formats: json, csv".to_string(),
+        ))),
     }
 }
 
@@ -86,7 +112,7 @@ pub async fn export_heart_rate_data(
 ) -> Result<HttpResponse> {
     let format = params.format.as_deref().unwrap_or("json").to_lowercase();
     let include_raw = params.include_raw.unwrap_or(false);
-    
+
     let start_date = params.start_date.unwrap_or_else(|| {
         Utc::now() - chrono::Duration::days(90) // Default to last 90 days
     });
@@ -95,9 +121,9 @@ pub async fn export_heart_rate_data(
     match format.as_str() {
         "csv" => export_heart_rate_csv(&pool, auth, start_date, end_date, include_raw).await,
         "json" => export_heart_rate_json(&pool, auth, start_date, end_date, include_raw).await,
-        _ => Ok(HttpResponse::BadRequest().json(
-            ApiResponse::<()>::error("Invalid format. Supported formats: json, csv".to_string())
-        ))
+        _ => Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
+            "Invalid format. Supported formats: json, csv".to_string(),
+        ))),
     }
 }
 
@@ -108,9 +134,9 @@ pub async fn export_activity_summary(
     auth: AuthContext,
     params: web::Query<ExportParams>,
 ) -> Result<HttpResponse> {
-    let start_date = params.start_date.unwrap_or_else(|| {
-        Utc::now() - chrono::Duration::days(30)
-    });
+    let start_date = params
+        .start_date
+        .unwrap_or_else(|| Utc::now() - chrono::Duration::days(30));
     let end_date = params.end_date.unwrap_or_else(|| Utc::now());
 
     let user_id = auth.user.id;
@@ -125,13 +151,15 @@ pub async fn export_activity_summary(
         }
         Err(e) => {
             error!(
-                user_id = %auth.user.id,
+                user_id = %user_id,
                 error = %e,
                 "Failed to export activity analytics"
             );
-            Ok(HttpResponse::InternalServerError().json(
-                ApiResponse::<()>::error("Failed to export activity data".to_string())
-            ))
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to export activity data".to_string(),
+                )),
+            )
         }
     }
 }
@@ -153,31 +181,49 @@ async fn export_as_json(
     for metric_type in metric_types {
         match metric_type.as_str() {
             "heart_rate" => {
-                if let Ok(data) = fetch_heart_rate_data(pool, auth.user.id, start_date, end_date, include_raw).await {
+                if let Ok(data) =
+                    fetch_heart_rate_data(pool, auth.user.id, start_date, end_date, include_raw)
+                        .await
+                {
                     total_records += data.len();
-                    export_data.insert("heart_rate".to_string(), serde_json::to_value(data).unwrap());
+                    export_data.insert(
+                        "heart_rate".to_string(),
+                        serde_json::to_value(data).unwrap(),
+                    );
                 }
             }
             "blood_pressure" => {
-                if let Ok(data) = fetch_blood_pressure_data(pool, auth.user.id, start_date, end_date, include_raw).await {
+                if let Ok(data) =
+                    fetch_blood_pressure_data(pool, auth.user.id, start_date, end_date, include_raw)
+                        .await
+                {
                     total_records += data.len();
-                    export_data.insert("blood_pressure".to_string(), serde_json::to_value(data).unwrap());
+                    export_data.insert(
+                        "blood_pressure".to_string(),
+                        serde_json::to_value(data).unwrap(),
+                    );
                 }
             }
             "sleep" => {
-                if let Ok(data) = fetch_sleep_data(pool, auth.user.id, start_date, end_date, include_raw).await {
+                if let Ok(data) =
+                    fetch_sleep_data(pool, auth.user.id, start_date, end_date, include_raw).await
+                {
                     total_records += data.len();
                     export_data.insert("sleep".to_string(), serde_json::to_value(data).unwrap());
                 }
             }
             "activity" => {
-                if let Ok(data) = fetch_activity_data(pool, auth.user.id, start_date, end_date, include_raw).await {
+                if let Ok(data) =
+                    fetch_activity_data(pool, auth.user.id, start_date, end_date, include_raw).await
+                {
                     total_records += data.len();
                     export_data.insert("activity".to_string(), serde_json::to_value(data).unwrap());
                 }
             }
             "workouts" => {
-                if let Ok(data) = fetch_workout_data(pool, auth.user.id, start_date, end_date, include_raw).await {
+                if let Ok(data) =
+                    fetch_workout_data(pool, auth.user.id, start_date, end_date, include_raw).await
+                {
                     total_records += data.len();
                     export_data.insert("workouts".to_string(), serde_json::to_value(data).unwrap());
                 }
@@ -189,7 +235,11 @@ async fn export_as_json(
     let response = ExportResponse {
         user_id: auth.user.id,
         export_format: "json".to_string(),
-        date_range: format!("{} to {}", start_date.format("%Y-%m-%d"), end_date.format("%Y-%m-%d")),
+        date_range: format!(
+            "{} to {}",
+            start_date.format("%Y-%m-%d"),
+            end_date.format("%Y-%m-%d")
+        ),
         metric_types: metric_types.to_vec(),
         record_count: total_records,
         export_timestamp: Utc::now(),
@@ -199,9 +249,11 @@ async fn export_as_json(
     Ok(HttpResponse::Ok()
         .insert_header(("Content-Type", "application/json"))
         .insert_header((
-            "Content-Disposition", 
-            format!("attachment; filename=\"health_data_export_{}.json\"", 
-                Utc::now().format("%Y%m%d_%H%M%S"))
+            "Content-Disposition",
+            format!(
+                "attachment; filename=\"health_data_export_{}.json\"",
+                Utc::now().format("%Y%m%d_%H%M%S")
+            ),
         ))
         .json(ApiResponse::success(response)))
 }
@@ -218,28 +270,41 @@ async fn export_as_csv(
     let mut total_records = 0;
 
     // Create comprehensive CSV with all metric types
-    writeln!(csv_content, "metric_type,timestamp,value1,value2,value3,value4,value5,source,context").unwrap();
+    writeln!(
+        csv_content,
+        "metric_type,timestamp,value1,value2,value3,value4,value5,source,context"
+    )
+    .unwrap();
 
     for metric_type in metric_types {
         match metric_type.as_str() {
             "heart_rate" => {
-                if let Ok(data) = fetch_heart_rate_data(pool, auth.user.id, start_date, end_date, include_raw).await {
+                if let Ok(data) =
+                    fetch_heart_rate_data(pool, auth.user.id, start_date, end_date, include_raw)
+                        .await
+                {
                     for record in &data {
                         writeln!(
                             csv_content,
                             "heart_rate,{},{},{},,,,,{},{}",
                             record.recorded_at.format("%Y-%m-%d %H:%M:%S"),
                             record.heart_rate,
-                            record.resting_heart_rate.map_or("".to_string(), |v| v.to_string()),
+                            record
+                                .resting_heart_rate
+                                .map_or("".to_string(), |v| v.to_string()),
                             record.source_device.as_deref().unwrap_or(""),
                             record.context.as_deref().unwrap_or("")
-                        ).unwrap();
+                        )
+                        .unwrap();
                     }
                     total_records += data.len();
                 }
             }
             "blood_pressure" => {
-                if let Ok(data) = fetch_blood_pressure_data(pool, auth.user.id, start_date, end_date, include_raw).await {
+                if let Ok(data) =
+                    fetch_blood_pressure_data(pool, auth.user.id, start_date, end_date, include_raw)
+                        .await
+                {
                     for record in &data {
                         writeln!(
                             csv_content,
@@ -249,62 +314,99 @@ async fn export_as_csv(
                             record.diastolic,
                             record.pulse.map_or("".to_string(), |v| v.to_string()),
                             record.source_device.as_deref().unwrap_or("")
-                        ).unwrap();
+                        )
+                        .unwrap();
                     }
                     total_records += data.len();
                 }
             }
             "sleep" => {
-                if let Ok(data) = fetch_sleep_data(pool, auth.user.id, start_date, end_date, include_raw).await {
+                if let Ok(data) =
+                    fetch_sleep_data(pool, auth.user.id, start_date, end_date, include_raw).await
+                {
                     for record in &data {
                         writeln!(
                             csv_content,
                             "sleep,{},{},{},{},{},{},{},",
-                            record.recorded_at.format("%Y-%m-%d %H:%M:%S"),
-                            record.total_sleep_minutes,
-                            record.deep_sleep_minutes.map_or("".to_string(), |v| v.to_string()),
-                            record.rem_sleep_minutes.map_or("".to_string(), |v| v.to_string()),
-                            record.awake_minutes.map_or("".to_string(), |v| v.to_string()),
-                            record.efficiency_percentage.map_or("".to_string(), |v| v.to_string()),
+                            record.sleep_start.format("%Y-%m-%d %H:%M:%S"),
+                            record.duration_minutes,
+                            record
+                                .deep_sleep_minutes
+                                .map_or("".to_string(), |v| v.to_string()),
+                            record
+                                .rem_sleep_minutes
+                                .map_or("".to_string(), |v| v.to_string()),
+                            record
+                                .awake_minutes
+                                .map_or("".to_string(), |v| v.to_string()),
+                            record
+                                .sleep_efficiency
+                                .as_ref()
+                                .and_then(|v| v.to_f32())
+                                .map_or("".to_string(), |v| v.to_string()),
                             record.source_device.as_deref().unwrap_or("")
-                        ).unwrap();
+                        )
+                        .unwrap();
                     }
                     total_records += data.len();
                 }
             }
             "activity" => {
-                if let Ok(data) = fetch_activity_data(pool, auth.user.id, start_date, end_date, include_raw).await {
+                if let Ok(data) =
+                    fetch_activity_data(pool, auth.user.id, start_date, end_date, include_raw).await
+                {
                     for record in &data {
                         writeln!(
                             csv_content,
                             "activity,{},{},{},{},{},{},{},",
-                            record.date.format("%Y-%m-%d"),
+                            record.recorded_date.format("%Y-%m-%d"),
                             record.steps.map_or("".to_string(), |v| v.to_string()),
-                            record.distance_meters.map_or("".to_string(), |v| v.to_string()),
-                            record.calories_burned.map_or("".to_string(), |v| v.to_string()),
-                            record.active_minutes.map_or("".to_string(), |v| v.to_string()),
-                            record.flights_climbed.map_or("".to_string(), |v| v.to_string()),
+                            record
+                                .distance_meters
+                                .as_ref()
+                                .map_or("".to_string(), |v| v.to_string()),
+                            record
+                                .calories_burned
+                                .map_or("".to_string(), |v| v.to_string()),
+                            record
+                                .active_minutes
+                                .map_or("".to_string(), |v| v.to_string()),
+                            record
+                                .flights_climbed
+                                .map_or("".to_string(), |v| v.to_string()),
                             record.source_device.as_deref().unwrap_or("")
-                        ).unwrap();
+                        )
+                        .unwrap();
                     }
                     total_records += data.len();
                 }
             }
             "workouts" => {
-                if let Ok(data) = fetch_workout_data(pool, auth.user.id, start_date, end_date, include_raw).await {
+                if let Ok(data) =
+                    fetch_workout_data(pool, auth.user.id, start_date, end_date, include_raw).await
+                {
                     for record in &data {
                         writeln!(
                             csv_content,
                             "workout,{},{},{},{},{},{},{},{}",
-                            record.start_time.format("%Y-%m-%d %H:%M:%S"),
+                            record.started_at.format("%Y-%m-%d %H:%M:%S"),
                             record.workout_type,
-                            (record.end_time - record.start_time).num_minutes(),
-                            record.total_energy_kcal.map_or("".to_string(), |v| v.to_string()),
-                            record.distance_meters.map_or("".to_string(), |v| v.to_string()),
-                            record.avg_heart_rate.map_or("".to_string(), |v| v.to_string()),
+                            (record.ended_at - record.started_at).num_minutes(),
+                            record
+                                .total_energy_kcal
+                                .as_ref()
+                                .map_or("".to_string(), |v| v.to_string()),
+                            record
+                                .distance_meters
+                                .as_ref()
+                                .map_or("".to_string(), |v| v.to_string()),
+                            record
+                                .average_heart_rate
+                                .map_or("".to_string(), |v| v.to_string()),
                             record.source_device.as_deref().unwrap_or(""),
                             record.workout_type
-                        ).unwrap();
+                        )
+                        .unwrap();
                     }
                     total_records += data.len();
                 }
@@ -316,7 +418,11 @@ async fn export_as_csv(
     let response = ExportResponse {
         user_id: auth.user.id,
         export_format: "csv".to_string(),
-        date_range: format!("{} to {}", start_date.format("%Y-%m-%d"), end_date.format("%Y-%m-%d")),
+        date_range: format!(
+            "{} to {}",
+            start_date.format("%Y-%m-%d"),
+            end_date.format("%Y-%m-%d")
+        ),
         metric_types: metric_types.to_vec(),
         record_count: total_records,
         export_timestamp: Utc::now(),
@@ -326,9 +432,11 @@ async fn export_as_csv(
     Ok(HttpResponse::Ok()
         .insert_header(("Content-Type", "text/csv"))
         .insert_header((
-            "Content-Disposition", 
-            format!("attachment; filename=\"health_data_export_{}.csv\"", 
-                Utc::now().format("%Y%m%d_%H%M%S"))
+            "Content-Disposition",
+            format!(
+                "attachment; filename=\"health_data_export_{}.csv\"",
+                Utc::now().format("%Y%m%d_%H%M%S")
+            ),
         ))
         .json(ApiResponse::success(response)))
 }
@@ -345,7 +453,11 @@ async fn export_heart_rate_json(
             let response = ExportResponse {
                 user_id: auth.user.id,
                 export_format: "json".to_string(),
-                date_range: format!("{} to {}", start_date.format("%Y-%m-%d"), end_date.format("%Y-%m-%d")),
+                date_range: format!(
+                    "{} to {}",
+                    start_date.format("%Y-%m-%d"),
+                    end_date.format("%Y-%m-%d")
+                ),
                 metric_types: vec!["heart_rate".to_string()],
                 record_count: data.len(),
                 export_timestamp: Utc::now(),
@@ -355,9 +467,11 @@ async fn export_heart_rate_json(
             Ok(HttpResponse::Ok()
                 .insert_header(("Content-Type", "application/json"))
                 .insert_header((
-                    "Content-Disposition", 
-                    format!("attachment; filename=\"heart_rate_export_{}.json\"", 
-                        Utc::now().format("%Y%m%d_%H%M%S"))
+                    "Content-Disposition",
+                    format!(
+                        "attachment; filename=\"heart_rate_export_{}.json\"",
+                        Utc::now().format("%Y%m%d_%H%M%S")
+                    ),
                 ))
                 .json(ApiResponse::success(response)))
         }
@@ -367,9 +481,11 @@ async fn export_heart_rate_json(
                 error = %e,
                 "Failed to export heart rate data"
             );
-            Ok(HttpResponse::InternalServerError().json(
-                ApiResponse::<()>::error("Failed to export heart rate data".to_string())
-            ))
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to export heart rate data".to_string(),
+                )),
+            )
         }
     }
 }
@@ -384,25 +500,35 @@ async fn export_heart_rate_csv(
     match fetch_heart_rate_data(pool, auth.user.id, start_date, end_date, include_raw).await {
         Ok(data) => {
             let mut csv_content = String::new();
-            writeln!(csv_content, "recorded_at,min_bpm,avg_bpm,max_bpm,context,source").unwrap();
+            writeln!(
+                csv_content,
+                "recorded_at,heart_rate,resting_heart_rate,context,source"
+            )
+            .unwrap();
 
             for record in &data {
                 writeln!(
                     csv_content,
-                    "{},{},{},{},{},{}",
+                    "{},{},{},{},{}",
                     record.recorded_at.format("%Y-%m-%d %H:%M:%S"),
-                    record.min_bpm.map_or("".to_string(), |v| v.to_string()),
-                    record.avg_bpm.map_or("".to_string(), |v| v.to_string()),
-                    record.max_bpm.map_or("".to_string(), |v| v.to_string()),
+                    record.heart_rate,
+                    record
+                        .resting_heart_rate
+                        .map_or("".to_string(), |v| v.to_string()),
                     record.context.as_deref().unwrap_or(""),
-                    record.source.as_deref().unwrap_or("")
-                ).unwrap();
+                    record.source_device.as_deref().unwrap_or("")
+                )
+                .unwrap();
             }
 
             let response = ExportResponse {
                 user_id: auth.user.id,
                 export_format: "csv".to_string(),
-                date_range: format!("{} to {}", start_date.format("%Y-%m-%d"), end_date.format("%Y-%m-%d")),
+                date_range: format!(
+                    "{} to {}",
+                    start_date.format("%Y-%m-%d"),
+                    end_date.format("%Y-%m-%d")
+                ),
                 metric_types: vec!["heart_rate".to_string()],
                 record_count: data.len(),
                 export_timestamp: Utc::now(),
@@ -412,9 +538,11 @@ async fn export_heart_rate_csv(
             Ok(HttpResponse::Ok()
                 .insert_header(("Content-Type", "text/csv"))
                 .insert_header((
-                    "Content-Disposition", 
-                    format!("attachment; filename=\"heart_rate_export_{}.csv\"", 
-                        Utc::now().format("%Y%m%d_%H%M%S"))
+                    "Content-Disposition",
+                    format!(
+                        "attachment; filename=\"heart_rate_export_{}.csv\"",
+                        Utc::now().format("%Y%m%d_%H%M%S")
+                    ),
                 ))
                 .json(ApiResponse::success(response)))
         }
@@ -424,9 +552,11 @@ async fn export_heart_rate_csv(
                 error = %e,
                 "Failed to export heart rate data"
             );
-            Ok(HttpResponse::InternalServerError().json(
-                ApiResponse::<()>::error("Failed to export heart rate data".to_string())
-            ))
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to export heart rate data".to_string(),
+                )),
+            )
         }
     }
 }
@@ -450,8 +580,8 @@ async fn export_activity_analytics(
     let records = sqlx::query_as!(
         ActivityRecord,
         r#"
-        SELECT user_id, date, steps, distance_meters, calories_burned, 
-               active_minutes, flights_climbed, source, raw_data, created_at, updated_at
+        SELECT user_id, recorded_date, steps, distance_meters, calories_burned, 
+               active_minutes, flights_climbed, source_device, metadata, metadata as raw_data, COALESCE(created_at, NOW()) as created_at, COALESCE(created_at, NOW()) as updated_at
         FROM activity_metrics 
         WHERE user_id = $1 AND recorded_date BETWEEN $2 AND $3
         ORDER BY recorded_date ASC
@@ -467,17 +597,21 @@ async fn export_activity_analytics(
         .into_iter()
         .map(|record| {
             let steps = record.steps.unwrap_or(0);
-            let step_goal_percentage = if steps > 0 { 
-                (steps as f32 / 10000.0) * 100.0  // Assuming 10k step goal
-            } else { 
-                0.0 
+            let step_goal_percentage = if steps > 0 {
+                (steps as f32 / 10000.0) * 100.0 // Assuming 10k step goal
+            } else {
+                0.0
             };
 
             ActivityAnalytics {
-                date: record.date.format("%Y-%m-%d").to_string(),
+                date: record.recorded_date.format("%Y-%m-%d").to_string(),
                 steps,
-                distance_km: record.distance_meters.unwrap_or(0.0) / 1000.0,
-                calories: record.calories_burned.unwrap_or(0.0),
+                distance_km: record
+                    .distance_meters
+                    .and_then(|v| v.to_f64())
+                    .unwrap_or(0.0)
+                    / 1000.0,
+                calories: record.calories_burned.unwrap_or(0) as f64,
                 active_minutes: record.active_minutes.unwrap_or(0),
                 step_goal_percentage,
             }
@@ -499,7 +633,7 @@ async fn fetch_heart_rate_data(
     sqlx::query_as!(
         HeartRateRecord,
         r#"
-        SELECT user_id, recorded_at, heart_rate, resting_heart_rate, context, source_device, metadata, created_at
+        SELECT user_id, recorded_at, heart_rate, resting_heart_rate, context, source_device, metadata as raw_data, metadata, COALESCE(created_at, NOW()) as created_at
         FROM heart_rate_metrics 
         WHERE user_id = $1 AND recorded_at BETWEEN $2 AND $3
         ORDER BY recorded_at ASC
@@ -522,7 +656,7 @@ async fn fetch_blood_pressure_data(
     sqlx::query_as!(
         BloodPressureRecord,
         r#"
-        SELECT user_id, recorded_at, systolic, diastolic, pulse, source_device, metadata, created_at
+        SELECT user_id, recorded_at, systolic, diastolic, pulse, source_device, metadata as raw_data, metadata, COALESCE(created_at, NOW()) as created_at
         FROM blood_pressure_metrics 
         WHERE user_id = $1 AND recorded_at BETWEEN $2 AND $3
         ORDER BY recorded_at ASC
@@ -547,7 +681,7 @@ async fn fetch_sleep_data(
         r#"
         SELECT user_id, sleep_start, sleep_end, duration_minutes,
                deep_sleep_minutes, rem_sleep_minutes, light_sleep_minutes, awake_minutes, sleep_efficiency,
-               source_device, metadata, created_at
+               source_device, metadata as raw_data, metadata, COALESCE(created_at, NOW()) as created_at
         FROM sleep_metrics 
         WHERE user_id = $1 AND sleep_start BETWEEN $2 AND $3
         ORDER BY sleep_start ASC
@@ -571,7 +705,7 @@ async fn fetch_activity_data(
         ActivityRecord,
         r#"
         SELECT user_id, recorded_date, steps, distance_meters, calories_burned,
-               active_minutes, flights_climbed, source_device, metadata, created_at
+               active_minutes, flights_climbed, source_device, metadata as raw_data, metadata, COALESCE(created_at, NOW()) as created_at, COALESCE(created_at, NOW()) as updated_at
         FROM activity_metrics 
         WHERE user_id = $1 AND recorded_date BETWEEN $2 AND $3
         ORDER BY recorded_date ASC
@@ -596,7 +730,7 @@ async fn fetch_workout_data(
         r#"
         SELECT id, user_id, workout_type, started_at, ended_at, distance_meters,
                average_heart_rate, max_heart_rate, total_energy_kcal, active_energy_kcal,
-               step_count, duration_seconds, route_geometry, source_device, metadata, created_at
+               step_count, duration_seconds, NULL::text as route_geometry, source_device, metadata as raw_data, metadata, COALESCE(created_at, NOW()) as created_at
         FROM workouts 
         WHERE user_id = $1 AND started_at BETWEEN $2 AND $3
         ORDER BY started_at ASC

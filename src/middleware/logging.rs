@@ -20,7 +20,7 @@ pub const REQUEST_ID_HEADER: &str = "x-request-id";
 /// List of sensitive field names that should be masked in logs
 const SENSITIVE_FIELDS: &[&str] = &[
     "password",
-    "api_key", 
+    "api_key",
     "token",
     "authorization",
     "secret",
@@ -29,8 +29,8 @@ const SENSITIVE_FIELDS: &[&str] = &[
     "credential",
     "ssn",
     "social_security",
-    "email", // Consider PII
-    "phone", // Consider PII
+    "email",   // Consider PII
+    "phone",   // Consider PII
     "address", // Consider PII
 ];
 
@@ -76,10 +76,10 @@ where
 
     fn call(&self, mut req: ServiceRequest) -> Self::Future {
         let service = self.service.clone();
-        
+
         Box::pin(async move {
             let start_time = SystemTime::now();
-            
+
             // Generate or extract request ID
             let request_id = req
                 .headers()
@@ -118,19 +118,13 @@ where
 
             // Execute request within the span
             let _guard = span.enter();
-            
-            tracing::info!(
-                event = "request_started",
-                message = "HTTP request received"
-            );
+
+            tracing::info!(event = "request_started", message = "HTTP request received");
 
             let result = service.call(req).await;
 
             // Calculate request duration
-            let duration = start_time
-                .elapsed()
-                .unwrap_or_default()
-                .as_millis();
+            let duration = start_time.elapsed().unwrap_or_default().as_millis();
 
             match &result {
                 Ok(res) => {
@@ -143,7 +137,7 @@ where
                 }
                 Err(err) => {
                     tracing::error!(
-                        event = "request_failed", 
+                        event = "request_failed",
                         error = %err,
                         duration_ms = duration,
                         message = "HTTP request failed with error"
@@ -158,23 +152,28 @@ where
 
 /// Extract client IP address from request headers and connection info
 fn extract_client_ip(req: &ServiceRequest) -> String {
-    req.headers()
+    // Try x-forwarded-for header first
+    if let Some(forwarded) = req
+        .headers()
         .get("x-forwarded-for")
         .and_then(|h| h.to_str().ok())
         .and_then(|h| h.split(',').next())
-        .or_else(|| {
-            req.headers()
-                .get("x-real-ip")
-                .and_then(|h| h.to_str().ok())
-        })
-        .or_else(|| {
-            req.connection_info()
-                .peer_addr()
-                .map(|addr| addr.to_string())
-        })
-        .unwrap_or_else(|| "unknown".to_string())
-        .trim()
-        .to_string()
+    {
+        return forwarded.trim().to_string();
+    }
+
+    // Try x-real-ip header
+    if let Some(real_ip) = req.headers().get("x-real-ip").and_then(|h| h.to_str().ok()) {
+        return real_ip.trim().to_string();
+    }
+
+    // Fall back to peer address
+    let conn_info = req.connection_info();
+    if let Some(peer) = conn_info.peer_addr() {
+        return peer.trim().to_string();
+    }
+
+    "unknown".to_string()
 }
 
 /// Mask sensitive data in a JSON value for logging
@@ -183,9 +182,12 @@ pub fn mask_sensitive_data(mut value: Value) -> Value {
         Value::Object(obj) => {
             for (key, val) in obj.iter_mut() {
                 let key_lower = key.to_lowercase();
-                
+
                 // Check if this field contains sensitive data
-                if SENSITIVE_FIELDS.iter().any(|&sensitive| key_lower.contains(sensitive)) {
+                if SENSITIVE_FIELDS
+                    .iter()
+                    .any(|&sensitive| key_lower.contains(sensitive))
+                {
                     *val = json!("[MASKED]");
                 } else {
                     // Recursively process nested objects and arrays
@@ -200,14 +202,14 @@ pub fn mask_sensitive_data(mut value: Value) -> Value {
         }
         _ => {}
     }
-    
+
     value
 }
 
 /// Mask sensitive data in a string (for URLs, headers, etc.)
 pub fn mask_sensitive_string(input: &str) -> String {
     let input_lower = input.to_lowercase();
-    
+
     // Check for sensitive patterns in the string
     for &sensitive in SENSITIVE_FIELDS {
         if input_lower.contains(sensitive) {
@@ -226,14 +228,14 @@ pub fn mask_sensitive_string(input: &str) -> String {
                     return masked;
                 }
             }
-            
+
             // For headers like "Authorization: Bearer token"
             if input_lower.starts_with(&format!("{}:", sensitive)) {
                 return format!("{}: [MASKED]", sensitive);
             }
         }
     }
-    
+
     input.to_string()
 }
 
@@ -284,12 +286,12 @@ pub fn log_error_with_context(
 fn format_error_chain(error: &dyn std::error::Error) -> String {
     let mut chain = Vec::new();
     let mut current = Some(error);
-    
+
     while let Some(err) = current {
         chain.push(err.to_string());
         current = err.source();
     }
-    
+
     chain.join(" -> ")
 }
 
@@ -309,29 +311,30 @@ impl PerformanceTimer {
             request_id,
         }
     }
-    
+
     pub fn finish(self) -> u128 {
-        let duration = self.start_time.elapsed()
-            .unwrap_or_default()
-            .as_millis();
-            
+        let duration = self.start_time.elapsed().unwrap_or_default().as_millis();
+
         let mut fields = vec![
             ("event", json!("performance_measurement")),
             ("context", json!(self.context)),
             ("duration_ms", json!(duration)),
         ];
-        
+
         if let Some(id) = self.request_id {
             fields.push(("request_id", json!(id.to_string())));
         }
-        
+
         tracing::info!(
             event = "performance_measurement",
             context = self.context,
             duration_ms = duration,
-            message = format!("Performance measurement for {}: {}ms", self.context, duration)
+            message = format!(
+                "Performance measurement for {}: {}ms",
+                self.context, duration
+            )
         );
-        
+
         duration
     }
 }
@@ -357,7 +360,7 @@ mod tests {
         });
 
         let masked = mask_sensitive_data(input);
-        
+
         assert_eq!(masked["username"], json!("testuser"));
         assert_eq!(masked["password"], json!("[MASKED]"));
         assert_eq!(masked["api_key"], json!("[MASKED]"));
@@ -373,12 +376,12 @@ mod tests {
             mask_sensitive_string("https://api.example.com?api_key=secret123&other=value"),
             "https://api.example.com?api_key=[MASKED]&other=value"
         );
-        
+
         assert_eq!(
             mask_sensitive_string("Authorization: Bearer token123"),
             "authorization: [MASKED]"
         );
-        
+
         assert_eq!(
             mask_sensitive_string("regular string with no secrets"),
             "regular string with no secrets"

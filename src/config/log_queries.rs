@@ -1,12 +1,11 @@
 /// Log aggregation queries and examples for the structured logging system
-/// 
+///
 /// These queries are designed for log aggregation systems like:
 /// - Datadog
 /// - CloudWatch Insights
 /// - Elasticsearch/OpenSearch
 /// - Splunk
 /// - Grafana Loki
-
 use serde_json::json;
 
 /// Common log query patterns for monitoring and debugging
@@ -24,16 +23,16 @@ impl LogQueries {
                 | stats count() as total, sum(status >= 400) as errors by path
                 | eval error_rate = errors / total * 100
                 | sort error_rate desc
-                "#
+                "#,
             ),
             (
-                "Request Duration P95 by Endpoint", 
+                "Request Duration P95 by Endpoint",
                 r#"
                 fields @timestamp, path, duration_ms
                 | filter event = "request_completed"
                 | stats percentile(duration_ms, 95) as p95_duration by path
                 | sort p95_duration desc
-                "#
+                "#,
             ),
             (
                 "Failed Requests with Context",
@@ -42,7 +41,7 @@ impl LogQueries {
                 | filter event = "request_failed" or status >= 400
                 | sort @timestamp desc
                 | limit 100
-                "#
+                "#,
             ),
             (
                 "Authentication Failures",
@@ -51,7 +50,7 @@ impl LogQueries {
                 | filter event = "authentication_failed"
                 | stats count() as failures by client_ip
                 | sort failures desc
-                "#
+                "#,
             ),
             (
                 "Performance Issues (>1s)",
@@ -60,7 +59,7 @@ impl LogQueries {
                 | filter event = "request_completed" and duration_ms > 1000
                 | sort duration_ms desc
                 | limit 50
-                "#
+                "#,
             ),
             (
                 "API Key Usage by User",
@@ -69,8 +68,8 @@ impl LogQueries {
                 | filter ispresent(user_id) and ispresent(api_key_id)
                 | stats count() as requests by user_id, api_key_id
                 | sort requests desc
-                "#
-            )
+                "#,
+            ),
         ]
     }
 
@@ -83,14 +82,14 @@ impl LogQueries {
                 service:health-export-api event:(request_failed OR request_completed)
                 | group by path
                 | eval error_rate = count(event:request_failed) / count() * 100
-                "#
+                "#,
             ),
             (
                 "High Duration Requests",
                 r#"
                 service:health-export-api event:request_completed duration_ms:>500
                 | sort duration_ms desc
-                "#
+                "#,
             ),
             (
                 "Failed Authentication by IP",
@@ -98,15 +97,15 @@ impl LogQueries {
                 service:health-export-api event:authentication_failed
                 | group by client_ip
                 | sort count desc
-                "#
+                "#,
             ),
             (
-                "Database Errors", 
+                "Database Errors",
                 r#"
                 service:health-export-api event:error_occurred context:*database*
                 | sort @timestamp desc
-                "#
-            )
+                "#,
+            ),
         ]
     }
 
@@ -148,7 +147,7 @@ impl LogQueries {
                             }
                         }
                     }
-                })
+                }),
             ),
             (
                 "Performance Percentiles",
@@ -174,7 +173,7 @@ impl LogQueries {
                             }
                         }
                     }
-                })
+                }),
             ),
             (
                 "Recent Errors with Full Context",
@@ -190,11 +189,11 @@ impl LogQueries {
                     "sort": [{"@timestamp": {"order": "desc"}}],
                     "size": 100,
                     "_source": [
-                        "@timestamp", "request_id", "context", "error", 
+                        "@timestamp", "request_id", "context", "error",
                         "error_chain", "user_id", "path"
                     ]
-                })
-            )
+                }),
+            ),
         ]
     }
 
@@ -210,7 +209,7 @@ impl LogQueries {
                 | event =~ "request_(completed|failed)"
                 | label_format endpoint="{{.path}}"
                 | rate(5m) by (endpoint)
-                "#
+                "#,
             ),
             (
                 "P95 Response Time",
@@ -219,7 +218,7 @@ impl LogQueries {
                 | json 
                 | event = "request_completed"
                 | quantile_over_time(0.95, duration_ms[5m]) by (path)
-                "#
+                "#,
             ),
             (
                 "Authentication Failures",
@@ -228,7 +227,7 @@ impl LogQueries {
                 | json 
                 | event = "authentication_failed"
                 | rate(1m) by (client_ip)
-                "#
+                "#,
             ),
             (
                 "Database Connection Issues",
@@ -237,8 +236,8 @@ impl LogQueries {
                 | json 
                 | context =~ ".*database.*"
                 | event = "error_occurred"
-                "#
-            )
+                "#,
+            ),
         ]
     }
 
@@ -254,7 +253,7 @@ impl LogQueries {
                 | stats count as total, sum(is_error) as errors by _time, path
                 | eval error_rate = round(errors/total*100, 2)
                 | timechart span=5m avg(error_rate) by path
-                "#
+                "#,
             ),
             (
                 "Performance Analysis",
@@ -263,7 +262,7 @@ impl LogQueries {
                 | stats perc50(duration_ms) as p50, perc95(duration_ms) as p95, 
                         perc99(duration_ms) as p99, avg(duration_ms) as avg by path
                 | sort -p95
-                "#
+                "#,
             ),
             (
                 "Security Events",
@@ -273,8 +272,8 @@ impl LogQueries {
                 | stats count by client_ip, user_agent, event
                 | where count > 5
                 | sort -count
-                "#
-            )
+                "#,
+            ),
         ]
     }
 }
@@ -321,21 +320,21 @@ impl LogAnalysis {
                 "Trace Request Flow",
                 r#"
                 {service_name="health-export-api"} | json | request_id="<REQUEST_ID>"
-                "#
+                "#,
             ),
             (
-                "User Activity Timeline", 
+                "User Activity Timeline",
                 r#"
                 {service_name="health-export-api"} | json | user_id="<USER_ID>" 
                 | line_format "{{.timestamp}} - {{.event}}: {{.message}}"
-                "#
+                "#,
             ),
             (
                 "API Key Usage Pattern",
                 r#"
                 {service_name="health-export-api"} | json | api_key_id="<API_KEY_ID>"
                 | stats count by path, status
-                "#
+                "#,
             ),
             (
                 "Performance Bottlenecks",
@@ -344,8 +343,8 @@ impl LogAnalysis {
                 | event="performance_measurement" 
                 | duration_ms > 100
                 | sort by timestamp desc
-                "#
-            )
+                "#,
+            ),
         ]
     }
 }
@@ -358,16 +357,16 @@ mod tests {
     fn test_query_generation() {
         let cloudwatch = LogQueries::cloudwatch_queries();
         assert!(!cloudwatch.is_empty());
-        
+
         let datadog = LogQueries::datadog_queries();
         assert!(!datadog.is_empty());
-        
+
         let elasticsearch = LogQueries::elasticsearch_queries();
         assert!(!elasticsearch.is_empty());
-        
+
         let loki = LogQueries::loki_queries();
         assert!(!loki.is_empty());
-        
+
         let splunk = LogQueries::splunk_queries();
         assert!(!splunk.is_empty());
     }

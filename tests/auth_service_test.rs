@@ -78,7 +78,10 @@ async fn test_create_and_authenticate_user() {
     assert_eq!(api_key.is_active, Some(true));
 
     // Authenticate with the API key (with None for IP and user agent in test)
-    let auth_context = auth_service.authenticate(&plain_key, None, None).await.unwrap();
+    let auth_context = auth_service
+        .authenticate(&plain_key, None, None)
+        .await
+        .unwrap();
 
     assert_eq!(auth_context.user.email, "test@example.com");
     assert_eq!(auth_context.api_key.name, "Test Key");

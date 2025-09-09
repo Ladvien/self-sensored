@@ -1,6 +1,7 @@
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use std::str::FromStr;
 use uuid::Uuid;
 
 /// User database model
@@ -42,7 +43,7 @@ pub struct RawIngestion {
 }
 
 /// Heart rate database model
-#[derive(Debug, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
 pub struct HeartRateRecord {
     pub user_id: Uuid,
     pub recorded_at: DateTime<Utc>,
@@ -56,7 +57,7 @@ pub struct HeartRateRecord {
 }
 
 /// Blood pressure database model
-#[derive(Debug, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
 pub struct BloodPressureRecord {
     pub user_id: Uuid,
     pub recorded_at: DateTime<Utc>,
@@ -70,7 +71,7 @@ pub struct BloodPressureRecord {
 }
 
 /// Sleep database model
-#[derive(Debug, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
 pub struct SleepRecord {
     pub user_id: Uuid,
     pub sleep_start: DateTime<Utc>,
@@ -88,7 +89,7 @@ pub struct SleepRecord {
 }
 
 /// Activity database model  
-#[derive(Debug, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
 pub struct ActivityRecord {
     pub user_id: Uuid,
     pub recorded_date: chrono::NaiveDate,
@@ -105,7 +106,7 @@ pub struct ActivityRecord {
 }
 
 /// Workout database model
-#[derive(Debug, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
 pub struct WorkoutRecord {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -155,7 +156,10 @@ pub struct AuditLog {
 
 /// Enhanced conversion functions with raw JSON preservation
 impl HeartRateRecord {
-    pub fn from_metric_with_raw(metric: crate::models::health_metrics::HeartRateMetric, raw_json: serde_json::Value) -> Self {
+    pub fn from_metric_with_raw(
+        metric: crate::models::health_metrics::HeartRateMetric,
+        raw_json: serde_json::Value,
+    ) -> Self {
         HeartRateRecord {
             user_id: Uuid::nil(), // Will be set by caller
             recorded_at: metric.recorded_at,
@@ -195,6 +199,7 @@ impl From<crate::models::health_metrics::BloodPressureMetric> for BloodPressureR
             diastolic: metric.diastolic as i32,
             pulse: metric.pulse.map(|v| v as i32),
             source_device: metric.source,
+            raw_data: None,
             metadata: None,
             created_at: Utc::now(),
         }
@@ -202,9 +207,12 @@ impl From<crate::models::health_metrics::BloodPressureMetric> for BloodPressureR
 }
 
 impl SleepRecord {
-    pub fn from_metric_with_raw(metric: crate::models::health_metrics::SleepMetric, raw_json: serde_json::Value) -> Self {
+    pub fn from_metric_with_raw(
+        metric: crate::models::health_metrics::SleepMetric,
+        raw_json: serde_json::Value,
+    ) -> Self {
         let efficiency = metric.get_efficiency_percentage();
-        
+
         SleepRecord {
             user_id: Uuid::nil(), // Will be set by caller
             sleep_start: metric.sleep_start,
@@ -214,7 +222,9 @@ impl SleepRecord {
             rem_sleep_minutes: metric.rem_sleep_minutes,
             light_sleep_minutes: None, // Not provided by API model
             awake_minutes: metric.awake_minutes,
-            sleep_efficiency: Some(sqlx::types::BigDecimal::from_str(&efficiency.to_string()).unwrap()),
+            sleep_efficiency: Some(
+                sqlx::types::BigDecimal::from_str(&efficiency.to_string()).unwrap(),
+            ),
             source_device: metric.source,
             raw_data: Some(raw_json),
             metadata: None,
@@ -226,7 +236,7 @@ impl SleepRecord {
 impl From<crate::models::health_metrics::SleepMetric> for SleepRecord {
     fn from(metric: crate::models::health_metrics::SleepMetric) -> Self {
         let efficiency = metric.get_efficiency_percentage();
-        
+
         SleepRecord {
             user_id: Uuid::nil(), // Will be set by caller
             sleep_start: metric.sleep_start,
@@ -236,7 +246,9 @@ impl From<crate::models::health_metrics::SleepMetric> for SleepRecord {
             rem_sleep_minutes: metric.rem_sleep_minutes,
             light_sleep_minutes: None, // Not provided by API model
             awake_minutes: metric.awake_minutes,
-            sleep_efficiency: Some(sqlx::types::BigDecimal::from_str(&efficiency.to_string()).unwrap()),
+            sleep_efficiency: Some(
+                sqlx::types::BigDecimal::from_str(&efficiency.to_string()).unwrap(),
+            ),
             source_device: metric.source,
             raw_data: None,
             metadata: None,
@@ -246,13 +258,18 @@ impl From<crate::models::health_metrics::SleepMetric> for SleepRecord {
 }
 
 impl ActivityRecord {
-    pub fn from_metric_with_raw(metric: crate::models::health_metrics::ActivityMetric, raw_json: serde_json::Value) -> Self {
+    pub fn from_metric_with_raw(
+        metric: crate::models::health_metrics::ActivityMetric,
+        raw_json: serde_json::Value,
+    ) -> Self {
         let now = Utc::now();
         ActivityRecord {
             user_id: Uuid::nil(), // Will be set by caller
             recorded_date: metric.date,
             steps: metric.steps,
-            distance_meters: metric.distance_meters.map(|v| sqlx::types::BigDecimal::from_str(&v.to_string()).unwrap()),
+            distance_meters: metric
+                .distance_meters
+                .map(|v| sqlx::types::BigDecimal::from_str(&v.to_string()).unwrap()),
             calories_burned: metric.calories_burned.map(|v| v as i32),
             active_minutes: metric.active_minutes,
             flights_climbed: metric.flights_climbed,
@@ -312,7 +329,9 @@ impl From<crate::models::health_metrics::ActivityMetric> for ActivityRecord {
             user_id: Uuid::nil(), // Will be set by caller
             recorded_date: metric.date,
             steps: metric.steps,
-            distance_meters: metric.distance_meters.map(|v| sqlx::types::BigDecimal::from_str(&v.to_string()).unwrap()),
+            distance_meters: metric
+                .distance_meters
+                .map(|v| sqlx::types::BigDecimal::from_str(&v.to_string()).unwrap()),
             calories_burned: metric.calories_burned.map(|v| v as i32),
             active_minutes: metric.active_minutes,
             flights_climbed: metric.flights_climbed,
@@ -326,22 +345,29 @@ impl From<crate::models::health_metrics::ActivityMetric> for ActivityRecord {
 }
 
 impl WorkoutRecord {
-    pub fn from_workout_with_raw(workout: crate::models::health_metrics::WorkoutData, raw_json: serde_json::Value) -> Self {
+    pub fn from_workout_with_raw(
+        workout: crate::models::health_metrics::WorkoutData,
+        raw_json: serde_json::Value,
+    ) -> Self {
         let duration_seconds = Some(workout.duration_seconds() as i32);
         let route_geometry = workout.route_to_linestring();
-        
+
         WorkoutRecord {
             id: Uuid::new_v4(),
             user_id: Uuid::nil(), // Will be set by caller
             workout_type: workout.workout_type,
             started_at: workout.start_time,
             ended_at: workout.end_time,
-            distance_meters: workout.distance_meters.map(|v| sqlx::types::BigDecimal::from(v)),
+            distance_meters: workout
+                .distance_meters
+                .map(|v| sqlx::types::BigDecimal::from_str(&v.to_string()).unwrap()),
             average_heart_rate: workout.avg_heart_rate.map(|v| v as i32),
             max_heart_rate: workout.max_heart_rate.map(|v| v as i32),
-            total_energy_kcal: workout.total_energy_kcal.map(|v| sqlx::types::BigDecimal::from_str(&v.to_string()).unwrap()),
-            active_energy_kcal: None,  // Not provided by API model
-            step_count: None,  // Not provided by API model
+            total_energy_kcal: workout
+                .total_energy_kcal
+                .map(|v| sqlx::types::BigDecimal::from_str(&v.to_string()).unwrap()),
+            active_energy_kcal: None, // Not provided by API model
+            step_count: None,         // Not provided by API model
             duration_seconds,
             route_geometry,
             source_device: workout.source,
@@ -352,20 +378,29 @@ impl WorkoutRecord {
     }
 
     /// Convert route points to detailed route point records
-    pub fn route_points(&self, workout_data: &crate::models::health_metrics::WorkoutData) -> Vec<WorkoutRoutePoint> {
+    pub fn route_points(
+        &self,
+        workout_data: &crate::models::health_metrics::WorkoutData,
+    ) -> Vec<WorkoutRoutePoint> {
         if let Some(route_points) = &workout_data.route_points {
-            route_points.iter().enumerate().map(|(i, point)| {
-                WorkoutRoutePoint {
-                    id: 0, // Will be set by database
-                    workout_id: self.id,
-                    point_order: i as i32,
-                    latitude: point.latitude,
-                    longitude: point.longitude,
-                    altitude_meters: point.altitude_meters.map(|v| sqlx::types::BigDecimal::from_str(&v.to_string()).unwrap()),
-                    recorded_at: point.recorded_at,
-                    created_at: Utc::now(),
-                }
-            }).collect()
+            route_points
+                .iter()
+                .enumerate()
+                .map(|(i, point)| {
+                    WorkoutRoutePoint {
+                        id: 0, // Will be set by database
+                        workout_id: self.id,
+                        point_order: i as i32,
+                        latitude: point.latitude,
+                        longitude: point.longitude,
+                        altitude_meters: point
+                            .altitude_meters
+                            .map(|v| sqlx::types::BigDecimal::from_str(&v.to_string()).unwrap()),
+                        recorded_at: point.recorded_at,
+                        created_at: Utc::now(),
+                    }
+                })
+                .collect()
         } else {
             Vec::new()
         }
@@ -376,19 +411,23 @@ impl From<crate::models::health_metrics::WorkoutData> for WorkoutRecord {
     fn from(workout: crate::models::health_metrics::WorkoutData) -> Self {
         let duration_seconds = Some(workout.duration_seconds() as i32);
         let route_geometry = workout.route_to_linestring();
-        
+
         WorkoutRecord {
             id: Uuid::new_v4(),
             user_id: Uuid::nil(), // Will be set by caller
             workout_type: workout.workout_type,
             started_at: workout.start_time,
             ended_at: workout.end_time,
-            distance_meters: workout.distance_meters.map(|v| sqlx::types::BigDecimal::from(v)),
+            distance_meters: workout
+                .distance_meters
+                .map(|v| sqlx::types::BigDecimal::from_str(&v.to_string()).unwrap()),
             average_heart_rate: workout.avg_heart_rate.map(|v| v as i32),
             max_heart_rate: workout.max_heart_rate.map(|v| v as i32),
-            total_energy_kcal: workout.total_energy_kcal.map(|v| sqlx::types::BigDecimal::from_str(&v.to_string()).unwrap()),
-            active_energy_kcal: None,  // Not provided by API model
-            step_count: None,  // Not provided by API model
+            total_energy_kcal: workout
+                .total_energy_kcal
+                .map(|v| sqlx::types::BigDecimal::from_str(&v.to_string()).unwrap()),
+            active_energy_kcal: None, // Not provided by API model
+            step_count: None,         // Not provided by API model
             duration_seconds,
             route_geometry,
             source_device: workout.source,

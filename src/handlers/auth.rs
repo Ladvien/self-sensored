@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::middleware::auth::AuthContext;
+use crate::services::auth::AuthContext;
 use crate::services::auth::AuthService;
 
 #[derive(Debug, Deserialize)]
@@ -75,10 +75,12 @@ pub async fn create_api_key(
     auth_service: web::Data<AuthService>,
 ) -> Result<HttpResponse> {
     // Extract client information for audit logging
-    let client_ip = req.connection_info()
+    let client_ip = req
+        .connection_info()
         .peer_addr()
         .and_then(|ip| ip.parse().ok());
-    let user_agent = req.headers()
+    let user_agent = req
+        .headers()
         .get("user-agent")
         .and_then(|h| h.to_str().ok());
 
@@ -118,7 +120,11 @@ pub async fn create_api_key(
                 success: false,
                 api_key: None,
                 key_info: None,
-                error: Some(format!("Invalid scope '{}'. Valid scopes: {}", scope, valid_scopes.join(", "))),
+                error: Some(format!(
+                    "Invalid scope '{}'. Valid scopes: {}",
+                    scope,
+                    valid_scopes.join(", ")
+                )),
             }));
         }
     }
@@ -135,27 +141,33 @@ pub async fn create_api_key(
         }
     }
 
-    match auth_service.create_api_key(
-        auth_context.user.id,
-        &request.name,
-        request.expires_at,
-        request.scopes.clone(),
-    ).await {
+    match auth_service
+        .create_api_key(
+            auth_context.user.id,
+            &request.name,
+            request.expires_at,
+            request.scopes.clone(),
+        )
+        .await
+    {
         Ok((plain_key, api_key)) => {
             // Log API key creation
-            auth_service.log_audit_event(
-                Some(auth_context.user.id),
-                Some(api_key.id),
-                "api_key_created",
-                Some("create_endpoint"),
-                client_ip,
-                user_agent,
-                Some(serde_json::json!({
-                    "key_name": api_key.name,
-                    "scopes": api_key.scopes,
-                    "expires_at": api_key.expires_at
-                })),
-            ).await.ok(); // Don't fail the request if audit logging fails
+            auth_service
+                .log_audit_event(
+                    Some(auth_context.user.id),
+                    Some(api_key.id),
+                    "api_key_created",
+                    Some("create_endpoint"),
+                    client_ip,
+                    user_agent,
+                    Some(serde_json::json!({
+                        "key_name": api_key.name,
+                        "scopes": api_key.scopes,
+                        "expires_at": api_key.expires_at
+                    })),
+                )
+                .await
+                .ok(); // Don't fail the request if audit logging fails
 
             Ok(HttpResponse::Created().json(CreateApiKeyResponse {
                 success: true,
@@ -173,28 +185,33 @@ pub async fn create_api_key(
         }
         Err(e) => {
             tracing::error!("Failed to create API key: {}", e);
-            
-            // Log failed attempt
-            auth_service.log_audit_event(
-                Some(auth_context.user.id),
-                None,
-                "api_key_creation_failed",
-                Some("create_endpoint"),
-                client_ip,
-                user_agent,
-                Some(serde_json::json!({
-                    "error": e.to_string(),
-                    "requested_name": request.name,
-                    "requested_scopes": request.scopes
-                })),
-            ).await.ok();
 
-            Ok(HttpResponse::InternalServerError().json(CreateApiKeyResponse {
-                success: false,
-                api_key: None,
-                key_info: None,
-                error: Some("Failed to create API key".to_string()),
-            }))
+            // Log failed attempt
+            auth_service
+                .log_audit_event(
+                    Some(auth_context.user.id),
+                    None,
+                    "api_key_creation_failed",
+                    Some("create_endpoint"),
+                    client_ip,
+                    user_agent,
+                    Some(serde_json::json!({
+                        "error": e.to_string(),
+                        "requested_name": request.name,
+                        "requested_scopes": request.scopes
+                    })),
+                )
+                .await
+                .ok();
+
+            Ok(
+                HttpResponse::InternalServerError().json(CreateApiKeyResponse {
+                    success: false,
+                    api_key: None,
+                    key_info: None,
+                    error: Some("Failed to create API key".to_string()),
+                }),
+            )
         }
     }
 }
@@ -226,12 +243,18 @@ pub async fn list_api_keys(
             }))
         }
         Err(e) => {
-            tracing::error!("Failed to list API keys for user {}: {}", auth_context.user.id, e);
-            Ok(HttpResponse::InternalServerError().json(ListApiKeysResponse {
-                success: false,
-                api_keys: vec![],
-                error: Some("Failed to retrieve API keys".to_string()),
-            }))
+            tracing::error!(
+                "Failed to list API keys for user {}: {}",
+                auth_context.user.id,
+                e
+            );
+            Ok(
+                HttpResponse::InternalServerError().json(ListApiKeysResponse {
+                    success: false,
+                    api_keys: vec![],
+                    error: Some("Failed to retrieve API keys".to_string()),
+                }),
+            )
         }
     }
 }
@@ -245,28 +268,40 @@ pub async fn revoke_api_key(
     auth_service: web::Data<AuthService>,
 ) -> Result<HttpResponse> {
     // Extract client information for audit logging
-    let client_ip = req.connection_info()
+    let client_ip = req
+        .connection_info()
         .peer_addr()
         .and_then(|ip| ip.parse().ok());
-    let user_agent = req.headers()
+    let user_agent = req
+        .headers()
         .get("user-agent")
         .and_then(|h| h.to_str().ok());
 
-    match auth_service.revoke_api_key(request.api_key_id, auth_context.user.id).await {
+    match auth_service
+        .revoke_api_key(request.api_key_id, auth_context.user.id)
+        .await
+    {
         Ok(revoked) => {
             // Log revocation attempt
-            auth_service.log_audit_event(
-                Some(auth_context.user.id),
-                Some(request.api_key_id),
-                if revoked { "api_key_revoked" } else { "api_key_revoke_failed" },
-                Some("revoke_endpoint"),
-                client_ip,
-                user_agent,
-                Some(serde_json::json!({
-                    "revoked": revoked,
-                    "reason": if revoked { "user_requested" } else { "key_not_found" }
-                })),
-            ).await.ok();
+            auth_service
+                .log_audit_event(
+                    Some(auth_context.user.id),
+                    Some(request.api_key_id),
+                    if revoked {
+                        "api_key_revoked"
+                    } else {
+                        "api_key_revoke_failed"
+                    },
+                    Some("revoke_endpoint"),
+                    client_ip,
+                    user_agent,
+                    Some(serde_json::json!({
+                        "revoked": revoked,
+                        "reason": if revoked { "user_requested" } else { "key_not_found" }
+                    })),
+                )
+                .await
+                .ok();
 
             if revoked {
                 Ok(HttpResponse::Ok().json(RevokeApiKeyResponse {
@@ -284,25 +319,30 @@ pub async fn revoke_api_key(
         }
         Err(e) => {
             tracing::error!("Failed to revoke API key {}: {}", request.api_key_id, e);
-            
-            // Log error
-            auth_service.log_audit_event(
-                Some(auth_context.user.id),
-                Some(request.api_key_id),
-                "api_key_revoke_error",
-                Some("revoke_endpoint"),
-                client_ip,
-                user_agent,
-                Some(serde_json::json!({
-                    "error": e.to_string()
-                })),
-            ).await.ok();
 
-            Ok(HttpResponse::InternalServerError().json(RevokeApiKeyResponse {
-                success: false,
-                revoked: false,
-                error: Some("Failed to revoke API key".to_string()),
-            }))
+            // Log error
+            auth_service
+                .log_audit_event(
+                    Some(auth_context.user.id),
+                    Some(request.api_key_id),
+                    "api_key_revoke_error",
+                    Some("revoke_endpoint"),
+                    client_ip,
+                    user_agent,
+                    Some(serde_json::json!({
+                        "error": e.to_string()
+                    })),
+                )
+                .await
+                .ok();
+
+            Ok(
+                HttpResponse::InternalServerError().json(RevokeApiKeyResponse {
+                    success: false,
+                    revoked: false,
+                    error: Some("Failed to revoke API key".to_string()),
+                }),
+            )
         }
     }
 }
@@ -324,36 +364,37 @@ pub async fn get_rate_limit_status(
         }));
     }
 
-    match auth_service.get_rate_limit_status(auth_context.api_key.id).await {
-        Ok(Some(rate_limit_info)) => {
-            Ok(HttpResponse::Ok().json(RateLimitStatusResponse {
-                success: true,
-                rate_limit_enabled: true,
-                status: Some(RateLimitStatus {
-                    requests_remaining: rate_limit_info.requests_remaining,
-                    requests_limit: rate_limit_info.requests_limit,
-                    reset_time: rate_limit_info.reset_time,
-                    retry_after: rate_limit_info.retry_after,
-                }),
-                error: None,
-            }))
-        }
-        Ok(None) => {
-            Ok(HttpResponse::Ok().json(RateLimitStatusResponse {
-                success: true,
-                rate_limit_enabled: false,
-                status: None,
-                error: None,
-            }))
-        }
+    match auth_service
+        .get_rate_limit_status(auth_context.api_key.id)
+        .await
+    {
+        Ok(Some(rate_limit_info)) => Ok(HttpResponse::Ok().json(RateLimitStatusResponse {
+            success: true,
+            rate_limit_enabled: true,
+            status: Some(RateLimitStatus {
+                requests_remaining: rate_limit_info.requests_remaining,
+                requests_limit: rate_limit_info.requests_limit,
+                reset_time: rate_limit_info.reset_time,
+                retry_after: rate_limit_info.retry_after,
+            }),
+            error: None,
+        })),
+        Ok(None) => Ok(HttpResponse::Ok().json(RateLimitStatusResponse {
+            success: true,
+            rate_limit_enabled: false,
+            status: None,
+            error: None,
+        })),
         Err(e) => {
             tracing::error!("Failed to get rate limit status: {}", e);
-            Ok(HttpResponse::InternalServerError().json(RateLimitStatusResponse {
-                success: false,
-                rate_limit_enabled,
-                status: None,
-                error: Some("Failed to retrieve rate limit status".to_string()),
-            }))
+            Ok(
+                HttpResponse::InternalServerError().json(RateLimitStatusResponse {
+                    success: false,
+                    rate_limit_enabled,
+                    status: None,
+                    error: Some("Failed to retrieve rate limit status".to_string()),
+                }),
+            )
         }
     }
 }
@@ -365,6 +406,6 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
             .route("/keys", web::post().to(create_api_key))
             .route("/keys", web::get().to(list_api_keys))
             .route("/keys", web::delete().to(revoke_api_key))
-            .route("/rate-limit", web::get().to(get_rate_limit_status))
+            .route("/rate-limit", web::get().to(get_rate_limit_status)),
     );
 }

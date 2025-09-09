@@ -1,12 +1,12 @@
 use actix_web::{web, HttpResponse, Result};
-use chrono::{DateTime, NaiveDate, Utc};
+use bigdecimal::ToPrimitive;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
-use std::collections::HashMap;
-use tracing::{error, info, instrument, warn};
+use tracing::{error, info, instrument};
 use uuid::Uuid;
 
-use crate::models::{ApiResponse, db::*};
+use crate::models::{db::*, ApiResponse};
 use crate::services::auth::AuthContext;
 
 /// Query parameters for filtering health data
@@ -14,7 +14,7 @@ use crate::services::auth::AuthContext;
 pub struct QueryParams {
     /// Start date for filtering (ISO 8601 format)
     pub start_date: Option<DateTime<Utc>>,
-    /// End date for filtering (ISO 8601 format) 
+    /// End date for filtering (ISO 8601 format)
     pub end_date: Option<DateTime<Utc>>,
     /// Specific metric types to include
     pub metric_types: Option<String>, // comma-separated list
@@ -27,7 +27,7 @@ pub struct QueryParams {
 }
 
 /// Response structure for paginated query results
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct QueryResponse<T> {
     pub data: Vec<T>,
     pub pagination: PaginationInfo,
@@ -35,7 +35,7 @@ pub struct QueryResponse<T> {
 }
 
 /// Pagination metadata
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PaginationInfo {
     pub page: u32,
     pub limit: u32,
@@ -44,7 +44,7 @@ pub struct PaginationInfo {
 }
 
 /// Summary statistics for health metrics
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HealthSummary {
     pub user_id: Uuid,
     pub date_range: DateRange,
@@ -55,13 +55,13 @@ pub struct HealthSummary {
     pub workouts: Option<WorkoutSummary>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DateRange {
     pub start_date: DateTime<Utc>,
     pub end_date: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HeartRateSummary {
     pub count: i64,
     pub avg_resting: Option<f32>,
@@ -70,7 +70,7 @@ pub struct HeartRateSummary {
     pub max_bpm: Option<i16>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BloodPressureSummary {
     pub count: i64,
     pub avg_systolic: Option<f32>,
@@ -78,7 +78,7 @@ pub struct BloodPressureSummary {
     pub latest_reading: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SleepSummary {
     pub count: i64,
     pub avg_duration_hours: Option<f32>,
@@ -86,7 +86,7 @@ pub struct SleepSummary {
     pub total_sleep_time: Option<i32>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ActivitySummary {
     pub count: i64,
     pub total_steps: Option<i64>,
@@ -95,7 +95,7 @@ pub struct ActivitySummary {
     pub avg_daily_steps: Option<f32>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct WorkoutSummary {
     pub count: i64,
     pub total_duration_hours: Option<f32>,
@@ -126,7 +126,7 @@ pub async fn get_heart_rate_data(
         WHERE user_id = $1
         "#
     );
-    
+
     let mut param_count = 2;
     if params.start_date.is_some() {
         query.push_str(&format!(" AND recorded_at >= ${}", param_count));
@@ -136,19 +136,23 @@ pub async fn get_heart_rate_data(
         query.push_str(&format!(" AND recorded_at <= ${}", param_count));
         param_count += 1;
     }
-    
-    query.push_str(&format!(" ORDER BY recorded_at {} LIMIT ${} OFFSET ${}", 
-        sort_order, param_count, param_count + 1));
+
+    query.push_str(&format!(
+        " ORDER BY recorded_at {} LIMIT ${} OFFSET ${}",
+        sort_order,
+        param_count,
+        param_count + 1
+    ));
 
     let mut db_query = sqlx::query_as::<_, HeartRateRecord>(&query).bind(auth.user.id);
-    
+
     if let Some(start_date) = params.start_date {
         db_query = db_query.bind(start_date);
     }
     if let Some(end_date) = params.end_date {
         db_query = db_query.bind(end_date);
     }
-    
+
     db_query = db_query.bind(limit as i64).bind(offset as i64);
 
     match db_query.fetch_all(pool.get_ref()).await {
@@ -156,7 +160,7 @@ pub async fn get_heart_rate_data(
             // Get total count for pagination
             let count_result = get_heart_rate_count(&pool, auth.user.id, &params).await;
             let total_count = count_result.unwrap_or(0);
-            
+
             let pagination = PaginationInfo {
                 page,
                 limit,
@@ -185,9 +189,11 @@ pub async fn get_heart_rate_data(
                 error = %e,
                 "Failed to retrieve heart rate data"
             );
-            Ok(HttpResponse::InternalServerError().json(
-                ApiResponse::<()>::error("Failed to retrieve heart rate data".to_string())
-            ))
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to retrieve heart rate data".to_string(),
+                )),
+            )
         }
     }
 }
@@ -214,7 +220,7 @@ pub async fn get_blood_pressure_data(
         WHERE user_id = $1
         "#
     );
-    
+
     let mut param_count = 2;
     if params.start_date.is_some() {
         query.push_str(&format!(" AND recorded_at >= ${}", param_count));
@@ -224,26 +230,30 @@ pub async fn get_blood_pressure_data(
         query.push_str(&format!(" AND recorded_at <= ${}", param_count));
         param_count += 1;
     }
-    
-    query.push_str(&format!(" ORDER BY recorded_at {} LIMIT ${} OFFSET ${}", 
-        sort_order, param_count, param_count + 1));
+
+    query.push_str(&format!(
+        " ORDER BY recorded_at {} LIMIT ${} OFFSET ${}",
+        sort_order,
+        param_count,
+        param_count + 1
+    ));
 
     let mut db_query = sqlx::query_as::<_, BloodPressureRecord>(&query).bind(auth.user.id);
-    
+
     if let Some(start_date) = params.start_date {
         db_query = db_query.bind(start_date);
     }
     if let Some(end_date) = params.end_date {
         db_query = db_query.bind(end_date);
     }
-    
+
     db_query = db_query.bind(limit as i64).bind(offset as i64);
 
     match db_query.fetch_all(pool.get_ref()).await {
         Ok(records) => {
             let count_result = get_blood_pressure_count(&pool, auth.user.id, &params).await;
             let total_count = count_result.unwrap_or(0);
-            
+
             let pagination = PaginationInfo {
                 page,
                 limit,
@@ -272,9 +282,11 @@ pub async fn get_blood_pressure_data(
                 error = %e,
                 "Failed to retrieve blood pressure data"
             );
-            Ok(HttpResponse::InternalServerError().json(
-                ApiResponse::<()>::error("Failed to retrieve blood pressure data".to_string())
-            ))
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to retrieve blood pressure data".to_string(),
+                )),
+            )
         }
     }
 }
@@ -290,7 +302,7 @@ pub async fn get_sleep_data(
     let limit = params.limit.unwrap_or(100).min(1000);
     let offset = (page - 1) * limit;
     let sort_order = match params.sort.as_deref() {
-        Some("asc") => "ASC", 
+        Some("asc") => "ASC",
         _ => "DESC",
     };
 
@@ -303,7 +315,7 @@ pub async fn get_sleep_data(
         WHERE user_id = $1
         "#
     );
-    
+
     let mut param_count = 2;
     if params.start_date.is_some() {
         query.push_str(&format!(" AND sleep_start >= ${}", param_count));
@@ -313,26 +325,30 @@ pub async fn get_sleep_data(
         query.push_str(&format!(" AND sleep_end <= ${}", param_count));
         param_count += 1;
     }
-    
-    query.push_str(&format!(" ORDER BY sleep_start {} LIMIT ${} OFFSET ${}", 
-        sort_order, param_count, param_count + 1));
+
+    query.push_str(&format!(
+        " ORDER BY sleep_start {} LIMIT ${} OFFSET ${}",
+        sort_order,
+        param_count,
+        param_count + 1
+    ));
 
     let mut db_query = sqlx::query_as::<_, SleepRecord>(&query).bind(auth.user.id);
-    
+
     if let Some(start_date) = params.start_date {
         db_query = db_query.bind(start_date);
     }
     if let Some(end_date) = params.end_date {
         db_query = db_query.bind(end_date);
     }
-    
+
     db_query = db_query.bind(limit as i64).bind(offset as i64);
 
     match db_query.fetch_all(pool.get_ref()).await {
         Ok(records) => {
             let count_result = get_sleep_count(&pool, auth.user.id, &params).await;
             let total_count = count_result.unwrap_or(0);
-            
+
             let pagination = PaginationInfo {
                 page,
                 limit,
@@ -361,9 +377,11 @@ pub async fn get_sleep_data(
                 error = %e,
                 "Failed to retrieve sleep data"
             );
-            Ok(HttpResponse::InternalServerError().json(
-                ApiResponse::<()>::error("Failed to retrieve sleep data".to_string())
-            ))
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to retrieve sleep data".to_string(),
+                )),
+            )
         }
     }
 }
@@ -391,7 +409,7 @@ pub async fn get_activity_data(
         WHERE user_id = $1
         "#
     );
-    
+
     let mut param_count = 2;
     if params.start_date.is_some() {
         query.push_str(&format!(" AND recorded_date >= ${}", param_count));
@@ -401,26 +419,30 @@ pub async fn get_activity_data(
         query.push_str(&format!(" AND recorded_date <= ${}", param_count));
         param_count += 1;
     }
-    
-    query.push_str(&format!(" ORDER BY recorded_date {} LIMIT ${} OFFSET ${}", 
-        sort_order, param_count, param_count + 1));
+
+    query.push_str(&format!(
+        " ORDER BY recorded_date {} LIMIT ${} OFFSET ${}",
+        sort_order,
+        param_count,
+        param_count + 1
+    ));
 
     let mut db_query = sqlx::query_as::<_, ActivityRecord>(&query).bind(auth.user.id);
-    
+
     if let Some(start_date) = params.start_date {
         db_query = db_query.bind(start_date.date_naive());
     }
     if let Some(end_date) = params.end_date {
         db_query = db_query.bind(end_date.date_naive());
     }
-    
+
     db_query = db_query.bind(limit as i64).bind(offset as i64);
 
     match db_query.fetch_all(pool.get_ref()).await {
         Ok(records) => {
             let count_result = get_activity_count(&pool, auth.user.id, &params).await;
             let total_count = count_result.unwrap_or(0);
-            
+
             let pagination = PaginationInfo {
                 page,
                 limit,
@@ -449,9 +471,11 @@ pub async fn get_activity_data(
                 error = %e,
                 "Failed to retrieve activity data"
             );
-            Ok(HttpResponse::InternalServerError().json(
-                ApiResponse::<()>::error("Failed to retrieve activity data".to_string())
-            ))
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to retrieve activity data".to_string(),
+                )),
+            )
         }
     }
 }
@@ -480,7 +504,7 @@ pub async fn get_workout_data(
         WHERE user_id = $1
         "#
     );
-    
+
     let mut param_count = 2;
     if params.start_date.is_some() {
         query.push_str(&format!(" AND started_at >= ${}", param_count));
@@ -490,26 +514,30 @@ pub async fn get_workout_data(
         query.push_str(&format!(" AND ended_at <= ${}", param_count));
         param_count += 1;
     }
-    
-    query.push_str(&format!(" ORDER BY started_at {} LIMIT ${} OFFSET ${}", 
-        sort_order, param_count, param_count + 1));
+
+    query.push_str(&format!(
+        " ORDER BY started_at {} LIMIT ${} OFFSET ${}",
+        sort_order,
+        param_count,
+        param_count + 1
+    ));
 
     let mut db_query = sqlx::query_as::<_, WorkoutRecord>(&query).bind(auth.user.id);
-    
+
     if let Some(start_date) = params.start_date {
         db_query = db_query.bind(start_date);
     }
     if let Some(end_date) = params.end_date {
         db_query = db_query.bind(end_date);
     }
-    
+
     db_query = db_query.bind(limit as i64).bind(offset as i64);
 
     match db_query.fetch_all(pool.get_ref()).await {
         Ok(records) => {
             let count_result = get_workout_count(&pool, auth.user.id, &params).await;
             let total_count = count_result.unwrap_or(0);
-            
+
             let pagination = PaginationInfo {
                 page,
                 limit,
@@ -538,9 +566,11 @@ pub async fn get_workout_data(
                 error = %e,
                 "Failed to retrieve workout data"
             );
-            Ok(HttpResponse::InternalServerError().json(
-                ApiResponse::<()>::error("Failed to retrieve workout data".to_string())
-            ))
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to retrieve workout data".to_string(),
+                )),
+            )
         }
     }
 }
@@ -557,10 +587,14 @@ pub async fn get_health_summary(
     });
     let end_date = params.end_date.unwrap_or_else(|| Utc::now());
 
-    let date_range = DateRange { start_date, end_date };
+    let date_range = DateRange {
+        start_date,
+        end_date,
+    };
 
     // Fetch all summary data in parallel
-    let heart_rate_summary = get_heart_rate_summary(&pool, auth.user.id, start_date, end_date).await;
+    let heart_rate_summary =
+        get_heart_rate_summary(&pool, auth.user.id, start_date, end_date).await;
     let bp_summary = get_blood_pressure_summary(&pool, auth.user.id, start_date, end_date).await;
     let sleep_summary = get_sleep_summary(&pool, auth.user.id, start_date, end_date).await;
     let activity_summary = get_activity_summary(&pool, auth.user.id, start_date, end_date).await;
@@ -588,13 +622,13 @@ pub async fn get_health_summary(
 
 // Helper functions for counting records
 async fn get_heart_rate_count(
-    pool: &PgPool, 
-    user_id: Uuid, 
-    params: &QueryParams
+    pool: &PgPool,
+    user_id: Uuid,
+    params: &QueryParams,
 ) -> Result<i64, sqlx::Error> {
     let mut query = "SELECT COUNT(*) FROM heart_rate_metrics WHERE user_id = $1".to_string();
     let mut param_count = 2;
-    
+
     if params.start_date.is_some() {
         query.push_str(&format!(" AND recorded_at >= ${}", param_count));
         param_count += 1;
@@ -615,13 +649,13 @@ async fn get_heart_rate_count(
 }
 
 async fn get_blood_pressure_count(
-    pool: &PgPool, 
-    user_id: Uuid, 
-    params: &QueryParams
+    pool: &PgPool,
+    user_id: Uuid,
+    params: &QueryParams,
 ) -> Result<i64, sqlx::Error> {
     let mut query = "SELECT COUNT(*) FROM blood_pressure_metrics WHERE user_id = $1".to_string();
     let mut param_count = 2;
-    
+
     if params.start_date.is_some() {
         query.push_str(&format!(" AND recorded_at >= ${}", param_count));
         param_count += 1;
@@ -642,13 +676,13 @@ async fn get_blood_pressure_count(
 }
 
 async fn get_sleep_count(
-    pool: &PgPool, 
-    user_id: Uuid, 
-    params: &QueryParams
+    pool: &PgPool,
+    user_id: Uuid,
+    params: &QueryParams,
 ) -> Result<i64, sqlx::Error> {
     let mut query = "SELECT COUNT(*) FROM sleep_metrics WHERE user_id = $1".to_string();
     let mut param_count = 2;
-    
+
     if params.start_date.is_some() {
         query.push_str(&format!(" AND sleep_start >= ${}", param_count));
         param_count += 1;
@@ -669,13 +703,13 @@ async fn get_sleep_count(
 }
 
 async fn get_activity_count(
-    pool: &PgPool, 
-    user_id: Uuid, 
-    params: &QueryParams
+    pool: &PgPool,
+    user_id: Uuid,
+    params: &QueryParams,
 ) -> Result<i64, sqlx::Error> {
     let mut query = "SELECT COUNT(*) FROM activity_metrics WHERE user_id = $1".to_string();
     let mut param_count = 2;
-    
+
     if params.start_date.is_some() {
         query.push_str(&format!(" AND recorded_date >= ${}", param_count));
         param_count += 1;
@@ -696,13 +730,13 @@ async fn get_activity_count(
 }
 
 async fn get_workout_count(
-    pool: &PgPool, 
-    user_id: Uuid, 
-    params: &QueryParams
+    pool: &PgPool,
+    user_id: Uuid,
+    params: &QueryParams,
 ) -> Result<i64, sqlx::Error> {
     let mut query = "SELECT COUNT(*) FROM workouts WHERE user_id = $1".to_string();
     let mut param_count = 2;
-    
+
     if params.start_date.is_some() {
         query.push_str(&format!(" AND started_at >= ${}", param_count));
         param_count += 1;
@@ -723,7 +757,7 @@ async fn get_workout_count(
 }
 
 // Helper functions for summary statistics
-async fn get_heart_rate_summary(
+pub async fn get_heart_rate_summary(
     pool: &PgPool,
     user_id: Uuid,
     start_date: DateTime<Utc>,
@@ -749,14 +783,22 @@ async fn get_heart_rate_summary(
 
     Ok(HeartRateSummary {
         count: result.count.unwrap_or(0),
-        avg_resting: result.avg_resting.map(|v| v as f32),
-        avg_active: result.avg_active.map(|v| v as f32),
-        min_bpm: if result.min_bpm.unwrap_or(999) == 999 { None } else { result.min_bpm },
-        max_bpm: if result.max_bpm.unwrap_or(0) == 0 { None } else { result.max_bpm },
+        avg_resting: result.avg_resting.and_then(|v| v.to_f32()),
+        avg_active: result.avg_active.and_then(|v| v.to_f32()),
+        min_bpm: if result.min_bpm.unwrap_or(999) == 999 {
+            None
+        } else {
+            result.min_bpm.map(|v| v as i16)
+        },
+        max_bpm: if result.max_bpm.unwrap_or(0) == 0 {
+            None
+        } else {
+            result.max_bpm.map(|v| v as i16)
+        },
     })
 }
 
-async fn get_blood_pressure_summary(
+pub async fn get_blood_pressure_summary(
     pool: &PgPool,
     user_id: Uuid,
     start_date: DateTime<Utc>,
@@ -781,13 +823,13 @@ async fn get_blood_pressure_summary(
 
     Ok(BloodPressureSummary {
         count: result.count.unwrap_or(0),
-        avg_systolic: result.avg_systolic.map(|v| v as f32),
-        avg_diastolic: result.avg_diastolic.map(|v| v as f32),
+        avg_systolic: result.avg_systolic.and_then(|v| v.to_f32()),
+        avg_diastolic: result.avg_diastolic.and_then(|v| v.to_f32()),
         latest_reading: result.latest_reading,
     })
 }
 
-async fn get_sleep_summary(
+pub async fn get_sleep_summary(
     pool: &PgPool,
     user_id: Uuid,
     start_date: DateTime<Utc>,
@@ -813,12 +855,12 @@ async fn get_sleep_summary(
     Ok(SleepSummary {
         count: result.count.unwrap_or(0),
         avg_duration_hours: result.avg_duration_hours.map(|v| v as f32),
-        avg_efficiency: result.avg_efficiency,
+        avg_efficiency: result.avg_efficiency.and_then(|v| v.to_f32()),
         total_sleep_time: result.total_sleep_time.map(|v| v as i32),
     })
 }
 
-async fn get_activity_summary(
+pub async fn get_activity_summary(
     pool: &PgPool,
     user_id: Uuid,
     start_date: DateTime<Utc>,
@@ -845,13 +887,16 @@ async fn get_activity_summary(
     Ok(ActivitySummary {
         count: result.count.unwrap_or(0),
         total_steps: result.total_steps,
-        total_distance_km: result.total_distance_meters.map(|v| v / 1000.0),
-        total_calories: result.total_calories,
-        avg_daily_steps: result.avg_daily_steps.map(|v| v as f32),
+        total_distance_km: result
+            .total_distance_meters
+            .and_then(|v| v.to_f64())
+            .map(|v| v / 1000.0),
+        total_calories: result.total_calories.map(|v| v as f64),
+        avg_daily_steps: result.avg_daily_steps.and_then(|v| v.to_f32()),
     })
 }
 
-async fn get_workout_summary(
+pub async fn get_workout_summary(
     pool: &PgPool,
     user_id: Uuid,
     start_date: DateTime<Utc>,
@@ -876,8 +921,8 @@ async fn get_workout_summary(
 
     Ok(WorkoutSummary {
         count: result.count.unwrap_or(0),
-        total_duration_hours: result.total_duration_hours.map(|v| v as f32),
-        total_calories: result.total_calories,
+        total_duration_hours: result.total_duration_hours.and_then(|v| v.to_f32()),
+        total_calories: result.total_calories.and_then(|v| v.to_f64()),
         workout_types: result.workout_types.unwrap_or_default(),
     })
 }

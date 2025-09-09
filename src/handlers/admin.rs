@@ -1,10 +1,9 @@
 use actix_web::{web, HttpResponse, Result};
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn, Level};
-use uuid::Uuid;
 
-use crate::services::auth::AuthContext;
 use crate::middleware::get_request_id;
+use crate::services::auth::AuthContext;
 
 /// Request to change log level at runtime
 #[derive(Deserialize)]
@@ -24,12 +23,9 @@ pub struct LogLevelResponse {
 }
 
 /// Get current log level configuration
-pub async fn get_log_level(
-    auth: AuthContext,
-    req: actix_web::HttpRequest,
-) -> Result<HttpResponse> {
+pub async fn get_log_level(auth: AuthContext, req: actix_web::HttpRequest) -> Result<HttpResponse> {
     let request_id = get_request_id(&req);
-    
+
     info!(
         event = "admin_log_level_check",
         user_id = %auth.user.id,
@@ -57,11 +53,11 @@ pub async fn set_log_level(
     payload: web::Json<LogLevelRequest>,
 ) -> Result<HttpResponse> {
     let request_id = get_request_id(&req);
-    
+
     // Validate log level
     let new_level = match payload.level.to_lowercase().as_str() {
         "trace" => Level::TRACE,
-        "debug" => Level::DEBUG, 
+        "debug" => Level::DEBUG,
         "info" => Level::INFO,
         "warn" | "warning" => Level::WARN,
         "error" => Level::ERROR,
@@ -73,10 +69,13 @@ pub async fn set_log_level(
                 request_id = request_id.map(|id| id.to_string()).as_deref(),
                 message = "Invalid log level requested"
             );
-            
+
             return Ok(HttpResponse::BadRequest().json(LogLevelResponse {
                 success: false,
-                message: format!("Invalid log level '{}'. Valid levels: trace, debug, info, warn, error", payload.level),
+                message: format!(
+                    "Invalid log level '{}'. Valid levels: trace, debug, info, warn, error",
+                    payload.level
+                ),
                 current_level: "info".to_string(), // This should be actual current level
                 previous_level: None,
                 timestamp: chrono::Utc::now(),
@@ -96,7 +95,7 @@ pub async fn set_log_level(
     // 1. Store the current level in application state
     // 2. Use tracing-subscriber's reload handle to actually change the level
     // 3. Persist the change if needed
-    
+
     let response = LogLevelResponse {
         success: true,
         message: format!("Log level changed to {} successfully", payload.level),
@@ -106,7 +105,7 @@ pub async fn set_log_level(
     };
 
     info!(
-        event = "log_level_changed_successfully", 
+        event = "log_level_changed_successfully",
         user_id = %auth.user.id,
         new_level = payload.level,
         request_id = request_id.map(|id| id.to_string()).as_deref(),
@@ -134,7 +133,7 @@ pub async fn get_logging_stats(
     req: actix_web::HttpRequest,
 ) -> Result<HttpResponse> {
     let request_id = get_request_id(&req);
-    
+
     info!(
         event = "admin_logging_stats_request",
         user_id = %auth.user.id,
@@ -176,7 +175,7 @@ pub async fn generate_test_logs(
     let request_id = get_request_id(&req);
     let count = payload.count.unwrap_or(5);
     let include_sensitive = payload.include_sensitive.unwrap_or(false);
-    
+
     info!(
         event = "admin_test_logs_requested",
         user_id = %auth.user.id,
@@ -194,7 +193,7 @@ pub async fn generate_test_logs(
                 message = format!("Test trace log message #{}", i)
             ),
             "debug" => tracing::debug!(
-                event = "test_debug_log", 
+                event = "test_debug_log",
                 iteration = i,
                 message = format!("Test debug log message #{}", i)
             ),
@@ -205,7 +204,7 @@ pub async fn generate_test_logs(
             ),
             "warn" => tracing::warn!(
                 event = "test_warn_log",
-                iteration = i, 
+                iteration = i,
                 message = format!("Test warning log message #{}", i)
             ),
             "error" => tracing::error!(
@@ -237,10 +236,10 @@ pub async fn generate_test_logs(
         // Add performance measurement
         let timer_context = format!("test_operation_{}", i);
         let timer = crate::middleware::PerformanceTimer::new(&timer_context, request_id);
-        
+
         // Simulate some work
         tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
-        
+
         timer.finish();
     }
 

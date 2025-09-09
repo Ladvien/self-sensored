@@ -1,31 +1,26 @@
-use std::time::Instant;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use std::time::Instant;
 
 use actix_web::{
-    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
-    Error, HttpResponse, Result,
-    http::Method,
     body::{EitherBody, MessageBody},
+    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
+    http::Method,
+    Error, HttpResponse, Result,
 };
 use futures::future::{ok, Ready};
 use futures::Future;
+use once_cell::sync::Lazy;
 use prometheus::{
-    Counter, CounterVec, Gauge, GaugeVec, Histogram, HistogramVec, Registry,
-    Encoder, TextEncoder,
-    register_counter_vec_with_registry,
-    register_gauge_vec_with_registry,
-    register_histogram_vec_with_registry,
-    register_gauge_with_registry,
-    register_counter_with_registry,
+    register_counter_vec_with_registry, register_counter_with_registry,
+    register_gauge_vec_with_registry, register_gauge_with_registry,
+    register_histogram_vec_with_registry, Counter, CounterVec, Encoder, Gauge, GaugeVec, Histogram,
+    HistogramVec, Registry, TextEncoder,
 };
 use tracing::{error, instrument};
-use once_cell::sync::Lazy;
 
 // Global metrics registry
-static METRICS_REGISTRY: Lazy<Registry> = Lazy::new(|| {
-    Registry::new()
-});
+static METRICS_REGISTRY: Lazy<Registry> = Lazy::new(|| Registry::new());
 
 // HTTP request metrics
 static HTTP_REQUESTS_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
@@ -34,7 +29,8 @@ static HTTP_REQUESTS_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
         "Total number of HTTP requests",
         &["method", "endpoint", "status_code"],
         METRICS_REGISTRY.clone()
-    ).expect("Failed to create HTTP requests counter")
+    )
+    .expect("Failed to create HTTP requests counter")
 });
 
 static HTTP_REQUEST_DURATION_SECONDS: Lazy<HistogramVec> = Lazy::new(|| {
@@ -45,7 +41,8 @@ static HTTP_REQUEST_DURATION_SECONDS: Lazy<HistogramVec> = Lazy::new(|| {
         // Buckets optimized for API response times: 1ms to 10s
         vec![0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
         METRICS_REGISTRY.clone()
-    ).expect("Failed to create HTTP request duration histogram")
+    )
+    .expect("Failed to create HTTP request duration histogram")
 });
 
 // Processing pipeline metrics
@@ -54,7 +51,8 @@ static INGEST_REQUESTS_TOTAL: Lazy<Counter> = Lazy::new(|| {
         "health_export_ingest_requests_total",
         "Total number of ingest requests processed",
         METRICS_REGISTRY.clone()
-    ).expect("Failed to create ingest requests counter")
+    )
+    .expect("Failed to create ingest requests counter")
 });
 
 static INGEST_METRICS_PROCESSED_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
@@ -63,10 +61,11 @@ static INGEST_METRICS_PROCESSED_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
         "Total number of health metrics processed",
         &["metric_type", "status"],
         METRICS_REGISTRY.clone()
-    ).expect("Failed to create ingest metrics processed counter")
+    )
+    .expect("Failed to create ingest metrics processed counter")
 });
 
-static INGEST_DURATION_SECONDS: Lazy<Histogram> = Lazy::new(|| {
+static INGEST_DURATION_SECONDS: Lazy<HistogramVec> = Lazy::new(|| {
     register_histogram_vec_with_registry!(
         "health_export_ingest_duration_seconds",
         "Duration of ingest operations in seconds",
@@ -74,7 +73,8 @@ static INGEST_DURATION_SECONDS: Lazy<Histogram> = Lazy::new(|| {
         // Buckets optimized for batch processing: 1ms to 60s
         vec![0.001, 0.01, 0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0],
         METRICS_REGISTRY.clone()
-    ).expect("Failed to create ingest duration histogram")
+    )
+    .expect("Failed to create ingest duration histogram")
 });
 
 static BATCH_PROCESSING_DURATION_SECONDS: Lazy<HistogramVec> = Lazy::new(|| {
@@ -85,7 +85,8 @@ static BATCH_PROCESSING_DURATION_SECONDS: Lazy<HistogramVec> = Lazy::new(|| {
         // Buckets optimized for batch processing: 1ms to 60s
         vec![0.001, 0.01, 0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0],
         METRICS_REGISTRY.clone()
-    ).expect("Failed to create batch processing duration histogram")
+    )
+    .expect("Failed to create batch processing duration histogram")
 });
 
 // Database connection pool metrics
@@ -94,7 +95,8 @@ static DB_CONNECTIONS_ACTIVE: Lazy<Gauge> = Lazy::new(|| {
         "health_export_db_connections_active",
         "Number of active database connections",
         METRICS_REGISTRY.clone()
-    ).expect("Failed to create active database connections gauge")
+    )
+    .expect("Failed to create active database connections gauge")
 });
 
 static DB_CONNECTIONS_IDLE: Lazy<Gauge> = Lazy::new(|| {
@@ -102,10 +104,11 @@ static DB_CONNECTIONS_IDLE: Lazy<Gauge> = Lazy::new(|| {
         "health_export_db_connections_idle",
         "Number of idle database connections",
         METRICS_REGISTRY.clone()
-    ).expect("Failed to create idle database connections gauge")
+    )
+    .expect("Failed to create idle database connections gauge")
 });
 
-static DB_CONNECTION_WAIT_TIME_SECONDS: Lazy<Histogram> = Lazy::new(|| {
+static DB_CONNECTION_WAIT_TIME_SECONDS: Lazy<HistogramVec> = Lazy::new(|| {
     register_histogram_vec_with_registry!(
         "health_export_db_connection_wait_time_seconds",
         "Time waiting to acquire database connection in seconds",
@@ -113,7 +116,8 @@ static DB_CONNECTION_WAIT_TIME_SECONDS: Lazy<Histogram> = Lazy::new(|| {
         // Buckets for connection wait times: 1μs to 10s
         vec![0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10.0],
         METRICS_REGISTRY.clone()
-    ).expect("Failed to create database connection wait time histogram")
+    )
+    .expect("Failed to create database connection wait time histogram")
 });
 
 // Error tracking metrics
@@ -123,7 +127,8 @@ static ERRORS_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
         "Total number of errors by type and endpoint",
         &["error_type", "endpoint", "severity"],
         METRICS_REGISTRY.clone()
-    ).expect("Failed to create errors counter")
+    )
+    .expect("Failed to create errors counter")
 });
 
 // Custom business metrics
@@ -132,7 +137,8 @@ static ACTIVE_USERS_24H: Lazy<Gauge> = Lazy::new(|| {
         "health_export_active_users_24h",
         "Number of active users in the last 24 hours",
         METRICS_REGISTRY.clone()
-    ).expect("Failed to create active users gauge")
+    )
+    .expect("Failed to create active users gauge")
 });
 
 static DATA_VOLUME_BYTES: Lazy<CounterVec> = Lazy::new(|| {
@@ -141,7 +147,8 @@ static DATA_VOLUME_BYTES: Lazy<CounterVec> = Lazy::new(|| {
         "Total volume of data processed in bytes",
         &["data_type", "operation"],
         METRICS_REGISTRY.clone()
-    ).expect("Failed to create data volume counter")
+    )
+    .expect("Failed to create data volume counter")
 });
 
 static HEALTH_METRICS_STORED_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
@@ -150,7 +157,8 @@ static HEALTH_METRICS_STORED_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
         "Total number of health metrics stored by type",
         &["metric_type"],
         METRICS_REGISTRY.clone()
-    ).expect("Failed to create health metrics stored counter")
+    )
+    .expect("Failed to create health metrics stored counter")
 });
 
 // Rate limiting metrics
@@ -160,7 +168,8 @@ static RATE_LIMITED_REQUESTS_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
         "Total number of rate limited requests",
         &["endpoint", "user_id"],
         METRICS_REGISTRY.clone()
-    ).expect("Failed to create rate limited requests counter")
+    )
+    .expect("Failed to create rate limited requests counter")
 });
 
 // Authentication metrics
@@ -170,7 +179,8 @@ static AUTH_ATTEMPTS_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
         "Total authentication attempts",
         &["result", "key_type"],
         METRICS_REGISTRY.clone()
-    ).expect("Failed to create auth attempts counter")
+    )
+    .expect("Failed to create auth attempts counter")
 });
 
 /// Metrics collection middleware for Prometheus monitoring
@@ -218,11 +228,11 @@ where
 
         Box::pin(async move {
             let res = fut.await?;
-            
+
             // Calculate request duration with minimal overhead
             let duration = start_time.elapsed();
             let status_code = res.status().as_u16().to_string();
-            
+
             // Record HTTP metrics - this should be <1ms overhead
             HTTP_REQUESTS_TOTAL
                 .with_label_values(&[&method, &normalize_endpoint(&path), &status_code])
@@ -240,13 +250,13 @@ where
 /// Normalize endpoint paths to reduce cardinality
 fn normalize_endpoint(path: &str) -> String {
     // Replace UUIDs and IDs with placeholders to prevent high cardinality
-    let normalized = path
-        .replace(
-            &regex::Regex::new(r"/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
-                .unwrap(),
-            "/{uuid}"
-        )
-        .replace(&regex::Regex::new(r"/\d+").unwrap(), "/{id}");
+    let uuid_regex =
+        regex::Regex::new(r"/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+            .unwrap();
+    let id_regex = regex::Regex::new(r"/\d+").unwrap();
+
+    let normalized = uuid_regex.replace_all(path, "/{uuid}");
+    let normalized = id_regex.replace_all(&normalized, "/{id}").to_string();
 
     // Limit to key endpoints to prevent metric explosion
     match normalized.as_str() {
@@ -274,7 +284,7 @@ impl Metrics {
     pub fn record_metrics_processed(metric_type: &str, count: u64, status: &str) {
         INGEST_METRICS_PROCESSED_TOTAL
             .with_label_values(&[metric_type, status])
-            .inc_by(count);
+            .inc_by(count as f64);
     }
 
     /// Record ingest processing duration
@@ -338,7 +348,7 @@ impl Metrics {
     pub fn record_data_volume(data_type: &str, operation: &str, bytes: u64) {
         DATA_VOLUME_BYTES
             .with_label_values(&[data_type, operation])
-            .inc_by(bytes);
+            .inc_by(bytes as f64);
     }
 
     /// Record health metrics stored
@@ -346,7 +356,7 @@ impl Metrics {
     pub fn record_health_metrics_stored(metric_type: &str, count: u64) {
         HEALTH_METRICS_STORED_TOTAL
             .with_label_values(&[metric_type])
-            .inc_by(count);
+            .inc_by(count as f64);
     }
 
     /// Record rate limited request
@@ -370,17 +380,7 @@ impl Metrics {
 #[instrument]
 pub async fn metrics_handler() -> Result<HttpResponse> {
     let encoder = TextEncoder::new();
-    let metric_families = match METRICS_REGISTRY.gather() {
-        Ok(families) => families,
-        Err(e) => {
-            error!("Failed to gather metrics: {}", e);
-            return Ok(HttpResponse::InternalServerError()
-                .json(serde_json::json!({
-                    "error": "Failed to gather metrics",
-                    "message": e.to_string()
-                })));
-        }
-    };
+    let metric_families = METRICS_REGISTRY.gather();
 
     match encoder.encode_to_string(&metric_families) {
         Ok(output) => Ok(HttpResponse::Ok()
@@ -388,11 +388,10 @@ pub async fn metrics_handler() -> Result<HttpResponse> {
             .body(output)),
         Err(e) => {
             error!("Failed to encode metrics: {}", e);
-            Ok(HttpResponse::InternalServerError()
-                .json(serde_json::json!({
-                    "error": "Failed to encode metrics",
-                    "message": e.to_string()
-                })))
+            Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Failed to encode metrics",
+                "message": e.to_string()
+            })))
         }
     }
 }
@@ -410,7 +409,10 @@ mod tests {
     #[test]
     fn test_normalize_endpoint() {
         assert_eq!(normalize_endpoint("/api/v1/ingest"), "/api/v1/ingest");
-        assert_eq!(normalize_endpoint("/api/v1/data/heart-rate"), "/api/v1/data/heart-rate");
+        assert_eq!(
+            normalize_endpoint("/api/v1/data/heart-rate"),
+            "/api/v1/data/heart-rate"
+        );
         assert_eq!(normalize_endpoint("/health"), "/health");
         assert_eq!(normalize_endpoint("/metrics"), "/metrics");
         assert_eq!(normalize_endpoint("/unknown/endpoint"), "/other");
@@ -423,7 +425,7 @@ mod tests {
         Metrics::record_metrics_processed("heart_rate", 10, "success");
         Metrics::record_error("validation", "/api/v1/ingest", "warning");
         Metrics::update_active_users_24h(42);
-        
+
         // Verify metrics registry is accessible
         let registry = get_metrics_registry();
         assert!(!registry.gather().unwrap().is_empty());

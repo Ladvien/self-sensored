@@ -9,7 +9,7 @@ use sqlx::PgPool;
 use thiserror::Error;
 use uuid::Uuid;
 
-use super::rate_limiter::{RateLimiter, RateLimitError};
+use super::rate_limiter::{RateLimitError, RateLimiter};
 
 #[derive(Debug, Error)]
 pub enum AuthError {
@@ -75,7 +75,11 @@ impl AuthService {
         // Configure Argon2 with recommended settings for API key hashing
         let argon2 = Argon2::default();
 
-        Self { pool, argon2, rate_limiter }
+        Self {
+            pool,
+            argon2,
+            rate_limiter,
+        }
     }
 
     /// Get a reference to the database pool for testing purposes
@@ -227,8 +231,10 @@ impl AuthService {
                                 "key_type": "uuid",
                                 "expires_at": expires_at
                             })),
-                        ).await.ok(); // Don't fail auth on audit log failure
-                        
+                        )
+                        .await
+                        .ok(); // Don't fail auth on audit log failure
+
                         return Err(AuthError::ApiKeyExpired);
                     }
                 }
@@ -275,7 +281,9 @@ impl AuthService {
                         "key_name": api_key.name,
                         "scopes": api_key.scopes
                     })),
-                ).await.ok(); // Don't fail auth on audit log failure
+                )
+                .await
+                .ok(); // Don't fail auth on audit log failure
 
                 tracing::info!(
                     user_id = %user.id,
@@ -337,8 +345,10 @@ impl AuthService {
                                         "key_type": "hashed",
                                         "expires_at": expires_at
                                     })),
-                                ).await.ok(); // Don't fail auth on audit log failure
-                                
+                                )
+                                .await
+                                .ok(); // Don't fail auth on audit log failure
+
                                 return Err(AuthError::ApiKeyExpired);
                             }
                         }
@@ -385,7 +395,9 @@ impl AuthService {
                                 "key_name": api_key.name,
                                 "scopes": api_key.scopes
                             })),
-                        ).await.ok(); // Don't fail auth on audit log failure
+                        )
+                        .await
+                        .ok(); // Don't fail auth on audit log failure
 
                         tracing::info!(
                             user_id = %user.id,
@@ -417,24 +429,26 @@ impl AuthService {
             user_agent,
             Some(serde_json::json!({
                 "reason": "invalid_api_key",
-                "key_format": if api_key.len() == 36 && Uuid::parse_str(api_key).is_ok() { 
-                    "uuid" 
-                } else if api_key.starts_with("hea_") { 
-                    "hashed" 
-                } else { 
-                    "unknown" 
+                "key_format": if api_key.len() == 36 && Uuid::parse_str(api_key).is_ok() {
+                    "uuid"
+                } else if api_key.starts_with("hea_") {
+                    "hashed"
+                } else {
+                    "unknown"
                 }
             })),
-        ).await.ok(); // Don't fail auth on audit log failure
+        )
+        .await
+        .ok(); // Don't fail auth on audit log failure
 
         tracing::warn!(
             "Authentication failed for invalid API key with format: {}",
-            if api_key.len() == 36 && Uuid::parse_str(api_key).is_ok() { 
-                "uuid" 
-            } else if api_key.starts_with("hea_") { 
-                "hashed" 
-            } else { 
-                "unknown" 
+            if api_key.len() == 36 && Uuid::parse_str(api_key).is_ok() {
+                "uuid"
+            } else if api_key.starts_with("hea_") {
+                "hashed"
+            } else {
+                "unknown"
             }
         );
 

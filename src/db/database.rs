@@ -1,7 +1,7 @@
+use crate::middleware::metrics::Metrics;
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::time::Duration;
 use tracing::{error, info};
-use crate::middleware::metrics::Metrics;
 
 /// Create a PostgreSQL connection pool with configuration from environment
 pub async fn create_connection_pool(database_url: &str) -> Result<PgPool, sqlx::Error> {
@@ -106,18 +106,24 @@ pub async fn test_database_connection(pool: &PgPool) -> Result<(), sqlx::Error> 
 
 /// Monitor database connection pool metrics and update Prometheus metrics
 pub fn update_db_pool_metrics(pool: &PgPool) {
-    let size = pool.size();
+    let size = pool.size() as usize;
     let idle = pool.num_idle();
-    
+
     // Update Prometheus metrics
     Metrics::update_db_connection_metrics(size as u64, idle as u64);
-    
+
     // Log if pool utilization is high
-    let utilization = ((size - idle) as f64 / size as f64) * 100.0;
+    let utilization = if size > 0 {
+        ((size.saturating_sub(idle)) as f64 / size as f64) * 100.0
+    } else {
+        0.0
+    };
     if utilization > 80.0 {
         tracing::warn!(
             "High database pool utilization: {:.1}% ({}/{} connections active)",
-            utilization, size - idle, size
+            utilization,
+            size.saturating_sub(idle),
+            size
         );
     }
 }

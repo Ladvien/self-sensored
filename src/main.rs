@@ -81,6 +81,27 @@ async fn main() -> std::io::Result<()> {
     });
     info!("Database metrics monitoring started");
 
+    // Start MQTT subscriber for Auto Health Export data
+    let mqtt_pool = pool.clone();
+    tokio::spawn(async move {
+        info!("Starting MQTT subscriber service");
+        let subscriber = services::mqtt_subscriber::MqttSubscriber::new(mqtt_pool);
+
+        // Keep retrying connection with backoff
+        loop {
+            match subscriber.start().await {
+                Ok(_) => {
+                    info!("MQTT subscriber connected successfully");
+                }
+                Err(e) => {
+                    warn!("MQTT subscriber error: {}, retrying in 30 seconds", e);
+                    tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+                }
+            }
+        }
+    });
+    info!("MQTT subscriber service started");
+
     // Start HTTP server
     HttpServer::new(move || {
         App::new()
@@ -88,35 +109,77 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(auth_service.clone()))
             // Increase payload size limit to 100MB for large health data uploads
             .app_data(web::PayloadConfig::new(100 * 1024 * 1024))
-            .wrap(Compress::default())  // Add gzip compression
-            .wrap(CompressionAndCaching)  // Add caching headers
+            .wrap(Compress::default()) // Add gzip compression
+            .wrap(CompressionAndCaching) // Add caching headers
             .wrap(MetricsMiddleware)
             .wrap(StructuredLogger)
             .wrap(AuthMiddleware)
             .route("/health", web::get().to(handlers::health::health_check))
-            .route("/metrics", web::get().to(middleware::metrics::metrics_handler))
+            .route(
+                "/metrics",
+                web::get().to(middleware::metrics::metrics_handler),
+            )
             .service(
                 web::scope("/api/v1")
                     .route("/status", web::get().to(handlers::health::api_status))
                     .route("/ingest", web::post().to(handlers::ingest::ingest_handler))
                     // Health data query endpoints
-                    .route("/data/heart-rate", web::get().to(handlers::query::get_heart_rate_data))
-                    .route("/data/blood-pressure", web::get().to(handlers::query::get_blood_pressure_data))
-                    .route("/data/sleep", web::get().to(handlers::query::get_sleep_data))
-                    .route("/data/activity", web::get().to(handlers::query::get_activity_data))
-                    .route("/data/workouts", web::get().to(handlers::query::get_workout_data))
-                    .route("/data/summary", web::get().to(handlers::query::get_health_summary))
+                    .route(
+                        "/data/heart-rate",
+                        web::get().to(handlers::query::get_heart_rate_data),
+                    )
+                    .route(
+                        "/data/blood-pressure",
+                        web::get().to(handlers::query::get_blood_pressure_data),
+                    )
+                    .route(
+                        "/data/sleep",
+                        web::get().to(handlers::query::get_sleep_data),
+                    )
+                    .route(
+                        "/data/activity",
+                        web::get().to(handlers::query::get_activity_data),
+                    )
+                    .route(
+                        "/data/workouts",
+                        web::get().to(handlers::query::get_workout_data),
+                    )
+                    .route(
+                        "/data/summary",
+                        web::get().to(handlers::query::get_health_summary),
+                    )
                     // Health data export endpoints
-                    .route("/export/all", web::get().to(handlers::export::export_health_data))
-                    .route("/export/heart-rate", web::get().to(handlers::export::export_heart_rate_data))
-                    .route("/export/activity-analytics", web::get().to(handlers::export::export_activity_summary))
+                    .route(
+                        "/export/all",
+                        web::get().to(handlers::export::export_health_data),
+                    )
+                    .route(
+                        "/export/heart-rate",
+                        web::get().to(handlers::export::export_heart_rate_data),
+                    )
+                    .route(
+                        "/export/activity-analytics",
+                        web::get().to(handlers::export::export_activity_summary),
+                    )
                     // Admin endpoints for logging management
                     .service(
                         web::scope("/admin")
-                            .route("/logging/level", web::get().to(handlers::admin::get_log_level))
-                            .route("/logging/level", web::put().to(handlers::admin::set_log_level))
-                            .route("/logging/stats", web::get().to(handlers::admin::get_logging_stats))
-                            .route("/logging/test", web::post().to(handlers::admin::generate_test_logs))
+                            .route(
+                                "/logging/level",
+                                web::get().to(handlers::admin::get_log_level),
+                            )
+                            .route(
+                                "/logging/level",
+                                web::put().to(handlers::admin::set_log_level),
+                            )
+                            .route(
+                                "/logging/stats",
+                                web::get().to(handlers::admin::get_logging_stats),
+                            )
+                            .route(
+                                "/logging/test",
+                                web::post().to(handlers::admin::generate_test_logs),
+                            ),
                     ),
             )
     })

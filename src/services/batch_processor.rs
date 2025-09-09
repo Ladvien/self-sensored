@@ -1,13 +1,13 @@
+use futures::future::join_all;
 use sqlx::{PgPool, Postgres, QueryBuilder};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
-use tracing::{info, warn, error, instrument};
+use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use futures::future::join_all;
 
-use crate::models::{HealthMetric, IngestPayload, ProcessingError};
 use crate::middleware::metrics::Metrics;
+use crate::models::{HealthMetric, IngestPayload, ProcessingError};
 
 /// Batch processing service for health data
 pub struct BatchProcessor {
@@ -64,7 +64,7 @@ impl Default for BatchConfig {
 
 impl BatchProcessor {
     pub fn new(pool: PgPool) -> Self {
-        Self { 
+        Self {
             pool,
             config: BatchConfig::default(),
             processed_counter: AtomicUsize::new(0),
@@ -95,10 +95,10 @@ impl BatchProcessor {
     ) -> BatchProcessingResult {
         let start_time = Instant::now();
         let initial_memory = self.estimate_memory_usage();
-        
+
         // Record batch processing start
         let total_metrics = payload.data.metrics.len() + payload.data.workouts.len();
-        
+
         self.reset_counters();
 
         let mut result = BatchProcessingResult {
@@ -126,7 +126,9 @@ impl BatchProcessor {
         if self.config.enable_parallel_processing {
             result = self.process_parallel(user_id, grouped, all_workouts).await;
         } else {
-            result = self.process_sequential(user_id, grouped, all_workouts).await;
+            result = self
+                .process_sequential(user_id, grouped, all_workouts)
+                .await;
         }
 
         // Calculate final metrics
@@ -135,7 +137,11 @@ impl BatchProcessor {
         result.memory_peak_mb = Some(self.estimate_memory_usage() - initial_memory);
 
         // Record batch processing metrics
-        let status = if result.failed_count == 0 { "success" } else { "partial_failure" };
+        let status = if result.failed_count == 0 {
+            "success"
+        } else {
+            "partial_failure"
+        };
         Metrics::record_batch_processing_duration("mixed", total_metrics, duration);
         Metrics::record_metrics_processed("mixed", result.processed_count as u64, status);
         if result.failed_count > 0 {
@@ -183,7 +189,8 @@ impl BatchProcessor {
                     "HeartRate",
                     || Self::insert_heart_rates_static(&pool, user_id, heart_rates.clone()),
                     &config,
-                ).await
+                )
+                .await
             }));
         }
 
@@ -196,7 +203,8 @@ impl BatchProcessor {
                     "BloodPressure",
                     || Self::insert_blood_pressures_static(&pool, user_id, blood_pressures.clone()),
                     &config,
-                ).await
+                )
+                .await
             }));
         }
 
@@ -209,7 +217,8 @@ impl BatchProcessor {
                     "Sleep",
                     || Self::insert_sleep_metrics_static(&pool, user_id, sleep_metrics.clone()),
                     &config,
-                ).await
+                )
+                .await
             }));
         }
 
@@ -222,7 +231,8 @@ impl BatchProcessor {
                     "Activity",
                     || Self::insert_activities_static(&pool, user_id, activities.clone()),
                     &config,
-                ).await
+                )
+                .await
             }));
         }
 
@@ -234,13 +244,14 @@ impl BatchProcessor {
                     "Workout",
                     || Self::insert_workouts_static(&pool, user_id, workouts.clone()),
                     &config,
-                ).await
+                )
+                .await
             }));
         }
 
         // Wait for all tasks to complete
         let results = join_all(tasks).await;
-        
+
         // Aggregate results
         for task_result in results {
             match task_result {
@@ -288,7 +299,8 @@ impl BatchProcessor {
                 "HeartRate",
                 || self.insert_heart_rates(user_id, heart_rates.clone()),
                 &self.config,
-            ).await;
+            )
+            .await;
             result.processed_count += processed;
             result.failed_count += failed;
             result.errors.extend(errors);
@@ -302,7 +314,8 @@ impl BatchProcessor {
                 "BloodPressure",
                 || self.insert_blood_pressures(user_id, blood_pressures.clone()),
                 &self.config,
-            ).await;
+            )
+            .await;
             result.processed_count += processed;
             result.failed_count += failed;
             result.errors.extend(errors);
@@ -316,7 +329,8 @@ impl BatchProcessor {
                 "Sleep",
                 || self.insert_sleep_metrics(user_id, sleep_metrics.clone()),
                 &self.config,
-            ).await;
+            )
+            .await;
             result.processed_count += processed;
             result.failed_count += failed;
             result.errors.extend(errors);
@@ -330,7 +344,8 @@ impl BatchProcessor {
                 "Activity",
                 || self.insert_activities(user_id, activities.clone()),
                 &self.config,
-            ).await;
+            )
+            .await;
             result.processed_count += processed;
             result.failed_count += failed;
             result.errors.extend(errors);
@@ -343,7 +358,8 @@ impl BatchProcessor {
                 "Workout",
                 || self.insert_workouts(user_id, workouts.clone()),
                 &self.config,
-            ).await;
+            )
+            .await;
             result.processed_count += processed;
             result.failed_count += failed;
             result.errors.extend(errors);
@@ -365,7 +381,7 @@ impl BatchProcessor {
     {
         let mut retry_count = 0;
         let mut backoff_ms = config.initial_backoff_ms;
-        
+
         loop {
             match operation().await {
                 Ok(count) => {
@@ -381,7 +397,7 @@ impl BatchProcessor {
                 }
                 Err(e) => {
                     retry_count += 1;
-                    
+
                     if retry_count > config.max_retries as usize {
                         error!(
                             metric_type = metric_type,
@@ -389,14 +405,23 @@ impl BatchProcessor {
                             retry_count = retry_count,
                             "Processing failed after max retries"
                         );
-                        
-                        return (0, 1, vec![ProcessingError {
-                            metric_type: metric_type.to_string(),
-                            error_message: format!("Failed after {} retries: {}", retry_count - 1, e),
-                            index: None,
-                        }], retry_count - 1);
+
+                        return (
+                            0,
+                            1,
+                            vec![ProcessingError {
+                                metric_type: metric_type.to_string(),
+                                error_message: format!(
+                                    "Failed after {} retries: {}",
+                                    retry_count - 1,
+                                    e
+                                ),
+                                index: None,
+                            }],
+                            retry_count - 1,
+                        );
                     }
-                    
+
                     // Check if error is retryable
                     if !Self::is_retryable_error(&e) {
                         error!(
@@ -404,14 +429,19 @@ impl BatchProcessor {
                             error = %e,
                             "Non-retryable error encountered"
                         );
-                        
-                        return (0, 1, vec![ProcessingError {
-                            metric_type: metric_type.to_string(),
-                            error_message: format!("Non-retryable error: {}", e),
-                            index: None,
-                        }], retry_count - 1);
+
+                        return (
+                            0,
+                            1,
+                            vec![ProcessingError {
+                                metric_type: metric_type.to_string(),
+                                error_message: format!("Non-retryable error: {}", e),
+                                index: None,
+                            }],
+                            retry_count - 1,
+                        );
                     }
-                    
+
                     warn!(
                         metric_type = metric_type,
                         error = %e,
@@ -419,14 +449,14 @@ impl BatchProcessor {
                         backoff_ms = backoff_ms,
                         "Processing failed, retrying after backoff"
                     );
-                    
+
                     sleep(Duration::from_millis(backoff_ms)).await;
                     backoff_ms = std::cmp::min(backoff_ms * 2, config.max_backoff_ms);
                 }
             }
         }
     }
-    
+
     /// Check if an error is retryable
     fn is_retryable_error(error: &sqlx::Error) -> bool {
         match error {
@@ -455,7 +485,7 @@ impl BatchProcessor {
             _ => false,
         }
     }
-    
+
     /// Estimate current memory usage (rough approximation)
     fn estimate_memory_usage(&self) -> f64 {
         // This is a rough estimation - in production you'd use more sophisticated memory tracking
@@ -541,7 +571,8 @@ impl BatchProcessor {
 
         query_builder.push_values(metrics.iter(), |mut b, metric| {
             let heart_rate = metric.avg_bpm.or(metric.max_bpm).unwrap_or(0);
-            let resting_heart_rate = if metric.min_bpm.is_some() && metric.min_bpm != metric.avg_bpm {
+            let resting_heart_rate = if metric.min_bpm.is_some() && metric.min_bpm != metric.avg_bpm
+            {
                 metric.min_bpm
             } else {
                 None

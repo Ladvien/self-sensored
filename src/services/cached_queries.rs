@@ -7,14 +7,13 @@ use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::handlers::query::{
-    QueryParams, QueryResponse, HealthSummary, HeartRateSummary, 
-    BloodPressureSummary, SleepSummary, ActivitySummary, WorkoutSummary,
-    get_heart_rate_summary, get_blood_pressure_summary, get_sleep_summary,
-    get_activity_summary, get_workout_summary
+    get_activity_summary, get_blood_pressure_summary, get_heart_rate_summary, get_sleep_summary,
+    get_workout_summary, ActivitySummary, BloodPressureSummary, HealthSummary, HeartRateSummary,
+    QueryParams, QueryResponse, SleepSummary, WorkoutSummary,
 };
-use crate::models::{ApiResponse, db::*};
+use crate::models::{db::*, ApiResponse};
 use crate::services::auth::AuthContext;
-use crate::services::cache::{CacheService, CacheKey, generate_query_hash};
+use crate::services::cache::{generate_query_hash, CacheKey, CacheService};
 
 /// Cached query service that wraps database queries with Redis caching
 #[derive(Clone)]
@@ -51,7 +50,8 @@ impl CachedQueryService {
 
         // Try cache first
         if self.cache_enabled {
-            if let Some(cached_result) = self.cache
+            if let Some(cached_result) = self
+                .cache
                 .get::<QueryResponse<HeartRateRecord>>(&cache_key, &self.cache_prefix)
                 .await
             {
@@ -64,12 +64,17 @@ impl CachedQueryService {
         }
 
         // Cache miss - query database
-        let result = self.query_heart_rate_from_db(auth.user.id, params).await?;
-        
+        let result = self
+            .query_heart_rate_from_db(auth.user.id, params)
+            .await
+            .map_err(|e| actix_web::error::ErrorInternalServerError(e))?;
+
         // Cache the result
         if self.cache_enabled {
             let cache_ttl = Some(Duration::from_secs(600)); // 10 minutes
-            self.cache.set(&cache_key, &self.cache_prefix, result.clone(), cache_ttl).await;
+            self.cache
+                .set(&cache_key, &self.cache_prefix, result.clone(), cache_ttl)
+                .await;
         }
 
         Ok(result)
@@ -82,16 +87,17 @@ impl CachedQueryService {
         auth: AuthContext,
         params: &QueryParams,
     ) -> Result<HealthSummary> {
-        let start_date = params.start_date.unwrap_or_else(|| {
-            Utc::now() - chrono::Duration::days(30)
-        });
+        let start_date = params
+            .start_date
+            .unwrap_or_else(|| Utc::now() - chrono::Duration::days(30));
         let end_date = params.end_date.unwrap_or_else(|| Utc::now());
-        
-        let date_range = format!("{}_{}", 
+
+        let date_range = format!(
+            "{}_{}",
             start_date.format("%Y%m%d"),
             end_date.format("%Y%m%d")
         );
-        
+
         let cache_key = CacheKey::HealthSummary {
             user_id: auth.user.id,
             date_range,
@@ -99,7 +105,8 @@ impl CachedQueryService {
 
         // Try cache first - summaries are expensive to compute
         if self.cache_enabled {
-            if let Some(cached_summary) = self.cache
+            if let Some(cached_summary) = self
+                .cache
                 .get::<HealthSummary>(&cache_key, &self.cache_prefix)
                 .await
             {
@@ -112,12 +119,17 @@ impl CachedQueryService {
         }
 
         // Cache miss - compute summary
-        let summary = self.compute_health_summary(auth.user.id, start_date, end_date).await?;
-        
+        let summary = self
+            .compute_health_summary(auth.user.id, start_date, end_date)
+            .await
+            .map_err(|e| actix_web::error::ErrorInternalServerError(e))?;
+
         // Cache with longer TTL for summaries
         if self.cache_enabled {
             let cache_ttl = Some(Duration::from_secs(1800)); // 30 minutes
-            self.cache.set(&cache_key, &self.cache_prefix, summary.clone(), cache_ttl).await;
+            self.cache
+                .set(&cache_key, &self.cache_prefix, summary.clone(), cache_ttl)
+                .await;
         }
 
         Ok(summary)
@@ -127,7 +139,9 @@ impl CachedQueryService {
     #[instrument(skip(self))]
     pub async fn invalidate_user_cache(&self, user_id: Uuid) {
         if self.cache_enabled {
-            self.cache.invalidate_user_cache(user_id, &self.cache_prefix).await;
+            self.cache
+                .invalidate_user_cache(user_id, &self.cache_prefix)
+                .await;
             info!(
                 user_id = %user_id,
                 "Cache invalidated after data ingestion"
@@ -141,7 +155,7 @@ impl CachedQueryService {
     }
 
     // Private helper methods
-    
+
     async fn query_heart_rate_from_db(
         &self,
         user_id: Uuid,
@@ -163,7 +177,7 @@ impl CachedQueryService {
             WHERE user_id = $1
             "#
         );
-        
+
         let mut param_count = 2;
         if params.start_date.is_some() {
             query.push_str(&format!(" AND recorded_at >= ${}", param_count));
@@ -173,24 +187,31 @@ impl CachedQueryService {
             query.push_str(&format!(" AND recorded_at <= ${}", param_count));
             param_count += 1;
         }
-        
-        query.push_str(&format!(" ORDER BY recorded_at {} LIMIT ${} OFFSET ${}", 
-            sort_order, param_count, param_count + 1));
+
+        query.push_str(&format!(
+            " ORDER BY recorded_at {} LIMIT ${} OFFSET ${}",
+            sort_order,
+            param_count,
+            param_count + 1
+        ));
 
         let mut db_query = sqlx::query_as::<_, HeartRateRecord>(&query).bind(user_id);
-        
+
         if let Some(start_date) = params.start_date {
             db_query = db_query.bind(start_date);
         }
         if let Some(end_date) = params.end_date {
             db_query = db_query.bind(end_date);
         }
-        
+
         db_query = db_query.bind(limit as i64).bind(offset as i64);
 
         let records = db_query.fetch_all(&self.pool).await?;
-        let total_count = self.get_heart_rate_count(user_id, params).await.unwrap_or(0);
-        
+        let total_count = self
+            .get_heart_rate_count(user_id, params)
+            .await
+            .unwrap_or(0);
+
         let pagination = crate::handlers::query::PaginationInfo {
             page,
             limit,
@@ -207,12 +228,12 @@ impl CachedQueryService {
 
     async fn get_heart_rate_count(
         &self,
-        user_id: Uuid, 
-        params: &QueryParams
+        user_id: Uuid,
+        params: &QueryParams,
     ) -> Result<i64, sqlx::Error> {
         let mut query = "SELECT COUNT(*) FROM heart_rate_metrics WHERE user_id = $1".to_string();
         let mut param_count = 2;
-        
+
         if params.start_date.is_some() {
             query.push_str(&format!(" AND recorded_at >= ${}", param_count));
             param_count += 1;
@@ -238,7 +259,10 @@ impl CachedQueryService {
         start_date: DateTime<Utc>,
         end_date: DateTime<Utc>,
     ) -> Result<HealthSummary, sqlx::Error> {
-        let date_range = crate::handlers::query::DateRange { start_date, end_date };
+        let date_range = crate::handlers::query::DateRange {
+            start_date,
+            end_date,
+        };
 
         // Run all summary queries in parallel for better performance
         let (heart_rate_result, bp_result, sleep_result, activity_result, workout_result) = tokio::join!(

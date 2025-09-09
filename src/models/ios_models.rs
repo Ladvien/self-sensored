@@ -64,7 +64,7 @@ impl IosIngestPayload {
 
         let mut internal_metrics = Vec::new();
         let mut internal_workouts = Vec::new();
-        
+
         // Track blood pressure readings by timestamp for pairing
         let mut bp_readings: HashMap<String, (Option<i16>, Option<i16>)> = HashMap::new();
 
@@ -79,17 +79,24 @@ impl IosIngestPayload {
 
                 // Convert based on metric name (handle more variations)
                 match ios_metric.name.to_lowercase().as_str() {
-                    "heart_rate" | "heartrate" | "resting_heart_rate" | "walking_heart_rate" | "heart_rate_variability" => {
+                    "heart_rate"
+                    | "heartrate"
+                    | "resting_heart_rate"
+                    | "walking_heart_rate"
+                    | "heart_rate_variability" => {
                         if let Some(qty) = data_point.qty {
-                            if qty > 0.0 && qty <= 300.0 { // Basic validation
+                            if qty > 0.0 && qty <= 300.0 {
+                                // Basic validation
                                 let context = match ios_metric.name.to_lowercase().as_str() {
                                     "resting_heart_rate" => Some("resting".to_string()),
                                     "walking_heart_rate" => Some("walking".to_string()),
-                                    _ => data_point.extra.get("context")
+                                    _ => data_point
+                                        .extra
+                                        .get("context")
                                         .and_then(|v| v.as_str())
                                         .map(|s| s.to_string()),
                                 };
-                                
+
                                 let metric = crate::models::HeartRateMetric {
                                     recorded_at,
                                     min_bpm: None,
@@ -122,18 +129,25 @@ impl IosIngestPayload {
 
                         let total_minutes = (end_time - start_time).num_minutes() as i32;
 
-                        if total_minutes > 0 && total_minutes <= 24 * 60 { // Max 24 hours
+                        if total_minutes > 0 && total_minutes <= 24 * 60 {
+                            // Max 24 hours
                             // Extract sleep stages from extra fields if available
-                            let deep_sleep_minutes = data_point.extra.get("deep_sleep_minutes")
+                            let deep_sleep_minutes = data_point
+                                .extra
+                                .get("deep_sleep_minutes")
                                 .and_then(|v| v.as_i64())
                                 .map(|v| v as i32);
-                            let rem_sleep_minutes = data_point.extra.get("rem_sleep_minutes")
+                            let rem_sleep_minutes = data_point
+                                .extra
+                                .get("rem_sleep_minutes")
                                 .and_then(|v| v.as_i64())
                                 .map(|v| v as i32);
-                            let awake_minutes = data_point.extra.get("awake_minutes")
+                            let awake_minutes = data_point
+                                .extra
+                                .get("awake_minutes")
                                 .and_then(|v| v.as_i64())
                                 .map(|v| v as i32);
-                            
+
                             let metric = crate::models::SleepMetric {
                                 recorded_at,
                                 sleep_start: start_time,
@@ -148,33 +162,53 @@ impl IosIngestPayload {
                             internal_metrics.push(HealthMetric::Sleep(metric));
                         }
                     }
-                    "steps" | "step_count" | "distance_walking_running" | "distance" | 
-                    "active_energy_burned" | "calories" | "flights_climbed" | "active_minutes" => {
+                    "steps"
+                    | "step_count"
+                    | "distance_walking_running"
+                    | "distance"
+                    | "active_energy_burned"
+                    | "calories"
+                    | "flights_climbed"
+                    | "active_minutes" => {
                         if let Some(qty) = data_point.qty {
-                            if qty >= 0.0 { // Basic validation - no negative values
+                            if qty >= 0.0 {
+                                // Basic validation - no negative values
                                 let metric = crate::models::ActivityMetric {
                                     date: recorded_at.date_naive(),
-                                    steps: if matches!(ios_metric.name.to_lowercase().as_str(), "steps" | "step_count") {
+                                    steps: if matches!(
+                                        ios_metric.name.to_lowercase().as_str(),
+                                        "steps" | "step_count"
+                                    ) {
                                         Some(qty as i32)
                                     } else {
                                         None
                                     },
-                                    distance_meters: if matches!(ios_metric.name.to_lowercase().as_str(), "distance_walking_running" | "distance") {
+                                    distance_meters: if matches!(
+                                        ios_metric.name.to_lowercase().as_str(),
+                                        "distance_walking_running" | "distance"
+                                    ) {
                                         Some(qty)
                                     } else {
                                         None
                                     },
-                                    calories_burned: if matches!(ios_metric.name.to_lowercase().as_str(), "active_energy_burned" | "calories") {
+                                    calories_burned: if matches!(
+                                        ios_metric.name.to_lowercase().as_str(),
+                                        "active_energy_burned" | "calories"
+                                    ) {
                                         Some(qty)
                                     } else {
                                         None
                                     },
-                                    active_minutes: if ios_metric.name.to_lowercase().as_str() == "active_minutes" {
+                                    active_minutes: if ios_metric.name.to_lowercase().as_str()
+                                        == "active_minutes"
+                                    {
                                         Some(qty as i32)
                                     } else {
                                         None
                                     },
-                                    flights_climbed: if ios_metric.name.to_lowercase().as_str() == "flights_climbed" {
+                                    flights_climbed: if ios_metric.name.to_lowercase().as_str()
+                                        == "flights_climbed"
+                                    {
                                         Some(qty as i32)
                                     } else {
                                         None
@@ -187,19 +221,26 @@ impl IosIngestPayload {
                     }
                     _ => {
                         // For unknown metric types, log for debugging and try to extract as activity if numeric
-                        tracing::debug!("Unknown iOS metric type: {} with qty: {:?}", ios_metric.name, data_point.qty);
-                        
+                        tracing::debug!(
+                            "Unknown iOS metric type: {} with qty: {:?}",
+                            ios_metric.name,
+                            data_point.qty
+                        );
+
                         // If it has a numeric quantity, store as generic activity data
                         if let Some(qty) = data_point.qty {
                             if qty >= 0.0 {
-                                tracing::info!("Converting unknown metric '{}' to generic activity data", ios_metric.name);
+                                tracing::info!(
+                                    "Converting unknown metric '{}' to generic activity data",
+                                    ios_metric.name
+                                );
                             }
                         }
                     }
                 }
             }
         }
-        
+
         // Create blood pressure metrics from paired readings
         for (timestamp_str, (systolic, diastolic)) in bp_readings {
             if let (Some(sys), Some(dia)) = (systolic, diastolic) {
@@ -222,23 +263,32 @@ impl IosIngestPayload {
             let end_time = parse_ios_date(&ios_workout.end).unwrap_or_else(Utc::now);
 
             // Extract additional workout data from extra fields
-            let total_energy_kcal = ios_workout.extra.get("total_energy_kcal")
+            let total_energy_kcal = ios_workout
+                .extra
+                .get("total_energy_kcal")
                 .or_else(|| ios_workout.extra.get("calories"))
                 .and_then(|v| v.as_f64());
-            
-            let distance_meters = ios_workout.extra.get("distance_meters")
+
+            let distance_meters = ios_workout
+                .extra
+                .get("distance_meters")
                 .or_else(|| ios_workout.extra.get("distance"))
                 .and_then(|v| v.as_f64());
-            
-            let avg_heart_rate = ios_workout.extra.get("avg_heart_rate")
-                .and_then(|v| v.as_i64())
-                .map(|v| v as i16);
-            
-            let max_heart_rate = ios_workout.extra.get("max_heart_rate")
+
+            let avg_heart_rate = ios_workout
+                .extra
+                .get("avg_heart_rate")
                 .and_then(|v| v.as_i64())
                 .map(|v| v as i16);
 
-            if start_time < end_time { // Basic validation
+            let max_heart_rate = ios_workout
+                .extra
+                .get("max_heart_rate")
+                .and_then(|v| v.as_i64())
+                .map(|v| v as i16);
+
+            if start_time < end_time {
+                // Basic validation
                 let workout = WorkoutData {
                     workout_type: ios_workout
                         .name

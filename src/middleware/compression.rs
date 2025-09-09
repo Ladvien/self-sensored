@@ -4,7 +4,7 @@ use actix_web::{
     http::header::{HeaderName, HeaderValue, CACHE_CONTROL, CONTENT_ENCODING, ETAG, EXPIRES},
     Error, HttpMessage, HttpResponse, Result,
 };
-use futures_util::future::{Ready, ready};
+use futures_util::future::{ready, Ready};
 use std::{
     future::Future,
     pin::Pin,
@@ -18,7 +18,8 @@ pub struct CompressionAndCaching;
 
 impl<S, B> Transform<S, ServiceRequest> for CompressionAndCaching
 where
-    S: actix_web::dev::Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
+    S: actix_web::dev::Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>
+        + 'static,
     S::Future: 'static,
     B: MessageBody + 'static,
 {
@@ -39,7 +40,8 @@ pub struct CompressionAndCachingMiddleware<S> {
 
 impl<S, B> actix_web::dev::Service<ServiceRequest> for CompressionAndCachingMiddleware<S>
 where
-    S: actix_web::dev::Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
+    S: actix_web::dev::Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error>
+        + 'static,
     S::Future: 'static,
     B: MessageBody + 'static,
 {
@@ -122,10 +124,7 @@ fn add_performance_headers<B>(response: &mut ServiceResponse<B>) {
 
     // Add server timing information
     if let Ok(header_value) = HeaderValue::from_str("app;dur=0") {
-        headers.insert(
-            HeaderName::from_static("server-timing"),
-            header_value,
-        );
+        headers.insert(HeaderName::from_static("server-timing"), header_value);
     }
 
     // Add security headers that can impact performance
@@ -152,7 +151,7 @@ fn generate_simple_etag() -> String {
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    
+
     // Use a hash of the timestamp rounded to nearest minute for cache efficiency
     let rounded_time = (now / 60) * 60;
     format!("{:x}", rounded_time)

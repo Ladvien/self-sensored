@@ -5,8 +5,8 @@ use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::handlers::query::{
-    ActivitySummary, BloodPressureSummary, HeartRateSummary, HealthSummary, 
-    QueryResponse, SleepSummary, WorkoutSummary
+    ActivitySummary, BloodPressureSummary, HealthSummary, HeartRateSummary, QueryResponse,
+    SleepSummary, WorkoutSummary,
 };
 
 /// Redis cache service for performance optimization
@@ -31,8 +31,8 @@ impl Default for CacheConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            default_ttl_seconds: 300, // 5 minutes
-            summary_ttl_seconds: 1800, // 30 minutes for summaries
+            default_ttl_seconds: 300,   // 5 minutes
+            summary_ttl_seconds: 1800,  // 30 minutes for summaries
             user_data_ttl_seconds: 600, // 10 minutes for user data
             key_prefix: "health_export".to_string(),
         }
@@ -54,20 +54,29 @@ pub enum CacheKey {
 impl CacheKey {
     pub fn to_redis_key(&self, prefix: &str) -> String {
         match self {
-            CacheKey::HeartRateQuery { user_id, hash } => 
-                format!("{}:hr_query:{}:{}", prefix, user_id, hash),
-            CacheKey::BloodPressureQuery { user_id, hash } => 
-                format!("{}:bp_query:{}:{}", prefix, user_id, hash),
-            CacheKey::SleepQuery { user_id, hash } => 
-                format!("{}:sleep_query:{}:{}", prefix, user_id, hash),
-            CacheKey::ActivityQuery { user_id, hash } => 
-                format!("{}:activity_query:{}:{}", prefix, user_id, hash),
-            CacheKey::WorkoutQuery { user_id, hash } => 
-                format!("{}:workout_query:{}:{}", prefix, user_id, hash),
-            CacheKey::HealthSummary { user_id, date_range } => 
-                format!("{}:summary:{}:{}", prefix, user_id, date_range),
-            CacheKey::UserMetrics { user_id, metric_type } => 
-                format!("{}:metrics:{}:{}", prefix, user_id, metric_type),
+            CacheKey::HeartRateQuery { user_id, hash } => {
+                format!("{}:hr_query:{}:{}", prefix, user_id, hash)
+            }
+            CacheKey::BloodPressureQuery { user_id, hash } => {
+                format!("{}:bp_query:{}:{}", prefix, user_id, hash)
+            }
+            CacheKey::SleepQuery { user_id, hash } => {
+                format!("{}:sleep_query:{}:{}", prefix, user_id, hash)
+            }
+            CacheKey::ActivityQuery { user_id, hash } => {
+                format!("{}:activity_query:{}:{}", prefix, user_id, hash)
+            }
+            CacheKey::WorkoutQuery { user_id, hash } => {
+                format!("{}:workout_query:{}:{}", prefix, user_id, hash)
+            }
+            CacheKey::HealthSummary {
+                user_id,
+                date_range,
+            } => format!("{}:summary:{}:{}", prefix, user_id, date_range),
+            CacheKey::UserMetrics {
+                user_id,
+                metric_type,
+            } => format!("{}:metrics:{}:{}", prefix, user_id, metric_type),
         }
     }
 }
@@ -96,13 +105,13 @@ impl CacheService {
         }
 
         info!("Initializing Redis cache service with URL: {}", redis_url);
-        
+
         let client = Client::open(redis_url)?;
         let connection_manager = client.get_connection_manager().await?;
-        
+
         // Test the connection
         let mut conn = connection_manager.clone();
-        let _: String = conn.ping().await?;
+        let _: redis::RedisResult<()> = redis::cmd("PING").query_async(&mut conn).await;
         info!("✓ Redis cache service initialized successfully");
 
         Ok(Self {
@@ -147,12 +156,11 @@ impl CacheService {
                     }
                 }
             }
-            Err(redis::RedisError { kind: redis::ErrorKind::TypeError, .. }) => {
-                // Key doesn't exist - cache miss
-                None
-            }
             Err(e) => {
-                error!(cache_key = %redis_key, error = %e, "Redis get error");
+                // Log only if it's not a typical cache miss
+                if !e.to_string().contains("nil") {
+                    error!(cache_key = %redis_key, error = %e, "Redis get error");
+                }
                 None
             }
         }
@@ -170,7 +178,7 @@ impl CacheService {
 
         let redis_key = key.to_redis_key(prefix);
         let ttl = ttl.unwrap_or(self.default_ttl);
-        
+
         let entry = CacheEntry {
             data,
             cached_at: chrono::Utc::now(),
@@ -181,7 +189,10 @@ impl CacheService {
 
         match serde_json::to_string(&entry) {
             Ok(serialized) => {
-                match conn.set_ex::<_, _, ()>(&redis_key, serialized, ttl.as_secs()).await {
+                match conn
+                    .set_ex::<_, _, ()>(&redis_key, serialized, ttl.as_secs())
+                    .await
+                {
                     Ok(_) => {
                         info!(cache_key = %redis_key, ttl_seconds = ttl.as_secs(), "Cache set");
                         true
@@ -275,8 +286,8 @@ impl CacheService {
         }
 
         let mut conn = self.connection_manager.clone();
-        
-        let info: String = match conn.info("stats").await {
+
+        let info: String = match redis::cmd("INFO").arg("stats").query_async(&mut conn).await {
             Ok(info) => info,
             Err(_) => return CacheStats::error(),
         };
@@ -378,7 +389,7 @@ impl CacheStats {
 /// Generate cache key hash from query parameters
 pub fn generate_query_hash(params: &crate::handlers::query::QueryParams) -> String {
     use sha2::{Digest, Sha256};
-    
+
     let mut hasher = Sha256::new();
     hasher.update(format!("{:?}", params).as_bytes());
     format!("{:x}", hasher.finalize())[..16].to_string()

@@ -1,8 +1,8 @@
 use std::env;
 use std::io;
-use tracing::{Level, Subscriber};
+use tracing::Level;
 use tracing_subscriber::{
-    fmt::{format::JsonFields, time::SystemTime},
+    fmt::time::SystemTime,
     layer::SubscriberExt,
     util::SubscriberInitExt,
     EnvFilter, Registry,
@@ -44,9 +44,7 @@ impl LoggingConfig {
         let mut config = Self::default();
 
         // Parse log level from RUST_LOG or LOG_LEVEL
-        if let Ok(level_str) = env::var("RUST_LOG")
-            .or_else(|_| env::var("LOG_LEVEL"))
-        {
+        if let Ok(level_str) = env::var("RUST_LOG").or_else(|_| env::var("LOG_LEVEL")) {
             config.level = parse_log_level(&level_str);
         }
 
@@ -68,24 +66,23 @@ impl LoggingConfig {
         // Environment
         config.environment = env::var("ENVIRONMENT")
             .or_else(|_| env::var("RUST_ENV"))
-            .unwrap_or_else(|| "development".to_string());
+            .unwrap_or_else(|_| "development".to_string());
 
         config
     }
 
     /// Initialize structured logging with the current configuration
     pub fn init(self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-        let env_filter = EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| {
-                // Create a more sophisticated default filter
-                let level = self.level.as_str();
-                let filter_str = format!(
-                    "{}={},sqlx=warn,actix_web=info,actix_server=info,mio=warn,hyper=warn,h2=warn",
-                    env!("CARGO_PKG_NAME").replace('-', "_"),
-                    level
-                );
-                EnvFilter::new(filter_str)
-            });
+        let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+            // Create a more sophisticated default filter
+            let level = self.level.as_str();
+            let filter_str = format!(
+                "{}={},sqlx=warn,actix_web=info,actix_server=info,mio=warn,hyper=warn,h2=warn",
+                env!("CARGO_PKG_NAME").replace('-', "_"),
+                level
+            );
+            EnvFilter::new(filter_str)
+        });
 
         if self.json_format {
             // JSON structured logging for production
@@ -159,7 +156,7 @@ impl LoggingConfig {
             new_level = %new_level,
             message = "Log level updated at runtime"
         );
-        
+
         // Note: In a real production system, you'd need to reinitialize
         // the subscriber or use a reload handle for runtime updates
     }
@@ -174,7 +171,10 @@ fn parse_log_level(level_str: &str) -> Level {
         "warn" | "warning" => Level::WARN,
         "error" => Level::ERROR,
         _ => {
-            eprintln!("Warning: Invalid log level '{}', defaulting to 'info'", level_str);
+            eprintln!(
+                "Warning: Invalid log level '{}', defaulting to 'info'",
+                level_str
+            );
             Level::INFO
         }
     }
@@ -199,7 +199,7 @@ impl LogLevelManager {
     pub fn set_level(&mut self, new_level: Level) -> Result<(), String> {
         let old_level = self.current_level;
         self.current_level = new_level;
-        
+
         tracing::info!(
             event = "runtime_log_level_change",
             old_level = %old_level,
@@ -207,7 +207,7 @@ impl LogLevelManager {
             timestamp = %chrono::Utc::now(),
             message = "Log level changed via API"
         );
-        
+
         Ok(())
     }
 

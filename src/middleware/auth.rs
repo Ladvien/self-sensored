@@ -63,7 +63,7 @@ where
                 .peer_addr()
                 .unwrap_or("unknown")
                 .to_string();
-            
+
             let client_ip = client_ip_str.parse::<std::net::IpAddr>().ok();
             let user_agent = req
                 .headers()
@@ -102,7 +102,10 @@ where
                         if let Some(auth_service) =
                             req.app_data::<actix_web::web::Data<AuthService>>()
                         {
-                            match auth_service.authenticate(token, client_ip, user_agent).await {
+                            match auth_service
+                                .authenticate(token, client_ip, user_agent)
+                                .await
+                            {
                                 Ok(auth_context) => {
                                     tracing::info!(
                                         "Authentication successful: user_id={} api_key_id={} client_ip={}",
