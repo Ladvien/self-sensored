@@ -3,12 +3,6 @@
 ## Critical Issues - Batch Processing & Database Operations Audit
 
 
-[AUDIT-002] Batch Processing - Missing Intra-Batch Deduplication  
-Priority: Critical  
-Points: 3  
-AC: Batches are not de-duplicated before database insertion, relying only on database ON CONFLICT constraints. This causes unnecessary database load and potential deadlocks. Implement HashSet-based deduplication within batches before database operations. Add deduplication by (user_id, recorded_at) for heart rate, blood pressure; (user_id, sleep_start, sleep_end) for sleep; (user_id, recorded_date) for activity; (user_id, started_at) for workouts.  
-Dependencies: None  
-Files: src/services/batch_processor.rs (all insert methods), src/handlers/ingest.rs (lines 156-221)
 
 [AUDIT-003] Timeout Configuration - Missing Cloudflare 100s Timeout Handling  
 Priority: High  
