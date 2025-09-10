@@ -14,11 +14,12 @@ use crate::models::{
 };
 use crate::services::auth::AuthContext;
 use crate::services::batch_processor::{BatchProcessingResult, BatchProcessor};
+use crate::services::streaming_parser::parse_large_json_payload;
 
-/// Maximum payload size (100MB)
-const MAX_PAYLOAD_SIZE: usize = 100 * 1024 * 1024;
+/// Maximum payload size (200MB) - increased to handle large iOS exports
+const MAX_PAYLOAD_SIZE: usize = 200 * 1024 * 1024;
 /// Maximum number of metrics per request (increased to handle full day exports)
-const MAX_METRICS_PER_REQUEST: usize = 50_000;
+const MAX_METRICS_PER_REQUEST: usize = 100_000;
 
 /// Custom extractor that logs raw JSON payload before deserialization
 pub struct LoggedJson<T>(pub T);
@@ -71,7 +72,7 @@ where
     }
 }
 
-/// Main health data ingest endpoint
+/// Main health data ingest endpoint with enhanced JSON parsing
 /// Accepts batch health data with Bearer token authentication
 #[instrument(skip(pool, raw_payload))]
 pub async fn ingest_handler(
@@ -84,7 +85,6 @@ pub async fn ingest_handler(
 
     // Record ingest request start
     Metrics::record_ingest_request();
-    Metrics::record_data_volume("ingest", "received", raw_payload.len() as u64);
 
     // Extract client IP for audit logging
     let client_ip = req
@@ -92,50 +92,43 @@ pub async fn ingest_handler(
         .map(|addr| addr.ip().to_string())
         .unwrap_or_else(|| "unknown".to_string());
 
+    // Get payload size and log processing start
+    let payload_size = raw_payload.len();
+    
+    info!(
+        user_id = %auth.user.id,
+        client_ip = %client_ip,
+        payload_size = payload_size,
+        "Starting enhanced ingest processing"
+    );
+
+    // Record data volume
+    Metrics::record_data_volume("ingest", "received", payload_size as u64);
+
     // Check payload size limit first
-    if raw_payload.len() > MAX_PAYLOAD_SIZE {
-        error!("Payload size {} exceeds limit", raw_payload.len());
+    if payload_size > MAX_PAYLOAD_SIZE {
+        error!("Payload size {} exceeds limit", payload_size);
         Metrics::record_error("payload_too_large", "/api/v1/ingest", "error");
         return Ok(
             HttpResponse::PayloadTooLarge().json(ApiResponse::<()>::error(format!(
                 "Payload size {} bytes exceeds maximum of {} MB",
-                raw_payload.len(),
+                payload_size,
                 MAX_PAYLOAD_SIZE / (1024 * 1024)
             ))),
         );
     }
 
-    // Parse the raw payload - try iOS format first, then standard format
-    let payload_str = String::from_utf8_lossy(&raw_payload);
-    debug!("Raw JSON payload received: {}", payload_str);
-    debug!("Payload length: {} bytes", raw_payload.len());
-    debug!("Content-Type: {:?}", req.headers().get("content-type"));
-
-    let internal_payload =
-        match serde_json::from_slice::<IosIngestPayload>(&raw_payload) {
-            Ok(ios_payload) => {
-                info!("Successfully parsed iOS format payload");
-                ios_payload.to_internal_format()
-            }
-            Err(_ios_error) => {
-                // Try standard format
-                match serde_json::from_slice::<IngestPayload>(&raw_payload) {
-                    Ok(standard_payload) => {
-                        info!("Successfully parsed standard format payload");
-                        standard_payload
-                    }
-                    Err(standard_error) => {
-                        error!("Failed to parse payload in both iOS and standard formats");
-                        error!("Standard format error: {}", standard_error);
-                        error!("Raw payload: {}", payload_str);
-                        Metrics::record_error("json_parse", "/api/v1/ingest", "error");
-                        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-                            format!("Invalid JSON format: {standard_error}"),
-                        )));
-                    }
-                }
-            }
-        };
+    // Use enhanced JSON parsing with better error reporting
+    let internal_payload = match parse_ios_payload_enhanced(&raw_payload).await {
+        Ok(payload) => payload,
+        Err(parse_error) => {
+            error!("Enhanced JSON parse error: {}", parse_error);
+            Metrics::record_error("enhanced_json_parse", "/api/v1/ingest", "error");
+            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
+                format!("JSON parsing error: {}", parse_error),
+            )));
+        }
+    };
 
     // Validate payload constraints
     let total_metrics = internal_payload.data.metrics.len() + internal_payload.data.workouts.len();
@@ -467,6 +460,130 @@ async fn update_processing_status(
     )
     .execute(pool)
     .await?;
+
+    Ok(())
+}
+
+/// Parse iOS payload with enhanced error handling and validation
+async fn parse_ios_payload_enhanced(raw_payload: &web::Bytes) -> Result<IngestPayload> {
+    // Log payload info for debugging large payloads
+    let payload_size = raw_payload.len();
+    if payload_size > 10 * 1024 * 1024 {  // > 10MB
+        info!("Processing large payload: {} MB", payload_size / (1024 * 1024));
+    }
+
+    // First validate JSON structure to detect corruption early
+    if let Err(validation_error) = validate_json_structure_basic(raw_payload) {
+        error!("JSON structure validation failed: {}", validation_error);
+        return Err(actix_web::error::ErrorBadRequest(format!(
+            "Malformed JSON detected: {}", validation_error
+        )));
+    }
+
+    // Try iOS format first with enhanced error reporting
+    match parse_with_error_context::<IosIngestPayload>(raw_payload, "iOS format") {
+        Ok(ios_payload) => {
+            info!("Successfully parsed iOS format payload ({} bytes)", payload_size);
+            Ok(ios_payload.to_internal_format())
+        }
+        Err(ios_error) => {
+            warn!("iOS format parse failed: {}", ios_error);
+            
+            // Try standard format as fallback
+            match parse_with_error_context::<IngestPayload>(raw_payload, "standard format") {
+                Ok(standard_payload) => {
+                    info!("Successfully parsed standard format payload ({} bytes)", payload_size);
+                    Ok(standard_payload)
+                }
+                Err(standard_error) => {
+                    error!("Failed to parse payload in both iOS and standard formats");
+                    error!("iOS format error: {}", ios_error);
+                    error!("Standard format error: {}", standard_error);
+                    
+                    // Log excerpt for debugging (first 1000 chars)
+                    let payload_str = String::from_utf8_lossy(raw_payload);
+                    let preview = if payload_str.len() > 1000 {
+                        &payload_str[..1000]
+                    } else {
+                        &payload_str
+                    };
+                    error!("Payload preview: {}", preview);
+                    
+                    Err(actix_web::error::ErrorBadRequest(format!(
+                        "Invalid JSON format. iOS error: {}. Standard error: {}", 
+                        ios_error, standard_error
+                    )))
+                }
+            }
+        }
+    }
+}
+
+/// Parse JSON with enhanced error context reporting
+fn parse_with_error_context<T: serde::de::DeserializeOwned>(
+    data: &[u8], 
+    format_name: &str
+) -> std::result::Result<T, String> {
+    let deserializer = &mut serde_json::Deserializer::from_slice(data);
+    match serde_path_to_error::deserialize(deserializer) {
+        Ok(parsed) => Ok(parsed),
+        Err(err) => {
+            let path = err.path().to_string();
+            let inner = err.into_inner();
+            Err(format!("{} parsing failed at '{}': {}", format_name, path, inner))
+        }
+    }
+}
+
+/// Basic JSON structure validation to detect corruption
+fn validate_json_structure_basic(data: &[u8]) -> std::result::Result<(), String> {
+    if data.is_empty() {
+        return Err("Empty payload".to_string());
+    }
+
+    // Quick validation - check for balanced braces
+    let mut brace_count = 0i32;
+    let mut bracket_count = 0i32;
+    let mut in_string = false;
+    let mut escape_next = false;
+    let mut quote_count = 0;
+
+    for &byte in data {
+        if escape_next {
+            escape_next = false;
+            continue;
+        }
+
+        match byte {
+            b'"' if !escape_next => {
+                in_string = !in_string;
+                quote_count += 1;
+            }
+            b'\\' if in_string => escape_next = true,
+            b'{' if !in_string => brace_count += 1,
+            b'}' if !in_string => brace_count -= 1,
+            b'[' if !in_string => bracket_count += 1,
+            b']' if !in_string => bracket_count -= 1,
+            _ => {}
+        }
+
+        // Early detection of malformed structure
+        if brace_count < 0 || bracket_count < 0 {
+            return Err("Unmatched closing brackets detected".to_string());
+        }
+    }
+
+    if in_string {
+        return Err(format!("Unterminated string detected (quotes: {})", quote_count));
+    }
+
+    if brace_count != 0 {
+        return Err(format!("Unmatched braces: {} unclosed", brace_count));
+    }
+
+    if bracket_count != 0 {
+        return Err(format!("Unmatched brackets: {} unclosed", bracket_count));
+    }
 
     Ok(())
 }

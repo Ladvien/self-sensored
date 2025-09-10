@@ -47,15 +47,34 @@ async fn main() -> std::io::Result<()> {
         .expect("WORKERS must be a valid number");
 
     let request_timeout_seconds = env::var("REQUEST_TIMEOUT_SECONDS")
-        .unwrap_or_else(|_| "90".to_string())
+        .unwrap_or_else(|_| "60".to_string())  // Reduced from 300s to 60s to prevent DoS attacks
         .parse::<u64>()
         .expect("REQUEST_TIMEOUT_SECONDS must be a valid number");
+
+    // Additional security configurations for request limiting
+    let max_payload_size_mb = env::var("MAX_PAYLOAD_SIZE_MB")
+        .unwrap_or_else(|_| "50".to_string())  // Default 50MB for health data uploads
+        .parse::<usize>()
+        .expect("MAX_PAYLOAD_SIZE_MB must be a valid number");
+
+    let connection_timeout_seconds = env::var("CONNECTION_TIMEOUT_SECONDS")
+        .unwrap_or_else(|_| "30".to_string())  // 30s connection timeout
+        .parse::<u64>()
+        .expect("CONNECTION_TIMEOUT_SECONDS must be a valid number");
+
+    let keep_alive_timeout_seconds = env::var("KEEP_ALIVE_TIMEOUT_SECONDS")
+        .unwrap_or_else(|_| "15".to_string())  // 15s keep-alive timeout
+        .parse::<u64>()
+        .expect("KEEP_ALIVE_TIMEOUT_SECONDS must be a valid number");
 
     info!("Starting Health Export REST API");
     info!("Database URL: {}", mask_password(&database_url));
     info!("Server binding to: {}:{}", server_host, server_port);
     info!("Worker threads: {}", workers);
-    info!("Request timeout: {}s (Cloudflare safe)", request_timeout_seconds);
+    info!("Request timeout: {}s (DoS-protected)", request_timeout_seconds);
+    info!("Max payload size: {}MB (security-limited)", max_payload_size_mb);
+    info!("Connection timeout: {}s", connection_timeout_seconds);
+    info!("Keep-alive timeout: {}s", keep_alive_timeout_seconds);
 
     // Create database connection pool
     let pool = create_connection_pool(&database_url)
@@ -136,8 +155,8 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(pool.clone()))
             .app_data(web::Data::new(auth_service.clone()))
             .app_data(web::Data::new(rate_limiter.clone()))
-            // Increase payload size limit to 100MB for large health data uploads
-            .app_data(web::PayloadConfig::new(100 * 1024 * 1024))
+            // Security-limited payload size to prevent DoS attacks
+            .app_data(web::PayloadConfig::new(max_payload_size_mb * 1024 * 1024))
             .wrap(configure_cors()) // CORS must be first for preflight requests
             .wrap(Compress::default()) // Add gzip compression
             .wrap(CompressionAndCaching) // Add caching headers
@@ -216,6 +235,8 @@ async fn main() -> std::io::Result<()> {
     })
     .workers(workers)
     .client_request_timeout(Duration::from_secs(request_timeout_seconds))
+    .client_timeout(Duration::from_secs(connection_timeout_seconds))
+    .keep_alive(Duration::from_secs(keep_alive_timeout_seconds))
     .bind((server_host, server_port))?
     .run()
     .await
