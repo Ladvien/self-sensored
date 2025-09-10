@@ -1,4 +1,5 @@
-use actix_web::{middleware::Compress, web, App, HttpServer};
+use actix_cors::Cors;
+use actix_web::{http::header, middleware::Compress, web, App, HttpServer};
 use dotenvy::dotenv;
 use std::env;
 use tracing::{info, warn};
@@ -111,6 +112,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(auth_service.clone()))
             // Increase payload size limit to 100MB for large health data uploads
             .app_data(web::PayloadConfig::new(100 * 1024 * 1024))
+            .wrap(configure_cors()) // CORS must be first for preflight requests
             .wrap(Compress::default()) // Add gzip compression
             .wrap(CompressionAndCaching) // Add caching headers
             .wrap(MetricsMiddleware)
@@ -205,4 +207,124 @@ fn mask_password(url: &str) -> String {
         }
     }
     url.to_string()
+}
+
+/// Configure CORS middleware with security-focused settings
+fn configure_cors() -> Cors {
+    let environment = env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string());
+    
+    // Parse allowed origins from environment variable
+    let allowed_origins = env::var("CORS_ALLOWED_ORIGINS")
+        .unwrap_or_else(|_| {
+            match environment.as_str() {
+                "production" => "https://api.yourdomain.com".to_string(),
+                _ => "http://localhost:3000,https://localhost:3000".to_string(),
+            }
+        });
+    
+    let max_age = env::var("CORS_MAX_AGE")
+        .unwrap_or_else(|_| "3600".to_string())
+        .parse::<usize>()
+        .unwrap_or(3600);
+    
+    let allow_credentials = env::var("CORS_ALLOW_CREDENTIALS")
+        .unwrap_or_else(|_| "false".to_string())
+        .parse::<bool>()
+        .unwrap_or(false);
+
+    info!("Configuring CORS for environment: {}", environment);
+    info!("CORS allowed origins: {}", allowed_origins);
+    info!("CORS max age: {} seconds", max_age);
+    info!("CORS credentials allowed: {}", allow_credentials);
+
+    let mut cors = Cors::default()
+        // Restrict to necessary HTTP methods only
+        .allowed_methods(vec!["GET", "POST", "OPTIONS"])
+        
+        // Only allow necessary headers for API authentication
+        .allowed_headers(vec![
+            header::AUTHORIZATION,
+            header::ACCEPT,
+            header::CONTENT_TYPE,
+            header::HeaderName::from_static("x-api-key"), // Custom API key header
+        ])
+        
+        // Expose Content-Disposition for file downloads
+        .expose_headers(&[header::CONTENT_DISPOSITION])
+        
+        // Set preflight cache duration
+        .max_age(max_age);
+
+    // Add allowed origins
+    for origin in allowed_origins.split(',') {
+        let trimmed_origin = origin.trim();
+        if !trimmed_origin.is_empty() {
+            cors = cors.allowed_origin(trimmed_origin);
+            info!("Added CORS allowed origin: {}", trimmed_origin);
+        }
+    }
+
+    // Configure credentials support (be very careful with this in production)
+    if allow_credentials {
+        cors = cors.supports_credentials();
+        warn!("CORS credentials support is ENABLED - ensure origins are explicitly set and trusted");
+    }
+
+    // Production environment security validations
+    if environment == "production" {
+        if allowed_origins.contains("localhost") {
+            warn!("SECURITY WARNING: localhost origins detected in production CORS configuration!");
+        }
+        if allowed_origins.contains('*') {
+            panic!("SECURITY ERROR: Wildcard origins are not allowed in production!");
+        }
+        info!("Production CORS security validations passed");
+    }
+
+    cors
+}
+
+/// Configure CORS middleware specifically for testing
+#[cfg(test)]
+pub fn configure_cors_for_testing() -> Cors {
+    use actix_cors::Cors;
+    use actix_web::http::header;
+    
+    let test_origins = env::var("CORS_ALLOWED_ORIGINS")
+        .unwrap_or_else(|_| "http://localhost:3000,https://trusted-app.com".to_string());
+    
+    let max_age = env::var("CORS_MAX_AGE")
+        .unwrap_or_else(|_| "1800".to_string())
+        .parse::<usize>()
+        .unwrap_or(1800);
+    
+    let allow_credentials = env::var("CORS_ALLOW_CREDENTIALS")
+        .unwrap_or_else(|_| "false".to_string())
+        .parse::<bool>()
+        .unwrap_or(false);
+
+    let mut cors = Cors::default()
+        .allowed_methods(vec!["GET", "POST", "OPTIONS"])
+        .allowed_headers(vec![
+            header::AUTHORIZATION,
+            header::ACCEPT,
+            header::CONTENT_TYPE,
+            header::HeaderName::from_static("x-api-key"),
+        ])
+        .expose_headers(&[header::CONTENT_DISPOSITION])
+        .max_age(max_age);
+
+    // Add test origins
+    for origin in test_origins.split(',') {
+        let trimmed_origin = origin.trim();
+        if !trimmed_origin.is_empty() {
+            cors = cors.allowed_origin(trimmed_origin);
+        }
+    }
+
+    if allow_credentials {
+        cors = cors.supports_credentials();
+    }
+
+    cors
 }
