@@ -9,12 +9,6 @@
 
 
 
-~~[SECURITY-003] Secrets Management - Database Credentials in Plain Text~~ - CLAIMING: SECURITY-003 - Secrets Management  
-Priority: High  
-Points: 2  
-AC: Database credentials and API secrets are stored in plain text in .env file without proper encryption or secret management. Production database password is exposed in version control. Implement proper secrets management using environment variables only, remove .env from git tracking, use encrypted secret storage for production deployments, and add .env to .gitignore if not already present. Document secure deployment practices.  
-Dependencies: None  
-Files: .env (contains plain text credentials), .gitignore (verify .env exclusion)
 
 [SECURITY-004] Insufficient Security Headers - Missing Protection Against XSS and Clickjacking  
 Priority: High  
