@@ -14,12 +14,6 @@ Files: src/main.rs (HttpServer configuration), src/handlers/ingest.rs, src/handl
 ## Critical Security Vulnerabilities - Security Audit
 
 
-[SECURITY-002] Rate Limiting Middleware Disabled - DoS Attack Vulnerability  
-Priority: Critical  
-Points: 2  
-AC: Rate limiting middleware is commented out in mod.rs and not integrated into the main application, despite comprehensive RateLimiter service being implemented. This leaves the API vulnerable to denial-of-service attacks and resource exhaustion. Uncomment and properly integrate RateLimitMiddleware after AuthMiddleware in main.rs middleware stack. Ensure rate limiting is enforced for all authenticated endpoints with proper error responses and headers.  
-Dependencies: None  
-Files: src/middleware/mod.rs (line 7 - commented out), src/main.rs (missing middleware integration)
 
 [SECURITY-003] Secrets Management - Database Credentials in Plain Text  
 Priority: High  

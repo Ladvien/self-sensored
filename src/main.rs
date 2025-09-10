@@ -2,6 +2,7 @@ use actix_cors::Cors;
 use actix_web::{http::header, middleware::Compress, web, App, HttpServer};
 use dotenvy::dotenv;
 use std::env;
+use std::time::Duration;
 use tracing::{info, warn};
 
 mod config;
@@ -45,10 +46,16 @@ async fn main() -> std::io::Result<()> {
         .parse::<usize>()
         .expect("WORKERS must be a valid number");
 
+    let request_timeout_seconds = env::var("REQUEST_TIMEOUT_SECONDS")
+        .unwrap_or_else(|_| "90".to_string())
+        .parse::<u64>()
+        .expect("REQUEST_TIMEOUT_SECONDS must be a valid number");
+
     info!("Starting Health Export REST API");
     info!("Database URL: {}", mask_password(&database_url));
     info!("Server binding to: {}:{}", server_host, server_port);
     info!("Worker threads: {}", workers);
+    info!("Request timeout: {}s (Cloudflare safe)", request_timeout_seconds);
 
     // Create database connection pool
     let pool = create_connection_pool(&database_url)
@@ -208,6 +215,7 @@ async fn main() -> std::io::Result<()> {
             )
     })
     .workers(workers)
+    .client_request_timeout(Duration::from_secs(request_timeout_seconds))
     .bind((server_host, server_port))?
     .run()
     .await
