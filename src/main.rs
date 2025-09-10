@@ -1,5 +1,5 @@
 use actix_web::{middleware::Compress, web, App, HttpServer};
-use dotenv::dotenv;
+use dotenvy::dotenv;
 use std::env;
 use tracing::{info, warn};
 
