@@ -138,12 +138,12 @@ impl Default for BatchConfig {
             enable_parallel_processing: true, // Keep parallel processing enabled
             chunk_size: 1000,
             memory_limit_mb: 500.0,
-            // Safe chunk sizes (80% of theoretical max to account for future parameters)
-            heart_rate_chunk_size: 8000,      // 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000
-            blood_pressure_chunk_size: 8000,  // 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000  
-            sleep_chunk_size: 5000,           // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000
-            activity_chunk_size: 7000,        // 7 params: 65,535 ÷ 7 × 0.8 ≈ 7,000
-            workout_chunk_size: 5000,         // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000
+            // Safe chunk sizes (80% of theoretical max for reliability)
+            heart_rate_chunk_size: 8000,      // 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000 (max ~48,000 params)
+            blood_pressure_chunk_size: 8000,  // 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000 (max ~48,000 params)
+            sleep_chunk_size: 5000,           // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000 (max ~50,000 params)
+            activity_chunk_size: 7000,        // 7 params: 65,535 ÷ 7 × 0.8 ≈ 7,000 (max ~49,000 params)
+            workout_chunk_size: 5000,         // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000 (max ~50,000 params)
             enable_progress_tracking: true,
             enable_intra_batch_deduplication: true, // Enable by default for performance
         }
@@ -824,14 +824,15 @@ impl BatchProcessor {
         deduplicated
     }
 
-    /// Deduplicate activity metrics using HashSet for O(1) lookups
+    /// Deduplicate activity metrics using HashMap for aggregation
+    /// When duplicates are found (same user_id, recorded_date), merge the data by taking the maximum values
+    /// This ensures we capture the most complete activity data for each day
     fn deduplicate_activities(
         &self,
         user_id: Uuid,
         metrics: Vec<crate::models::ActivityMetric>,
     ) -> Vec<crate::models::ActivityMetric> {
-        let mut seen_keys = HashSet::new();
-        let mut deduplicated = Vec::new();
+        let mut activity_map: HashMap<ActivityKey, crate::models::ActivityMetric> = HashMap::new();
 
         for metric in metrics {
             let key = ActivityKey {
@@ -839,12 +840,36 @@ impl BatchProcessor {
                 recorded_date: metric.date,
             };
 
-            if seen_keys.insert(key) {
-                deduplicated.push(metric);
+            match activity_map.get_mut(&key) {
+                Some(existing) => {
+                    // Merge activity data by taking maximum values or first non-null values
+                    if let Some(steps) = metric.steps {
+                        existing.steps = Some(existing.steps.unwrap_or(0).max(steps));
+                    }
+                    if let Some(distance) = metric.distance_meters {
+                        existing.distance_meters = Some(existing.distance_meters.unwrap_or(0.0).max(distance));
+                    }
+                    if let Some(calories) = metric.calories_burned {
+                        existing.calories_burned = Some(existing.calories_burned.unwrap_or(0.0).max(calories));
+                    }
+                    if let Some(active_minutes) = metric.active_minutes {
+                        existing.active_minutes = Some(existing.active_minutes.unwrap_or(0).max(active_minutes));
+                    }
+                    if let Some(flights) = metric.flights_climbed {
+                        existing.flights_climbed = Some(existing.flights_climbed.unwrap_or(0).max(flights));
+                    }
+                    // Keep the most recent source or first non-null source
+                    if metric.source.is_some() {
+                        existing.source = metric.source;
+                    }
+                }
+                None => {
+                    activity_map.insert(key, metric);
+                }
             }
         }
 
-        deduplicated
+        activity_map.into_values().collect()
     }
 
     /// Deduplicate workout metrics using HashSet for O(1) lookups  
@@ -925,7 +950,7 @@ impl BatchProcessor {
             return Ok(0);
         }
 
-        // Use default chunking if we don't have access to config
+        // Use safe default chunking to prevent parameter limit errors
         let chunk_size = 8000; // Safe default for heart rate (6 params per record)
         
         Self::insert_heart_rates_chunked(pool, user_id, metrics, chunk_size).await
@@ -945,11 +970,21 @@ impl BatchProcessor {
         let mut total_inserted = 0;
         let chunks: Vec<_> = metrics.chunks(chunk_size).collect();
         
+        // Validate parameter count to prevent PostgreSQL limit errors
+        let max_params_per_chunk = chunk_size * 6; // 6 params per heart rate record
+        if max_params_per_chunk > 52428 { // Safe limit (80% of 65,535)
+            return Err(sqlx::Error::Configuration(format!(
+                "Chunk size {} would result in {} parameters, exceeding safe limit",
+                chunk_size, max_params_per_chunk
+            ).into()));
+        }
+        
         info!(
             metric_type = "heart_rate",
             total_records = metrics.len(),
             chunk_count = chunks.len(),
             chunk_size = chunk_size,
+            max_params_per_chunk = max_params_per_chunk,
             "Processing heart rate metrics in chunks"
         );
 
@@ -1003,7 +1038,7 @@ impl BatchProcessor {
             return Ok(0);
         }
 
-        // Use default chunking if we don't have access to config
+        // Use safe default chunking to prevent parameter limit errors
         let chunk_size = 8000; // Safe default for blood pressure (6 params per record)
         
         Self::insert_blood_pressures_chunked(pool, user_id, metrics, chunk_size).await
@@ -1023,11 +1058,21 @@ impl BatchProcessor {
         let mut total_inserted = 0;
         let chunks: Vec<_> = metrics.chunks(chunk_size).collect();
         
+        // Validate parameter count to prevent PostgreSQL limit errors
+        let max_params_per_chunk = chunk_size * 6; // 6 params per blood pressure record
+        if max_params_per_chunk > 52428 { // Safe limit (80% of 65,535)
+            return Err(sqlx::Error::Configuration(format!(
+                "Chunk size {} would result in {} parameters, exceeding safe limit",
+                chunk_size, max_params_per_chunk
+            ).into()));
+        }
+        
         info!(
             metric_type = "blood_pressure",
             total_records = metrics.len(),
             chunk_count = chunks.len(),
             chunk_size = chunk_size,
+            max_params_per_chunk = max_params_per_chunk,
             "Processing blood pressure metrics in chunks"
         );
 
@@ -1073,7 +1118,7 @@ impl BatchProcessor {
             return Ok(0);
         }
 
-        // Use default chunking if we don't have access to config
+        // Use safe default chunking to prevent parameter limit errors
         let chunk_size = 5000; // Safe default for sleep (10 params per record)
         
         Self::insert_sleep_metrics_chunked(pool, user_id, metrics, chunk_size).await
@@ -1093,11 +1138,21 @@ impl BatchProcessor {
         let mut total_inserted = 0;
         let chunks: Vec<_> = metrics.chunks(chunk_size).collect();
         
+        // Validate parameter count to prevent PostgreSQL limit errors
+        let max_params_per_chunk = chunk_size * 10; // 10 params per sleep record
+        if max_params_per_chunk > 52428 { // Safe limit (80% of 65,535)
+            return Err(sqlx::Error::Configuration(format!(
+                "Chunk size {} would result in {} parameters, exceeding safe limit",
+                chunk_size, max_params_per_chunk
+            ).into()));
+        }
+        
         info!(
             metric_type = "sleep",
             total_records = metrics.len(),
             chunk_count = chunks.len(),
             chunk_size = chunk_size,
+            max_params_per_chunk = max_params_per_chunk,
             "Processing sleep metrics in chunks"
         );
 
@@ -1164,7 +1219,7 @@ impl BatchProcessor {
             return Ok(0);
         }
 
-        // Use default chunking if we don't have access to config
+        // Use safe default chunking to prevent parameter limit errors
         let chunk_size = 7000; // Safe default for activity (7 params per record)
         
         Self::insert_activities_chunked(pool, user_id, metrics, chunk_size).await
@@ -1184,11 +1239,21 @@ impl BatchProcessor {
         let mut total_inserted = 0;
         let chunks: Vec<_> = metrics.chunks(chunk_size).collect();
         
+        // Validate parameter count to prevent PostgreSQL limit errors
+        let max_params_per_chunk = chunk_size * 7; // 7 params per activity record
+        if max_params_per_chunk > 52428 { // Safe limit (80% of 65,535)
+            return Err(sqlx::Error::Configuration(format!(
+                "Chunk size {} would result in {} parameters, exceeding safe limit",
+                chunk_size, max_params_per_chunk
+            ).into()));
+        }
+        
         info!(
             metric_type = "activity",
             total_records = metrics.len(),
             chunk_count = chunks.len(),
             chunk_size = chunk_size,
+            max_params_per_chunk = max_params_per_chunk,
             "Processing activity metrics in chunks"
         );
 
@@ -1208,15 +1273,7 @@ impl BatchProcessor {
                     .push_bind(&metric.source);
             });
 
-            query_builder.push(
-                " ON CONFLICT (user_id, recorded_date) DO UPDATE SET
-                  steps = COALESCE(EXCLUDED.steps, activity_metrics.steps),
-                  distance_meters = COALESCE(EXCLUDED.distance_meters, activity_metrics.distance_meters),
-                  calories_burned = COALESCE(EXCLUDED.calories_burned, activity_metrics.calories_burned),
-                  active_minutes = COALESCE(EXCLUDED.active_minutes, activity_metrics.active_minutes),
-                  flights_climbed = COALESCE(EXCLUDED.flights_climbed, activity_metrics.flights_climbed),
-                  updated_at = NOW()"
-            );
+            query_builder.push(" ON CONFLICT (user_id, recorded_date) DO NOTHING");
 
             let result = query_builder.build().execute(pool).await?;
             let chunk_inserted = result.rows_affected() as usize;
@@ -1244,7 +1301,7 @@ impl BatchProcessor {
             return Ok(0);
         }
 
-        // Use default chunking if we don't have access to config
+        // Use safe default chunking to prevent parameter limit errors
         let chunk_size = 5000; // Safe default for workouts (10 params per record)
         
         Self::insert_workouts_chunked(pool, user_id, workouts, chunk_size).await
@@ -1264,11 +1321,21 @@ impl BatchProcessor {
         let mut total_inserted = 0;
         let chunks: Vec<_> = workouts.chunks(chunk_size).collect();
         
+        // Validate parameter count to prevent PostgreSQL limit errors
+        let max_params_per_chunk = chunk_size * 10; // 10 params per workout record
+        if max_params_per_chunk > 52428 { // Safe limit (80% of 65,535)
+            return Err(sqlx::Error::Configuration(format!(
+                "Chunk size {} would result in {} parameters, exceeding safe limit",
+                chunk_size, max_params_per_chunk
+            ).into()));
+        }
+        
         info!(
             metric_type = "workout",
             total_records = workouts.len(),
             chunk_count = chunks.len(),
             chunk_size = chunk_size,
+            max_params_per_chunk = max_params_per_chunk,
             "Processing workout metrics in chunks"
         );
 
@@ -1291,13 +1358,12 @@ impl BatchProcessor {
             });
 
             query_builder.push(" ON CONFLICT (user_id, started_at) DO UPDATE SET
-                ended_at = EXCLUDED.ended_at,
+                ended_at = CASE WHEN EXCLUDED.ended_at > workouts.ended_at THEN EXCLUDED.ended_at ELSE workouts.ended_at END,
                 total_energy_kcal = COALESCE(EXCLUDED.total_energy_kcal, workouts.total_energy_kcal),
                 distance_meters = COALESCE(EXCLUDED.distance_meters, workouts.distance_meters),
                 average_heart_rate = COALESCE(EXCLUDED.average_heart_rate, workouts.average_heart_rate),
                 max_heart_rate = COALESCE(EXCLUDED.max_heart_rate, workouts.max_heart_rate),
-                updated_at = NOW()
-                WHERE workouts.ended_at = EXCLUDED.ended_at");
+                updated_at = NOW()");
 
             let result = query_builder.build().execute(pool).await?;
             let chunk_inserted = result.rows_affected() as usize;
