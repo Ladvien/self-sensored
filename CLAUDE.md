@@ -182,6 +182,38 @@ let exists = sqlx::query!(
 - Automatically create partitions 3 months ahead
 - Use BRIN indexes for time-series data
 
+### Batch Processing Configuration
+PostgreSQL has a parameter limit of 65,535 per query. Our batch processor implements chunking to stay under this limit:
+
+```rust
+// Default safe chunk sizes (80% of theoretical max)
+let config = BatchConfig {
+    heart_rate_chunk_size: 8000,      // 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000
+    blood_pressure_chunk_size: 8000,  // 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000  
+    sleep_chunk_size: 5000,           // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000
+    activity_chunk_size: 7000,        // 7 params: 65,535 ÷ 7 × 0.8 ≈ 7,000
+    workout_chunk_size: 5000,         // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000
+    enable_progress_tracking: true,   // Track progress for large batches
+    ..Default::default()
+};
+
+let batch_processor = BatchProcessor::with_config(pool, config);
+```
+
+**Parameter Count per Metric Type:**
+- **Heart Rate**: 6 params (user_id, recorded_at, heart_rate, resting_heart_rate, context, source)
+- **Blood Pressure**: 6 params (user_id, recorded_at, systolic, diastolic, pulse, source)
+- **Sleep**: 10 params (user_id, sleep_start, sleep_end, duration_minutes, deep_sleep_minutes, rem_sleep_minutes, light_sleep_minutes, awake_minutes, efficiency, source)
+- **Activity**: 7 params (user_id, recorded_date, steps, distance_meters, calories_burned, active_minutes, flights_climbed, source)
+- **Workout**: 10 params (id, user_id, workout_type, started_at, ended_at, total_energy_kcal, distance_meters, avg_heart_rate, max_heart_rate, source)
+
+**Chunking Benefits:**
+- Prevents PostgreSQL parameter limit errors
+- Maintains transaction integrity within each chunk
+- Provides progress tracking for large batches
+- Parallel processing of chunks when enabled
+- Comprehensive logging of chunk processing
+
 ## 🌐 API GUIDELINES
 
 ### Endpoint Design

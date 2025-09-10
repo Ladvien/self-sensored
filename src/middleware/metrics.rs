@@ -428,6 +428,6 @@ mod tests {
 
         // Verify metrics registry is accessible
         let registry = get_metrics_registry();
-        assert!(!registry.gather().unwrap().is_empty());
+        assert!(!registry.gather().is_empty());
     }
 }
