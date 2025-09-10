@@ -53,7 +53,7 @@ pub struct HeartRateRecord {
     pub source_device: Option<String>,
     pub raw_data: Option<serde_json::Value>, // Store original JSON for debugging
     pub metadata: Option<serde_json::Value>,
-    pub created_at: DateTime<Utc>,
+    pub created_at: Option<DateTime<Utc>>,
 }
 
 /// Blood pressure database model
@@ -67,7 +67,7 @@ pub struct BloodPressureRecord {
     pub source_device: Option<String>,
     pub raw_data: Option<serde_json::Value>, // Store original JSON for debugging
     pub metadata: Option<serde_json::Value>,
-    pub created_at: DateTime<Utc>,
+    pub created_at: Option<DateTime<Utc>>,
 }
 
 /// Sleep database model
@@ -85,7 +85,7 @@ pub struct SleepRecord {
     pub source_device: Option<String>,
     pub raw_data: Option<serde_json::Value>, // Store original JSON for debugging
     pub metadata: Option<serde_json::Value>,
-    pub created_at: DateTime<Utc>,
+    pub created_at: Option<DateTime<Utc>>,
 }
 
 /// Activity database model  
@@ -101,8 +101,8 @@ pub struct ActivityRecord {
     pub source_device: Option<String>,
     pub raw_data: Option<serde_json::Value>, // Store original JSON for debugging
     pub metadata: Option<serde_json::Value>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>, // Track aggregation updates
+    pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>, // Track aggregation updates
 }
 
 /// Workout database model
@@ -124,7 +124,7 @@ pub struct WorkoutRecord {
     pub source_device: Option<String>,
     pub raw_data: Option<serde_json::Value>, // Store original JSON for debugging
     pub metadata: Option<serde_json::Value>,
-    pub created_at: DateTime<Utc>,
+    pub created_at: Option<DateTime<Utc>>,
 }
 
 /// Workout route points (separate table for detailed GPS data)
@@ -169,7 +169,7 @@ impl HeartRateRecord {
             source_device: metric.source,
             raw_data: Some(raw_json),
             metadata: None,
-            created_at: Utc::now(),
+            created_at: Some(Utc::now()),
         }
     }
 }
@@ -185,7 +185,7 @@ impl From<crate::models::health_metrics::HeartRateMetric> for HeartRateRecord {
             source_device: metric.source,
             raw_data: None,
             metadata: None,
-            created_at: Utc::now(),
+            created_at: Some(Utc::now()),
         }
     }
 }
@@ -201,7 +201,7 @@ impl From<crate::models::health_metrics::BloodPressureMetric> for BloodPressureR
             source_device: metric.source,
             raw_data: None,
             metadata: None,
-            created_at: Utc::now(),
+            created_at: Some(Utc::now()),
         }
     }
 }
@@ -228,7 +228,7 @@ impl SleepRecord {
             source_device: metric.source,
             raw_data: Some(raw_json),
             metadata: None,
-            created_at: Utc::now(),
+            created_at: Some(Utc::now()),
         }
     }
 }
@@ -252,7 +252,7 @@ impl From<crate::models::health_metrics::SleepMetric> for SleepRecord {
             source_device: metric.source,
             raw_data: None,
             metadata: None,
-            created_at: Utc::now(),
+            created_at: Some(Utc::now()),
         }
     }
 }
@@ -276,8 +276,8 @@ impl ActivityRecord {
             source_device: metric.source,
             raw_data: Some(raw_json),
             metadata: None,
-            created_at: now,
-            updated_at: now,
+            created_at: Some(now),
+            updated_at: Some(now),
         }
     }
 
@@ -318,7 +318,7 @@ impl ActivityRecord {
             (None, None) => None,
         };
 
-        self.updated_at = Utc::now();
+        self.updated_at = Some(Utc::now());
     }
 }
 
@@ -338,8 +338,8 @@ impl From<crate::models::health_metrics::ActivityMetric> for ActivityRecord {
             source_device: metric.source,
             raw_data: None,
             metadata: None,
-            created_at: now,
-            updated_at: now,
+            created_at: Some(now),
+            updated_at: Some(now),
         }
     }
 }
@@ -373,7 +373,7 @@ impl WorkoutRecord {
             source_device: workout.source,
             raw_data: Some(raw_json),
             metadata: None,
-            created_at: Utc::now(),
+            created_at: Some(Utc::now()),
         }
     }
 
@@ -433,7 +433,7 @@ impl From<crate::models::health_metrics::WorkoutData> for WorkoutRecord {
             source_device: workout.source,
             raw_data: None,
             metadata: None,
-            created_at: Utc::now(),
+            created_at: Some(Utc::now()),
         }
     }
 }

@@ -81,26 +81,28 @@ async fn main() -> std::io::Result<()> {
     });
     info!("Database metrics monitoring started");
 
-    // Start MQTT subscriber for Auto Health Export data
-    let mqtt_pool = pool.clone();
-    tokio::spawn(async move {
-        info!("Starting MQTT subscriber service");
-        let subscriber = services::mqtt_subscriber::MqttSubscriber::new(mqtt_pool);
+    // Start MQTT subscriber for Auto Health Export data - temporarily disabled
+    // let mqtt_pool = pool.clone();
+    // tokio::spawn(async move {
+    //     info!("Starting MQTT subscriber service");
+    //     let subscriber = services::mqtt_subscriber::MqttSubscriber::new(mqtt_pool);
 
-        // Keep retrying connection with backoff
-        loop {
-            match subscriber.start().await {
-                Ok(_) => {
-                    info!("MQTT subscriber connected successfully");
-                }
-                Err(e) => {
-                    warn!("MQTT subscriber error: {}, retrying in 30 seconds", e);
-                    tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
-                }
-            }
-        }
-    });
-    info!("MQTT subscriber service started");
+    //     // Keep retrying connection with backoff
+    //     loop {
+    //         match subscriber.start().await {
+    //             Ok(_) => {
+    //                 info!("MQTT subscriber connected successfully");
+    //             }
+    //             Err(e) => {
+    //                 {
+    //                     warn!("MQTT subscriber error: {}, retrying in 30 seconds", e);
+    //                 } // Error drops here
+    //                 tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+    //             }
+    //         }
+    //     }
+    // });
+    info!("MQTT subscriber temporarily disabled - fix Send trait issue");
 
     // Start HTTP server
     HttpServer::new(move || {

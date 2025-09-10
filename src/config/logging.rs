@@ -2,10 +2,7 @@ use std::env;
 use std::io;
 use tracing::Level;
 use tracing_subscriber::{
-    fmt::time::SystemTime,
-    layer::SubscriberExt,
-    util::SubscriberInitExt,
-    EnvFilter, Registry,
+    fmt::time::SystemTime, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Registry,
 };
 
 /// Logging configuration structure

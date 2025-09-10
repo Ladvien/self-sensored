@@ -18,7 +18,7 @@ futures = "0.3"
 
 # Database
 sqlx = { version = "0.8.1", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json", "ipnetwork", "bigdecimal"] }
-bigdecimal = { version = "0.3", features = ["serde"] }
+bigdecimal = { version = "0.4", features = ["serde"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
