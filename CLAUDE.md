@@ -7,6 +7,7 @@ This file provides context and guidelines for Claude Code when working with the 
 - **ALWAYS** run tests before committing any changes
 - **ALWAYS** validate API payloads against the Auto Health Export schema
 - **NEVER** store sensitive data (API keys, passwords) in code - use environment variables and .env file
+- **NEVER** commit .env files to version control - use .env.example for template and keep .env local only
 - **ALWAYS** use transactions for database operations that modify multiple tables
 - **NEVER** bypass rate limiting or authentication checks
 - **ALWAYS** handle errors gracefully with proper error types and logging

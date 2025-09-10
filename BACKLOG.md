@@ -4,18 +4,12 @@
 
 
 
-[AUDIT-003] Timeout Configuration - Missing Cloudflare 100s Timeout Handling  
-Priority: High  
-Points: 2  
-AC: No timeout configuration for request processing to handle Cloudflare's 100-second timeout limit. Large batch operations risk timing out without proper handling. Implement request timeout middleware with 90-second limit, graceful timeout responses, and async batch processing continuation for large operations. Add timeout configuration to HttpServer and implement proper timeout error responses.  
-Dependencies: None  
-Files: src/main.rs (HttpServer configuration), src/handlers/ingest.rs, src/handlers/optimized_ingest.rs
 
 ## Critical Security Vulnerabilities - Security Audit
 
 
 
-[SECURITY-003] Secrets Management - Database Credentials in Plain Text  
+~~[SECURITY-003] Secrets Management - Database Credentials in Plain Text~~ - CLAIMING: SECURITY-003 - Secrets Management  
 Priority: High  
 Points: 2  
 AC: Database credentials and API secrets are stored in plain text in .env file without proper encryption or secret management. Production database password is exposed in version control. Implement proper secrets management using environment variables only, remove .env from git tracking, use encrypted secret storage for production deployments, and add .env to .gitignore if not already present. Document secure deployment practices.  
