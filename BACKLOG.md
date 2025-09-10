@@ -13,12 +13,6 @@ Files: src/main.rs (HttpServer configuration), src/handlers/ingest.rs, src/handl
 
 ## Critical Security Vulnerabilities - Security Audit
 
-[SECURITY-001] Missing CORS Configuration - API Vulnerable to Cross-Origin Attacks  
-Priority: Critical  
-Points: 3  
-AC: The API lacks CORS (Cross-Origin Resource Sharing) middleware configuration despite having actix-cors dependency. This leaves the API vulnerable to cross-origin attacks and prevents legitimate web applications from safely accessing the API. Implement proper CORS middleware in main.rs with restrictive origins for production, allowed headers for API authentication, and proper preflight handling. Configure environment-specific CORS origins and security policies.  
-Dependencies: None  
-Files: src/main.rs (middleware configuration), Cargo.toml (actix-cors dependency present but unused)
 
 [SECURITY-002] Rate Limiting Middleware Disabled - DoS Attack Vulnerability  
 Priority: Critical  
