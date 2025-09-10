@@ -1,5 +1,6 @@
 // Core data models for the Health Export API
 
+pub mod background_jobs;
 pub mod db;
 pub mod health_metrics;
 pub mod ios_models;
@@ -8,6 +9,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 // Re-export commonly used types
+// pub use background_jobs::*; // Temporarily commented out - missing database tables
 pub use health_metrics::*;
 pub use ios_models::*;
 

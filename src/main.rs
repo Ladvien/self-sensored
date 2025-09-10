@@ -173,6 +173,7 @@ async fn main() -> std::io::Result<()> {
                 web::scope("/api/v1")
                     .route("/status", web::get().to(handlers::health::api_status))
                     .route("/ingest", web::post().to(handlers::ingest::ingest_handler))
+                    .route("/ingest-async", web::post().to(handlers::ingest_async_simple::ingest_async_optimized_handler))
                     // Health data query endpoints
                     .route(
                         "/data/heart-rate",
