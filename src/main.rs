@@ -13,8 +13,8 @@ mod services;
 
 use config::LoggingConfig;
 use db::database::{create_connection_pool, update_db_pool_metrics};
-use middleware::{AuthMiddleware, CompressionAndCaching, MetricsMiddleware, StructuredLogger};
-use services::auth::AuthService;
+use middleware::{AuthMiddleware, CompressionAndCaching, MetricsMiddleware, RateLimitMiddleware, StructuredLogger};
+use services::{auth::AuthService, rate_limiter::RateLimiter};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -30,6 +30,8 @@ async fn main() -> std::io::Result<()> {
     // Load configuration from environment variables
     let database_url =
         env::var("DATABASE_URL").expect("DATABASE_URL must be set in environment or .env file");
+
+    let redis_url = env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
 
     let server_host = env::var("SERVER_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
 
@@ -71,6 +73,22 @@ async fn main() -> std::io::Result<()> {
     let auth_service = AuthService::new(pool.clone());
     info!("AuthService initialized");
 
+    // Create RateLimiter service
+    let rate_limiter = match RateLimiter::new(&redis_url).await {
+        Ok(limiter) => {
+            if limiter.is_using_redis() {
+                info!("Rate limiter initialized with Redis backend: {}", mask_password(&redis_url));
+            } else {
+                info!("Rate limiter initialized with in-memory fallback");
+            }
+            limiter
+        }
+        Err(e) => {
+            warn!("Failed to create rate limiter, falling back to in-memory: {}", e);
+            RateLimiter::new_in_memory(100) // Default 100 requests/hour
+        }
+    };
+
     // Start database metrics monitoring task
     let pool_for_metrics = pool.clone();
     tokio::spawn(async move {
@@ -110,6 +128,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(web::Data::new(pool.clone()))
             .app_data(web::Data::new(auth_service.clone()))
+            .app_data(web::Data::new(rate_limiter.clone()))
             // Increase payload size limit to 100MB for large health data uploads
             .app_data(web::PayloadConfig::new(100 * 1024 * 1024))
             .wrap(configure_cors()) // CORS must be first for preflight requests
@@ -118,6 +137,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(MetricsMiddleware)
             .wrap(StructuredLogger)
             .wrap(AuthMiddleware)
+            .wrap(RateLimitMiddleware)
             .route("/health", web::get().to(handlers::health::health_check))
             .route(
                 "/metrics",

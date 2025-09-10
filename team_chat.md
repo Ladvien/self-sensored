@@ -1004,3 +1004,28 @@
 - Complete documentation and test coverage for ongoing maintenance
 
 **Available for:** Supporting other team members with CORS integration questions or advanced security configuration needs.
+
+## Security Engineer - Story SECURITY-002 Assignment
+**Timestamp:** 2025-09-10 Current Assignment
+**Agent:** Security Engineer (Rate Limiting Specialist)
+**Action:** CLAIMING: SECURITY-002 - Rate Limiting Middleware Disabled
+
+**Status:** 🚀 IN PROGRESS
+**Priority:** Critical (8 story points)
+**Focus:** Enable and configure rate limiting middleware for DoS protection, API key-based limits (100 requests/hour), IP-based limits for unauthenticated endpoints, and proper HTTP 429 responses with retry headers per CLAUDE.md requirements.
+
+**Current Tasks:**
+- [x] Story claimed and team notified
+- [ ] Research Actix-web rate limiting best practices and DoS protection strategies
+- [ ] Examine current rate_limiter.rs service and middleware/mod.rs configuration
+- [ ] Enable and integrate rate limiting middleware in main.rs
+- [ ] Configure per-API-key rate limits (100 requests/hour as per CLAUDE.md)
+- [ ] Add IP-based rate limiting for unauthenticated endpoints
+- [ ] Configure sliding window algorithm for smooth rate limiting
+- [ ] Add bypass for health check endpoints
+- [ ] Add rate limiting configuration to environment variables
+- [ ] Write comprehensive tests in tests/middleware/rate_limiting_test.rs
+- [ ] Test DoS scenarios and legitimate usage patterns
+- [ ] Self-review for security effectiveness and performance impact
+- [ ] Commit changes with security-focused messages
+- [ ] Move SECURITY-002 from BACKLOG.md to DONE.md

@@ -103,17 +103,94 @@ impl RateLimiter {
         }
     }
 
-    /// Check if a request is allowed and update rate limit counters
+    /// Check if a request is allowed and update rate limit counters for API keys
     pub async fn check_rate_limit(
         &self,
         api_key_id: Uuid,
     ) -> Result<RateLimitInfo, RateLimitError> {
-        let key = format!("rate_limit:{api_key_id}");
+        let key = format!("rate_limit:api_key:{api_key_id}");
 
         if self.using_redis && self.redis_client.is_some() {
             self.check_redis_rate_limit(&key).await
         } else {
             self.check_memory_rate_limit(&key).await
+        }
+    }
+
+    /// Check if a request is allowed and update rate limit counters for IP addresses
+    /// Uses a more restrictive limit for unauthenticated requests
+    pub async fn check_ip_rate_limit(
+        &self,
+        ip_address: &str,
+    ) -> Result<RateLimitInfo, RateLimitError> {
+        let key = format!("rate_limit:ip:{ip_address}");
+        
+        // Use more restrictive limits for IP-based rate limiting (20 requests/hour)
+        let ip_limit = std::env::var("RATE_LIMIT_IP_REQUESTS_PER_HOUR")
+            .unwrap_or_else(|_| "20".to_string())
+            .parse::<i32>()
+            .unwrap_or(20);
+
+        if self.using_redis && self.redis_client.is_some() {
+            self.check_redis_rate_limit_with_limit(&key, ip_limit).await
+        } else {
+            self.check_memory_rate_limit_with_limit(&key, ip_limit).await
+        }
+    }
+
+    /// Redis-based rate limiting with custom limit
+    async fn check_redis_rate_limit_with_limit(&self, key: &str, limit: i32) -> Result<RateLimitInfo, RateLimitError> {
+        if let Some(client) = &self.redis_client {
+            let mut conn = client.get_async_connection().await?;
+
+            // Use Redis sliding window with expiration
+            let now = Utc::now().timestamp();
+            let window_start = now - 3600; // 1 hour window
+
+            // Remove expired entries and count current requests
+            let _: () = redis::cmd("ZREMRANGEBYSCORE")
+                .arg(key)
+                .arg(0)
+                .arg(window_start)
+                .query_async(&mut conn)
+                .await?;
+            let current_count: i32 = conn.zcard(key).await?;
+
+            if current_count >= limit {
+                // Get the oldest entry to determine reset time
+                let oldest_entries: Vec<(String, f64)> = conn.zrange_withscores(key, 0, 0).await?;
+                let reset_time = if let Some((_, timestamp)) = oldest_entries.first() {
+                    DateTime::from_timestamp(*timestamp as i64 + 3600, 0)
+                        .unwrap_or_else(|| Utc::now() + chrono::Duration::hours(1))
+                } else {
+                    Utc::now() + chrono::Duration::hours(1)
+                };
+
+                return Ok(RateLimitInfo {
+                    requests_remaining: 0,
+                    requests_limit: limit,
+                    reset_time,
+                    retry_after: Some((reset_time - Utc::now()).num_seconds() as i32),
+                });
+            }
+
+            // Add current request
+            let request_id = Uuid::new_v4().to_string();
+            let _: () = conn.zadd(key, request_id, now).await?;
+            let _: () = conn.expire(key, 3600).await?; // Set expiration
+
+            let reset_time = Utc::now() + chrono::Duration::hours(1);
+
+            Ok(RateLimitInfo {
+                requests_remaining: limit - current_count - 1,
+                requests_limit: limit,
+                reset_time,
+                retry_after: None,
+            })
+        } else {
+            Err(RateLimitError::InternalError(
+                "Redis client not available".to_string(),
+            ))
         }
     }
 
@@ -171,6 +248,62 @@ impl RateLimiter {
                 "Redis client not available".to_string(),
             ))
         }
+    }
+
+    /// In-memory rate limiting with custom limit (fallback)
+    async fn check_memory_rate_limit_with_limit(&self, key: &str, limit: i32) -> Result<RateLimitInfo, RateLimitError> {
+        let now = Instant::now();
+        let mut store = self
+            .fallback_store
+            .lock()
+            .map_err(|e| RateLimitError::InternalError(format!("Lock poisoned: {e}")))?;
+
+        // Clean up expired entries periodically
+        let keys_to_remove: Vec<String> = store
+            .iter()
+            .filter(|(_, entry)| now.duration_since(entry.window_start) > self.window_duration)
+            .map(|(k, _)| k.clone())
+            .collect();
+
+        for key_to_remove in keys_to_remove {
+            store.remove(&key_to_remove);
+        }
+
+        // Get or create entry for this key
+        let entry = store
+            .entry(key.to_string())
+            .or_insert_with(|| InMemoryRateLimit {
+                count: 0,
+                window_start: now,
+                reset_time: Utc::now() + chrono::Duration::hours(1),
+            });
+
+        // Check if we need to reset the window
+        if now.duration_since(entry.window_start) > self.window_duration {
+            entry.count = 0;
+            entry.window_start = now;
+            entry.reset_time = Utc::now() + chrono::Duration::hours(1);
+        }
+
+        // Check if limit exceeded
+        if entry.count >= limit {
+            return Ok(RateLimitInfo {
+                requests_remaining: 0,
+                requests_limit: limit,
+                reset_time: entry.reset_time,
+                retry_after: Some((entry.reset_time - Utc::now()).num_seconds() as i32),
+            });
+        }
+
+        // Increment counter
+        entry.count += 1;
+
+        Ok(RateLimitInfo {
+            requests_remaining: limit - entry.count,
+            requests_limit: limit,
+            reset_time: entry.reset_time,
+            retry_after: None,
+        })
     }
 
     /// In-memory rate limiting (fallback)

@@ -1,16 +1,77 @@
 use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
     Error, HttpMessage, HttpResponse,
+    http::header::{HeaderName, HeaderValue},
 };
 use futures_util::future::LocalBoxFuture;
 use std::{
     future::{ready, Ready},
     rc::Rc,
 };
+use tracing::{warn, debug};
 
 use crate::services::{auth::AuthContext, rate_limiter::{RateLimiter, RateLimitError}};
 
-/// Rate limiting middleware that uses API key from auth context
+/// Extract client IP address from request headers
+fn get_client_ip(req: &ServiceRequest) -> String {
+    // Check X-Forwarded-For header first (for load balancers/proxies)
+    if let Some(forwarded_for) = req.headers().get("x-forwarded-for") {
+        if let Ok(forwarded_for_str) = forwarded_for.to_str() {
+            // Take the first IP from comma-separated list
+            if let Some(first_ip) = forwarded_for_str.split(',').next() {
+                return first_ip.trim().to_string();
+            }
+        }
+    }
+    
+    // Check X-Real-IP header (for Nginx)
+    if let Some(real_ip) = req.headers().get("x-real-ip") {
+        if let Ok(real_ip_str) = real_ip.to_str() {
+            return real_ip_str.to_string();
+        }
+    }
+    
+    // Fall back to connection info IP
+    req.connection_info()
+        .peer_addr()
+        .unwrap_or("unknown")
+        .to_string()
+}
+
+/// Add rate limiting headers to response
+fn add_rate_limit_headers(
+    mut response: ServiceResponse<actix_web::body::BoxBody>,
+    requests_remaining: i32,
+    requests_limit: i32,
+    reset_time: chrono::DateTime<chrono::Utc>,
+    retry_after: Option<i32>,
+) -> ServiceResponse<actix_web::body::BoxBody> {
+    let headers = response.headers_mut();
+    
+    // Standard rate limiting headers
+    if let Ok(limit_header) = HeaderValue::from_str(&requests_limit.to_string()) {
+        headers.insert(HeaderName::from_static("x-ratelimit-limit"), limit_header);
+    }
+    
+    if let Ok(remaining_header) = HeaderValue::from_str(&requests_remaining.to_string()) {
+        headers.insert(HeaderName::from_static("x-ratelimit-remaining"), remaining_header);
+    }
+    
+    if let Ok(reset_header) = HeaderValue::from_str(&reset_time.timestamp().to_string()) {
+        headers.insert(HeaderName::from_static("x-ratelimit-reset"), reset_header);
+    }
+    
+    // Add Retry-After header for rate limited requests
+    if let Some(retry_seconds) = retry_after {
+        if let Ok(retry_header) = HeaderValue::from_str(&retry_seconds.to_string()) {
+            headers.insert(actix_web::http::header::RETRY_AFTER, retry_header);
+        }
+    }
+    
+    response
+}
+
+/// Rate limiting middleware that uses API key from auth context or IP for unauthenticated requests
 pub struct RateLimitMiddleware;
 
 impl<S, B> Transform<S, ServiceRequest> for RateLimitMiddleware
@@ -52,59 +113,90 @@ where
         let service = self.service.clone();
 
         Box::pin(async move {
-            // Skip rate limiting for health check endpoint
-            if req.path() == "/health" {
+            // Skip rate limiting for health check and metrics endpoints
+            let path = req.path();
+            if path == "/health" || path == "/metrics" {
                 return service.call(req).await;
             }
 
-            // Get auth context from request (should be set by AuthMiddleware)
-            let auth_context = req.extensions().get::<AuthContext>().cloned();
+            // Get the RateLimiter from app data
+            if let Some(rate_limiter) = req.app_data::<actix_web::web::Data<RateLimiter>>() {
+                // Get auth context from request (may be set by AuthMiddleware)
+                let auth_context = req.extensions().get::<AuthContext>().cloned();
+                
+                let rate_limit_result = if let Some(auth_context) = auth_context {
+                    // Authenticated request: use API key-based rate limiting
+                    debug!("Checking rate limit for API key: {}", auth_context.api_key.id);
+                    rate_limiter.check_rate_limit(auth_context.api_key.id).await
+                } else {
+                    // Unauthenticated request: use IP-based rate limiting
+                    let client_ip = get_client_ip(&req);
+                    debug!("Checking rate limit for IP: {}", client_ip);
+                    rate_limiter.check_ip_rate_limit(&client_ip).await
+                };
 
-            if let Some(auth_context) = auth_context {
-                // Get the RateLimiter from app data
-                if let Some(rate_limiter) = req.app_data::<actix_web::web::Data<RateLimiter>>() {
-                    match rate_limiter.check_rate_limit(auth_context.api_key.id).await {
-                        Ok(rate_limit_info) => {
-                            // Call service first, then modify response
-                            let response = service.call(req).await?;
+                match rate_limit_result {
+                    Ok(rate_limit_info) => {
+                        if rate_limit_info.requests_remaining < 0 || rate_limit_info.retry_after.is_some() {
+                            // Rate limit exceeded
+                            warn!("Rate limit exceeded for path: {}", path);
+                            let mut builder = HttpResponse::TooManyRequests();
                             
-                            // For now, we'll pass through the response as-is
-                            // In a production system, you'd want to properly add headers
-                            // but this requires more complex response manipulation
+                            // Add rate limiting headers
+                            builder.insert_header(("x-ratelimit-limit", rate_limit_info.requests_limit.to_string()));
+                            builder.insert_header(("x-ratelimit-remaining", rate_limit_info.requests_remaining.max(0).to_string()));
+                            builder.insert_header(("x-ratelimit-reset", rate_limit_info.reset_time.timestamp().to_string()));
+                            
+                            if let Some(retry_seconds) = rate_limit_info.retry_after {
+                                builder.insert_header(("retry-after", retry_seconds.to_string()));
+                            }
+
+                            // Return error response which will be handled by Actix-web
+                            Err(actix_web::error::ErrorTooManyRequests(
+                                serde_json::json!({
+                                    "error": "rate_limit_exceeded",
+                                    "message": "Too many requests. Please try again later.",
+                                    "retry_after": rate_limit_info.retry_after,
+                                    "rate_limit": {
+                                        "limit": rate_limit_info.requests_limit,
+                                        "remaining": rate_limit_info.requests_remaining.max(0),
+                                        "reset": rate_limit_info.reset_time.timestamp()
+                                    }
+                                }).to_string()
+                            ).into())
+                        } else {
+                            // Request allowed, proceed with service call
+                            debug!("Rate limit check passed, {} requests remaining", rate_limit_info.requests_remaining);
+                            let mut response = service.call(req).await?;
+                            
+                            // Add rate limiting headers to successful responses
+                            let headers = response.headers_mut();
+                            
+                            if let Ok(limit_header) = HeaderValue::from_str(&rate_limit_info.requests_limit.to_string()) {
+                                headers.insert(HeaderName::from_static("x-ratelimit-limit"), limit_header);
+                            }
+                            
+                            if let Ok(remaining_header) = HeaderValue::from_str(&rate_limit_info.requests_remaining.to_string()) {
+                                headers.insert(HeaderName::from_static("x-ratelimit-remaining"), remaining_header);
+                            }
+                            
+                            if let Ok(reset_header) = HeaderValue::from_str(&rate_limit_info.reset_time.timestamp().to_string()) {
+                                headers.insert(HeaderName::from_static("x-ratelimit-reset"), reset_header);
+                            }
+                            
                             Ok(response)
                         }
-                        Err(RateLimitError::RateLimitExceeded) => {
-                            Ok(req.into_response(
-                                HttpResponse::TooManyRequests()
-                                    .json(serde_json::json!({
-                                        "error": "Rate limit exceeded",
-                                        "message": "Too many requests. Please try again later."
-                                    }))
-                            ))
-                        }
-                        Err(e) => {
-                            log::error!("Rate limiting error: {}", e);
-                            Ok(req.into_response(
-                                HttpResponse::InternalServerError()
-                                    .json(serde_json::json!({
-                                        "error": "Rate limiting service unavailable"
-                                    }))
-                            ))
-                        }
                     }
-                } else {
-                    log::error!("RateLimiter not found in app data");
-                    Ok(req.into_response(
-                        HttpResponse::InternalServerError()
-                            .json(serde_json::json!({
-                                "error": "Rate limiting service unavailable"
-                            }))
-                    ))
+                    Err(e) => {
+                        warn!("Rate limiting service error: {}", e);
+                        // On rate limiting service error, allow request to proceed but log the issue
+                        // This ensures the API remains available even if Redis is down
+                        service.call(req).await
+                    }
                 }
             } else {
-                // No auth context - this should have been handled by AuthMiddleware first
-                // But allow the request to proceed as it may be handled by other middleware
-                log::warn!("Rate limit middleware called without auth context");
+                warn!("RateLimiter not found in app data");
+                // If rate limiter is not available, allow the request to proceed
                 service.call(req).await
             }
         })

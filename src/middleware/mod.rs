@@ -4,10 +4,11 @@ pub mod compression;
 pub mod logging;
 pub mod metrics;
 pub mod request_logger;
-// pub mod rate_limit; // Rate limiting disabled for now
+pub mod rate_limit;
 
 pub use auth::*;
 pub use compression::*;
 pub use logging::*;
 pub use metrics::*;
+pub use rate_limit::*;
 pub use request_logger::*;
