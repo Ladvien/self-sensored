@@ -1,6 +1,7 @@
 use futures::future::join_all;
 use sqlx::{PgPool, Postgres, QueryBuilder};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -31,6 +32,55 @@ pub struct BatchProcessingResult {
     pub retry_attempts: usize,
     pub memory_peak_mb: Option<f64>,
     pub chunk_progress: Option<ChunkProgress>,
+    pub deduplication_stats: Option<DeduplicationStats>,
+}
+
+/// Statistics about deduplication during batch processing  
+#[derive(Debug, Clone)]
+pub struct DeduplicationStats {
+    pub heart_rate_duplicates: usize,
+    pub blood_pressure_duplicates: usize,
+    pub sleep_duplicates: usize,
+    pub activity_duplicates: usize,
+    pub workout_duplicates: usize,
+    pub total_duplicates: usize,
+    pub deduplication_time_ms: u64,
+}
+
+/// Unique key for heart rate metrics (user_id, recorded_at)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct HeartRateKey {
+    user_id: Uuid,
+    recorded_at_millis: i64, // Use milliseconds for precise comparison
+}
+
+/// Unique key for blood pressure metrics (user_id, recorded_at)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct BloodPressureKey {
+    user_id: Uuid,
+    recorded_at_millis: i64,
+}
+
+/// Unique key for sleep metrics (user_id, sleep_start, sleep_end)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct SleepKey {
+    user_id: Uuid,
+    sleep_start_millis: i64,
+    sleep_end_millis: i64,
+}
+
+/// Unique key for activity metrics (user_id, recorded_date)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct ActivityKey {
+    user_id: Uuid,
+    recorded_date: chrono::NaiveDate,
+}
+
+/// Unique key for workout metrics (user_id, started_at)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct WorkoutKey {
+    user_id: Uuid,
+    started_at_millis: i64,
 }
 
 /// Progress tracking for chunked operations
@@ -76,6 +126,7 @@ pub struct BatchConfig {
     pub activity_chunk_size: usize,       // 7 params per record -> max 9,362
     pub workout_chunk_size: usize,        // 10 params per record -> max 6,553
     pub enable_progress_tracking: bool,   // Track progress for large batches
+    pub enable_intra_batch_deduplication: bool, // Enable deduplication within batches
 }
 
 impl Default for BatchConfig {
@@ -94,6 +145,7 @@ impl Default for BatchConfig {
             activity_chunk_size: 7000,        // 7 params: 65,535 ÷ 7 × 0.8 ≈ 7,000
             workout_chunk_size: 5000,         // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000
             enable_progress_tracking: true,
+            enable_intra_batch_deduplication: true, // Enable by default for performance
         }
     }
 }
@@ -159,6 +211,7 @@ impl BatchProcessor {
             } else { 
                 None 
             },
+            deduplication_stats: None,
         };
 
         // Validate payload size first - total_metrics already calculated above
@@ -172,15 +225,27 @@ impl BatchProcessor {
         let mut grouped = self.group_metrics_by_type(payload.data.metrics);
         let mut all_workouts = std::mem::take(&mut grouped.workouts);
         all_workouts.extend(payload.data.workouts);
+        
+        // Put workouts back into grouped for deduplication
+        grouped.workouts = all_workouts;
+
+        // Deduplicate metrics within the batch before database operations
+        let (deduplicated_grouped, dedup_stats) = self.deduplicate_grouped_metrics(user_id, grouped);
+        
+        // Extract workouts after deduplication
+        let all_workouts = deduplicated_grouped.workouts.clone();
 
         // Process in parallel if enabled, otherwise sequential
         if self.config.enable_parallel_processing {
-            result = self.process_parallel(user_id, grouped, all_workouts).await;
+            result = self.process_parallel(user_id, deduplicated_grouped, all_workouts).await;
         } else {
             result = self
-                .process_sequential(user_id, grouped, all_workouts)
+                .process_sequential(user_id, deduplicated_grouped, all_workouts)
                 .await;
         }
+        
+        // Add deduplication statistics to the result
+        result.deduplication_stats = Some(dedup_stats);
 
         // Calculate final metrics
         let duration = start_time.elapsed();
@@ -198,7 +263,17 @@ impl BatchProcessor {
         if result.failed_count > 0 {
             Metrics::record_error("batch_processing", "/api/v1/ingest", "warning");
         }
+        
+        // Record deduplication metrics
+        if let Some(dedup_stats) = &result.deduplication_stats {
+            if dedup_stats.total_duplicates > 0 {
+                Metrics::record_duplicates_removed(dedup_stats.total_duplicates as u64);
+            }
+        }
 
+        let dedup_info = result.deduplication_stats.as_ref().map(|s| s.total_duplicates).unwrap_or(0);
+        let dedup_time = result.deduplication_stats.as_ref().map(|s| s.deduplication_time_ms).unwrap_or(0);
+        
         info!(
             user_id = %user_id,
             processed = result.processed_count,
@@ -207,6 +282,8 @@ impl BatchProcessor {
             duration_ms = result.processing_time_ms,
             memory_mb = result.memory_peak_mb,
             retry_attempts = result.retry_attempts,
+            total_duplicates_removed = dedup_info,
+            deduplication_time_ms = dedup_time,
             "Batch processing completed"
         );
 
@@ -237,6 +314,7 @@ impl BatchProcessor {
             } else { 
                 None 
             },
+            deduplication_stats: None,
         };
 
         // Spawn parallel tasks for each metric type
@@ -369,6 +447,7 @@ impl BatchProcessor {
             } else { 
                 None 
             },
+            deduplication_stats: None,
         };
 
         // Process heart rate metrics
@@ -587,6 +666,208 @@ impl BatchProcessor {
         }
 
         grouped
+    }
+
+    /// Deduplicate grouped metrics before database insertion
+    /// Returns deduplicated metrics and statistics about removed duplicates
+    fn deduplicate_grouped_metrics(
+        &self,
+        user_id: Uuid,
+        mut grouped: GroupedMetrics,
+    ) -> (GroupedMetrics, DeduplicationStats) {
+        if !self.config.enable_intra_batch_deduplication {
+            return (
+                grouped,
+                DeduplicationStats {
+                    heart_rate_duplicates: 0,
+                    blood_pressure_duplicates: 0,
+                    sleep_duplicates: 0,
+                    activity_duplicates: 0,
+                    workout_duplicates: 0,
+                    total_duplicates: 0,
+                    deduplication_time_ms: 0,
+                },
+            );
+        }
+
+        let start_time = Instant::now();
+        let mut stats = DeduplicationStats {
+            heart_rate_duplicates: 0,
+            blood_pressure_duplicates: 0,
+            sleep_duplicates: 0,
+            activity_duplicates: 0,
+            workout_duplicates: 0,
+            total_duplicates: 0,
+            deduplication_time_ms: 0,
+        };
+
+        // Deduplicate heart rate metrics
+        let original_hr_count = grouped.heart_rates.len();
+        grouped.heart_rates = self.deduplicate_heart_rates(user_id, grouped.heart_rates);
+        stats.heart_rate_duplicates = original_hr_count - grouped.heart_rates.len();
+
+        // Deduplicate blood pressure metrics  
+        let original_bp_count = grouped.blood_pressures.len();
+        grouped.blood_pressures = self.deduplicate_blood_pressures(user_id, grouped.blood_pressures);
+        stats.blood_pressure_duplicates = original_bp_count - grouped.blood_pressures.len();
+
+        // Deduplicate sleep metrics
+        let original_sleep_count = grouped.sleep_metrics.len();
+        grouped.sleep_metrics = self.deduplicate_sleep_metrics(user_id, grouped.sleep_metrics);
+        stats.sleep_duplicates = original_sleep_count - grouped.sleep_metrics.len();
+
+        // Deduplicate activity metrics
+        let original_activity_count = grouped.activities.len();
+        grouped.activities = self.deduplicate_activities(user_id, grouped.activities);
+        stats.activity_duplicates = original_activity_count - grouped.activities.len();
+
+        // Deduplicate workout metrics
+        let original_workout_count = grouped.workouts.len();
+        grouped.workouts = self.deduplicate_workouts(user_id, grouped.workouts);
+        stats.workout_duplicates = original_workout_count - grouped.workouts.len();
+
+        stats.total_duplicates = stats.heart_rate_duplicates
+            + stats.blood_pressure_duplicates
+            + stats.sleep_duplicates
+            + stats.activity_duplicates
+            + stats.workout_duplicates;
+
+        stats.deduplication_time_ms = start_time.elapsed().as_millis() as u64;
+
+        if stats.total_duplicates > 0 {
+            info!(
+                user_id = %user_id,
+                heart_rate_duplicates = stats.heart_rate_duplicates,
+                blood_pressure_duplicates = stats.blood_pressure_duplicates,
+                sleep_duplicates = stats.sleep_duplicates,
+                activity_duplicates = stats.activity_duplicates,
+                workout_duplicates = stats.workout_duplicates,
+                total_duplicates = stats.total_duplicates,
+                deduplication_time_ms = stats.deduplication_time_ms,
+                "Intra-batch deduplication completed"
+            );
+        }
+
+        (grouped, stats)
+    }
+
+    /// Deduplicate heart rate metrics using HashSet for O(1) lookups
+    /// Preserves order of first occurrence of each unique record
+    fn deduplicate_heart_rates(
+        &self,
+        user_id: Uuid,
+        metrics: Vec<crate::models::HeartRateMetric>,
+    ) -> Vec<crate::models::HeartRateMetric> {
+        let mut seen_keys = HashSet::new();
+        let mut deduplicated = Vec::new();
+
+        for metric in metrics {
+            let key = HeartRateKey {
+                user_id,
+                recorded_at_millis: metric.recorded_at.timestamp_millis(),
+            };
+
+            if seen_keys.insert(key) {
+                // First time seeing this key, keep the record
+                deduplicated.push(metric);
+            }
+            // Duplicate found - skip this record
+        }
+
+        deduplicated
+    }
+
+    /// Deduplicate blood pressure metrics using HashSet for O(1) lookups
+    fn deduplicate_blood_pressures(
+        &self,
+        user_id: Uuid,
+        metrics: Vec<crate::models::BloodPressureMetric>,
+    ) -> Vec<crate::models::BloodPressureMetric> {
+        let mut seen_keys = HashSet::new();
+        let mut deduplicated = Vec::new();
+
+        for metric in metrics {
+            let key = BloodPressureKey {
+                user_id,
+                recorded_at_millis: metric.recorded_at.timestamp_millis(),
+            };
+
+            if seen_keys.insert(key) {
+                deduplicated.push(metric);
+            }
+        }
+
+        deduplicated
+    }
+
+    /// Deduplicate sleep metrics using HashSet for O(1) lookups
+    fn deduplicate_sleep_metrics(
+        &self,
+        user_id: Uuid,
+        metrics: Vec<crate::models::SleepMetric>,
+    ) -> Vec<crate::models::SleepMetric> {
+        let mut seen_keys = HashSet::new();
+        let mut deduplicated = Vec::new();
+
+        for metric in metrics {
+            let key = SleepKey {
+                user_id,
+                sleep_start_millis: metric.sleep_start.timestamp_millis(),
+                sleep_end_millis: metric.sleep_end.timestamp_millis(),
+            };
+
+            if seen_keys.insert(key) {
+                deduplicated.push(metric);
+            }
+        }
+
+        deduplicated
+    }
+
+    /// Deduplicate activity metrics using HashSet for O(1) lookups
+    fn deduplicate_activities(
+        &self,
+        user_id: Uuid,
+        metrics: Vec<crate::models::ActivityMetric>,
+    ) -> Vec<crate::models::ActivityMetric> {
+        let mut seen_keys = HashSet::new();
+        let mut deduplicated = Vec::new();
+
+        for metric in metrics {
+            let key = ActivityKey {
+                user_id,
+                recorded_date: metric.date,
+            };
+
+            if seen_keys.insert(key) {
+                deduplicated.push(metric);
+            }
+        }
+
+        deduplicated
+    }
+
+    /// Deduplicate workout metrics using HashSet for O(1) lookups  
+    fn deduplicate_workouts(
+        &self,
+        user_id: Uuid,
+        workouts: Vec<crate::models::WorkoutData>,
+    ) -> Vec<crate::models::WorkoutData> {
+        let mut seen_keys = HashSet::new();
+        let mut deduplicated = Vec::new();
+
+        for workout in workouts {
+            let key = WorkoutKey {
+                user_id,
+                started_at_millis: workout.start_time.timestamp_millis(),
+            };
+
+            if seen_keys.insert(key) {
+                deduplicated.push(workout);
+            }
+        }
+
+        deduplicated
     }
 
     /// Batch insert heart rate metrics with ON CONFLICT handling

@@ -183,6 +183,16 @@ static AUTH_ATTEMPTS_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
     .expect("Failed to create auth attempts counter")
 });
 
+// Batch processing deduplication metrics
+static DUPLICATES_REMOVED_TOTAL: Lazy<Counter> = Lazy::new(|| {
+    register_counter_with_registry!(
+        "health_export_duplicates_removed_total",
+        "Total number of duplicate records removed during batch processing",
+        METRICS_REGISTRY.clone()
+    )
+    .expect("Failed to create duplicates removed counter")
+});
+
 /// Metrics collection middleware for Prometheus monitoring
 pub struct MetricsMiddleware;
 
@@ -373,6 +383,12 @@ impl Metrics {
         AUTH_ATTEMPTS_TOTAL
             .with_label_values(&[result, key_type])
             .inc();
+    }
+
+    /// Record duplicates removed during batch processing
+    #[instrument(skip_all)]
+    pub fn record_duplicates_removed(count: u64) {
+        DUPLICATES_REMOVED_TOTAL.inc_by(count as f64);
     }
 }
 

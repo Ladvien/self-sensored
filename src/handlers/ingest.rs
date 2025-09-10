@@ -17,8 +17,8 @@ use crate::services::batch_processor::{BatchProcessingResult, BatchProcessor};
 
 /// Maximum payload size (100MB)
 const MAX_PAYLOAD_SIZE: usize = 100 * 1024 * 1024;
-/// Maximum number of metrics per request
-const MAX_METRICS_PER_REQUEST: usize = 10_000;
+/// Maximum number of metrics per request (increased to handle full day exports)
+const MAX_METRICS_PER_REQUEST: usize = 50_000;
 
 /// Custom extractor that logs raw JSON payload before deserialization
 pub struct LoggedJson<T>(pub T);

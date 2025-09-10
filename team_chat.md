@@ -913,3 +913,24 @@
 - Ready for production deployment with large health data ingestion workloads
 
 **Available for:** Supporting other team members with performance optimization questions or advanced batch processing integration needs.
+
+## Backend Engineer - Story AUDIT-002 Assignment
+**Timestamp:** 2025-09-10 Current Assignment  
+**Agent:** Backend Engineer  
+**Action:** CLAIMING: AUDIT-002 - Missing Intra-Batch Deduplication  
+
+**Status:** 🚀 IN PROGRESS  
+**Priority:** Critical (8 story points)  
+**Focus:** Implementing HashSet-based deduplication logic before database insertion for each metric type to prevent duplicate data within single batch operations.
+
+**Current Tasks:**
+- [x] Story claimed and team notified
+- [ ] Analyze current duplicate handling approach in batch_processor.rs
+- [ ] Research Rust HashSet-based deduplication patterns for health metrics
+- [ ] Define unique keys for each metric type based on business rules
+- [ ] Implement deduplication logic before database insertion
+- [ ] Optimize for O(1) deduplication lookups while maintaining data integrity
+- [ ] Write comprehensive tests in tests/services/batch_deduplication_test.rs
+- [ ] Benchmark performance improvements (before/after database load)
+- [ ] Self-review focusing on data integrity and performance impact
+- [ ] Commit changes and move AUDIT-002 from BACKLOG.md to DONE.md
