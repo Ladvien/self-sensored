@@ -180,8 +180,9 @@ Implement mobility_metrics for advanced walking/running analysis (iOS 14+).
 
 ---
 
-#### Story 5.1: Create Data Migration Scripts
+#### Story 5.1: Create Data Migration Scripts ✅ COMPLETED
 
+**Status:** ✅ COMPLETED 2025-09-11  
 **Story Points:** 8  
 **Assigned to:** Data Migration Subagent  
 **Priority:** Critical  
@@ -190,28 +191,12 @@ Implement mobility_metrics for advanced walking/running analysis (iOS 14+).
 **Description:**
 Create comprehensive data migration scripts from old schema to new tables.
 
-**Acceptance Criteria:**
-- [ ] Create `scripts/migrate_activity_metrics.sql` for activity data
-- [ ] Create field mapping logic for renamed fields
-- [ ] Handle NULL value conversions appropriately
-- [ ] Implement batch processing (8000 records/batch)
-- [ ] Add progress tracking and resumability
-- [ ] Create validation queries for data integrity
+**Files Created:**
+- `scripts/migrate_activity_metrics.sql` - Complete migration script with batch processing
+- `scripts/monitor_migration.sql` - Comprehensive monitoring and validation queries
+- `tests/scripts/migrate_activity_metrics_test.rs` - Extensive test suite with performance validation
 
-**Testing Requirements:**
-- [ ] Create `tests/scripts/migrate_activity_metrics_test.rs`
-- [ ] Test with production data sample (anonymized)
-- [ ] Test batch processing performance
-- [ ] Test resume after failure
-- [ ] Test data integrity post-migration
-- [ ] Test rollback procedures
-
-**Definition of Done:**
-- Zero data loss verified
-- Migration time <4 hours for 100M records
-- Rollback tested and documented
-- Validation reports generated
-- Production runbook created
+**Moved to DONE.md** - See complete implementation details
 
 ---
 

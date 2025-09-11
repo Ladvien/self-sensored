@@ -5,7 +5,8 @@ use std::collections::HashMap;
 use self_sensored::models::{
     ActivityMetric, BloodPressureMetric, HealthMetric, HeartRateMetric, IngestData, IngestPayload,
     IosIngestData, IosIngestPayload, IosMetric, IosMetricData, IosWorkout, SleepMetric,
-    WorkoutData,
+    WorkoutData, NutritionMetric, SymptomMetric, ReproductiveHealthMetric, 
+    EnvironmentalMetric, MentalHealthMetric, MobilityMetric,
 };
 
 #[test]
@@ -42,6 +43,12 @@ fn test_standard_payload_serialization() {
                 source: Some("Test".to_string()),
                 route_points: None,
             }],
+            nutrition_metrics: Vec::new(),
+            symptom_metrics: Vec::new(),
+            reproductive_health_metrics: Vec::new(),
+            environmental_metrics: Vec::new(),
+            mental_health_metrics: Vec::new(),
+            mobility_metrics: Vec::new(),
         },
     };
 
@@ -259,6 +266,12 @@ fn test_large_payload_performance() {
         data: IngestData {
             metrics,
             workouts: vec![],
+            nutrition_metrics: Vec::new(),
+            symptom_metrics: Vec::new(),
+            reproductive_health_metrics: Vec::new(),
+            environmental_metrics: Vec::new(),
+            mental_health_metrics: Vec::new(),
+            mobility_metrics: Vec::new(),
         },
     };
 
@@ -297,4 +310,235 @@ fn test_large_payload_performance() {
         "Should be reasonable size"
     );
     assert_eq!(payload.data.metrics.len(), 1000);
+}
+
+#[test]
+fn test_new_metric_types_validation() {
+    let now = Utc::now();
+
+    // Test Nutrition Metric
+    let nutrition_metric = NutritionMetric {
+        recorded_at: now,
+        water_ml: Some(2000.0),
+        energy_consumed_kcal: Some(2500.0),
+        carbohydrates_g: Some(300.0),
+        protein_g: Some(150.0),
+        fat_total_g: Some(80.0),
+        fat_saturated_g: Some(25.0),
+        fat_monounsaturated_g: Some(30.0),
+        fat_polyunsaturated_g: Some(15.0),
+        cholesterol_mg: Some(200.0),
+        fiber_g: Some(25.0),
+        sugar_g: Some(50.0),
+        sodium_mg: Some(2300.0),
+        vitamin_a_mcg: Some(800.0),
+        vitamin_d_mcg: Some(15.0),
+        vitamin_e_mg: Some(12.0),
+        vitamin_k_mcg: Some(100.0),
+        vitamin_c_mg: Some(90.0),
+        thiamin_mg: Some(1.2),
+        riboflavin_mg: Some(1.3),
+        niacin_mg: Some(16.0),
+        pantothenic_acid_mg: Some(5.0),
+        vitamin_b6_mg: Some(1.7),
+        biotin_mcg: Some(30.0),
+        folate_mcg: Some(400.0),
+        vitamin_b12_mcg: Some(2.4),
+        calcium_mg: Some(1000.0),
+        phosphorus_mg: Some(700.0),
+        magnesium_mg: Some(400.0),
+        potassium_mg: Some(3500.0),
+        chloride_mg: Some(2300.0),
+        iron_mg: Some(18.0),
+        zinc_mg: Some(11.0),
+        copper_mg: Some(0.9),
+        manganese_mg: Some(2.3),
+        iodine_mcg: Some(150.0),
+        selenium_mcg: Some(55.0),
+        chromium_mcg: Some(35.0),
+        molybdenum_mcg: Some(45.0),
+        caffeine_mg: Some(400.0),
+        aggregation_period: Some("daily".to_string()),
+        source: Some("MyFitnessPal".to_string()),
+    };
+
+    // Should validate successfully
+    assert!(nutrition_metric.validate().is_ok());
+
+    // Test Symptom Metric
+    let symptom_metric = SymptomMetric {
+        recorded_at: now,
+        onset_at: Some(now - chrono::Duration::hours(2)),
+        symptom_type: "headache".to_string(),
+        severity: "moderate".to_string(),
+        duration_minutes: Some(120),
+        triggers: Some(vec!["stress".to_string(), "dehydration".to_string()]),
+        treatments: Some(vec!["ibuprofen".to_string(), "rest".to_string()]),
+        notes: Some("Started after work meeting".to_string()),
+        source: Some("manual_entry".to_string()),
+    };
+
+    // Should validate successfully
+    assert!(symptom_metric.validate().is_ok());
+
+    // Test Environmental Metric
+    let environmental_metric = EnvironmentalMetric {
+        recorded_at: now,
+        environmental_sound_level_db: Some(85.0),
+        headphone_exposure_db: Some(75.0),
+        noise_reduction_db: Some(20.0),
+        exposure_duration_seconds: Some(3600),
+        uv_index: Some(8.0),
+        time_in_sun_minutes: Some(30),
+        time_in_shade_minutes: Some(90),
+        sunscreen_applied: Some(true),
+        uv_dose_joules_per_m2: Some(150.0),
+        fall_detected: Some(false),
+        fall_severity: None,
+        impact_force_g: None,
+        emergency_contacted: None,
+        fall_response_time_seconds: None,
+        handwashing_events: Some(8),
+        handwashing_duration_seconds: Some(20),
+        toothbrushing_events: Some(2),
+        toothbrushing_duration_seconds: Some(120),
+        pm2_5_micrograms_m3: Some(12.0),
+        pm10_micrograms_m3: Some(20.0),
+        air_quality_index: Some(45),
+        ozone_ppb: Some(30.0),
+        no2_ppb: Some(15.0),
+        so2_ppb: Some(5.0),
+        co_ppm: Some(1.0),
+        altitude_meters: Some(100.0),
+        barometric_pressure_hpa: Some(1013.25),
+        indoor_outdoor_context: Some("mixed".to_string()),
+        aggregation_period: Some("daily".to_string()),
+        measurement_count: Some(24),
+        source: Some("Apple Watch".to_string()),
+        device_type: Some("Apple Watch Series 8".to_string()),
+    };
+
+    // Should validate successfully
+    assert!(environmental_metric.validate().is_ok());
+
+    // Test Mental Health Metric
+    let mental_health_metric = MentalHealthMetric {
+        recorded_at: now,
+        mindful_minutes: Some(20.0),
+        mood_valence: Some(0.7),
+        mood_labels: Some(vec!["happy".to_string(), "calm".to_string(), "content".to_string()]),
+        daylight_minutes: Some(480.0),
+        stress_level: Some("low".to_string()),
+        depression_score: Some(3),
+        anxiety_score: Some(2),
+        sleep_quality_score: Some(8),
+        source: Some("iOS Health".to_string()),
+        notes: Some("Good day overall".to_string()),
+    };
+
+    // Should validate successfully
+    assert!(mental_health_metric.validate().is_ok());
+
+    // Test Mobility Metric
+    let mobility_metric = MobilityMetric {
+        recorded_at: now,
+        walking_speed_m_per_s: Some(1.4),
+        step_length_cm: Some(65.0),
+        double_support_percentage: Some(25.0),
+        walking_asymmetry_percentage: Some(2.5),
+        walking_steadiness: Some("ok".to_string()),
+        stair_ascent_speed: Some(0.8),
+        stair_descent_speed: Some(1.0),
+        six_minute_walk_test_distance: Some(550.0),
+        walking_heart_rate_recovery: Some(15),
+        low_cardio_fitness_event: Some(false),
+        walking_heart_rate_average: Some(95),
+        source: Some("Apple Watch".to_string()),
+        device_type: Some("Apple Watch Series 8".to_string()),
+    };
+
+    // Should validate successfully
+    assert!(mobility_metric.validate().is_ok());
+
+    // Test validation errors
+    let mut invalid_nutrition = nutrition_metric.clone();
+    invalid_nutrition.water_ml = Some(25000.0); // Exceeds 20L limit
+    assert!(invalid_nutrition.validate().is_err());
+
+    let mut invalid_symptom = symptom_metric.clone();
+    invalid_symptom.severity = "extreme".to_string(); // Invalid severity
+    assert!(invalid_symptom.validate().is_err());
+
+    let mut invalid_environmental = environmental_metric.clone();
+    invalid_environmental.environmental_sound_level_db = Some(150.0); // Exceeds 140dB limit
+    assert!(invalid_environmental.validate().is_err());
+
+    let mut invalid_mental_health = mental_health_metric.clone();
+    invalid_mental_health.mood_valence = Some(1.5); // Exceeds 1.0 limit
+    assert!(invalid_mental_health.validate().is_err());
+
+    let mut invalid_mobility = mobility_metric.clone();
+    invalid_mobility.walking_speed_m_per_s = Some(10.0); // Unrealistic speed
+    assert!(invalid_mobility.validate().is_err());
+}
+
+#[test]
+fn test_health_metric_enum_with_new_types() {
+    let now = Utc::now();
+
+    let nutrition_metric = HealthMetric::Nutrition(NutritionMetric {
+        recorded_at: now,
+        water_ml: Some(2000.0),
+        energy_consumed_kcal: Some(2000.0),
+        carbohydrates_g: None,
+        protein_g: None,
+        fat_total_g: None,
+        fat_saturated_g: None,
+        fat_monounsaturated_g: None,
+        fat_polyunsaturated_g: None,
+        cholesterol_mg: None,
+        fiber_g: None,
+        sugar_g: None,
+        sodium_mg: None,
+        vitamin_a_mcg: None,
+        vitamin_d_mcg: None,
+        vitamin_e_mg: None,
+        vitamin_k_mcg: None,
+        vitamin_c_mg: None,
+        thiamin_mg: None,
+        riboflavin_mg: None,
+        niacin_mg: None,
+        pantothenic_acid_mg: None,
+        vitamin_b6_mg: None,
+        biotin_mcg: None,
+        folate_mcg: None,
+        vitamin_b12_mcg: None,
+        calcium_mg: None,
+        phosphorus_mg: None,
+        magnesium_mg: None,
+        potassium_mg: None,
+        chloride_mg: None,
+        iron_mg: None,
+        zinc_mg: None,
+        copper_mg: None,
+        manganese_mg: None,
+        iodine_mcg: None,
+        selenium_mcg: None,
+        chromium_mcg: None,
+        molybdenum_mcg: None,
+        caffeine_mg: None,
+        aggregation_period: Some("daily".to_string()),
+        source: Some("Test".to_string()),
+    });
+
+    // Test that the metric type is correctly identified
+    assert_eq!(nutrition_metric.metric_type(), "Nutrition");
+
+    // Test that validation works through the enum
+    assert!(nutrition_metric.validate().is_ok());
+
+    // Test serialization/deserialization of the enum
+    let json_str = serde_json::to_string(&nutrition_metric).expect("Should serialize");
+    assert!(!json_str.is_empty());
+    assert!(json_str.contains("Nutrition"));
 }

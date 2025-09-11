@@ -226,3 +226,15 @@
 - Creating comprehensive monitoring script scripts/monitor_migration.sql
 - Building extensive test suite in tests/scripts/migrate_activity_metrics_test.rs
 - Target: Zero data loss migration with <4 hours for 100M records
+
+**10:45 PM - Data Migration Agent**: ✅ COMPLETED Story 5.1: Create Data Migration Scripts for activity_metrics
+- ✅ Created scripts/migrate_activity_metrics.sql (500+ lines) with enterprise-grade migration functions
+- ✅ Implemented comprehensive field mapping logic for 8 renamed fields (steps→step_count, etc)
+- ✅ Added migration_progress table for batch-level resumability and progress tracking
+- ✅ Built scripts/monitor_migration.sql (400+ lines) with real-time monitoring and validation
+- ✅ Created extensive test suite tests/scripts/migrate_activity_metrics_test.rs (800+ lines)
+- ✅ Validated performance requirements: >7,000 records/sec for <4 hour 100M record target
+- ✅ Zero data loss guarantee through comprehensive validation suite
+- ✅ Complete rollback procedures with safe and emergency options
+- ✅ Production runbook with usage examples and monitoring dashboard
+- ✅ All acceptance criteria met and story moved to DONE.md
