@@ -162,6 +162,204 @@ impl IosIngestPayload {
                             internal_metrics.push(HealthMetric::Sleep(metric));
                         }
                     }
+                    // New metric types - Nutrition
+                    "dietary_water" | "water" => {
+                        if let Some(qty) = data_point.qty {
+                            if qty >= 0.0 {
+                                let metric = crate::models::NutritionMetric {
+                                    recorded_at,
+                                    water_ml: Some(qty),
+                                    energy_consumed_kcal: None,
+                                    carbohydrates_g: None,
+                                    protein_g: None,
+                                    fat_total_g: None,
+                                    fat_saturated_g: None,
+                                    fat_monounsaturated_g: None,
+                                    fat_polyunsaturated_g: None,
+                                    cholesterol_mg: None,
+                                    fiber_g: None,
+                                    sugar_g: None,
+                                    sodium_mg: None,
+                                    vitamin_a_mcg: None,
+                                    vitamin_d_mcg: None,
+                                    vitamin_e_mg: None,
+                                    vitamin_k_mcg: None,
+                                    vitamin_c_mg: None,
+                                    thiamin_mg: None,
+                                    riboflavin_mg: None,
+                                    niacin_mg: None,
+                                    pantothenic_acid_mg: None,
+                                    vitamin_b6_mg: None,
+                                    biotin_mcg: None,
+                                    folate_mcg: None,
+                                    vitamin_b12_mcg: None,
+                                    calcium_mg: None,
+                                    phosphorus_mg: None,
+                                    magnesium_mg: None,
+                                    potassium_mg: None,
+                                    chloride_mg: None,
+                                    iron_mg: None,
+                                    zinc_mg: None,
+                                    copper_mg: None,
+                                    manganese_mg: None,
+                                    iodine_mcg: None,
+                                    selenium_mcg: None,
+                                    chromium_mcg: None,
+                                    molybdenum_mcg: None,
+                                    caffeine_mg: None,
+                                    aggregation_period: Some("daily".to_string()),
+                                    source: data_point.source.clone(),
+                                };
+                                internal_metrics.push(HealthMetric::Nutrition(metric));
+                            }
+                        }
+                    }
+                    "dietary_energy_consumed" | "nutrition_calories" => {
+                        if let Some(qty) = data_point.qty {
+                            if qty >= 0.0 {
+                                let metric = crate::models::NutritionMetric {
+                                    recorded_at,
+                                    water_ml: None,
+                                    energy_consumed_kcal: Some(qty),
+                                    carbohydrates_g: None,
+                                    protein_g: None,
+                                    fat_total_g: None,
+                                    fat_saturated_g: None,
+                                    fat_monounsaturated_g: None,
+                                    fat_polyunsaturated_g: None,
+                                    cholesterol_mg: None,
+                                    fiber_g: None,
+                                    sugar_g: None,
+                                    sodium_mg: None,
+                                    vitamin_a_mcg: None,
+                                    vitamin_d_mcg: None,
+                                    vitamin_e_mg: None,
+                                    vitamin_k_mcg: None,
+                                    vitamin_c_mg: None,
+                                    thiamin_mg: None,
+                                    riboflavin_mg: None,
+                                    niacin_mg: None,
+                                    pantothenic_acid_mg: None,
+                                    vitamin_b6_mg: None,
+                                    biotin_mcg: None,
+                                    folate_mcg: None,
+                                    vitamin_b12_mcg: None,
+                                    calcium_mg: None,
+                                    phosphorus_mg: None,
+                                    magnesium_mg: None,
+                                    potassium_mg: None,
+                                    chloride_mg: None,
+                                    iron_mg: None,
+                                    zinc_mg: None,
+                                    copper_mg: None,
+                                    manganese_mg: None,
+                                    iodine_mcg: None,
+                                    selenium_mcg: None,
+                                    chromium_mcg: None,
+                                    molybdenum_mcg: None,
+                                    caffeine_mg: None,
+                                    aggregation_period: Some("daily".to_string()),
+                                    source: data_point.source.clone(),
+                                };
+                                internal_metrics.push(HealthMetric::Nutrition(metric));
+                            }
+                        }
+                    }
+                    // Environmental metrics
+                    "environmental_audio_exposure" | "headphone_audio_exposure" => {
+                        if let Some(qty) = data_point.qty {
+                            if qty >= 0.0 && qty <= 140.0 {
+                                let metric = crate::models::EnvironmentalMetric {
+                                    recorded_at,
+                                    environmental_sound_level_db: if ios_metric.name.to_lowercase().contains("environmental") {
+                                        Some(qty)
+                                    } else { None },
+                                    headphone_exposure_db: if ios_metric.name.to_lowercase().contains("headphone") {
+                                        Some(qty)
+                                    } else { None },
+                                    noise_reduction_db: None,
+                                    exposure_duration_seconds: None,
+                                    uv_index: None,
+                                    time_in_sun_minutes: None,
+                                    time_in_shade_minutes: None,
+                                    sunscreen_applied: None,
+                                    uv_dose_joules_per_m2: None,
+                                    fall_detected: None,
+                                    fall_severity: None,
+                                    impact_force_g: None,
+                                    emergency_contacted: None,
+                                    fall_response_time_seconds: None,
+                                    handwashing_events: None,
+                                    handwashing_duration_seconds: None,
+                                    toothbrushing_events: None,
+                                    toothbrushing_duration_seconds: None,
+                                    pm2_5_micrograms_m3: None,
+                                    pm10_micrograms_m3: None,
+                                    air_quality_index: None,
+                                    ozone_ppb: None,
+                                    no2_ppb: None,
+                                    so2_ppb: None,
+                                    co_ppm: None,
+                                    altitude_meters: None,
+                                    barometric_pressure_hpa: None,
+                                    indoor_outdoor_context: None,
+                                    aggregation_period: Some("event".to_string()),
+                                    measurement_count: Some(1),
+                                    source: data_point.source.clone(),
+                                    device_type: Some("Apple Watch".to_string()),
+                                };
+                                internal_metrics.push(HealthMetric::Environmental(metric));
+                            }
+                        }
+                    }
+                    // Mental health metrics
+                    "mindful_session" => {
+                        if let Some(qty) = data_point.qty {
+                            if qty >= 0.0 {
+                                let metric = crate::models::MentalHealthMetric {
+                                    recorded_at,
+                                    mindful_minutes: Some(qty),
+                                    mood_valence: None,
+                                    mood_labels: None,
+                                    daylight_minutes: None,
+                                    stress_level: None,
+                                    depression_score: None,
+                                    anxiety_score: None,
+                                    sleep_quality_score: None,
+                                    source: data_point.source.clone(),
+                                    notes: None,
+                                };
+                                internal_metrics.push(HealthMetric::MentalHealth(metric));
+                            }
+                        }
+                    }
+                    "state_of_mind" => {
+                        // iOS 17+ State of Mind data - extract from extra fields
+                        let mood_valence = data_point.extra.get("valence")
+                            .and_then(|v| v.as_f64());
+                        let mood_labels = data_point.extra.get("labels")
+                            .and_then(|v| v.as_array())
+                            .map(|arr| arr.iter()
+                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                .collect::<Vec<String>>());
+                        
+                        if mood_valence.is_some() || mood_labels.is_some() {
+                            let metric = crate::models::MentalHealthMetric {
+                                recorded_at,
+                                mindful_minutes: None,
+                                mood_valence,
+                                mood_labels,
+                                daylight_minutes: None,
+                                stress_level: None,
+                                depression_score: None,
+                                anxiety_score: None,
+                                sleep_quality_score: None,
+                                source: data_point.source.clone(),
+                                notes: None,
+                            };
+                            internal_metrics.push(HealthMetric::MentalHealth(metric));
+                        }
+                    }
                     "steps"
                     | "step_count"
                     | "distance_walking_running"
@@ -311,6 +509,12 @@ impl IosIngestPayload {
             data: IngestData {
                 metrics: internal_metrics,
                 workouts: internal_workouts,
+                nutrition_metrics: Vec::new(),
+                symptom_metrics: Vec::new(),
+                reproductive_health_metrics: Vec::new(),
+                environmental_metrics: Vec::new(),
+                mental_health_metrics: Vec::new(),
+                mobility_metrics: Vec::new(),
             },
         }
     }

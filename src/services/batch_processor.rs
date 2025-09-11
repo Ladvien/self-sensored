@@ -44,6 +44,12 @@ pub struct DeduplicationStats {
     pub sleep_duplicates: usize,
     pub activity_duplicates: usize,
     pub workout_duplicates: usize,
+    pub nutrition_duplicates: usize,
+    pub symptom_duplicates: usize,
+    pub reproductive_health_duplicates: usize,
+    pub environmental_duplicates: usize,
+    pub mental_health_duplicates: usize,
+    pub mobility_duplicates: usize,
     pub total_duplicates: usize,
     pub deduplication_time_ms: u64,
 }
@@ -152,7 +158,14 @@ impl BatchProcessor {
         let initial_memory = self.estimate_memory_usage();
 
         // Record batch processing start
-        let total_metrics = payload.data.metrics.len() + payload.data.workouts.len();
+        let total_metrics = payload.data.metrics.len() 
+            + payload.data.workouts.len()
+            + payload.data.nutrition_metrics.len()
+            + payload.data.symptom_metrics.len()
+            + payload.data.reproductive_health_metrics.len()
+            + payload.data.environmental_metrics.len()
+            + payload.data.mental_health_metrics.len()
+            + payload.data.mobility_metrics.len();
 
         self.reset_counters();
 
@@ -170,6 +183,14 @@ impl BatchProcessor {
 
         // Put workouts back into grouped for deduplication
         grouped.workouts = all_workouts;
+        
+        // Add individual metric collections to the grouped data
+        grouped.nutrition_metrics.extend(payload.data.nutrition_metrics);
+        grouped.symptom_metrics.extend(payload.data.symptom_metrics);
+        grouped.reproductive_health_metrics.extend(payload.data.reproductive_health_metrics);
+        grouped.environmental_metrics.extend(payload.data.environmental_metrics);
+        grouped.mental_health_metrics.extend(payload.data.mental_health_metrics);
+        grouped.mobility_metrics.extend(payload.data.mobility_metrics);
 
         // Deduplicate metrics within the batch before database operations
         let (deduplicated_grouped, dedup_stats) =
@@ -642,6 +663,12 @@ impl BatchProcessor {
                 HealthMetric::Sleep(sleep) => grouped.sleep_metrics.push(sleep),
                 HealthMetric::Activity(activity) => grouped.activities.push(activity),
                 HealthMetric::Workout(workout) => grouped.workouts.push(workout),
+                HealthMetric::Nutrition(nutrition) => grouped.nutrition_metrics.push(nutrition),
+                HealthMetric::Symptom(symptom) => grouped.symptom_metrics.push(symptom),
+                HealthMetric::ReproductiveHealth(reproductive_health) => grouped.reproductive_health_metrics.push(reproductive_health),
+                HealthMetric::Environmental(environmental) => grouped.environmental_metrics.push(environmental),
+                HealthMetric::MentalHealth(mental_health) => grouped.mental_health_metrics.push(mental_health),
+                HealthMetric::Mobility(mobility) => grouped.mobility_metrics.push(mobility),
             }
         }
 
@@ -1454,7 +1481,7 @@ impl BatchProcessor {
         }
 
         let start_time = std::time::Instant::now();
-        
+
         // Begin transaction for dual-write atomicity
         let mut tx = self.pool.begin().await?;
 
@@ -1494,7 +1521,7 @@ impl BatchProcessor {
             (Ok(old_count), Ok(new_count)) => {
                 // Both insertions succeeded, commit transaction
                 tx.commit().await?;
-                
+
                 let duration = start_time.elapsed();
                 info!(
                     user_id = %user_id,
@@ -1506,13 +1533,13 @@ impl BatchProcessor {
 
                 // Record successful dual-write metrics
                 Metrics::record_dual_write_success("activity_metrics", old_count as u64, duration);
-                
+
                 Ok(old_count) // Return count from primary table
             }
             (old_result, new_result) => {
                 // At least one insertion failed, rollback transaction
                 tx.rollback().await?;
-                
+
                 let duration = start_time.elapsed();
                 error!(
                     user_id = %user_id,
@@ -1523,7 +1550,11 @@ impl BatchProcessor {
                 );
 
                 // Record failed dual-write metrics
-                Metrics::record_dual_write_failure("activity_metrics", metrics.len() as u64, duration);
+                Metrics::record_dual_write_failure(
+                    "activity_metrics",
+                    metrics.len() as u64,
+                    duration,
+                );
 
                 // Return the first error encountered
                 if let Err(old_error) = old_result {
@@ -1700,7 +1731,7 @@ impl BatchProcessor {
         }
 
         let start_time = std::time::Instant::now();
-        
+
         // Begin transaction for dual-write atomicity
         let mut tx = pool.begin().await?;
 
@@ -1720,27 +1751,17 @@ impl BatchProcessor {
             .collect();
 
         // Attempt to insert into both tables
-        let old_table_result = Self::insert_activities_chunked_tx(
-            &mut tx,
-            user_id,
-            metrics.clone(),
-            chunk_size,
-        )
-        .await;
+        let old_table_result =
+            Self::insert_activities_chunked_tx(&mut tx, user_id, metrics.clone(), chunk_size).await;
 
-        let new_table_result = Self::insert_activities_v2_chunked_tx(
-            &mut tx,
-            user_id,
-            v2_metrics,
-            chunk_size,
-        )
-        .await;
+        let new_table_result =
+            Self::insert_activities_v2_chunked_tx(&mut tx, user_id, v2_metrics, chunk_size).await;
 
         match (old_table_result, new_table_result) {
             (Ok(old_count), Ok(new_count)) => {
                 // Both insertions succeeded, commit transaction
                 tx.commit().await?;
-                
+
                 let duration = start_time.elapsed();
                 info!(
                     user_id = %user_id,
@@ -1752,13 +1773,13 @@ impl BatchProcessor {
 
                 // Record successful dual-write metrics
                 Metrics::record_dual_write_success("activity_metrics", old_count as u64, duration);
-                
+
                 Ok(old_count) // Return count from primary table
             }
             (old_result, new_result) => {
                 // At least one insertion failed, rollback transaction
                 tx.rollback().await?;
-                
+
                 let duration = start_time.elapsed();
                 error!(
                     user_id = %user_id,
@@ -1769,7 +1790,11 @@ impl BatchProcessor {
                 );
 
                 // Record failed dual-write metrics
-                Metrics::record_dual_write_failure("activity_metrics", metrics.len() as u64, duration);
+                Metrics::record_dual_write_failure(
+                    "activity_metrics",
+                    metrics.len() as u64,
+                    duration,
+                );
 
                 // Return the first error encountered
                 if let Err(old_error) = old_result {
@@ -1790,4 +1815,10 @@ struct GroupedMetrics {
     sleep_metrics: Vec<crate::models::SleepMetric>,
     activities: Vec<crate::models::ActivityMetric>,
     workouts: Vec<crate::models::WorkoutData>,
+    nutrition_metrics: Vec<crate::models::NutritionMetric>,
+    symptom_metrics: Vec<crate::models::SymptomMetric>,
+    reproductive_health_metrics: Vec<crate::models::ReproductiveHealthMetric>,
+    environmental_metrics: Vec<crate::models::EnvironmentalMetric>,
+    mental_health_metrics: Vec<crate::models::MentalHealthMetric>,
+    mobility_metrics: Vec<crate::models::MobilityMetric>,
 }

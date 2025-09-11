@@ -741,11 +741,15 @@ impl Metrics {
 
     /// Record successful dual-write operation
     #[instrument(skip_all)]
-    pub fn record_dual_write_success(table: &str, record_count: u64, duration: std::time::Duration) {
+    pub fn record_dual_write_success(
+        table: &str,
+        record_count: u64,
+        duration: std::time::Duration,
+    ) {
         DUAL_WRITE_OPERATIONS_TOTAL
             .with_label_values(&[table, "success"])
             .inc_by(record_count as f64);
-        
+
         DUAL_WRITE_DURATION_SECONDS
             .with_label_values(&[table, "success"])
             .observe(duration.as_secs_f64());
@@ -753,11 +757,15 @@ impl Metrics {
 
     /// Record failed dual-write operation
     #[instrument(skip_all)]
-    pub fn record_dual_write_failure(table: &str, record_count: u64, duration: std::time::Duration) {
+    pub fn record_dual_write_failure(
+        table: &str,
+        record_count: u64,
+        duration: std::time::Duration,
+    ) {
         DUAL_WRITE_OPERATIONS_TOTAL
             .with_label_values(&[table, "failure"])
             .inc_by(record_count as f64);
-        
+
         DUAL_WRITE_DURATION_SECONDS
             .with_label_values(&[table, "failure"])
             .observe(duration.as_secs_f64());
@@ -773,11 +781,15 @@ impl Metrics {
 
     /// Record dual-write rollback event
     #[instrument(skip_all)]
-    pub fn record_dual_write_rollback(table: &str, record_count: u64, duration: std::time::Duration) {
+    pub fn record_dual_write_rollback(
+        table: &str,
+        record_count: u64,
+        duration: std::time::Duration,
+    ) {
         DUAL_WRITE_OPERATIONS_TOTAL
             .with_label_values(&[table, "rollback"])
             .inc_by(record_count as f64);
-        
+
         DUAL_WRITE_DURATION_SECONDS
             .with_label_values(&[table, "rollback"])
             .observe(duration.as_secs_f64());

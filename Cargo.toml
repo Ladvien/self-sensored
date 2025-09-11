@@ -19,6 +19,7 @@ futures = "0.3"
 # Database
 sqlx = { version = "0.8.1", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json", "ipnetwork", "bigdecimal"] }
 bigdecimal = { version = "0.4", features = ["serde"] }
+rust_decimal = { version = "1.33", features = ["serde"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -70,6 +71,8 @@ rumqttc = { version = "0.24", features = ["websocket"] }
 [dev-dependencies]
 tokio-test = "0.4"
 reqwest = { version = "0.11", features = ["json"] }
+rand = "0.8"
+rust_decimal = { version = "1.33", features = ["serde"] }
 
 [features]
 default = []
@@ -78,4 +81,9 @@ testing = ["reqwest"]
 [[bin]]
 name = "self-sensored"
 path = "src/main.rs"
+
+# Test configuration for migration scripts
+[[test]]
+name = "migrate_activity_metrics_test"
+path = "tests/scripts/migrate_activity_metrics_test.rs"
 
