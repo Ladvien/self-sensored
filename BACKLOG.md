@@ -35,15 +35,6 @@
 
 ## Low Priority Issues (P3)
 
-### [AUDIT-008] Configuration Flexibility Enhancement
-**Priority:** Low  
-**Points:** 2  
-**AC:**
-- Add metric-specific chunk size overrides to IngestBatchConfig
-- Make validation thresholds configurable via environment variables
-- Document all configuration options
-**Dependencies:** None  
-**Files:** src/services/batch_processor.rs, src/config/
 
 ### [AUDIT-009] API Documentation Updates
 **Priority:** Low  

@@ -75,6 +75,71 @@ All stories have been successfully completed and moved to DONE.md.
 
 **Quality Assurance:** Test now properly respects the configured activity chunk limit and includes assertions to verify chunk size compliance.
 
+### [AUDIT-008] Configuration Flexibility Enhancement ✅
+**Status:** COMPLETED  
+**Priority:** Low (2 story points)  
+**Completion Date:** 2025-09-11  
+**Agent:** Backend Engineer  
+
+**Acceptance Criteria Achieved:**
+- ✅ Added metric-specific chunk size overrides to BatchConfig with environment variable support
+- ✅ Made all validation thresholds configurable via environment variables  
+- ✅ Created comprehensive documentation with configuration examples and usage
+- ✅ Implemented configuration validation and error handling
+- ✅ Added comprehensive test coverage for configuration flexibility
+
+**Technical Implementation:**  
+- Created `BatchConfig` with metric-specific chunk sizes (heart_rate: 8000, blood_pressure: 8000, sleep: 5000, activity: 7000, workout: 5000)
+- Implemented `ValidationConfig` for all health metric validation thresholds (heart rate, blood pressure, sleep, activity, GPS, workout)
+- Added environment variable configuration with fallback to sensible defaults
+- Built-in parameter limit validation prevents PostgreSQL limit violations
+- Configuration validation ensures min < max relationships and logical consistency
+
+**Configuration Structure:**
+```rust
+// Batch Processing Configuration
+BATCH_HEART_RATE_CHUNK_SIZE=8000    // 6 params × 8000 = 48k (75% of 65k limit)
+BATCH_BLOOD_PRESSURE_CHUNK_SIZE=8000 // 6 params × 8000 = 48k (75% of 65k limit)  
+BATCH_SLEEP_CHUNK_SIZE=5000          // 10 params × 5000 = 50k (76% of 65k limit)
+BATCH_ACTIVITY_CHUNK_SIZE=7000       // 7 params × 7000 = 49k (75% of 65k limit)
+BATCH_WORKOUT_CHUNK_SIZE=5000        // 10 params × 5000 = 50k (76% of 65k limit)
+
+// Health Metric Validation Thresholds
+VALIDATION_HEART_RATE_MIN=15, VALIDATION_HEART_RATE_MAX=300
+VALIDATION_SYSTOLIC_MIN=50, VALIDATION_SYSTOLIC_MAX=250
+VALIDATION_DIASTOLIC_MIN=30, VALIDATION_DIASTOLIC_MAX=150  
+VALIDATION_SLEEP_EFFICIENCY_MIN=0.0, VALIDATION_SLEEP_EFFICIENCY_MAX=100.0
+VALIDATION_STEPS_MIN=0, VALIDATION_STEPS_MAX=200000
+VALIDATION_DISTANCE_MAX_KM=500.0, VALIDATION_CALORIES_MAX=20000.0
+VALIDATION_WORKOUT_MAX_DURATION_HOURS=24
+```
+
+**Files Modified:**
+- `/mnt/datadrive_m2/self-sensored/src/config/batch_config.rs` - New batch configuration system
+- `/mnt/datadrive_m2/self-sensored/src/config/validation_config.rs` - Enhanced validation config  
+- `/mnt/datadrive_m2/self-sensored/src/config/mod.rs` - Module exports and public API
+- `/mnt/datadrive_m2/self-sensored/src/services/batch_processor.rs` - Integration with new config system
+- `/mnt/datadrive_m2/self-sensored/src/models/health_metrics.rs` - Configurable validation methods
+- `/mnt/datadrive_m2/self-sensored/.env.example` - 45+ new configuration options documented
+- `/mnt/datadrive_m2/self-sensored/CLAUDE.md` - Comprehensive configuration documentation
+- `/mnt/datadrive_m2/self-sensored/tests/config_test.rs` - Complete test coverage for config flexibility
+
+**PostgreSQL Parameter Safety:**
+- Validates chunk sizes against PostgreSQL 65,535 parameter limit during configuration load
+- Safe defaults set at 75-80% of theoretical maximums for reliability
+- Runtime validation prevents configuration that would cause database errors
+- Clear error messages guide administrators to safe configuration values
+
+**Production Benefits:**
+- Environment-specific tuning without code changes
+- Per-deployment optimization for different workloads  
+- Graceful handling of validation edge cases through threshold adjustments
+- Performance tuning via chunk size optimization based on hardware capabilities
+
+**Impact Analysis:** Provides production-ready flexibility for deployment-specific optimization. Enables tuning of batch processing performance and data validation rules through environment variables, supporting various edge cases and deployment scenarios without requiring code changes.
+
+**Quality Assurance:** Comprehensive test coverage validates all configuration scenarios, environment variable parsing, validation logic, and error handling. Configuration validation prevents invalid settings that could cause runtime failures.
+
 ### [AUDIT-004] Database Constraint Alignment ✅
 **Status:** COMPLETED  
 **Priority:** High (3 story points)  
