@@ -372,7 +372,16 @@ fn configure_cors() -> Cors {
             warn!("SECURITY WARNING: localhost origins detected in production CORS configuration!");
         }
         if allowed_origins.contains('*') {
-            panic!("SECURITY ERROR: Wildcard origins are not allowed in production!");
+            error!("SECURITY ERROR: Wildcard origins are not allowed in production!");
+            // Return a restrictive CORS configuration instead of panicking
+            return Cors::default()
+                .allowed_methods(vec!["GET", "POST", "OPTIONS"])
+                .allowed_headers(vec![
+                    header::AUTHORIZATION,
+                    header::CONTENT_TYPE,
+                    header::ACCEPT,
+                ])
+                .max_age(max_age);
         }
         info!("Production CORS security validations passed");
     }

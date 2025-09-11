@@ -119,6 +119,18 @@ impl AuthService {
         }
     }
 
+    /// Robust detection of Argon2 hash format
+    /// This replaces simple LIKE '$argon2%' pattern matching with proper validation
+    fn is_argon2_hash(hash: &str) -> bool {
+        // Argon2 hashes follow the format: $argon2{variant}${parameters}${salt}${hash}
+        // Variants include: argon2i, argon2d, argon2id
+        hash.starts_with("$argon2") && 
+        (hash.starts_with("$argon2i$") || 
+         hash.starts_with("$argon2d$") || 
+         hash.starts_with("$argon2id$")) &&
+        hash.matches('$').count() >= 5  // Minimum structure validation
+    }
+
     /// Create a new API key for a user
     pub async fn create_api_key(
         &self,
@@ -175,12 +187,20 @@ impl AuthService {
     /// Supports both UUID-based keys (Auto Export format) and hashed keys
     /// Includes comprehensive audit logging for all authentication attempts
     /// Enforces rate limiting per API key if rate limiter is configured
+    /// Includes brute force protection for failed authentication attempts
     pub async fn authenticate(
         &self,
         api_key: &str,
         ip_address: Option<std::net::IpAddr>,
         user_agent: Option<&str>,
     ) -> Result<AuthContext, AuthError> {
+        // Apply IP-based rate limiting for authentication attempts to prevent brute force attacks
+        if let Some(ref rate_limiter) = self.rate_limiter {
+            if let Some(ip) = ip_address {
+                rate_limiter.check_ip_rate_limit(&ip.to_string()).await?;
+            }
+        }
+
         // Check if the API key is a UUID (Auto Export format)
         // Auto Export sends the API key ID directly as the Bearer token
         if let Ok(api_key_uuid) = Uuid::parse_str(api_key) {
@@ -234,6 +254,13 @@ impl AuthService {
                         )
                         .await
                         .ok(); // Don't fail auth on audit log failure
+
+                        // Track failed authentication attempt for this IP
+                        if let Some(ref rate_limiter) = self.rate_limiter {
+                            if let Some(ip) = ip_address {
+                                let _ = rate_limiter.check_ip_rate_limit(&format!("failed_auth:{}", ip)).await;
+                            }
+                        }
 
                         return Err(AuthError::ApiKeyExpired);
                     }
@@ -291,6 +318,13 @@ impl AuthService {
                     "Auto Export API key authenticated successfully"
                 );
                 return Ok(AuthContext { user, api_key });
+            } else {
+                // UUID not found in database - track failed attempt
+                if let Some(ref rate_limiter) = self.rate_limiter {
+                    if let Some(ip) = ip_address {
+                        let _ = rate_limiter.check_ip_rate_limit(&format!("failed_auth:{}", ip)).await;
+                    }
+                }
             }
         }
 
@@ -319,14 +353,24 @@ impl AuthService {
                 JOIN users u ON ak.user_id = u.id
                 WHERE (ak.is_active IS NULL OR ak.is_active = true) 
                     AND (u.is_active IS NULL OR u.is_active = true)
-                    AND ak.key_hash LIKE '$argon2%'
                 "#
             )
             .fetch_all(&self.pool)
             .await?;
 
             // Find the matching API key by verifying hashes
+            // Only process keys with valid Argon2 hash format (robust replacement for LIKE '$argon2%')
             for row in api_keys {
+                // Skip keys that don't have valid Argon2 hash format
+                if !Self::is_argon2_hash(&row.key_hash) {
+                    tracing::debug!(
+                        key_id = %row.id,
+                        hash_preview = &row.key_hash[..std::cmp::min(20, row.key_hash.len())],
+                        "Skipping key with invalid Argon2 hash format"
+                    );
+                    continue;
+                }
+
                 match self.verify_api_key(api_key, &row.key_hash) {
                     Ok(true) => {
                         // Check if key is expired
@@ -348,6 +392,13 @@ impl AuthService {
                                 )
                                 .await
                                 .ok(); // Don't fail auth on audit log failure
+
+                                // Track failed authentication attempt for this IP
+                                if let Some(ref rate_limiter) = self.rate_limiter {
+                                    if let Some(ip) = ip_address {
+                                        let _ = rate_limiter.check_ip_rate_limit(&format!("failed_auth:{}", ip)).await;
+                                    }
+                                }
 
                                 return Err(AuthError::ApiKeyExpired);
                             }
@@ -440,6 +491,13 @@ impl AuthService {
         )
         .await
         .ok(); // Don't fail auth on audit log failure
+
+        // Track failed authentication attempt for this IP to prevent brute force attacks
+        if let Some(ref rate_limiter) = self.rate_limiter {
+            if let Some(ip) = ip_address {
+                let _ = rate_limiter.check_ip_rate_limit(&format!("failed_auth:{}", ip)).await;
+            }
+        }
 
         tracing::warn!(
             "Authentication failed for invalid API key with format: {}",
@@ -622,4 +680,5 @@ impl AuthService {
     pub fn is_rate_limiting_enabled(&self) -> bool {
         self.rate_limiter.is_some()
     }
+
 }

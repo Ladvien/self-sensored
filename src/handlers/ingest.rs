@@ -61,7 +61,8 @@ where
                 Ok(obj) => Ok(LoggedJson(obj)),
                 Err(e) => {
                     error!("JSON deserialization error: {}", e);
-                    error!("Failed JSON payload: {}", body_str);
+                    let sanitized_payload = sanitize_payload_for_logging(&body_str, 500);
+                    error!("Failed JSON payload (sanitized): {}", sanitized_payload);
                     Err(actix_web::error::ErrorBadRequest(format!(
                         "JSON parsing error: {e}"
                     )))
@@ -626,14 +627,10 @@ async fn parse_ios_payload_enhanced(raw_payload: &web::Bytes) -> Result<IngestPa
                     error!("iOS format error: {}", ios_error);
                     error!("Standard format error: {}", standard_error);
 
-                    // Log excerpt for debugging (first 1000 chars)
+                    // Log sanitized payload metadata for debugging (no sensitive content)
                     let payload_str = String::from_utf8_lossy(raw_payload);
-                    let preview = if payload_str.len() > 1000 {
-                        &payload_str[..1000]
-                    } else {
-                        &payload_str
-                    };
-                    error!("Payload preview: {}", preview);
+                    let sanitized_preview = sanitize_payload_for_logging(&payload_str, 500);
+                    error!("Payload preview (sanitized): {}", sanitized_preview);
 
                     Err(actix_web::error::ErrorBadRequest(format!(
                         "Invalid JSON format. iOS error: {}. Standard error: {}",
@@ -661,6 +658,36 @@ fn parse_with_error_context<T: serde::de::DeserializeOwned>(
                 format_name, path, inner
             ))
         }
+    }
+}
+
+/// Sanitize payload content for logging by removing sensitive data and keeping only structure information
+fn sanitize_payload_for_logging(payload: &str, max_length: usize) -> String {
+    // Simple pattern replacements for sensitive fields without regex dependency
+    let mut sanitized = payload.to_string();
+    
+    // Replace specific sensitive field patterns
+    if sanitized.contains("sexual_activity") {
+        sanitized = sanitized.replace("sexual_activity", "[REDACTED_FIELD]");
+    }
+    if sanitized.contains("contraceptive_method") {
+        sanitized = sanitized.replace("contraceptive_method", "[REDACTED_FIELD]");
+    }
+    if sanitized.contains("\"email\"") {
+        sanitized = sanitized.replace("\"email\"", "\"[REDACTED_EMAIL]\"");
+    }
+    if sanitized.contains("\"notes\"") {
+        sanitized = sanitized.replace("\"notes\"", "\"[REDACTED_NOTES]\"");
+    }
+    if sanitized.contains("\"symptoms\"") {
+        sanitized = sanitized.replace("\"symptoms\"", "\"[REDACTED_SYMPTOMS]\"");
+    }
+    
+    // Truncate to max length and add ellipsis if needed
+    if sanitized.len() > max_length {
+        format!("{}...[truncated]", &sanitized[..max_length])
+    } else {
+        sanitized
     }
 }
 
