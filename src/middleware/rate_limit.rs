@@ -125,9 +125,20 @@ where
                 let auth_context = req.extensions().get::<AuthContext>().cloned();
                 
                 let rate_limit_result = if let Some(auth_context) = auth_context {
-                    // Authenticated request: use API key-based rate limiting
-                    debug!("Checking rate limit for API key: {}", auth_context.api_key.id);
-                    rate_limiter.check_rate_limit(auth_context.api_key.id).await
+                    // Authenticated request: check if we should use per-user or per-API-key rate limiting
+                    let use_user_rate_limiting = std::env::var("RATE_LIMIT_USE_USER_BASED")
+                        .unwrap_or_else(|_| "false".to_string())
+                        .parse::<bool>()
+                        .unwrap_or(false);
+                    
+                    if use_user_rate_limiting {
+                        debug!("Checking per-user rate limit for user: {}", auth_context.user.id);
+                        rate_limiter.check_user_rate_limit(auth_context.user.id).await
+                    } else {
+                        // Default: use API key-based rate limiting  
+                        debug!("Checking rate limit for API key: {}", auth_context.api_key.id);
+                        rate_limiter.check_rate_limit(auth_context.api_key.id).await
+                    }
                 } else {
                     // Unauthenticated request: use IP-based rate limiting
                     let client_ip = get_client_ip(&req);

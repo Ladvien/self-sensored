@@ -125,16 +125,32 @@ impl RateLimiter {
     ) -> Result<RateLimitInfo, RateLimitError> {
         let key = format!("rate_limit:ip:{ip_address}");
         
-        // Use more restrictive limits for IP-based rate limiting (20 requests/hour)
+        // Use more restrictive limits for IP-based rate limiting (100 requests/hour)
         let ip_limit = std::env::var("RATE_LIMIT_IP_REQUESTS_PER_HOUR")
-            .unwrap_or_else(|_| "20".to_string())
+            .unwrap_or_else(|_| "100".to_string())
             .parse::<i32>()
-            .unwrap_or(20);
+            .unwrap_or(100);
 
         if self.using_redis && self.redis_client.is_some() {
             self.check_redis_rate_limit_with_limit(&key, ip_limit).await
         } else {
             self.check_memory_rate_limit_with_limit(&key, ip_limit).await
+        }
+    }
+
+    /// Check if a request is allowed and update rate limit counters for user IDs
+    /// Provides per-user rate limiting independent of API keys
+    pub async fn check_user_rate_limit(
+        &self,
+        user_id: Uuid,
+    ) -> Result<RateLimitInfo, RateLimitError> {
+        let key = format!("rate_limit:user:{user_id}");
+
+        // Use standard rate limit for authenticated users
+        if self.using_redis && self.redis_client.is_some() {
+            self.check_redis_rate_limit(&key).await
+        } else {
+            self.check_memory_rate_limit(&key).await
         }
     }
 
@@ -367,7 +383,7 @@ impl RateLimiter {
         &self,
         api_key_id: Uuid,
     ) -> Result<RateLimitInfo, RateLimitError> {
-        let key = format!("rate_limit:{api_key_id}");
+        let key = format!("rate_limit:api_key:{api_key_id}");
 
         if self.using_redis && self.redis_client.is_some() {
             self.get_redis_rate_limit_status(&key).await
@@ -561,5 +577,35 @@ mod tests {
         // Should be able to make requests again
         let result = rate_limiter.check_rate_limit(api_key_id).await.unwrap();
         assert_eq!(result.requests_remaining, 0); // 1 - 1 = 0 remaining after this request
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiter_user_based() {
+        let rate_limiter = RateLimiter::new_in_memory(3); // 3 requests per hour
+        let user_id = Uuid::new_v4();
+
+        // First 3 requests should succeed
+        for i in 0..3 {
+            let result = rate_limiter.check_user_rate_limit(user_id).await.unwrap();
+            assert_eq!(result.requests_remaining, 2 - i);
+            assert_eq!(result.requests_limit, 3);
+        }
+
+        // 4th request should be rate limited
+        let result = rate_limiter.check_user_rate_limit(user_id).await.unwrap();
+        assert_eq!(result.requests_remaining, 0);
+        assert!(result.retry_after.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiter_ip_based_with_increased_limit() {
+        let rate_limiter = RateLimiter::new_in_memory(100); // Standard limit
+
+        // Test IP rate limiting uses the higher default (100) instead of old 20
+        let result = rate_limiter.check_ip_rate_limit("192.168.1.1").await.unwrap();
+        
+        // With new default of 100, we should have 99 remaining after first request
+        assert_eq!(result.requests_limit, 100);
+        assert_eq!(result.requests_remaining, 99);
     }
 }
