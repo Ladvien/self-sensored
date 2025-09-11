@@ -7,9 +7,9 @@ The Health Export API implements comprehensive rate limiting to ensure fair usag
 ### Rate Limit Policies
 
 #### Request-Based Limits
-- **Default Limit**: 100 requests per hour per API key
+- **Default Limit**: 100 requests per hour per API key (IP-based by default)
 - **Window**: Sliding 1-hour window (3600 seconds)
-- **Granularity**: Per API key, tracked individually
+- **Granularity**: Per API key, tracked individually (configurable per-user)
 - **Reset**: Sliding window that resets continuously
 
 #### Data-Based Limits

@@ -26,11 +26,35 @@ info:
     ```
     
     ## Rate Limiting
-    - **Requests**: 100 per hour per API key
+    - **Requests**: 100 per hour per API key (IP-based by default, configurable per-user)
     - **Payload Size**: 100MB maximum
     - **Metrics per Request**: 10,000 maximum
     
+    Rate limiting can be configured per-user for specific use cases. Contact support for custom limits.
     When rate limits are exceeded, the API returns HTTP 429 with retry information.
+    
+    ## Troubleshooting Common Errors
+    
+    ### Authentication Issues (401)
+    - **Missing Authorization header**: Ensure requests include `Authorization: Bearer <your-api-key>`
+    - **Invalid token format**: Verify the Bearer token is properly formatted
+    - **Expired token**: Check if your API key needs renewal
+    
+    ### Validation Errors (400/422)
+    - **Heart rate out of range**: Valid range is 15-300 BPM
+    - **Blood pressure invalid**: Systolic 60-250 mmHg, Diastolic 40-150 mmHg
+    - **Too many metrics**: Maximum 10,000 metrics per request
+    - **Payload too large**: Maximum 100MB per request
+    
+    ### Rate Limiting (429)
+    - **Rate limit exceeded**: Default is 100 requests/hour per API key
+    - **Solution**: Implement exponential backoff, check X-RateLimit-* headers
+    - **Custom limits**: Contact support for higher rate limits if needed
+    
+    ### Server Errors (500-504)
+    - **Database unavailable**: Temporary issue, retry after delay
+    - **Request timeout**: Reduce payload size or complexity
+    - **Check service status**: Monitor `/health` and `/api/v1/status` endpoints
     
   version: "1.0.0"
   contact:
@@ -142,7 +166,7 @@ paths:
         
         ## Validation
         Each metric type has specific validation rules:
-        - Heart rate: 20-300 BPM
+        - Heart rate: 15-300 BPM
         - Blood pressure: Systolic 60-250, Diastolic 40-150
         - Sleep: Logical time periods and efficiency 0-100%
         - Activity: Non-negative values within reasonable ranges
@@ -1118,19 +1142,19 @@ components:
           example: "2025-01-15T08:30:00Z"
         min_bpm:
           type: integer
-          minimum: 20
+          minimum: 15
           maximum: 300
           description: Minimum heart rate in BPM
           example: 65
         avg_bpm:
           type: integer
-          minimum: 20
+          minimum: 15
           maximum: 300
           description: Average heart rate in BPM
           example: 72
         max_bpm:
           type: integer
-          minimum: 20
+          minimum: 15
           maximum: 300
           description: Maximum heart rate in BPM
           example: 85
@@ -1170,7 +1194,7 @@ components:
           example: 80
         pulse:
           type: integer
-          minimum: 20
+          minimum: 15
           maximum: 300
           description: Pulse rate in BPM
           example: 68
@@ -1309,13 +1333,13 @@ components:
           example: 5500.0
         avg_heart_rate:
           type: integer
-          minimum: 20
+          minimum: 15
           maximum: 300
           description: Average heart rate in BPM
           example: 155
         max_heart_rate:
           type: integer
-          minimum: 20
+          minimum: 15
           maximum: 300
           description: Maximum heart rate in BPM
           example: 175

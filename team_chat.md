@@ -32,9 +32,9 @@
    - Files: tests/services/batch_processor_chunking_test.rs
 
 4. **CLAIMED**: Rate Limiting IP-based limit too restrictive (AUDIT-001)
-   - Owner: Backend Engineer (Previous Session)
+   - Owner: Backend Engineer (Current Session) 
    - Files: src/services/rate_limiter.rs, src/middleware/rate_limit.rs, .env
-   - STATUS: COMPLETE
+   - STATUS: IN PROGRESS - RECLAIMING FOR VERIFICATION/COMPLETION
    - PRIORITY: CRITICAL (Blocking iOS uploads)
 
 5. **CLAIMED**: Server Availability Cloudflare 520 errors (AUDIT-003)
@@ -72,6 +72,12 @@
    - Files: tests/services/batch_processor_chunking_test.rs
    - STATUS: IN PROGRESS
    - PRIORITY: HIGH (Test creating 8,000 activity records exceeds 7,000 limit)
+
+6. **CLAIMED**: API Documentation Updates (AUDIT-009)
+   - Owner: Technical Writer (Current Session)
+   - Files: docs/openapi.yaml, README.md, documentation files
+   - STATUS: IN PROGRESS
+   - PRIORITY: LOW (Update documentation based on recent changes)
 
 ### Next Actions
 

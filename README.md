@@ -9,7 +9,7 @@ A production-ready REST API built in Rust for receiving and storing health data 
 - **Robust Authentication**: API key-based authentication with Argon2 hashing and audit logging
 - **High Performance**: Built with Rust and Actix-web for optimal performance and memory safety
 - **Spatial Data Support**: PostGIS integration for workout route tracking and location data
-- **Rate Limiting**: Configurable rate limiting to prevent abuse
+- **Rate Limiting**: IP-based rate limiting (100 requests/hour) with configurable per-user options
 - **Observability**: Structured logging with tracing, metrics, and monitoring
 - **Data Integrity**: Individual transactions per metric with comprehensive validation
 - **Raw Data Storage**: Preserves original payloads for data recovery and analysis
@@ -132,7 +132,7 @@ WORKERS=4
 # Optional: Redis for caching
 REDIS_URL=redis://localhost:6379
 
-# Optional: Rate limiting
+# Rate limiting (IP-based by default)
 RATE_LIMIT_REQUESTS_PER_HOUR=100
 RATE_LIMIT_BANDWIDTH_MB_PER_HOUR=10
 ```
@@ -310,7 +310,7 @@ Prometheus metrics are exposed at `/metrics` (when enabled):
 ## 🔒 Security
 
 - **API Key Authentication**: Secure Argon2 hashed API keys
-- **Rate Limiting**: Configurable per-key request and bandwidth limits  
+- **Rate Limiting**: IP-based limits (100 requests/hour) with configurable per-user options  
 - **Audit Logging**: All API access logged with IP, user agent, and metadata
 - **Input Validation**: Comprehensive validation of all health metric data
 - **SQL Injection Protection**: SQLx compile-time query verification
