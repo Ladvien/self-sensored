@@ -95,40 +95,6 @@ Implement comprehensive nutrition_metrics table supporting 37+ nutrition fields 
 
 ---
 
-#### Story 3.1: Create Reproductive Health Table
-
-**Story Points:** 8  
-**Assigned to:** Database Subagent  
-**Priority:** High  
-
-**Description:**
-Implement reproductive_health table with privacy-sensitive field handling.
-
-**Acceptance Criteria:**
-- [ ] Create migration `migrations/0014_create_reproductive_health.sql` with:
-  - Menstrual tracking fields (flow, spotting, cycle_day)
-  - Fertility tracking (basal_body_temp, cervical_mucus, ovulation)
-  - Pregnancy tracking fields
-  - Sexual health fields (marked for encryption)
-- [ ] Implement field-level encryption for sensitive fields
-- [ ] Add audit logging triggers
-- [ ] Add privacy access controls
-
-**Testing Requirements:**
-- [ ] Create `tests/migrations/0014_create_reproductive_health_test.rs`
-- [ ] Test encryption/decryption of sensitive fields
-- [ ] Test audit log generation
-- [ ] Test access control restrictions
-- [ ] Test data retention policies
-
-**Definition of Done:**
-- All fields encrypted as specified
-- Audit logging verified
-- HIPAA compliance checklist completed
-- Privacy impact assessment documented
-- User consent flow implemented
-
----
 
 #### Story 3.2: Create Environmental Metrics Table
 
