@@ -91,41 +91,6 @@ Implement comprehensive nutrition_metrics table supporting 37+ nutrition fields 
 
 ---
 
-#### Story 2.2: Create Symptoms Tracking Table
-
-**Story Points:** 5  
-**Assigned to:** Database Subagent  
-**Priority:** High  
-
-**Description:**
-Implement symptoms table for 35+ symptom types with severity tracking.
-
-**Acceptance Criteria:**
-- [ ] Create migration `migrations/0013_create_symptoms.sql` with:
-  - Symptom_type field with enumeration
-  - Severity scale (mild, moderate, severe, not_present)
-  - Duration tracking
-  - Notes field for additional context
-- [ ] Add composite indexes for (user_id, symptom_type, recorded_at)
-- [ ] Implement monthly partitioning
-- [ ] Add symptom type validation
-
-**Testing Requirements:**
-- [ ] Create `tests/migrations/0013_create_symptoms_test.rs`
-- [ ] Test all 35 symptom type enumerations
-- [ ] Test severity validation
-- [ ] Test query performance for symptom history
-- [ ] Test concurrent symptom logging
-
-**Definition of Done:**
-- All symptom types enumerated
-- Severity validation enforced
-- Query performance <50ms for 3-month history
-- Sample symptom data imports
-- Clinical compliance reviewed
-
----
-
 ### Stream 3: Reproductive and Environmental Health
 
 ---
