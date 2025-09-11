@@ -40,6 +40,7 @@ fn test_standard_payload_serialization() {
                 avg_heart_rate: Some(150),
                 max_heart_rate: Some(175),
                 source: Some("Test".to_string()),
+                route_points: None,
             }],
         },
     };

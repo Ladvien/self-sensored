@@ -248,6 +248,61 @@ static SECURITY_EVENTS_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
     .expect("Failed to create security events counter")
 });
 
+// AUDIT-007: Enhanced Monitoring and Alerting Metrics
+static VALIDATION_ERRORS_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
+    register_counter_vec_with_registry!(
+        "health_export_validation_errors_total",
+        "Total validation errors by metric type and error category",
+        &["metric_type", "error_category", "endpoint"],
+        METRICS_REGISTRY.clone()
+    )
+    .expect("Failed to create validation errors counter")
+});
+
+static VALIDATION_ERROR_RATE: Lazy<HistogramVec> = Lazy::new(|| {
+    register_histogram_vec_with_registry!(
+        "health_export_validation_error_rate",
+        "Validation error rate as a percentage of total metrics processed",
+        &["endpoint", "metric_type"],
+        // Buckets for error rate percentages: 0% to 100%
+        vec![0.0, 0.01, 0.05, 0.10, 0.20, 0.30, 0.50, 0.70, 1.0],
+        METRICS_REGISTRY.clone()
+    )
+    .expect("Failed to create validation error rate histogram")
+});
+
+static BATCH_PARAMETER_USAGE: Lazy<HistogramVec> = Lazy::new(|| {
+    register_histogram_vec_with_registry!(
+        "health_export_batch_parameter_usage",
+        "PostgreSQL parameter usage per batch operation",
+        &["metric_type", "operation_type"],
+        // Buckets for parameter usage: 1 to 65535 (PostgreSQL limit)
+        vec![1.0, 100.0, 1000.0, 5000.0, 10000.0, 25000.0, 40000.0, 52428.0, 65535.0],
+        METRICS_REGISTRY.clone()
+    )
+    .expect("Failed to create batch parameter usage histogram")
+});
+
+static RATE_LIMIT_EXHAUSTION_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
+    register_counter_vec_with_registry!(
+        "health_export_rate_limit_exhaustion_total",
+        "Total number of rate limit exhaustion events",
+        &["limit_type", "endpoint", "threshold_percentage"],
+        METRICS_REGISTRY.clone()
+    )
+    .expect("Failed to create rate limit exhaustion counter")
+});
+
+static RATE_LIMIT_USAGE_RATIO: Lazy<GaugeVec> = Lazy::new(|| {
+    register_gauge_vec_with_registry!(
+        "health_export_rate_limit_usage_ratio",
+        "Current rate limit usage as a ratio (0.0 = none used, 1.0 = fully exhausted)",
+        &["limit_type", "key_identifier"],
+        METRICS_REGISTRY.clone()
+    )
+    .expect("Failed to create rate limit usage ratio gauge")
+});
+
 /// Metrics collection middleware for Prometheus monitoring
 pub struct MetricsMiddleware;
 
@@ -574,6 +629,48 @@ impl Metrics {
             .with_label_values(&[event_type, endpoint, severity])
             .inc();
     }
+
+    // AUDIT-007: Enhanced Monitoring and Alerting Methods
+    
+    /// Record validation error with detailed categorization
+    #[instrument(skip_all)]
+    pub fn record_validation_error(metric_type: &str, error_category: &str, endpoint: &str) {
+        VALIDATION_ERRORS_TOTAL
+            .with_label_values(&[metric_type, error_category, endpoint])
+            .inc();
+    }
+
+    /// Record validation error rate for alerting
+    #[instrument(skip_all)]
+    pub fn record_validation_error_rate(endpoint: &str, metric_type: &str, error_rate: f64) {
+        VALIDATION_ERROR_RATE
+            .with_label_values(&[endpoint, metric_type])
+            .observe(error_rate);
+    }
+
+    /// Record batch parameter usage for PostgreSQL limit monitoring
+    #[instrument(skip_all)]
+    pub fn record_batch_parameter_usage(metric_type: &str, operation_type: &str, parameter_count: usize) {
+        BATCH_PARAMETER_USAGE
+            .with_label_values(&[metric_type, operation_type])
+            .observe(parameter_count as f64);
+    }
+
+    /// Record rate limit exhaustion event
+    #[instrument(skip_all)]
+    pub fn record_rate_limit_exhaustion(limit_type: &str, endpoint: &str, threshold_percentage: &str) {
+        RATE_LIMIT_EXHAUSTION_TOTAL
+            .with_label_values(&[limit_type, endpoint, threshold_percentage])
+            .inc();
+    }
+
+    /// Update rate limit usage ratio for monitoring
+    #[instrument(skip_all)]
+    pub fn update_rate_limit_usage_ratio(limit_type: &str, key_identifier: &str, usage_ratio: f64) {
+        RATE_LIMIT_USAGE_RATIO
+            .with_label_values(&[limit_type, key_identifier])
+            .set(usage_ratio);
+    }
 }
 
 /// Handler for Prometheus metrics endpoint
@@ -648,6 +745,13 @@ mod tests {
         );
         Metrics::record_large_request("/api/v1/ingest", 52428800);
         Metrics::record_security_event("large_payload", "/api/v1/ingest", "medium");
+
+        // Test AUDIT-007 enhanced monitoring metrics
+        Metrics::record_validation_error("heart_rate", "range_violation", "/api/v1/ingest");
+        Metrics::record_validation_error_rate("/api/v1/ingest", "heart_rate", 0.05);
+        Metrics::record_batch_parameter_usage("heart_rate", "insert", 48000);
+        Metrics::record_rate_limit_exhaustion("api_key", "/api/v1/ingest", "90_percent");
+        Metrics::update_rate_limit_usage_ratio("api_key", "key_123", 0.85);
 
         // Verify metrics registry is accessible
         let registry = get_metrics_registry();

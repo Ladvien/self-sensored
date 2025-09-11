@@ -7,7 +7,8 @@ use uuid::Uuid;
 use crate::middleware::metrics::Metrics;
 use crate::models::{ApiResponse, IngestPayload, IngestResponse, IosIngestPayload};
 use crate::services::auth::AuthContext;
-use crate::services::batch_processor::{BatchConfig, BatchProcessor};
+use crate::services::batch_processor::BatchProcessor;
+use crate::config::BatchConfig;
 
 /// Maximum payload size (200MB)
 const MAX_PAYLOAD_SIZE: usize = 200 * 1024 * 1024;

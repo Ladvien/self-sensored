@@ -2,7 +2,7 @@ use self_sensored::services::auth::{AuthError, AuthService};
 use sqlx::postgres::PgPoolOptions;
 
 async fn get_test_pool() -> sqlx::PgPool {
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
     let database_url = std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL must be set");
 
     PgPoolOptions::new()

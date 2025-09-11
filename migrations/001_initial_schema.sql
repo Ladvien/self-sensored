@@ -1,6 +1,21 @@
 -- Enable required extensions
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "postgis";
+-- Note: These require superuser privileges. 
+-- If they fail, create them manually as postgres user before running migrations.
+DO $$ 
+BEGIN
+    -- Try to create extensions, but continue if they fail (already exist or no privileges)
+    BEGIN
+        CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    EXCEPTION WHEN insufficient_privilege THEN
+        RAISE NOTICE 'uuid-ossp extension already exists or insufficient privileges';
+    END;
+    
+    BEGIN  
+        CREATE EXTENSION IF NOT EXISTS "postgis";
+    EXCEPTION WHEN insufficient_privilege THEN
+        RAISE NOTICE 'postgis extension already exists or insufficient privileges';
+    END;
+END $$;
 
 -- Users table for storing user information
 CREATE TABLE users (

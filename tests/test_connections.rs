@@ -2,7 +2,7 @@ use sqlx::postgres::PgPoolOptions;
 
 #[tokio::test]
 async fn test_database_connection() {
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     let pool = PgPoolOptions::new()
@@ -23,7 +23,7 @@ async fn test_database_connection() {
 
 #[tokio::test]
 async fn test_test_database_connection() {
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
     let database_url = std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL must be set");
 
     let pool = PgPoolOptions::new()
@@ -44,7 +44,7 @@ async fn test_test_database_connection() {
 
 #[tokio::test]
 async fn test_redis_connection() {
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
     let redis_url = std::env::var("REDIS_URL").expect("REDIS_URL must be set");
 
     let client = redis::Client::open(redis_url).expect("Failed to create Redis client");

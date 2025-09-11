@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use crate::config::ValidationConfig;
 
 /// Heart rate metric with validation
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -73,16 +74,20 @@ pub struct WorkoutData {
 
 impl GpsCoordinate {
     pub fn validate(&self) -> Result<(), String> {
-        if !(-90.0..=90.0).contains(&self.latitude) {
+        self.validate_with_config(&ValidationConfig::default())
+    }
+
+    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
+        if !(config.latitude_min..=config.latitude_max).contains(&self.latitude) {
             return Err(format!(
-                "latitude {} is out of range (-90 to 90)",
-                self.latitude
+                "latitude {} is out of range ({} to {})",
+                self.latitude, config.latitude_min, config.latitude_max
             ));
         }
-        if !(-180.0..=180.0).contains(&self.longitude) {
+        if !(config.longitude_min..=config.longitude_max).contains(&self.longitude) {
             return Err(format!(
-                "longitude {} is out of range (-180 to 180)",
-                self.longitude
+                "longitude {} is out of range ({} to {})",
+                self.longitude, config.longitude_min, config.longitude_max
             ));
         }
         Ok(())
@@ -96,6 +101,10 @@ impl GpsCoordinate {
 
 impl WorkoutData {
     pub fn validate(&self) -> Result<(), String> {
+        self.validate_with_config(&ValidationConfig::default())
+    }
+
+    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
         if self.end_time <= self.start_time {
             return Err("end_time must be after start_time".to_string());
         }
@@ -104,9 +113,24 @@ impl WorkoutData {
             return Err("workout_type cannot be empty".to_string());
         }
 
+        // Check workout duration against configured maximum
+        let duration_hours = (self.end_time - self.start_time).num_hours();
+        if duration_hours > config.workout_max_duration_hours {
+            return Err(format!(
+                "workout duration {} hours exceeds maximum of {} hours",
+                duration_hours, config.workout_max_duration_hours
+            ));
+        }
+
         if let Some(energy) = self.total_energy_kcal {
             if energy < 0.0 {
                 return Err("total_energy_kcal cannot be negative".to_string());
+            }
+            if energy > config.calories_max {
+                return Err(format!(
+                    "total_energy_kcal {} exceeds maximum of {}",
+                    energy, config.calories_max
+                ));
             }
         }
 
@@ -114,24 +138,37 @@ impl WorkoutData {
             if distance < 0.0 {
                 return Err("distance_meters cannot be negative".to_string());
             }
+            let distance_km = distance / 1000.0;
+            if distance_km > config.distance_max_km {
+                return Err(format!(
+                    "distance {} km exceeds maximum of {} km",
+                    distance_km, config.distance_max_km
+                ));
+            }
         }
 
         if let Some(hr) = self.avg_heart_rate {
-            if !(20..=300).contains(&hr) {
-                return Err(format!("avg_heart_rate {} is out of range (20-300)", hr));
+            if !(config.workout_heart_rate_min..=config.workout_heart_rate_max).contains(&hr) {
+                return Err(format!(
+                    "avg_heart_rate {} is out of range ({}-{})",
+                    hr, config.workout_heart_rate_min, config.workout_heart_rate_max
+                ));
             }
         }
 
         if let Some(hr) = self.max_heart_rate {
-            if !(20..=300).contains(&hr) {
-                return Err(format!("max_heart_rate {} is out of range (20-300)", hr));
+            if !(config.workout_heart_rate_min..=config.workout_heart_rate_max).contains(&hr) {
+                return Err(format!(
+                    "max_heart_rate {} is out of range ({}-{})",
+                    hr, config.workout_heart_rate_min, config.workout_heart_rate_max
+                ));
             }
         }
 
         // Validate GPS route if provided
         if let Some(route_points) = &self.route_points {
             for (i, point) in route_points.iter().enumerate() {
-                if let Err(e) = point.validate() {
+                if let Err(e) = point.validate_with_config(config) {
                     return Err(format!("route point {}: {}", i, e));
                 }
             }
@@ -219,19 +256,32 @@ pub struct ProcessingError {
 /// Validation functions
 impl HeartRateMetric {
     pub fn validate(&self) -> Result<(), String> {
+        self.validate_with_config(&ValidationConfig::default())
+    }
+
+    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
         if let Some(bpm) = self.min_bpm {
-            if !(20..=300).contains(&bpm) {
-                return Err(format!("min_bpm {bpm} is out of range (20-300)"));
+            if !(config.heart_rate_min..=config.heart_rate_max).contains(&bpm) {
+                return Err(format!(
+                    "min_bpm {} is out of range ({}-{})",
+                    bpm, config.heart_rate_min, config.heart_rate_max
+                ));
             }
         }
         if let Some(bpm) = self.avg_bpm {
-            if !(20..=300).contains(&bpm) {
-                return Err(format!("avg_bpm {bpm} is out of range (20-300)"));
+            if !(config.heart_rate_min..=config.heart_rate_max).contains(&bpm) {
+                return Err(format!(
+                    "avg_bpm {} is out of range ({}-{})",
+                    bpm, config.heart_rate_min, config.heart_rate_max
+                ));
             }
         }
         if let Some(bpm) = self.max_bpm {
-            if !(20..=300).contains(&bpm) {
-                return Err(format!("max_bpm {bpm} is out of range (20-300)"));
+            if !(config.heart_rate_min..=config.heart_rate_max).contains(&bpm) {
+                return Err(format!(
+                    "max_bpm {} is out of range ({}-{})",
+                    bpm, config.heart_rate_min, config.heart_rate_max
+                ));
             }
         }
         Ok(())
@@ -240,17 +290,21 @@ impl HeartRateMetric {
 
 impl BloodPressureMetric {
     pub fn validate(&self) -> Result<(), String> {
+        self.validate_with_config(&ValidationConfig::default())
+    }
+
+    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
         // Medical ranges as specified in story requirements
-        if self.systolic < 50 || self.systolic > 250 {
+        if self.systolic < config.systolic_min || self.systolic > config.systolic_max {
             return Err(format!(
-                "systolic {} is out of range (50-250)",
-                self.systolic
+                "systolic {} is out of range ({}-{})",
+                self.systolic, config.systolic_min, config.systolic_max
             ));
         }
-        if self.diastolic < 30 || self.diastolic > 150 {
+        if self.diastolic < config.diastolic_min || self.diastolic > config.diastolic_max {
             return Err(format!(
-                "diastolic {} is out of range (30-150)",
-                self.diastolic
+                "diastolic {} is out of range ({}-{})",
+                self.diastolic, config.diastolic_min, config.diastolic_max
             ));
         }
 
@@ -263,8 +317,11 @@ impl BloodPressureMetric {
         }
 
         if let Some(pulse) = self.pulse {
-            if !(20..=300).contains(&pulse) {
-                return Err(format!("pulse {pulse} is out of range (20-300)"));
+            if !(config.heart_rate_min..=config.heart_rate_max).contains(&pulse) {
+                return Err(format!(
+                    "pulse {} is out of range ({}-{})",
+                    pulse, config.heart_rate_min, config.heart_rate_max
+                ));
             }
         }
         Ok(())
@@ -273,19 +330,27 @@ impl BloodPressureMetric {
 
 impl SleepMetric {
     pub fn validate(&self) -> Result<(), String> {
+        self.validate_with_config(&ValidationConfig::default())
+    }
+
+    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
         if self.sleep_end <= self.sleep_start {
             return Err("sleep_end must be after sleep_start".to_string());
         }
 
         let calculated_duration = (self.sleep_end - self.sleep_start).num_minutes() as i32;
-        if (self.total_sleep_minutes - calculated_duration).abs() > 60 {
-            return Err("total_sleep_minutes doesn't match sleep duration".to_string());
+        if (self.total_sleep_minutes - calculated_duration).abs() > config.sleep_duration_tolerance_minutes {
+            return Err(format!(
+                "total_sleep_minutes doesn't match sleep duration (tolerance: {} minutes)",
+                config.sleep_duration_tolerance_minutes
+            ));
         }
 
         if let Some(efficiency) = self.efficiency_percentage {
-            if !(0.0..=100.0).contains(&efficiency) {
+            if !(config.sleep_efficiency_min..=config.sleep_efficiency_max).contains(&efficiency) {
                 return Err(format!(
-                    "efficiency_percentage {efficiency} is out of range (0-100)"
+                    "efficiency_percentage {} is out of range ({}-{})",
+                    efficiency, config.sleep_efficiency_min, config.sleep_efficiency_max
                 ));
             }
         }
@@ -326,19 +391,39 @@ impl SleepMetric {
 
 impl ActivityMetric {
     pub fn validate(&self) -> Result<(), String> {
+        self.validate_with_config(&ValidationConfig::default())
+    }
+
+    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
         if let Some(steps) = self.steps {
-            if steps < 0 {
-                return Err("steps cannot be negative".to_string());
+            if steps < config.steps_min || steps > config.steps_max {
+                return Err(format!(
+                    "steps {} is out of range ({}-{})",
+                    steps, config.steps_min, config.steps_max
+                ));
             }
         }
         if let Some(distance) = self.distance_meters {
             if distance < 0.0 {
                 return Err("distance_meters cannot be negative".to_string());
             }
+            let distance_km = distance / 1000.0;
+            if distance_km > config.distance_max_km {
+                return Err(format!(
+                    "distance {} km exceeds maximum of {} km",
+                    distance_km, config.distance_max_km
+                ));
+            }
         }
         if let Some(calories) = self.calories_burned {
             if calories < 0.0 {
                 return Err("calories_burned cannot be negative".to_string());
+            }
+            if calories > config.calories_max {
+                return Err(format!(
+                    "calories_burned {} exceeds maximum of {}",
+                    calories, config.calories_max
+                ));
             }
         }
         Ok(())
@@ -347,12 +432,16 @@ impl ActivityMetric {
 
 impl HealthMetric {
     pub fn validate(&self) -> Result<(), String> {
+        self.validate_with_config(&ValidationConfig::default())
+    }
+
+    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
         match self {
-            HealthMetric::HeartRate(metric) => metric.validate(),
-            HealthMetric::BloodPressure(metric) => metric.validate(),
-            HealthMetric::Sleep(metric) => metric.validate(),
-            HealthMetric::Activity(metric) => metric.validate(),
-            HealthMetric::Workout(workout) => workout.validate(),
+            HealthMetric::HeartRate(metric) => metric.validate_with_config(config),
+            HealthMetric::BloodPressure(metric) => metric.validate_with_config(config),
+            HealthMetric::Sleep(metric) => metric.validate_with_config(config),
+            HealthMetric::Activity(metric) => metric.validate_with_config(config),
+            HealthMetric::Workout(workout) => workout.validate_with_config(config),
         }
     }
 

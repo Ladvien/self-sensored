@@ -184,21 +184,93 @@ let exists = sqlx::query!(
 - Use BRIN indexes for time-series data
 
 ### Batch Processing Configuration
-PostgreSQL has a parameter limit of 65,535 per query. Our batch processor implements chunking to stay under this limit:
+PostgreSQL has a parameter limit of 65,535 per query. Our batch processor implements configurable chunking to stay under this limit.
 
+**Environment Variable Configuration:**
+```bash
+# Batch Processing Settings
+BATCH_MAX_RETRIES=3
+BATCH_INITIAL_BACKOFF_MS=100
+BATCH_MAX_BACKOFF_MS=5000
+BATCH_ENABLE_PARALLEL=true
+BATCH_MEMORY_LIMIT_MB=500.0
+
+# Metric-Specific Chunk Sizes (Environment Configurable)
+BATCH_HEART_RATE_CHUNK_SIZE=8000      # 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000
+BATCH_BLOOD_PRESSURE_CHUNK_SIZE=8000  # 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000  
+BATCH_SLEEP_CHUNK_SIZE=5000           # 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000
+BATCH_ACTIVITY_CHUNK_SIZE=7000        # 7 params: 65,535 ÷ 7 × 0.8 ≈ 7,000
+BATCH_WORKOUT_CHUNK_SIZE=5000         # 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000
+
+BATCH_ENABLE_PROGRESS_TRACKING=true   # Track progress for large batches
+BATCH_ENABLE_DEDUPLICATION=true       # Enable intra-batch deduplication
+```
+
+**Code Usage:**
 ```rust
-// Default safe chunk sizes (80% of theoretical max)
-let config = BatchConfig {
-    heart_rate_chunk_size: 8000,      // 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000
-    blood_pressure_chunk_size: 8000,  // 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000  
-    sleep_chunk_size: 5000,           // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000
-    activity_chunk_size: 7000,        // 7 params: 65,535 ÷ 7 × 0.8 ≈ 7,000
-    workout_chunk_size: 5000,         // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000
-    enable_progress_tracking: true,   // Track progress for large batches
-    ..Default::default()
-};
+use crate::config::BatchConfig;
+
+// Load configuration from environment variables
+let config = BatchConfig::from_env();
+config.validate()?; // Validates chunk sizes against PostgreSQL limits
 
 let batch_processor = BatchProcessor::with_config(pool, config);
+```
+
+### Health Metric Validation Configuration
+All validation thresholds are configurable via environment variables:
+
+**Heart Rate Validation:**
+```bash
+VALIDATION_HEART_RATE_MIN=15        # Minimum BPM (physiological lower bound)
+VALIDATION_HEART_RATE_MAX=300       # Maximum BPM (extreme athletic scenarios)
+```
+
+**Blood Pressure Validation:**
+```bash
+VALIDATION_SYSTOLIC_MIN=50          # Minimum systolic pressure (mmHg)
+VALIDATION_SYSTOLIC_MAX=250         # Maximum systolic pressure (mmHg)
+VALIDATION_DIASTOLIC_MIN=30         # Minimum diastolic pressure (mmHg)
+VALIDATION_DIASTOLIC_MAX=150        # Maximum diastolic pressure (mmHg)
+```
+
+**Sleep Validation:**
+```bash
+VALIDATION_SLEEP_EFFICIENCY_MIN=0.0        # Minimum sleep efficiency (%)
+VALIDATION_SLEEP_EFFICIENCY_MAX=100.0      # Maximum sleep efficiency (%)
+VALIDATION_SLEEP_DURATION_TOLERANCE_MINUTES=60  # Sleep time calculation tolerance
+```
+
+**Activity Validation:**
+```bash
+VALIDATION_STEPS_MIN=0              # Minimum daily steps
+VALIDATION_STEPS_MAX=200000         # Maximum daily steps (extreme scenarios)
+VALIDATION_DISTANCE_MAX_KM=500.0    # Maximum daily distance (km)
+VALIDATION_CALORIES_MAX=20000.0     # Maximum daily calories (extreme athletic events)
+```
+
+**GPS & Workout Validation:**
+```bash
+VALIDATION_LATITUDE_MIN=-90.0       # GPS latitude bounds
+VALIDATION_LATITUDE_MAX=90.0
+VALIDATION_LONGITUDE_MIN=-180.0     # GPS longitude bounds
+VALIDATION_LONGITUDE_MAX=180.0
+VALIDATION_WORKOUT_HEART_RATE_MIN=15    # Workout heart rate bounds
+VALIDATION_WORKOUT_HEART_RATE_MAX=300
+VALIDATION_WORKOUT_MAX_DURATION_HOURS=24  # Maximum workout duration (ultra events)
+```
+
+**Code Usage:**
+```rust
+use crate::config::ValidationConfig;
+
+// Load validation configuration from environment
+let validation_config = ValidationConfig::from_env();
+validation_config.validate()?; // Ensures configuration consistency
+
+// Use with health metrics
+let metric = HeartRateMetric { /* ... */ };
+metric.validate_with_config(&validation_config)?;
 ```
 
 **Parameter Count per Metric Type:**

@@ -3,21 +3,33 @@
 
 -- Sleep metrics: Prevent duplicate sleep sessions
 -- A user can only have one sleep session with the same start and end time
-ALTER TABLE sleep_metrics 
-ADD CONSTRAINT sleep_metrics_user_time_unique 
-UNIQUE (user_id, sleep_start, sleep_end);
+DO $$ BEGIN
+    ALTER TABLE sleep_metrics 
+    ADD CONSTRAINT sleep_metrics_user_time_unique 
+    UNIQUE (user_id, sleep_start, sleep_end);
+EXCEPTION WHEN duplicate_object THEN
+    RAISE NOTICE 'Constraint sleep_metrics_user_time_unique already exists';
+END $$;
 
 -- Blood pressure: One reading per timestamp
 -- Prevents duplicate blood pressure readings at the exact same time
-ALTER TABLE blood_pressure_metrics 
-ADD CONSTRAINT blood_pressure_user_time_unique 
-UNIQUE (user_id, recorded_at);
+DO $$ BEGIN
+    ALTER TABLE blood_pressure_metrics 
+    ADD CONSTRAINT blood_pressure_user_time_unique 
+    UNIQUE (user_id, recorded_at);
+EXCEPTION WHEN duplicate_object THEN
+    RAISE NOTICE 'Constraint blood_pressure_user_time_unique already exists';
+END $$;
 
 -- Workouts: Prevent duplicate workouts
 -- A user can only have one workout starting at a specific time
-ALTER TABLE workouts 
-ADD CONSTRAINT workouts_user_started_unique 
-UNIQUE (user_id, started_at);
+DO $$ BEGIN
+    ALTER TABLE workouts 
+    ADD CONSTRAINT workouts_user_started_unique 
+    UNIQUE (user_id, started_at);
+EXCEPTION WHEN duplicate_object THEN
+    RAISE NOTICE 'Constraint workouts_user_started_unique already exists';
+END $$;
 
 -- Add indexes to support the constraints and improve query performance
 CREATE INDEX IF NOT EXISTS idx_sleep_metrics_user_times 

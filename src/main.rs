@@ -63,9 +63,20 @@ async fn main() -> std::io::Result<()> {
         .expect("CONNECTION_TIMEOUT_SECONDS must be a valid number");
 
     let keep_alive_timeout_seconds = env::var("KEEP_ALIVE_TIMEOUT_SECONDS")
-        .unwrap_or_else(|_| "15".to_string())  // 15s keep-alive timeout
+        .unwrap_or_else(|_| "75".to_string())  // 75s keep-alive timeout (under Cloudflare's 100s)
         .parse::<u64>()
         .expect("KEEP_ALIVE_TIMEOUT_SECONDS must be a valid number");
+
+    // Additional timeout configurations for Cloudflare 520 error prevention
+    let client_shutdown_timeout_seconds = env::var("CLIENT_SHUTDOWN_TIMEOUT_SECONDS")
+        .unwrap_or_else(|_| "30".to_string())  // 30s client shutdown timeout
+        .parse::<u64>()
+        .expect("CLIENT_SHUTDOWN_TIMEOUT_SECONDS must be a valid number");
+
+    let server_shutdown_timeout_seconds = env::var("SERVER_SHUTDOWN_TIMEOUT_SECONDS")
+        .unwrap_or_else(|_| "30".to_string())  // 30s server shutdown timeout
+        .parse::<u64>()
+        .expect("SERVER_SHUTDOWN_TIMEOUT_SECONDS must be a valid number");
 
     info!("Starting Health Export REST API");
     info!("Database URL: {}", mask_password(&database_url));
@@ -74,7 +85,9 @@ async fn main() -> std::io::Result<()> {
     info!("Request timeout: {}s (DoS-protected)", request_timeout_seconds);
     info!("Max payload size: {}MB (security-limited)", max_payload_size_mb);
     info!("Connection timeout: {}s", connection_timeout_seconds);
-    info!("Keep-alive timeout: {}s", keep_alive_timeout_seconds);
+    info!("Keep-alive timeout: {}s (Cloudflare-optimized)", keep_alive_timeout_seconds);
+    info!("Client shutdown timeout: {}s", client_shutdown_timeout_seconds);
+    info!("Server shutdown timeout: {}s", server_shutdown_timeout_seconds);
 
     // Create database connection pool
     let pool = create_connection_pool(&database_url)
@@ -165,6 +178,8 @@ async fn main() -> std::io::Result<()> {
             .wrap(AuthMiddleware)
             .wrap(RateLimitMiddleware)
             .route("/health", web::get().to(handlers::health::health_check))
+            .route("/health/live", web::get().to(handlers::health::liveness_probe))
+            .route("/health/ready", web::get().to(handlers::health::readiness_probe))
             .route(
                 "/metrics",
                 web::get().to(middleware::metrics::metrics_handler),
@@ -236,7 +251,8 @@ async fn main() -> std::io::Result<()> {
     })
     .workers(workers)
     .client_request_timeout(Duration::from_secs(request_timeout_seconds))
-    .client_timeout(Duration::from_secs(connection_timeout_seconds))
+    .client_disconnect_timeout(Duration::from_secs(client_shutdown_timeout_seconds))
+    .shutdown_timeout(server_shutdown_timeout_seconds)
     .keep_alive(Duration::from_secs(keep_alive_timeout_seconds))
     .bind((server_host, server_port))?
     .run()

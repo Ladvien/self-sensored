@@ -46,6 +46,13 @@ async fn test_batch_config_custom() {
         enable_parallel_processing: false,
         chunk_size: 2000,
         memory_limit_mb: 1000.0,
+        heart_rate_chunk_size: 8000,
+        blood_pressure_chunk_size: 8000,
+        sleep_chunk_size: 5000,
+        activity_chunk_size: 7000,
+        workout_chunk_size: 5000,
+        enable_progress_tracking: true,
+        enable_intra_batch_deduplication: false,
     };
 
     assert_eq!(config.max_retries, 5);

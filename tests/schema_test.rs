@@ -6,7 +6,7 @@ mod schema_tests {
     use super::*;
 
     async fn get_test_pool() -> PgPool {
-        dotenv::dotenv().ok();
+        dotenvy::dotenv().ok();
         let database_url =
             env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL must be set for testing");
 

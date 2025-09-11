@@ -10,6 +10,7 @@ use std::{
 };
 use tracing::{warn, debug};
 
+use crate::middleware::metrics::Metrics;
 use crate::services::{auth::AuthContext, rate_limiter::{RateLimiter, RateLimitError}};
 
 /// Extract client IP address from request headers
@@ -148,9 +149,36 @@ where
 
                 match rate_limit_result {
                     Ok(rate_limit_info) => {
+                        // AUDIT-007: Track rate limit usage ratio for monitoring
+                        let usage_ratio = 1.0 - (rate_limit_info.requests_remaining as f64 / rate_limit_info.requests_limit as f64);
+                        let key_identifier = if let Some(auth_context) = req.extensions().get::<AuthContext>() {
+                            format!("key_{}", auth_context.api_key.id)
+                        } else {
+                            format!("ip_{}", get_client_ip(&req))
+                        };
+                        
+                        let limit_type = if req.extensions().get::<AuthContext>().is_some() {
+                            "api_key"
+                        } else {
+                            "ip_address"
+                        };
+                        
+                        Metrics::update_rate_limit_usage_ratio(limit_type, &key_identifier, usage_ratio);
+                        
+                        // AUDIT-007: Track near-exhaustion events
+                        if usage_ratio >= 0.80 && rate_limit_info.requests_remaining > 0 {
+                            Metrics::record_rate_limit_exhaustion(limit_type, path, "80_percent");
+                        } else if usage_ratio >= 0.90 && rate_limit_info.requests_remaining > 0 {
+                            Metrics::record_rate_limit_exhaustion(limit_type, path, "90_percent");
+                        }
+                        
                         if rate_limit_info.requests_remaining < 0 || rate_limit_info.retry_after.is_some() {
                             // Rate limit exceeded
                             warn!("Rate limit exceeded for path: {}", path);
+                            
+                            // AUDIT-007: Track full exhaustion events
+                            Metrics::record_rate_limit_exhaustion(limit_type, path, "100_percent");
+                            
                             let mut builder = HttpResponse::TooManyRequests();
                             
                             // Add rate limiting headers

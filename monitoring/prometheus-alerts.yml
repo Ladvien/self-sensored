@@ -198,3 +198,134 @@ groups:
     annotations:
       summary: "Frequent large metric batches detected"
       description: "Large metric batches (>1000 metrics) are being processed at {{ $value }} batches per second, indicating potential capacity concerns."
+
+# AUDIT-007: Enhanced Monitoring and Alerting Rules
+- name: health_export_api_audit_007_alerts
+  rules:
+  # Validation Error Rate Monitoring (>10% threshold)
+  - alert: HighValidationErrorRate
+    expr: histogram_quantile(0.50, rate(health_export_validation_error_rate_bucket[5m])) > 0.10
+    for: 2m
+    labels:
+      severity: warning
+      service: health-export-api
+      component: validation
+      audit_story: AUDIT-007
+    annotations:
+      summary: "Validation error rate exceeds 10% threshold"
+      description: "Validation error rate is {{ $value | humanizePercentage }} (median over 5min), exceeding the 10% alert threshold. Review data quality and validation rules."
+
+  # Critical Validation Error Rate (>25% threshold)
+  - alert: CriticalValidationErrorRate
+    expr: histogram_quantile(0.50, rate(health_export_validation_error_rate_bucket[5m])) > 0.25
+    for: 1m
+    labels:
+      severity: critical
+      service: health-export-api
+      component: validation
+      audit_story: AUDIT-007
+    annotations:
+      summary: "Critical validation error rate detected"
+      description: "Validation error rate is {{ $value | humanizePercentage }} (median over 5min), exceeding critical 25% threshold. Immediate attention required."
+
+  # Parameter Usage Approaching PostgreSQL Limit
+  - alert: HighParameterUsage
+    expr: histogram_quantile(0.95, rate(health_export_batch_parameter_usage_bucket[5m])) > 52428  # 80% of 65,535
+    for: 3m
+    labels:
+      severity: warning
+      service: health-export-api
+      component: batch-processing
+      audit_story: AUDIT-007
+    annotations:
+      summary: "Batch parameter usage approaching PostgreSQL limit"
+      description: "95th percentile parameter usage is {{ $value }}, approaching PostgreSQL limit of 65,535. Consider reducing batch sizes."
+
+  # Critical Parameter Usage Near Limit
+  - alert: CriticalParameterUsage
+    expr: histogram_quantile(0.95, rate(health_export_batch_parameter_usage_bucket[5m])) > 58981  # 90% of 65,535
+    for: 1m
+    labels:
+      severity: critical
+      service: health-export-api
+      component: batch-processing
+      audit_story: AUDIT-007
+    annotations:
+      summary: "Critical: Batch parameter usage near PostgreSQL limit"
+      description: "95th percentile parameter usage is {{ $value }}, dangerously close to PostgreSQL limit of 65,535. Reduce batch sizes immediately."
+
+  # Rate Limit Exhaustion Events
+  - alert: FrequentRateLimitExhaustion
+    expr: rate(health_export_rate_limit_exhaustion_total{threshold_percentage="80_percent"}[5m]) > 0.5
+    for: 2m
+    labels:
+      severity: warning
+      service: health-export-api
+      component: rate-limiting
+      audit_story: AUDIT-007
+    annotations:
+      summary: "Frequent rate limit near-exhaustion events"
+      description: "Rate limit 80% threshold breaches occurring at {{ $value }} events per second. Consider adjusting limits or investigating client behavior."
+
+  - alert: RateLimitFullExhaustion
+    expr: rate(health_export_rate_limit_exhaustion_total{threshold_percentage="100_percent"}[5m]) > 0.1
+    for: 1m
+    labels:
+      severity: critical
+      service: health-export-api
+      component: rate-limiting
+      audit_story: AUDIT-007
+    annotations:
+      summary: "Rate limits being fully exhausted"
+      description: "Rate limit full exhaustion (100%) events occurring at {{ $value }} per second. Clients are being blocked - investigate immediately."
+
+  # Rate Limit Usage Ratio Monitoring
+  - alert: HighRateLimitUsageRatio
+    expr: health_export_rate_limit_usage_ratio > 0.90
+    for: 5m
+    labels:
+      severity: warning
+      service: health-export-api
+      component: rate-limiting
+      audit_story: AUDIT-007
+    annotations:
+      summary: "Rate limit usage ratio very high"
+      description: "Rate limit usage ratio is {{ $value | humanizePercentage }} for {{ $labels.key_identifier }}, indicating near-exhaustion. Monitor for potential issues."
+
+  # Validation Error Categories Monitoring
+  - alert: HighRangeViolationErrors
+    expr: rate(health_export_validation_errors_total{error_category="range_violation"}[5m]) > 5
+    for: 3m
+    labels:
+      severity: warning
+      service: health-export-api
+      component: validation
+      audit_story: AUDIT-007
+    annotations:
+      summary: "High rate of range violation errors"
+      description: "Range violation validation errors occurring at {{ $value }} errors per second. Review client data quality or validation thresholds."
+
+  - alert: HighRequiredFieldMissingErrors
+    expr: rate(health_export_validation_errors_total{error_category="required_field_missing"}[5m]) > 2
+    for: 3m
+    labels:
+      severity: warning
+      service: health-export-api
+      component: validation
+      audit_story: AUDIT-007
+    annotations:
+      summary: "High rate of required field missing errors"
+      description: "Required field missing validation errors occurring at {{ $value }} errors per second. Check client integration implementation."
+
+  # Batch Processing Parameter Usage by Type
+  - alert: HeartRateParameterUsageHigh
+    expr: histogram_quantile(0.90, rate(health_export_batch_parameter_usage_bucket{metric_type="heart_rate"}[5m])) > 45000  # ~70% of safe limit for heart rate
+    for: 5m
+    labels:
+      severity: info
+      service: health-export-api
+      component: batch-processing
+      audit_story: AUDIT-007
+    annotations:
+      summary: "Heart rate batch parameter usage high"
+      description: "90th percentile heart rate batch parameter usage is {{ $value }}, approaching recommended limits. Monitor for efficiency."

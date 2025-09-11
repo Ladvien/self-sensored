@@ -23,7 +23,7 @@ mod project_setup_tests {
     #[test]
     fn test_environment_variables_loading() {
         // Load .env file
-        dotenv::dotenv().ok();
+        dotenvy::dotenv().ok();
 
         // Test that critical environment variables can be loaded
         let database_url = env::var("DATABASE_URL");
@@ -71,7 +71,7 @@ mod project_setup_tests {
 
     #[test]
     fn test_database_connection_pool_config() {
-        dotenv::dotenv().ok();
+        dotenvy::dotenv().ok();
 
         let max_connections = env::var("DATABASE_MAX_CONNECTIONS")
             .unwrap_or_else(|_| "20".to_string())
@@ -102,7 +102,7 @@ mod project_setup_tests {
 
     #[test]
     fn test_redis_configuration() {
-        dotenv::dotenv().ok();
+        dotenvy::dotenv().ok();
 
         let redis_url =
             env::var("REDIS_URL").unwrap_or_else(|_| "redis://192.168.1.104:6379".to_string());

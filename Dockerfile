@@ -82,9 +82,9 @@ EXPOSE 8080
 # Expose metrics port
 EXPOSE 9090
 
-# Health check using the built-in health endpoint
-HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+# Health check using the optimized liveness probe endpoint
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8080/health/live || exit 1
 
 # Environment variables with secure defaults
 ENV RUST_LOG=info

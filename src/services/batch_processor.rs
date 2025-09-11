@@ -10,6 +10,7 @@ use tokio::time::sleep;
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
+use crate::config::BatchConfig;
 use crate::middleware::metrics::Metrics;
 use crate::models::{HealthMetric, IngestPayload, ProcessingError};
 
@@ -110,45 +111,6 @@ pub enum ProcessingStatus {
     Retrying,
 }
 
-/// Configuration for batch processing
-#[derive(Debug, Clone)]
-pub struct BatchConfig {
-    pub max_retries: u32,
-    pub initial_backoff_ms: u64,
-    pub max_backoff_ms: u64,
-    pub enable_parallel_processing: bool,
-    pub chunk_size: usize,
-    pub memory_limit_mb: f64,
-    // Chunking configurations to stay under PostgreSQL 65,535 parameter limit
-    pub heart_rate_chunk_size: usize,     // 6 params per record -> max 10,922
-    pub blood_pressure_chunk_size: usize, // 6 params per record -> max 10,922
-    pub sleep_chunk_size: usize,          // 10 params per record -> max 6,553
-    pub activity_chunk_size: usize,       // 7 params per record -> max 9,362
-    pub workout_chunk_size: usize,        // 10 params per record -> max 6,553
-    pub enable_progress_tracking: bool,   // Track progress for large batches
-    pub enable_intra_batch_deduplication: bool, // Enable deduplication within batches
-}
-
-impl Default for BatchConfig {
-    fn default() -> Self {
-        Self {
-            max_retries: 3,
-            initial_backoff_ms: 100,
-            max_backoff_ms: 5000,
-            enable_parallel_processing: true, // Keep parallel processing enabled
-            chunk_size: 1000,
-            memory_limit_mb: 500.0,
-            // Safe chunk sizes (80% of theoretical max for reliability)
-            heart_rate_chunk_size: 8000,      // 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000 (max ~48,000 params)
-            blood_pressure_chunk_size: 8000,  // 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000 (max ~48,000 params)
-            sleep_chunk_size: 5000,           // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000 (max ~50,000 params)
-            activity_chunk_size: 7000,        // 7 params: 65,535 ÷ 7 × 0.8 ≈ 7,000 (max ~49,000 params)
-            workout_chunk_size: 5000,         // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000 (max ~50,000 params)
-            enable_progress_tracking: true,
-            enable_intra_batch_deduplication: true, // Enable by default for performance
-        }
-    }
-}
 
 impl BatchProcessor {
     pub fn new(pool: PgPool) -> Self {
@@ -979,6 +941,9 @@ impl BatchProcessor {
             ).into()));
         }
         
+        // AUDIT-007: Record parameter usage for monitoring
+        Metrics::record_batch_parameter_usage("heart_rate", "chunked_insert", max_params_per_chunk);
+        
         info!(
             metric_type = "heart_rate",
             total_records = metrics.len(),
@@ -1067,6 +1032,9 @@ impl BatchProcessor {
             ).into()));
         }
         
+        // AUDIT-007: Record parameter usage for monitoring
+        Metrics::record_batch_parameter_usage("blood_pressure", "chunked_insert", max_params_per_chunk);
+        
         info!(
             metric_type = "blood_pressure",
             total_records = metrics.len(),
@@ -1146,6 +1114,9 @@ impl BatchProcessor {
                 chunk_size, max_params_per_chunk
             ).into()));
         }
+        
+        // AUDIT-007: Record parameter usage for monitoring
+        Metrics::record_batch_parameter_usage("sleep", "chunked_insert", max_params_per_chunk);
         
         info!(
             metric_type = "sleep",
@@ -1248,6 +1219,9 @@ impl BatchProcessor {
             ).into()));
         }
         
+        // AUDIT-007: Record parameter usage for monitoring
+        Metrics::record_batch_parameter_usage("activity", "chunked_insert", max_params_per_chunk);
+        
         info!(
             metric_type = "activity",
             total_records = metrics.len(),
@@ -1329,6 +1303,9 @@ impl BatchProcessor {
                 chunk_size, max_params_per_chunk
             ).into()));
         }
+        
+        // AUDIT-007: Record parameter usage for monitoring
+        Metrics::record_batch_parameter_usage("workout", "chunked_insert", max_params_per_chunk);
         
         info!(
             metric_type = "workout",

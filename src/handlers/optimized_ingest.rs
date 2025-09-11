@@ -297,14 +297,14 @@ fn validate_single_workout_optimized(workout: &crate::models::WorkoutData) -> Re
     }
     
     if let Some(hr) = workout.avg_heart_rate {
-        if !(20..=300).contains(&hr) {
-            return Err(format!("avg_heart_rate {} is out of range (20-300)", hr));
+        if !(15..=300).contains(&hr) {
+            return Err(format!("avg_heart_rate {} is out of range (15-300)", hr));
         }
     }
     
     if let Some(hr) = workout.max_heart_rate {
-        if !(20..=300).contains(&hr) {
-            return Err(format!("max_heart_rate {} is out of range (20-300)", hr));
+        if !(15..=300).contains(&hr) {
+            return Err(format!("max_heart_rate {} is out of range (15-300)", hr));
         }
     }
     

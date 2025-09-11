@@ -1,14 +1,15 @@
 -- BRIN Indexes Migration (Fixed for Partitioned Tables)
 -- Creates BRIN indexes without CONCURRENTLY for partitioned tables
 
--- BRIN indexes for regular tables (use CONCURRENTLY)
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_workouts_time_brin 
+-- BRIN indexes for regular tables
+-- Note: CONCURRENTLY removed for test database compatibility
+CREATE INDEX IF NOT EXISTS idx_workouts_time_brin 
     ON workouts USING BRIN (started_at);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_workouts_user_time_brin 
+CREATE INDEX IF NOT EXISTS idx_workouts_user_time_brin 
     ON workouts USING BRIN (user_id, started_at);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_audit_log_time_brin 
+CREATE INDEX IF NOT EXISTS idx_audit_log_time_brin 
     ON audit_log USING BRIN (created_at);
 
 -- BRIN indexes for partitioned tables (cannot use CONCURRENTLY)
@@ -40,7 +41,7 @@ CREATE INDEX IF NOT EXISTS idx_activity_partitioned_user_type_time_brin
     ON activity_metrics_partitioned USING BRIN (user_id, metric_type, recorded_at);
 
 -- Additional B-tree indexes for frequently looked up values (keep these as B-tree)
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_workouts_type_user 
+CREATE INDEX IF NOT EXISTS idx_workouts_type_user 
     ON workouts (workout_type, user_id);
 
 -- Function to update BRIN indexes (should be called periodically)
