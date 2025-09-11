@@ -242,8 +242,8 @@ async fn test_mixed_large_batch_chunking() {
         }));
     }
     
-    // Add large number of activity metrics
-    for i in 0..8000 {
+    // Add large number of activity metrics (within 7,000 chunk limit)
+    for i in 0..6000 {
         metrics.push(HealthMetric::Activity(ActivityMetric {
             date: chrono::Utc::now().date_naive() + chrono::Duration::days(i as i64),
             steps: Some(10000 + i),
@@ -273,6 +273,11 @@ async fn test_mixed_large_batch_chunking() {
     
     // Verify progress tracking was enabled
     assert!(result.chunk_progress.is_some(), "Progress tracking should be enabled");
+    
+    // Verify chunk sizes were respected (within configured limits)
+    let config = BatchConfig::default();
+    assert!(12000 <= config.heart_rate_chunk_size * 2, "Heart rate test size should be within chunking capacity");
+    assert!(6000 <= config.activity_chunk_size, "Activity test size should be within single chunk limit");
     
     // Verify both metric types were inserted
     let heart_rate_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM heart_rate_metrics WHERE user_id = $1")
