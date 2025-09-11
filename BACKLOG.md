@@ -169,8 +169,9 @@ Implement environmental_metrics for audio exposure, UV, and safety tracking.
 
 ---
 
-#### Story 4.1: Create Mental Health Metrics Table
+#### Story 4.1: Create Mental Health Metrics Table ✅ COMPLETED
 
+**Status:** ✅ COMPLETED 2025-09-11  
 **Story Points:** 3  
 **Assigned to:** Database Subagent  
 **Priority:** Medium  
@@ -178,28 +179,12 @@ Implement environmental_metrics for audio exposure, UV, and safety tracking.
 **Description:**
 Implement mental_health_metrics for mindfulness and mood tracking (iOS 17+).
 
-**Acceptance Criteria:**
-- [ ] Create migration `migrations/0016_create_mental_health_metrics.sql` with:
-  - Mindful session duration tracking
-  - Mood valence (-1.0 to 1.0 scale)
-  - Mood labels array field
-  - Time in daylight tracking
-- [ ] Add appropriate constraints for mood values
-- [ ] Support array storage for mood labels
+**Files Created:**
+- `migrations/0017_create_mental_health_metrics.sql` - Mental health schema with iOS 17+ support
+- `migrations/0017_create_mental_health_metrics_rollback.sql` - Rollback migration  
+- `tests/migrations/0017_create_mental_health_metrics_test.rs` - Comprehensive test suite
 
-**Testing Requirements:**
-- [ ] Create `tests/migrations/0016_create_mental_health_metrics_test.rs`
-- [ ] Test mood valence range validation
-- [ ] Test array field operations
-- [ ] Test aggregation queries for mood trends
-- [ ] Test iOS 17+ data import
-
-**Definition of Done:**
-- iOS 17+ compatibility verified
-- Mood tracking validated
-- Privacy considerations documented
-- Sample data imports successfully
-- API endpoints documented
+**Moved to DONE.md** - See complete implementation details
 
 ---
 
