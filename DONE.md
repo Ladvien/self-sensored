@@ -1653,3 +1653,44 @@ Addresses Cloudflare 520 errors through:
 **Performance:** All metrics collection operates with minimal overhead, maintaining sub-millisecond impact on request processing while providing detailed observability data.
 
 ---
+
+### [AUDIT-009] API Documentation Updates ✅ COMPLETED
+**Status:** COMPLETED  
+**Priority:** Low (1 story point)  
+**Completion Date:** 2025-09-11  
+**Agent:** Technical Writer  
+
+**Acceptance Criteria Achieved:**
+- ✅ Updated OpenAPI spec with new heart rate validation ranges (15-300 BPM)
+- ✅ Documented rate limiting behavior (100 requests/hour for IP, configurable per-user)
+- ✅ Added comprehensive troubleshooting guide for common errors
+- ✅ Updated README.md and related documentation with consistent rate limiting information
+- ✅ Enhanced all documentation files with accurate technical details
+
+**Technical Implementation:**
+- **OpenAPI Specification Updates**: Updated heart rate validation ranges from 20-300 BPM to 15-300 BPM across all schema definitions
+- **Rate Limiting Documentation**: Clarified IP-based rate limiting (100 requests/hour by default) with configurable per-user options
+- **Troubleshooting Guide**: Added comprehensive error scenarios and solutions covering:
+  - Authentication issues (401): Missing headers, invalid tokens, expired credentials
+  - Validation errors (400/422): Heart rate ranges, blood pressure limits, payload constraints
+  - Rate limiting (429): Exhaustion handling, backoff strategies, custom limit requests  
+  - Server errors (500-504): Database issues, timeouts, service status monitoring
+- **Documentation Consistency**: Updated README.md and rate-limiting-and-errors.md with consistent terminology and accurate limits
+
+**Files Modified:**
+- `/mnt/datadrive_m2/self-sensored/docs/openapi.yaml` - Heart rate validation ranges and troubleshooting section
+- `/mnt/datadrive_m2/self-sensored/README.md` - Rate limiting description and environment configuration  
+- `/mnt/datadrive_m2/self-sensored/docs/rate-limiting-and-errors.md` - IP-based rate limiting clarification
+- `/mnt/datadrive_m2/self-sensored/team_chat.md` - Story ownership tracking
+
+**Quality Impact:** 
+- **Validation Accuracy**: Documentation now matches AUDIT-002 implementation (15-300 BPM range)
+- **Rate Limiting Clarity**: Resolves confusion about IP-based vs per-user rate limiting from AUDIT-001
+- **Developer Experience**: Troubleshooting guide reduces support burden and improves API adoption
+- **Documentation Consistency**: All files use consistent terminology and accurate technical specifications
+
+**Dependencies Resolved:** Based on completed AUDIT-002 (heart rate validation) and AUDIT-001 (rate limiting) implementations, ensuring documentation reflects actual system behavior.
+
+**Impact Analysis:** Provides developers with accurate API documentation that matches the implemented system, reducing integration issues and support requests. The troubleshooting guide enables self-service problem resolution for common scenarios.
+
+---
