@@ -1,17 +1,17 @@
 use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
-    Error, HttpMessage, HttpResponse,
     http::header::{HeaderName, HeaderValue},
+    Error, HttpMessage, HttpResponse,
 };
 use futures_util::future::LocalBoxFuture;
 use std::{
     future::{ready, Ready},
     rc::Rc,
 };
-use tracing::{warn, debug};
+use tracing::{debug, warn};
 
 use crate::middleware::metrics::Metrics;
-use crate::services::{auth::AuthContext, rate_limiter::{RateLimiter, RateLimitError}};
+use crate::services::{auth::AuthContext, rate_limiter::RateLimiter};
 
 /// Extract client IP address from request headers
 fn get_client_ip(req: &ServiceRequest) -> String {
@@ -24,14 +24,14 @@ fn get_client_ip(req: &ServiceRequest) -> String {
             }
         }
     }
-    
+
     // Check X-Real-IP header (for Nginx)
     if let Some(real_ip) = req.headers().get("x-real-ip") {
         if let Ok(real_ip_str) = real_ip.to_str() {
             return real_ip_str.to_string();
         }
     }
-    
+
     // Fall back to connection info IP
     req.connection_info()
         .peer_addr()
@@ -48,27 +48,30 @@ fn add_rate_limit_headers(
     retry_after: Option<i32>,
 ) -> ServiceResponse<actix_web::body::BoxBody> {
     let headers = response.headers_mut();
-    
+
     // Standard rate limiting headers
     if let Ok(limit_header) = HeaderValue::from_str(&requests_limit.to_string()) {
         headers.insert(HeaderName::from_static("x-ratelimit-limit"), limit_header);
     }
-    
+
     if let Ok(remaining_header) = HeaderValue::from_str(&requests_remaining.to_string()) {
-        headers.insert(HeaderName::from_static("x-ratelimit-remaining"), remaining_header);
+        headers.insert(
+            HeaderName::from_static("x-ratelimit-remaining"),
+            remaining_header,
+        );
     }
-    
+
     if let Ok(reset_header) = HeaderValue::from_str(&reset_time.timestamp().to_string()) {
         headers.insert(HeaderName::from_static("x-ratelimit-reset"), reset_header);
     }
-    
+
     // Add Retry-After header for rate limited requests
     if let Some(retry_seconds) = retry_after {
         if let Ok(retry_header) = HeaderValue::from_str(&retry_seconds.to_string()) {
             headers.insert(actix_web::http::header::RETRY_AFTER, retry_header);
         }
     }
-    
+
     response
 }
 
@@ -124,20 +127,28 @@ where
             if let Some(rate_limiter) = req.app_data::<actix_web::web::Data<RateLimiter>>() {
                 // Get auth context from request (may be set by AuthMiddleware)
                 let auth_context = req.extensions().get::<AuthContext>().cloned();
-                
+
                 let rate_limit_result = if let Some(auth_context) = auth_context {
                     // Authenticated request: check if we should use per-user or per-API-key rate limiting
                     let use_user_rate_limiting = std::env::var("RATE_LIMIT_USE_USER_BASED")
                         .unwrap_or_else(|_| "false".to_string())
                         .parse::<bool>()
                         .unwrap_or(false);
-                    
+
                     if use_user_rate_limiting {
-                        debug!("Checking per-user rate limit for user: {}", auth_context.user.id);
-                        rate_limiter.check_user_rate_limit(auth_context.user.id).await
+                        debug!(
+                            "Checking per-user rate limit for user: {}",
+                            auth_context.user.id
+                        );
+                        rate_limiter
+                            .check_user_rate_limit(auth_context.user.id)
+                            .await
                     } else {
-                        // Default: use API key-based rate limiting  
-                        debug!("Checking rate limit for API key: {}", auth_context.api_key.id);
+                        // Default: use API key-based rate limiting
+                        debug!(
+                            "Checking rate limit for API key: {}",
+                            auth_context.api_key.id
+                        );
                         rate_limiter.check_rate_limit(auth_context.api_key.id).await
                     }
                 } else {
@@ -150,42 +161,60 @@ where
                 match rate_limit_result {
                     Ok(rate_limit_info) => {
                         // AUDIT-007: Track rate limit usage ratio for monitoring
-                        let usage_ratio = 1.0 - (rate_limit_info.requests_remaining as f64 / rate_limit_info.requests_limit as f64);
-                        let key_identifier = if let Some(auth_context) = req.extensions().get::<AuthContext>() {
-                            format!("key_{}", auth_context.api_key.id)
-                        } else {
-                            format!("ip_{}", get_client_ip(&req))
-                        };
-                        
+                        let usage_ratio = 1.0
+                            - (rate_limit_info.requests_remaining as f64
+                                / rate_limit_info.requests_limit as f64);
+                        let key_identifier =
+                            if let Some(auth_context) = req.extensions().get::<AuthContext>() {
+                                format!("key_{}", auth_context.api_key.id)
+                            } else {
+                                format!("ip_{}", get_client_ip(&req))
+                            };
+
                         let limit_type = if req.extensions().get::<AuthContext>().is_some() {
                             "api_key"
                         } else {
                             "ip_address"
                         };
-                        
-                        Metrics::update_rate_limit_usage_ratio(limit_type, &key_identifier, usage_ratio);
-                        
+
+                        Metrics::update_rate_limit_usage_ratio(
+                            limit_type,
+                            &key_identifier,
+                            usage_ratio,
+                        );
+
                         // AUDIT-007: Track near-exhaustion events
                         if usage_ratio >= 0.80 && rate_limit_info.requests_remaining > 0 {
                             Metrics::record_rate_limit_exhaustion(limit_type, path, "80_percent");
                         } else if usage_ratio >= 0.90 && rate_limit_info.requests_remaining > 0 {
                             Metrics::record_rate_limit_exhaustion(limit_type, path, "90_percent");
                         }
-                        
-                        if rate_limit_info.requests_remaining < 0 || rate_limit_info.retry_after.is_some() {
+
+                        if rate_limit_info.requests_remaining < 0
+                            || rate_limit_info.retry_after.is_some()
+                        {
                             // Rate limit exceeded
                             warn!("Rate limit exceeded for path: {}", path);
-                            
+
                             // AUDIT-007: Track full exhaustion events
                             Metrics::record_rate_limit_exhaustion(limit_type, path, "100_percent");
-                            
+
                             let mut builder = HttpResponse::TooManyRequests();
-                            
+
                             // Add rate limiting headers
-                            builder.insert_header(("x-ratelimit-limit", rate_limit_info.requests_limit.to_string()));
-                            builder.insert_header(("x-ratelimit-remaining", rate_limit_info.requests_remaining.max(0).to_string()));
-                            builder.insert_header(("x-ratelimit-reset", rate_limit_info.reset_time.timestamp().to_string()));
-                            
+                            builder.insert_header((
+                                "x-ratelimit-limit",
+                                rate_limit_info.requests_limit.to_string(),
+                            ));
+                            builder.insert_header((
+                                "x-ratelimit-remaining",
+                                rate_limit_info.requests_remaining.max(0).to_string(),
+                            ));
+                            builder.insert_header((
+                                "x-ratelimit-reset",
+                                rate_limit_info.reset_time.timestamp().to_string(),
+                            ));
+
                             if let Some(retry_seconds) = rate_limit_info.retry_after {
                                 builder.insert_header(("retry-after", retry_seconds.to_string()));
                             }
@@ -201,28 +230,48 @@ where
                                         "remaining": rate_limit_info.requests_remaining.max(0),
                                         "reset": rate_limit_info.reset_time.timestamp()
                                     }
-                                }).to_string()
-                            ).into())
+                                })
+                                .to_string(),
+                            )
+                            .into())
                         } else {
                             // Request allowed, proceed with service call
-                            debug!("Rate limit check passed, {} requests remaining", rate_limit_info.requests_remaining);
+                            debug!(
+                                "Rate limit check passed, {} requests remaining",
+                                rate_limit_info.requests_remaining
+                            );
                             let mut response = service.call(req).await?;
-                            
+
                             // Add rate limiting headers to successful responses
                             let headers = response.headers_mut();
-                            
-                            if let Ok(limit_header) = HeaderValue::from_str(&rate_limit_info.requests_limit.to_string()) {
-                                headers.insert(HeaderName::from_static("x-ratelimit-limit"), limit_header);
+
+                            if let Ok(limit_header) =
+                                HeaderValue::from_str(&rate_limit_info.requests_limit.to_string())
+                            {
+                                headers.insert(
+                                    HeaderName::from_static("x-ratelimit-limit"),
+                                    limit_header,
+                                );
                             }
-                            
-                            if let Ok(remaining_header) = HeaderValue::from_str(&rate_limit_info.requests_remaining.to_string()) {
-                                headers.insert(HeaderName::from_static("x-ratelimit-remaining"), remaining_header);
+
+                            if let Ok(remaining_header) = HeaderValue::from_str(
+                                &rate_limit_info.requests_remaining.to_string(),
+                            ) {
+                                headers.insert(
+                                    HeaderName::from_static("x-ratelimit-remaining"),
+                                    remaining_header,
+                                );
                             }
-                            
-                            if let Ok(reset_header) = HeaderValue::from_str(&rate_limit_info.reset_time.timestamp().to_string()) {
-                                headers.insert(HeaderName::from_static("x-ratelimit-reset"), reset_header);
+
+                            if let Ok(reset_header) = HeaderValue::from_str(
+                                &rate_limit_info.reset_time.timestamp().to_string(),
+                            ) {
+                                headers.insert(
+                                    HeaderName::from_static("x-ratelimit-reset"),
+                                    reset_header,
+                                );
                             }
-                            
+
                             Ok(response)
                         }
                     }
@@ -246,8 +295,8 @@ where
 mod tests {
     use super::*;
     use crate::services::{
-        auth::{AuthService, AuthContext, User, ApiKey},
-        rate_limiter::RateLimiter
+        auth::{ApiKey, AuthContext, AuthService, User},
+        rate_limiter::RateLimiter,
     };
     use actix_web::{test, web, App, HttpResponse};
     use chrono::Utc;
@@ -260,7 +309,7 @@ mod tests {
     #[tokio::test]
     async fn test_rate_limit_middleware_success() {
         let rate_limiter = web::Data::new(RateLimiter::new_in_memory(10));
-        
+
         // Create a mock auth context
         let auth_context = AuthContext {
             user: User {
@@ -287,18 +336,17 @@ mod tests {
             App::new()
                 .app_data(rate_limiter)
                 .wrap(RateLimitMiddleware)
-                .route("/test", web::get().to(test_handler))
-        ).await;
+                .route("/test", web::get().to(test_handler)),
+        )
+        .await;
 
         // Manually insert auth context into request
-        let req = test::TestRequest::get()
-            .uri("/test")
-            .to_request();
+        let req = test::TestRequest::get().uri("/test").to_request();
 
         // We need to insert the auth context differently for testing
         // For now, let's test without auth context to verify it handles gracefully
         let resp = test::call_service(&app, req).await;
-        
+
         // Should succeed even without auth context (logs warning but continues)
         assert_eq!(resp.status(), 200);
     }
@@ -311,8 +359,12 @@ mod tests {
             App::new()
                 .app_data(rate_limiter)
                 .wrap(RateLimitMiddleware)
-                .route("/health", web::get().to(|| async { HttpResponse::Ok().json("healthy") }))
-        ).await;
+                .route(
+                    "/health",
+                    web::get().to(|| async { HttpResponse::Ok().json("healthy") }),
+                ),
+        )
+        .await;
 
         let req = test::TestRequest::get().uri("/health").to_request();
         let resp = test::call_service(&app, req).await;
@@ -330,14 +382,15 @@ mod tests {
             App::new()
                 .app_data(rate_limiter)
                 .wrap(RateLimitMiddleware)
-                .route("/test", web::get().to(test_handler))
-        ).await;
+                .route("/test", web::get().to(test_handler)),
+        )
+        .await;
 
         // First request should succeed and have rate limit headers
         let req1 = test::TestRequest::get().uri("/test").to_request();
         let resp1 = test::call_service(&app, req1).await;
         assert_eq!(resp1.status(), 200);
-        
+
         // Check for rate limiting headers on successful request
         assert!(resp1.headers().contains_key("x-ratelimit-limit"));
         assert!(resp1.headers().contains_key("x-ratelimit-remaining"));

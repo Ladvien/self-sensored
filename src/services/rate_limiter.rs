@@ -124,7 +124,7 @@ impl RateLimiter {
         ip_address: &str,
     ) -> Result<RateLimitInfo, RateLimitError> {
         let key = format!("rate_limit:ip:{ip_address}");
-        
+
         // Use more restrictive limits for IP-based rate limiting (100 requests/hour)
         let ip_limit = std::env::var("RATE_LIMIT_IP_REQUESTS_PER_HOUR")
             .unwrap_or_else(|_| "100".to_string())
@@ -134,7 +134,8 @@ impl RateLimiter {
         if self.using_redis && self.redis_client.is_some() {
             self.check_redis_rate_limit_with_limit(&key, ip_limit).await
         } else {
-            self.check_memory_rate_limit_with_limit(&key, ip_limit).await
+            self.check_memory_rate_limit_with_limit(&key, ip_limit)
+                .await
         }
     }
 
@@ -155,7 +156,11 @@ impl RateLimiter {
     }
 
     /// Redis-based rate limiting with custom limit
-    async fn check_redis_rate_limit_with_limit(&self, key: &str, limit: i32) -> Result<RateLimitInfo, RateLimitError> {
+    async fn check_redis_rate_limit_with_limit(
+        &self,
+        key: &str,
+        limit: i32,
+    ) -> Result<RateLimitInfo, RateLimitError> {
         if let Some(client) = &self.redis_client {
             let mut conn = client.get_async_connection().await?;
 
@@ -267,7 +272,11 @@ impl RateLimiter {
     }
 
     /// In-memory rate limiting with custom limit (fallback)
-    async fn check_memory_rate_limit_with_limit(&self, key: &str, limit: i32) -> Result<RateLimitInfo, RateLimitError> {
+    async fn check_memory_rate_limit_with_limit(
+        &self,
+        key: &str,
+        limit: i32,
+    ) -> Result<RateLimitInfo, RateLimitError> {
         let now = Instant::now();
         let mut store = self
             .fallback_store
@@ -602,8 +611,11 @@ mod tests {
         let rate_limiter = RateLimiter::new_in_memory(100); // Standard limit
 
         // Test IP rate limiting uses the higher default (100) instead of old 20
-        let result = rate_limiter.check_ip_rate_limit("192.168.1.1").await.unwrap();
-        
+        let result = rate_limiter
+            .check_ip_rate_limit("192.168.1.1")
+            .await
+            .unwrap();
+
         // IP rate limiting should use 100 as default (environmental variable override)
         // With default of 100, we should have 99 remaining after first request
         assert_eq!(result.requests_limit, 100);
@@ -624,17 +636,17 @@ mod tests {
         // Both should succeed and have independent counters
         assert_eq!(user_result1.requests_remaining, 99);
         assert_eq!(ip_result1.requests_remaining, 99);
-        
+
         // Verify they're truly independent by using up one limit
         for _ in 0..99 {
             rate_limiter.check_user_rate_limit(user_id).await.unwrap();
         }
-        
+
         // User limit should be exhausted
         let user_result2 = rate_limiter.check_user_rate_limit(user_id).await.unwrap();
         assert_eq!(user_result2.requests_remaining, 0);
         assert!(user_result2.retry_after.is_some());
-        
+
         // IP limit should still work
         let ip_result2 = rate_limiter.check_ip_rate_limit(ip_address).await.unwrap();
         assert_eq!(ip_result2.requests_remaining, 98); // One request made earlier

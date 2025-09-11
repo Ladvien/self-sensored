@@ -4,11 +4,11 @@ use std::time::Instant;
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
+use crate::config::BatchConfig;
 use crate::middleware::metrics::Metrics;
 use crate::models::{ApiResponse, IngestPayload, IngestResponse, IosIngestPayload};
 use crate::services::auth::AuthContext;
 use crate::services::batch_processor::BatchProcessor;
-use crate::config::BatchConfig;
 
 /// Maximum payload size (200MB)
 const MAX_PAYLOAD_SIZE: usize = 200 * 1024 * 1024;
@@ -38,7 +38,7 @@ pub async fn ingest_async_optimized_handler(
         .unwrap_or_else(|| "unknown".to_string());
 
     let payload_size = raw_payload.len();
-    
+
     info!(
         user_id = %auth.user.id,
         client_ip = %client_ip,
@@ -65,27 +65,34 @@ pub async fn ingest_async_optimized_handler(
     // Parse JSON payload with timeout protection
     let internal_payload = match tokio::time::timeout(
         std::time::Duration::from_secs(10),
-        parse_ios_payload_enhanced(&raw_payload)
-    ).await {
+        parse_ios_payload_enhanced(&raw_payload),
+    )
+    .await
+    {
         Ok(Ok(payload)) => payload,
         Ok(Err(parse_error)) => {
             error!("JSON parse error: {}", parse_error);
             Metrics::record_error("json_parse", "/api/v1/ingest-async", "error");
-            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-                format!("JSON parsing error: {}", parse_error),
-            )));
+            return Ok(
+                HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
+                    "JSON parsing error: {}",
+                    parse_error
+                ))),
+            );
         }
         Err(_) => {
             error!("JSON parsing timeout after 10 seconds");
             Metrics::record_error("json_parse_timeout", "/api/v1/ingest-async", "error");
-            return Ok(HttpResponse::RequestTimeout().json(ApiResponse::<()>::error(
-                "JSON parsing took too long".to_string(),
-            )));
+            return Ok(
+                HttpResponse::RequestTimeout().json(ApiResponse::<()>::error(
+                    "JSON parsing took too long".to_string(),
+                )),
+            );
         }
     };
 
     let total_metrics = internal_payload.data.metrics.len() + internal_payload.data.workouts.len();
-    
+
     info!(
         user_id = %auth.user.id,
         total_metrics = total_metrics,
@@ -127,6 +134,7 @@ pub async fn ingest_async_optimized_handler(
             workout_chunk_size: 5000,
             enable_progress_tracking: false, // Disable for speed
             enable_intra_batch_deduplication: true,
+            enable_dual_write_activity_metrics: false, // Disable for async endpoint to prioritize speed
         }
     } else {
         BatchConfig::default()
@@ -134,11 +142,13 @@ pub async fn ingest_async_optimized_handler(
 
     // Process with timeout to prevent Cloudflare 524 errors
     let processor = BatchProcessor::with_config(pool.get_ref().clone(), batch_config);
-    
+
     let processing_result = match tokio::time::timeout(
         std::time::Duration::from_secs(PROCESSING_TIMEOUT_SECONDS),
-        processor.process_batch(auth.user.id, internal_payload)
-    ).await {
+        processor.process_batch(auth.user.id, internal_payload),
+    )
+    .await
+    {
         Ok(result) => result,
         Err(_) => {
             // Processing timed out - this would require background processing in production
@@ -148,7 +158,7 @@ pub async fn ingest_async_optimized_handler(
                 timeout_seconds = PROCESSING_TIMEOUT_SECONDS,
                 "Processing timed out - payload too large for synchronous processing"
             );
-            
+
             // Update raw ingestion status
             let _ = sqlx::query!(
                 "UPDATE raw_ingestions SET status = 'error', error_message = 'Processing timeout - requires background processing' WHERE id = $1",
@@ -158,7 +168,7 @@ pub async fn ingest_async_optimized_handler(
             .await;
 
             Metrics::record_error("processing_timeout", "/api/v1/ingest-async", "error");
-            
+
             return Ok(HttpResponse::RequestTimeout().json(ApiResponse::<()>::error(
                 format!("Processing timed out after {} seconds. Payload with {} metrics is too large for real-time processing. Consider using background processing for large batches.", 
                     PROCESSING_TIMEOUT_SECONDS, total_metrics)
@@ -196,7 +206,7 @@ pub async fn ingest_async_optimized_handler(
     } else {
         "timeout"
     };
-    
+
     Metrics::record_ingest_duration(duration, status);
     Metrics::record_data_volume("ingest", "processed", response.processed_count as u64);
 
@@ -216,7 +226,8 @@ pub async fn ingest_async_optimized_handler(
     // Return 200 for successful processing, 202 if we hit performance limits but still processed
     if response.success {
         Ok(HttpResponse::Ok().json(ApiResponse::success(response)))
-    } else if processing_time >= (PROCESSING_TIMEOUT_SECONDS * 800) { // 80% of timeout
+    } else if processing_time >= (PROCESSING_TIMEOUT_SECONDS * 800) {
+        // 80% of timeout
         Ok(HttpResponse::Accepted().json(ApiResponse::success(response))) // Indicate partial processing due to time constraints
     } else {
         Ok(HttpResponse::Ok().json(ApiResponse::success(response)))
@@ -231,7 +242,7 @@ async fn store_raw_payload(
     _client_ip: &str,
 ) -> Result<Uuid, sqlx::Error> {
     use sha2::{Digest, Sha256};
-    
+
     let payload_json = serde_json::to_string(payload).map_err(sqlx::Error::decode)?;
     let payload_hash = format!("{:x}", Sha256::digest(payload_json.as_bytes()));
 
@@ -308,31 +319,40 @@ async fn update_processing_status(
 async fn parse_ios_payload_enhanced(raw_payload: &web::Bytes) -> Result<IngestPayload> {
     let payload_size = raw_payload.len();
     if payload_size > 10 * 1024 * 1024 {
-        info!("Processing large payload: {} MB", payload_size / (1024 * 1024));
+        info!(
+            "Processing large payload: {} MB",
+            payload_size / (1024 * 1024)
+        );
     }
 
     // Try iOS format first
     match serde_json::from_slice::<IosIngestPayload>(raw_payload) {
         Ok(ios_payload) => {
-            info!("Successfully parsed iOS format payload ({} bytes)", payload_size);
+            info!(
+                "Successfully parsed iOS format payload ({} bytes)",
+                payload_size
+            );
             Ok(ios_payload.to_internal_format())
         }
         Err(ios_error) => {
             warn!("iOS format parse failed: {}", ios_error);
-            
+
             // Try standard format as fallback
             match serde_json::from_slice::<IngestPayload>(raw_payload) {
                 Ok(standard_payload) => {
-                    info!("Successfully parsed standard format payload ({} bytes)", payload_size);
+                    info!(
+                        "Successfully parsed standard format payload ({} bytes)",
+                        payload_size
+                    );
                     Ok(standard_payload)
                 }
                 Err(standard_error) => {
                     error!("Failed to parse payload in both iOS and standard formats");
                     error!("iOS format error: {}", ios_error);
                     error!("Standard format error: {}", standard_error);
-                    
+
                     Err(actix_web::error::ErrorBadRequest(format!(
-                        "Invalid JSON format. iOS error: {}. Standard error: {}", 
+                        "Invalid JSON format. iOS error: {}. Standard error: {}",
                         ios_error, standard_error
                     )))
                 }

@@ -2,10 +2,9 @@ use actix_web::{web, HttpResponse, Result};
 use chrono::Utc;
 use serde_json::json;
 use sqlx::PgPool;
-use std::time::{SystemTime, UNIX_EPOCH};
-use tracing::{error, warn, info};
 use std::sync::atomic::{AtomicU64, Ordering};
-use tokio::time::{timeout, Duration};
+use std::time::{SystemTime, UNIX_EPOCH};
+use tracing::info;
 
 /// Health check statistics
 static HEALTH_CHECK_COUNT: AtomicU64 = AtomicU64::new(0);
@@ -16,19 +15,19 @@ static DB_CHECK_FAILURES: AtomicU64 = AtomicU64::new(0);
 pub async fn health_check() -> Result<HttpResponse> {
     let check_id = HEALTH_CHECK_COUNT.fetch_add(1, Ordering::Relaxed);
     let timestamp = Utc::now();
-    
+
     info!(check_id = check_id, "Health check requested");
-    
+
     // Update last successful check timestamp
     let epoch_seconds = timestamp.timestamp() as u64;
     LAST_SUCCESSFUL_CHECK.store(epoch_seconds, Ordering::Relaxed);
-    
+
     // Get uptime
     let uptime_seconds = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    
+
     // Enhanced response for debugging Cloudflare 520 issues
     let response = json!({
         "status": "healthy",
@@ -57,7 +56,7 @@ pub async fn health_check() -> Result<HttpResponse> {
             "body_size_bytes": 1024 // Estimate
         }
     });
-    
+
     // Return with proper headers for Cloudflare compatibility
     Ok(HttpResponse::Ok()
         .insert_header(("Cache-Control", "no-cache, no-store, must-revalidate"))
@@ -71,15 +70,15 @@ pub async fn health_check() -> Result<HttpResponse> {
 pub async fn api_status(_pool: web::Data<PgPool>) -> Result<HttpResponse> {
     let check_start = std::time::Instant::now();
     let timestamp = Utc::now();
-    
+
     info!("Comprehensive API status check initiated");
-    
+
     // Simplified status check for now - TODO: Add proper database health checks
     let database_status = "connected";
     let db_response_time_ms = 10;
-    
+
     let check_duration = check_start.elapsed();
-    
+
     let response = json!({
         "status": "operational",
         "timestamp": timestamp.to_rfc3339(),
@@ -106,7 +105,7 @@ pub async fn api_status(_pool: web::Data<PgPool>) -> Result<HttpResponse> {
             "db_response_time_ms": db_response_time_ms
         }
     });
-    
+
     Ok(HttpResponse::Ok()
         .insert_header(("Cache-Control", "no-cache, no-store, must-revalidate"))
         .insert_header(("X-API-Status", database_status))

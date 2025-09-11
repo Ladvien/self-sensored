@@ -1,13 +1,10 @@
 use std::pin::Pin;
-use std::task::{Context, Poll};
 use std::time::Instant;
 
 use actix_web::{
     body::{EitherBody, MessageBody},
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
-    http::Method,
     Error, HttpResponse, Result,
-    web::Bytes,
 };
 use futures::future::{ok, Ready};
 use futures::Future;
@@ -15,8 +12,8 @@ use once_cell::sync::Lazy;
 use prometheus::{
     register_counter_vec_with_registry, register_counter_with_registry,
     register_gauge_vec_with_registry, register_gauge_with_registry,
-    register_histogram_vec_with_registry, Counter, CounterVec, Encoder, Gauge, GaugeVec, Histogram,
-    HistogramVec, Registry, TextEncoder,
+    register_histogram_vec_with_registry, Counter, CounterVec, Gauge, GaugeVec, HistogramVec,
+    Registry, TextEncoder,
 };
 use tracing::{error, instrument};
 
@@ -303,6 +300,39 @@ static RATE_LIMIT_USAGE_RATIO: Lazy<GaugeVec> = Lazy::new(|| {
     .expect("Failed to create rate limit usage ratio gauge")
 });
 
+// Dual-write metrics for activity_metrics migration
+static DUAL_WRITE_OPERATIONS_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
+    register_counter_vec_with_registry!(
+        "health_export_dual_write_operations_total",
+        "Total dual-write operations by table and status",
+        &["table", "status"],
+        METRICS_REGISTRY.clone()
+    )
+    .expect("Failed to create dual-write operations counter")
+});
+
+static DUAL_WRITE_DURATION_SECONDS: Lazy<HistogramVec> = Lazy::new(|| {
+    register_histogram_vec_with_registry!(
+        "health_export_dual_write_duration_seconds",
+        "Dual-write operation duration in seconds",
+        &["table", "status"],
+        // Buckets optimized for database transaction times: 1ms to 30s
+        vec![0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0],
+        METRICS_REGISTRY.clone()
+    )
+    .expect("Failed to create dual-write duration histogram")
+});
+
+static DUAL_WRITE_CONSISTENCY_ERRORS_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
+    register_counter_vec_with_registry!(
+        "health_export_dual_write_consistency_errors_total",
+        "Total consistency errors during dual-write operations",
+        &["table", "error_type"],
+        METRICS_REGISTRY.clone()
+    )
+    .expect("Failed to create dual-write consistency errors counter")
+});
+
 /// Metrics collection middleware for Prometheus monitoring
 pub struct MetricsMiddleware;
 
@@ -343,14 +373,15 @@ where
         let start_time = Instant::now();
         let method = req.method().to_string();
         let path = req.path().to_string();
-        
+
         // Extract content length for payload monitoring
-        let content_length = req.headers()
+        let content_length = req
+            .headers()
             .get("content-length")
             .and_then(|h| h.to_str().ok())
             .and_then(|s| s.parse::<u64>().ok())
             .unwrap_or(0);
-        
+
         let normalized_endpoint = normalize_endpoint(&path);
 
         let fut = self.service.call(req);
@@ -364,11 +395,19 @@ where
 
             // Record HTTP metrics - this should be <1ms overhead
             HTTP_REQUESTS_TOTAL
-                .with_label_values(&[method.as_str(), normalized_endpoint.as_str(), status_code.as_str()])
+                .with_label_values(&[
+                    method.as_str(),
+                    normalized_endpoint.as_str(),
+                    status_code.as_str(),
+                ])
                 .inc();
 
             HTTP_REQUEST_DURATION_SECONDS
-                .with_label_values(&[method.as_str(), normalized_endpoint.as_str(), status_code.as_str()])
+                .with_label_values(&[
+                    method.as_str(),
+                    normalized_endpoint.as_str(),
+                    status_code.as_str(),
+                ])
                 .observe(duration.as_secs_f64());
 
             // Record payload size monitoring metrics
@@ -381,15 +420,20 @@ where
                 // Classify payload size and record processing duration
                 let size_bucket = classify_payload_size(content_length);
                 PROCESSING_DURATION_BY_SIZE
-                    .with_label_values(&[method.as_str(), normalized_endpoint.as_str(), size_bucket])
+                    .with_label_values(&[
+                        method.as_str(),
+                        normalized_endpoint.as_str(),
+                        size_bucket,
+                    ])
                     .observe(duration.as_secs_f64());
 
                 // Monitor large requests for security analysis
-                if content_length > 10 * 1024 * 1024 {  // 10MB threshold
+                if content_length > 10 * 1024 * 1024 {
+                    // 10MB threshold
                     LARGE_REQUEST_TOTAL
                         .with_label_values(&[normalized_endpoint.as_str(), size_bucket])
                         .inc();
-                    
+
                     // Log security event for large payloads
                     tracing::warn!(
                         method = %method,
@@ -399,7 +443,7 @@ where
                         status_code = %status_code,
                         "Large payload detected - monitoring for potential DoS"
                     );
-                    
+
                     SECURITY_EVENTS_TOTAL
                         .with_label_values(&["large_payload", &normalized_endpoint, "medium"])
                         .inc();
@@ -415,14 +459,19 @@ where
                         status_code = %status_code,
                         "Extremely large payload detected - potential DoS attack"
                     );
-                    
+
                     SECURITY_EVENTS_TOTAL
-                        .with_label_values(&["extremely_large_payload", &normalized_endpoint, "high"])
+                        .with_label_values(&[
+                            "extremely_large_payload",
+                            &normalized_endpoint,
+                            "high",
+                        ])
                         .inc();
                 }
 
                 // Monitor slow processing of large payloads
-                if content_length > 1024 * 1024 && duration.as_secs() > 30 {  // 1MB+ taking >30s
+                if content_length > 1024 * 1024 && duration.as_secs() > 30 {
+                    // 1MB+ taking >30s
                     tracing::warn!(
                         method = %method,
                         endpoint = %normalized_endpoint,
@@ -431,7 +480,7 @@ where
                         status_code = %status_code,
                         "Slow processing of large payload detected"
                     );
-                    
+
                     SECURITY_EVENTS_TOTAL
                         .with_label_values(&["slow_large_payload", &normalized_endpoint, "medium"])
                         .inc();
@@ -446,14 +495,14 @@ where
 /// Classify payload size into buckets for metrics labeling
 fn classify_payload_size(size_bytes: u64) -> &'static str {
     match size_bytes {
-        0..=1024 => "tiny",         // 0-1KB
-        1025..=10240 => "small",    // 1KB-10KB
-        10241..=102400 => "medium", // 10KB-100KB
-        102401..=1048576 => "large", // 100KB-1MB
-        1048577..=10485760 => "xlarge", // 1MB-10MB
+        0..=1024 => "tiny",               // 0-1KB
+        1025..=10240 => "small",          // 1KB-10KB
+        10241..=102400 => "medium",       // 10KB-100KB
+        102401..=1048576 => "large",      // 100KB-1MB
+        1048577..=10485760 => "xlarge",   // 1MB-10MB
         10485761..=52428800 => "xxlarge", // 10MB-50MB
-        52428801..=104857600 => "huge", // 50MB-100MB
-        _ => "massive", // >100MB
+        52428801..=104857600 => "huge",   // 50MB-100MB
+        _ => "massive",                   // >100MB
     }
 }
 
@@ -631,7 +680,7 @@ impl Metrics {
     }
 
     // AUDIT-007: Enhanced Monitoring and Alerting Methods
-    
+
     /// Record validation error with detailed categorization
     #[instrument(skip_all)]
     pub fn record_validation_error(metric_type: &str, error_category: &str, endpoint: &str) {
@@ -650,7 +699,11 @@ impl Metrics {
 
     /// Record batch parameter usage for PostgreSQL limit monitoring
     #[instrument(skip_all)]
-    pub fn record_batch_parameter_usage(metric_type: &str, operation_type: &str, parameter_count: usize) {
+    pub fn record_batch_parameter_usage(
+        metric_type: &str,
+        operation_type: &str,
+        parameter_count: usize,
+    ) {
         BATCH_PARAMETER_USAGE
             .with_label_values(&[metric_type, operation_type])
             .observe(parameter_count as f64);
@@ -658,7 +711,11 @@ impl Metrics {
 
     /// Record rate limit exhaustion event
     #[instrument(skip_all)]
-    pub fn record_rate_limit_exhaustion(limit_type: &str, endpoint: &str, threshold_percentage: &str) {
+    pub fn record_rate_limit_exhaustion(
+        limit_type: &str,
+        endpoint: &str,
+        threshold_percentage: &str,
+    ) {
         RATE_LIMIT_EXHAUSTION_TOTAL
             .with_label_values(&[limit_type, endpoint, threshold_percentage])
             .inc();
@@ -670,6 +727,60 @@ impl Metrics {
         RATE_LIMIT_USAGE_RATIO
             .with_label_values(&[limit_type, key_identifier])
             .set(usage_ratio);
+    }
+
+    // Dual-write metrics methods
+
+    /// Record dual-write operation start
+    #[instrument(skip_all)]
+    pub fn record_dual_write_start(table: &str, record_count: u64) {
+        DUAL_WRITE_OPERATIONS_TOTAL
+            .with_label_values(&[table, "started"])
+            .inc_by(record_count as f64);
+    }
+
+    /// Record successful dual-write operation
+    #[instrument(skip_all)]
+    pub fn record_dual_write_success(table: &str, record_count: u64, duration: std::time::Duration) {
+        DUAL_WRITE_OPERATIONS_TOTAL
+            .with_label_values(&[table, "success"])
+            .inc_by(record_count as f64);
+        
+        DUAL_WRITE_DURATION_SECONDS
+            .with_label_values(&[table, "success"])
+            .observe(duration.as_secs_f64());
+    }
+
+    /// Record failed dual-write operation
+    #[instrument(skip_all)]
+    pub fn record_dual_write_failure(table: &str, record_count: u64, duration: std::time::Duration) {
+        DUAL_WRITE_OPERATIONS_TOTAL
+            .with_label_values(&[table, "failure"])
+            .inc_by(record_count as f64);
+        
+        DUAL_WRITE_DURATION_SECONDS
+            .with_label_values(&[table, "failure"])
+            .observe(duration.as_secs_f64());
+    }
+
+    /// Record dual-write consistency error
+    #[instrument(skip_all)]
+    pub fn record_dual_write_consistency_error(table: &str, error_type: &str) {
+        DUAL_WRITE_CONSISTENCY_ERRORS_TOTAL
+            .with_label_values(&[table, error_type])
+            .inc();
+    }
+
+    /// Record dual-write rollback event
+    #[instrument(skip_all)]
+    pub fn record_dual_write_rollback(table: &str, record_count: u64, duration: std::time::Duration) {
+        DUAL_WRITE_OPERATIONS_TOTAL
+            .with_label_values(&[table, "rollback"])
+            .inc_by(record_count as f64);
+        
+        DUAL_WRITE_DURATION_SECONDS
+            .with_label_values(&[table, "rollback"])
+            .observe(duration.as_secs_f64());
     }
 }
 
@@ -723,7 +834,7 @@ mod tests {
         assert_eq!(classify_payload_size(512000), "large");
         assert_eq!(classify_payload_size(5120000), "xlarge");
         assert_eq!(classify_payload_size(26214400), "xxlarge"); // 25MB
-        assert_eq!(classify_payload_size(78643200), "huge");    // 75MB
+        assert_eq!(classify_payload_size(78643200), "huge"); // 75MB
         assert_eq!(classify_payload_size(157286400), "massive"); // 150MB
     }
 

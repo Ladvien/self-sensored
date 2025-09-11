@@ -3,8 +3,8 @@ pub mod auth;
 pub mod compression;
 pub mod logging;
 pub mod metrics;
-pub mod request_logger;
 pub mod rate_limit;
+pub mod request_logger;
 
 pub use auth::*;
 pub use compression::*;

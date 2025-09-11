@@ -4,11 +4,6 @@ use std::time::Duration;
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
-use crate::handlers::query::{
-    ActivitySummary, BloodPressureSummary, HealthSummary, HeartRateSummary, QueryResponse,
-    SleepSummary, WorkoutSummary,
-};
-
 /// Redis cache service for performance optimization
 #[derive(Clone)]
 pub struct CacheService {

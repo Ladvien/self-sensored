@@ -54,6 +54,7 @@ async fn test_batch_config_custom() {
         workout_chunk_size: 5000,
         enable_progress_tracking: true,
         enable_intra_batch_deduplication: false,
+        enable_dual_write_activity_metrics: false, // Not needed for standalone testing
     };
 
     assert_eq!(config.max_retries, 5);

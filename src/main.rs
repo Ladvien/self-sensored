@@ -14,7 +14,9 @@ mod services;
 
 use config::LoggingConfig;
 use db::database::{create_connection_pool, update_db_pool_metrics};
-use middleware::{AuthMiddleware, CompressionAndCaching, MetricsMiddleware, RateLimitMiddleware, StructuredLogger};
+use middleware::{
+    AuthMiddleware, CompressionAndCaching, MetricsMiddleware, RateLimitMiddleware, StructuredLogger,
+};
 use services::{auth::AuthService, rate_limiter::RateLimiter};
 
 #[actix_web::main]
@@ -47,34 +49,34 @@ async fn main() -> std::io::Result<()> {
         .expect("WORKERS must be a valid number");
 
     let request_timeout_seconds = env::var("REQUEST_TIMEOUT_SECONDS")
-        .unwrap_or_else(|_| "60".to_string())  // Reduced from 300s to 60s to prevent DoS attacks
+        .unwrap_or_else(|_| "60".to_string()) // Reduced from 300s to 60s to prevent DoS attacks
         .parse::<u64>()
         .expect("REQUEST_TIMEOUT_SECONDS must be a valid number");
 
     // Additional security configurations for request limiting
     let max_payload_size_mb = env::var("MAX_PAYLOAD_SIZE_MB")
-        .unwrap_or_else(|_| "50".to_string())  // Default 50MB for health data uploads
+        .unwrap_or_else(|_| "50".to_string()) // Default 50MB for health data uploads
         .parse::<usize>()
         .expect("MAX_PAYLOAD_SIZE_MB must be a valid number");
 
     let connection_timeout_seconds = env::var("CONNECTION_TIMEOUT_SECONDS")
-        .unwrap_or_else(|_| "30".to_string())  // 30s connection timeout
+        .unwrap_or_else(|_| "30".to_string()) // 30s connection timeout
         .parse::<u64>()
         .expect("CONNECTION_TIMEOUT_SECONDS must be a valid number");
 
     let keep_alive_timeout_seconds = env::var("KEEP_ALIVE_TIMEOUT_SECONDS")
-        .unwrap_or_else(|_| "75".to_string())  // 75s keep-alive timeout (under Cloudflare's 100s)
+        .unwrap_or_else(|_| "75".to_string()) // 75s keep-alive timeout (under Cloudflare's 100s)
         .parse::<u64>()
         .expect("KEEP_ALIVE_TIMEOUT_SECONDS must be a valid number");
 
     // Additional timeout configurations for Cloudflare 520 error prevention
     let client_shutdown_timeout_seconds = env::var("CLIENT_SHUTDOWN_TIMEOUT_SECONDS")
-        .unwrap_or_else(|_| "30".to_string())  // 30s client shutdown timeout
+        .unwrap_or_else(|_| "30".to_string()) // 30s client shutdown timeout
         .parse::<u64>()
         .expect("CLIENT_SHUTDOWN_TIMEOUT_SECONDS must be a valid number");
 
     let server_shutdown_timeout_seconds = env::var("SERVER_SHUTDOWN_TIMEOUT_SECONDS")
-        .unwrap_or_else(|_| "30".to_string())  // 30s server shutdown timeout
+        .unwrap_or_else(|_| "30".to_string()) // 30s server shutdown timeout
         .parse::<u64>()
         .expect("SERVER_SHUTDOWN_TIMEOUT_SECONDS must be a valid number");
 
@@ -82,12 +84,27 @@ async fn main() -> std::io::Result<()> {
     info!("Database URL: {}", mask_password(&database_url));
     info!("Server binding to: {}:{}", server_host, server_port);
     info!("Worker threads: {}", workers);
-    info!("Request timeout: {}s (DoS-protected)", request_timeout_seconds);
-    info!("Max payload size: {}MB (security-limited)", max_payload_size_mb);
+    info!(
+        "Request timeout: {}s (DoS-protected)",
+        request_timeout_seconds
+    );
+    info!(
+        "Max payload size: {}MB (security-limited)",
+        max_payload_size_mb
+    );
     info!("Connection timeout: {}s", connection_timeout_seconds);
-    info!("Keep-alive timeout: {}s (Cloudflare-optimized)", keep_alive_timeout_seconds);
-    info!("Client shutdown timeout: {}s", client_shutdown_timeout_seconds);
-    info!("Server shutdown timeout: {}s", server_shutdown_timeout_seconds);
+    info!(
+        "Keep-alive timeout: {}s (Cloudflare-optimized)",
+        keep_alive_timeout_seconds
+    );
+    info!(
+        "Client shutdown timeout: {}s",
+        client_shutdown_timeout_seconds
+    );
+    info!(
+        "Server shutdown timeout: {}s",
+        server_shutdown_timeout_seconds
+    );
 
     // Create database connection pool
     let pool = create_connection_pool(&database_url)
@@ -116,14 +133,20 @@ async fn main() -> std::io::Result<()> {
     let rate_limiter = match RateLimiter::new(&redis_url).await {
         Ok(limiter) => {
             if limiter.is_using_redis() {
-                info!("Rate limiter initialized with Redis backend: {}", mask_password(&redis_url));
+                info!(
+                    "Rate limiter initialized with Redis backend: {}",
+                    mask_password(&redis_url)
+                );
             } else {
                 info!("Rate limiter initialized with in-memory fallback");
             }
             limiter
         }
         Err(e) => {
-            warn!("Failed to create rate limiter, falling back to in-memory: {}", e);
+            warn!(
+                "Failed to create rate limiter, falling back to in-memory: {}",
+                e
+            );
             RateLimiter::new_in_memory(100) // Default 100 requests/hour
         }
     };
@@ -178,8 +201,14 @@ async fn main() -> std::io::Result<()> {
             .wrap(AuthMiddleware)
             .wrap(RateLimitMiddleware)
             .route("/health", web::get().to(handlers::health::health_check))
-            .route("/health/live", web::get().to(handlers::health::liveness_probe))
-            .route("/health/ready", web::get().to(handlers::health::readiness_probe))
+            .route(
+                "/health/live",
+                web::get().to(handlers::health::liveness_probe),
+            )
+            .route(
+                "/health/ready",
+                web::get().to(handlers::health::readiness_probe),
+            )
             .route(
                 "/metrics",
                 web::get().to(middleware::metrics::metrics_handler),
@@ -188,7 +217,11 @@ async fn main() -> std::io::Result<()> {
                 web::scope("/api/v1")
                     .route("/status", web::get().to(handlers::health::api_status))
                     .route("/ingest", web::post().to(handlers::ingest::ingest_handler))
-                    .route("/ingest-async", web::post().to(handlers::ingest_async_simple::ingest_async_optimized_handler))
+                    .route(
+                        "/ingest-async",
+                        web::post()
+                            .to(handlers::ingest_async_simple::ingest_async_optimized_handler),
+                    )
                     // Health data query endpoints
                     .route(
                         "/data/heart-rate",
@@ -278,21 +311,19 @@ fn mask_password(url: &str) -> String {
 /// Configure CORS middleware with security-focused settings
 fn configure_cors() -> Cors {
     let environment = env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string());
-    
+
     // Parse allowed origins from environment variable
-    let allowed_origins = env::var("CORS_ALLOWED_ORIGINS")
-        .unwrap_or_else(|_| {
-            match environment.as_str() {
-                "production" => "https://api.yourdomain.com".to_string(),
-                _ => "http://localhost:3000,https://localhost:3000".to_string(),
-            }
+    let allowed_origins =
+        env::var("CORS_ALLOWED_ORIGINS").unwrap_or_else(|_| match environment.as_str() {
+            "production" => "https://api.yourdomain.com".to_string(),
+            _ => "http://localhost:3000,https://localhost:3000".to_string(),
         });
-    
+
     let max_age = env::var("CORS_MAX_AGE")
         .unwrap_or_else(|_| "3600".to_string())
         .parse::<usize>()
         .unwrap_or(3600);
-    
+
     let allow_credentials = env::var("CORS_ALLOW_CREDENTIALS")
         .unwrap_or_else(|_| "false".to_string())
         .parse::<bool>()
@@ -306,7 +337,6 @@ fn configure_cors() -> Cors {
     let mut cors = Cors::default()
         // Restrict to necessary HTTP methods only
         .allowed_methods(vec!["GET", "POST", "OPTIONS"])
-        
         // Only allow necessary headers for API authentication
         .allowed_headers(vec![
             header::AUTHORIZATION,
@@ -314,10 +344,8 @@ fn configure_cors() -> Cors {
             header::CONTENT_TYPE,
             header::HeaderName::from_static("x-api-key"), // Custom API key header
         ])
-        
         // Expose Content-Disposition for file downloads
         .expose_headers(&[header::CONTENT_DISPOSITION])
-        
         // Set preflight cache duration
         .max_age(max_age);
 
@@ -333,7 +361,9 @@ fn configure_cors() -> Cors {
     // Configure credentials support (be very careful with this in production)
     if allow_credentials {
         cors = cors.supports_credentials();
-        warn!("CORS credentials support is ENABLED - ensure origins are explicitly set and trusted");
+        warn!(
+            "CORS credentials support is ENABLED - ensure origins are explicitly set and trusted"
+        );
     }
 
     // Production environment security validations
@@ -355,15 +385,15 @@ fn configure_cors() -> Cors {
 pub fn configure_cors_for_testing() -> Cors {
     use actix_cors::Cors;
     use actix_web::http::header;
-    
+
     let test_origins = env::var("CORS_ALLOWED_ORIGINS")
         .unwrap_or_else(|_| "http://localhost:3000,https://trusted-app.com".to_string());
-    
+
     let max_age = env::var("CORS_MAX_AGE")
         .unwrap_or_else(|_| "1800".to_string())
         .parse::<usize>()
         .unwrap_or(1800);
-    
+
     let allow_credentials = env::var("CORS_ALLOW_CREDENTIALS")
         .unwrap_or_else(|_| "false".to_string())
         .parse::<bool>()

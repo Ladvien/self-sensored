@@ -11,7 +11,7 @@ use std::{
     rc::Rc,
     time::{SystemTime, UNIX_EPOCH},
 };
-use tracing::{error, info_span, instrument, warn, Span};
+use tracing::info_span;
 use uuid::Uuid;
 
 /// Request ID header name for propagation
@@ -74,7 +74,7 @@ where
 
     forward_ready!(service);
 
-    fn call(&self, mut req: ServiceRequest) -> Self::Future {
+    fn call(&self, req: ServiceRequest) -> Self::Future {
         let service = self.service.clone();
 
         Box::pin(async move {
@@ -259,7 +259,7 @@ macro_rules! log_structured {
 pub fn log_error_with_context(
     error: &dyn std::error::Error,
     context: &str,
-    request_id: Option<Uuid>,
+    _request_id: Option<Uuid>,
     additional_fields: Option<HashMap<String, Value>>,
 ) {
     // Log additional context fields if provided

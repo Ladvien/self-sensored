@@ -556,3 +556,342 @@ mod tests {
         assert!(deserialization_time.as_millis() < 2000, "Should deserialize quickly");
     }
 }
+
+#[cfg(test)]
+mod dual_write_tests {
+    use super::*;
+    use self_sensored::{
+        config::BatchConfig,
+        services::batch_processor::BatchProcessor,
+        models::ActivityMetricV2,
+    };
+    use tokio_test;
+
+    /// Test ActivityMetricV2 validation
+    #[test]
+    fn test_activity_metric_v2_validation() {
+        let now = Utc::now();
+        
+        // Valid metric
+        let valid_metric = ActivityMetricV2 {
+            recorded_at: now,
+            step_count: Some(10000),
+            flights_climbed: Some(15),
+            distance_walking_running_meters: Some(5000.0),
+            distance_cycling_meters: Some(2000.0),
+            distance_swimming_meters: None,
+            distance_wheelchair_meters: None,
+            distance_downhill_snow_sports_meters: None,
+            push_count: None,
+            swimming_stroke_count: None,
+            nike_fuel: Some(500.0),
+            active_energy_burned_kcal: Some(400.0),
+            basal_energy_burned_kcal: Some(1800.0),
+            exercise_time_minutes: Some(45),
+            stand_time_minutes: Some(12),
+            move_time_minutes: Some(300),
+            stand_hour_achieved: Some(true),
+            aggregation_period: Some("daily".to_string()),
+            source: Some("Apple Health".to_string()),
+        };
+        
+        assert!(valid_metric.validate().is_ok());
+        
+        // Invalid metrics - out of range values
+        let invalid_step_count = ActivityMetricV2 {
+            step_count: Some(300000), // Way too high
+            ..valid_metric.clone()
+        };
+        assert!(invalid_step_count.validate().is_err());
+        
+        let invalid_flights_climbed = ActivityMetricV2 {
+            flights_climbed: Some(20000), // Way too high
+            ..valid_metric.clone()
+        };
+        assert!(invalid_flights_climbed.validate().is_err());
+        
+        let invalid_aggregation_period = ActivityMetricV2 {
+            aggregation_period: Some("invalid_period".to_string()),
+            ..valid_metric.clone()
+        };
+        assert!(invalid_aggregation_period.validate().is_err());
+        
+        let invalid_exercise_time = ActivityMetricV2 {
+            exercise_time_minutes: Some(2000), // More than 24 hours
+            ..valid_metric.clone()
+        };
+        assert!(invalid_exercise_time.validate().is_err());
+    }
+
+    #[test]
+    fn test_activity_metric_conversion() {
+        let original_metric = ActivityMetric {
+            date: chrono::Utc::now().date_naive(),
+            steps: Some(12000),
+            distance_meters: Some(8000.0),
+            calories_burned: Some(500.0),
+            active_minutes: Some(60),
+            flights_climbed: Some(20),
+            source: Some("Apple Watch".to_string()),
+        };
+        
+        // Test conversion to v2
+        let v2_metric = ActivityMetricV2::from_activity_metric(&original_metric);
+        
+        assert_eq!(v2_metric.step_count, original_metric.steps);
+        assert_eq!(v2_metric.flights_climbed, original_metric.flights_climbed);
+        assert_eq!(v2_metric.distance_walking_running_meters, original_metric.distance_meters);
+        assert_eq!(v2_metric.active_energy_burned_kcal, original_metric.calories_burned);
+        assert_eq!(v2_metric.exercise_time_minutes, original_metric.active_minutes);
+        assert_eq!(v2_metric.source, original_metric.source);
+        assert_eq!(v2_metric.aggregation_period, Some("daily".to_string()));
+        
+        // Test conversion back to original
+        let converted_back = v2_metric.to_activity_metric();
+        
+        assert_eq!(converted_back.date, original_metric.date);
+        assert_eq!(converted_back.steps, original_metric.steps);
+        assert_eq!(converted_back.distance_meters, original_metric.distance_meters);
+        assert_eq!(converted_back.calories_burned, original_metric.calories_burned);
+        assert_eq!(converted_back.active_minutes, original_metric.active_minutes);
+        assert_eq!(converted_back.flights_climbed, original_metric.flights_climbed);
+        assert_eq!(converted_back.source, original_metric.source);
+    }
+
+    #[test]
+    fn test_dual_write_config_validation() {
+        // Test default configuration
+        let default_config = BatchConfig::default();
+        assert!(!default_config.enable_dual_write_activity_metrics); // Should be disabled by default
+        
+        // Test custom configuration
+        let mut custom_config = BatchConfig::default();
+        custom_config.enable_dual_write_activity_metrics = true;
+        assert!(custom_config.enable_dual_write_activity_metrics);
+        
+        // Test validation still works
+        assert!(custom_config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_activity_metric_v2_field_completeness() {
+        let now = Utc::now();
+        
+        // Create a metric with all fields populated
+        let complete_metric = ActivityMetricV2 {
+            recorded_at: now,
+            step_count: Some(15000),
+            flights_climbed: Some(25),
+            distance_walking_running_meters: Some(8000.0),
+            distance_cycling_meters: Some(3000.0),
+            distance_swimming_meters: Some(1000.0),
+            distance_wheelchair_meters: Some(500.0),
+            distance_downhill_snow_sports_meters: Some(2000.0),
+            push_count: Some(100),
+            swimming_stroke_count: Some(500),
+            nike_fuel: Some(750.0),
+            active_energy_burned_kcal: Some(600.0),
+            basal_energy_burned_kcal: Some(1900.0),
+            exercise_time_minutes: Some(90),
+            stand_time_minutes: Some(14),
+            move_time_minutes: Some(400),
+            stand_hour_achieved: Some(true),
+            aggregation_period: Some("hourly".to_string()),
+            source: Some("Apple Health Export".to_string()),
+        };
+        
+        // Should validate successfully with all fields
+        assert!(complete_metric.validate().is_ok());
+        
+        // Test boundary values
+        let boundary_metric = ActivityMetricV2 {
+            recorded_at: now,
+            step_count: Some(200000), // Maximum allowed
+            flights_climbed: Some(10000), // Maximum allowed
+            distance_walking_running_meters: Some(500000.0), // 500km - maximum allowed
+            distance_cycling_meters: Some(1000000.0), // 1000km - maximum allowed
+            distance_swimming_meters: Some(50000.0), // 50km - maximum allowed
+            distance_wheelchair_meters: Some(500000.0), // 500km - maximum allowed
+            distance_downhill_snow_sports_meters: Some(200000.0), // 200km - maximum allowed
+            push_count: Some(50000), // Maximum allowed
+            swimming_stroke_count: Some(100000), // Maximum allowed
+            nike_fuel: Some(50000.0), // Maximum allowed
+            active_energy_burned_kcal: Some(20000.0), // Maximum allowed
+            basal_energy_burned_kcal: Some(10000.0), // Maximum allowed
+            exercise_time_minutes: Some(1440), // 24 hours - maximum allowed
+            stand_time_minutes: Some(1440), // 24 hours - maximum allowed
+            move_time_minutes: Some(1440), // 24 hours - maximum allowed
+            stand_hour_achieved: Some(false),
+            aggregation_period: Some("weekly".to_string()),
+            source: Some("Test Device".to_string()),
+        };
+        
+        // Should validate successfully at boundaries
+        assert!(boundary_metric.validate().is_ok());
+    }
+
+    #[test]
+    fn test_field_mapping_edge_cases() {
+        // Test conversion with minimal data
+        let minimal_metric = ActivityMetric {
+            date: chrono::Utc::now().date_naive(),
+            steps: None,
+            distance_meters: None,
+            calories_burned: None,
+            active_minutes: None,
+            flights_climbed: None,
+            source: None,
+        };
+        
+        let v2_minimal = ActivityMetricV2::from_activity_metric(&minimal_metric);
+        
+        assert_eq!(v2_minimal.step_count, None);
+        assert_eq!(v2_minimal.distance_walking_running_meters, None);
+        assert_eq!(v2_minimal.active_energy_burned_kcal, None);
+        assert_eq!(v2_minimal.exercise_time_minutes, None);
+        assert_eq!(v2_minimal.flights_climbed, None);
+        assert_eq!(v2_minimal.source, None);
+        assert_eq!(v2_minimal.aggregation_period, Some("daily".to_string())); // Should default to daily
+        
+        // Should still validate
+        assert!(v2_minimal.validate().is_ok());
+    }
+
+    #[test]
+    fn test_aggregation_period_validation() {
+        let now = Utc::now();
+        let base_metric = ActivityMetricV2 {
+            recorded_at: now,
+            step_count: Some(10000),
+            flights_climbed: Some(15),
+            distance_walking_running_meters: Some(5000.0),
+            distance_cycling_meters: None,
+            distance_swimming_meters: None,
+            distance_wheelchair_meters: None,
+            distance_downhill_snow_sports_meters: None,
+            push_count: None,
+            swimming_stroke_count: None,
+            nike_fuel: None,
+            active_energy_burned_kcal: Some(400.0),
+            basal_energy_burned_kcal: None,
+            exercise_time_minutes: Some(45),
+            stand_time_minutes: None,
+            move_time_minutes: None,
+            stand_hour_achieved: None,
+            aggregation_period: Some("minute".to_string()),
+            source: Some("Test".to_string()),
+        };
+        
+        // Test valid aggregation periods
+        let valid_periods = ["minute", "hourly", "daily", "weekly"];
+        for period in valid_periods {
+            let mut metric = base_metric.clone();
+            metric.aggregation_period = Some(period.to_string());
+            assert!(metric.validate().is_ok(), "Period '{}' should be valid", period);
+        }
+        
+        // Test invalid aggregation period
+        let mut invalid_metric = base_metric.clone();
+        invalid_metric.aggregation_period = Some("monthly".to_string());
+        assert!(invalid_metric.validate().is_err());
+        
+        // Test None aggregation period (should be valid)
+        let mut none_metric = base_metric.clone();
+        none_metric.aggregation_period = None;
+        assert!(none_metric.validate().is_ok());
+    }
+
+    /// Test that dual-write doesn't interfere with existing functionality
+    #[test]
+    fn test_dual_write_config_backwards_compatibility() {
+        // Test that disabling dual-write maintains current behavior
+        let mut config = BatchConfig::default();
+        config.enable_dual_write_activity_metrics = false;
+        
+        // Validation should still work
+        assert!(config.validate().is_ok());
+        
+        // Activity chunk size should still be valid
+        assert_eq!(config.activity_chunk_size, 7000);
+        assert!(config.activity_chunk_size * 7 <= 52428); // Should stay under parameter limit
+    }
+
+    #[test]
+    fn test_dual_write_parameter_calculations() {
+        // Test that v2 table parameter calculations are correct
+        let activity_v2_params_per_record = 21; // Based on the insert query in batch_processor.rs
+        let chunk_size = 2000; // Conservative chunk size for v2 table
+        let total_params = chunk_size * activity_v2_params_per_record;
+        
+        // Should be well under PostgreSQL limit
+        assert!(total_params < 52428, "V2 chunk size calculation should be safe");
+        
+        // Test that we have room for dual-write overhead
+        let dual_write_overhead = 1.1; // 10% overhead estimate
+        let total_with_overhead = (total_params as f64 * dual_write_overhead) as usize;
+        assert!(total_with_overhead < 52428, "Dual-write should stay under parameter limit with overhead");
+    }
+
+    /// Test metrics collection for dual-write operations
+    #[test]
+    fn test_dual_write_metrics_integration() {
+        use self_sensored::middleware::metrics::Metrics;
+        
+        // Test that dual-write metrics can be recorded without panic
+        Metrics::record_dual_write_start("activity_metrics", 100);
+        Metrics::record_dual_write_success("activity_metrics", 100, std::time::Duration::from_millis(500));
+        Metrics::record_dual_write_failure("activity_metrics", 50, std::time::Duration::from_millis(1000));
+        Metrics::record_dual_write_consistency_error("activity_metrics", "field_mismatch");
+        Metrics::record_dual_write_rollback("activity_metrics", 75, std::time::Duration::from_millis(200));
+        
+        // If we get here without panicking, the metrics integration works
+        assert!(true);
+    }
+
+    /// Test performance impact of dual-write conversion
+    #[test]
+    fn test_conversion_performance() {
+        use std::time::Instant;
+        
+        // Create a batch of activity metrics
+        let metrics: Vec<ActivityMetric> = (0..1000)
+            .map(|i| ActivityMetric {
+                date: chrono::Utc::now().date_naive() - chrono::Duration::days(i % 30),
+                steps: Some(8000 + (i * 100) % 10000),
+                distance_meters: Some(5000.0 + (i as f64 * 10.0) % 3000.0),
+                calories_burned: Some(300.0 + (i as f64 * 2.0) % 500.0),
+                active_minutes: Some(30 + (i * 2) % 120),
+                flights_climbed: Some(5 + (i % 50)),
+                source: Some(format!("Device_{}", i % 5)),
+            })
+            .collect();
+        
+        // Test conversion performance
+        let start = Instant::now();
+        let v2_metrics: Vec<ActivityMetricV2> = metrics
+            .iter()
+            .map(|m| ActivityMetricV2::from_activity_metric(m))
+            .collect();
+        let conversion_time = start.elapsed();
+        
+        // Test validation performance
+        let start = Instant::now();
+        let validation_results: Vec<_> = v2_metrics
+            .iter()
+            .map(|m| m.validate())
+            .collect();
+        let validation_time = start.elapsed();
+        
+        // Ensure all validations passed
+        for result in validation_results {
+            assert!(result.is_ok());
+        }
+        
+        // Performance assertions (should be very fast)
+        assert!(conversion_time.as_millis() < 100, "Conversion should be fast: {:?}", conversion_time);
+        assert!(validation_time.as_millis() < 100, "Validation should be fast: {:?}", validation_time);
+        
+        println!("Converted {} metrics in {:?}", metrics.len(), conversion_time);
+        println!("Validated {} metrics in {:?}", v2_metrics.len(), validation_time);
+    }
+}

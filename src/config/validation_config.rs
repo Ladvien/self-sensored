@@ -6,30 +6,30 @@ pub struct ValidationConfig {
     // Heart Rate Validation Thresholds
     pub heart_rate_min: i16,
     pub heart_rate_max: i16,
-    
-    // Blood Pressure Validation Thresholds  
+
+    // Blood Pressure Validation Thresholds
     pub systolic_min: i16,
     pub systolic_max: i16,
     pub diastolic_min: i16,
     pub diastolic_max: i16,
-    
+
     // Sleep Validation Thresholds
     pub sleep_efficiency_min: f32,
     pub sleep_efficiency_max: f32,
     pub sleep_duration_tolerance_minutes: i32,
-    
+
     // Activity Validation Thresholds
     pub steps_min: i32,
     pub steps_max: i32,
     pub distance_max_km: f64,
     pub calories_max: f64,
-    
+
     // GPS Coordinate Validation
     pub latitude_min: f64,
     pub latitude_max: f64,
     pub longitude_min: f64,
     pub longitude_max: f64,
-    
+
     // Workout Validation
     pub workout_heart_rate_min: i16,
     pub workout_heart_rate_max: i16,
@@ -42,30 +42,30 @@ impl Default for ValidationConfig {
             // Heart rate: physiologically reasonable range
             heart_rate_min: 15,
             heart_rate_max: 300,
-            
+
             // Blood pressure: medical ranges for extreme values
             systolic_min: 50,
             systolic_max: 250,
             diastolic_min: 30,
             diastolic_max: 150,
-            
+
             // Sleep efficiency: percentage range
             sleep_efficiency_min: 0.0,
             sleep_efficiency_max: 100.0,
             sleep_duration_tolerance_minutes: 60, // Allow 1 hour variance
-            
+
             // Activity limits: reasonable daily maximums
             steps_min: 0,
-            steps_max: 200_000, // Extreme but possible
+            steps_max: 200_000,     // Extreme but possible
             distance_max_km: 500.0, // ~310 miles - marathon+ distance
             calories_max: 20_000.0, // Extreme athletic events
-            
+
             // GPS coordinates: global valid ranges
             latitude_min: -90.0,
             latitude_max: 90.0,
             longitude_min: -180.0,
             longitude_max: 180.0,
-            
+
             // Workout validation
             workout_heart_rate_min: 15,
             workout_heart_rate_max: 300,
@@ -87,7 +87,7 @@ impl ValidationConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(300),
-                
+
             // Blood Pressure Thresholds
             systolic_min: env::var("VALIDATION_SYSTOLIC_MIN")
                 .ok()
@@ -105,7 +105,7 @@ impl ValidationConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(150),
-                
+
             // Sleep Validation Thresholds
             sleep_efficiency_min: env::var("VALIDATION_SLEEP_EFFICIENCY_MIN")
                 .ok()
@@ -115,11 +115,13 @@ impl ValidationConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(100.0),
-            sleep_duration_tolerance_minutes: env::var("VALIDATION_SLEEP_DURATION_TOLERANCE_MINUTES")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(60),
-                
+            sleep_duration_tolerance_minutes: env::var(
+                "VALIDATION_SLEEP_DURATION_TOLERANCE_MINUTES",
+            )
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(60),
+
             // Activity Validation Thresholds
             steps_min: env::var("VALIDATION_STEPS_MIN")
                 .ok()
@@ -137,7 +139,7 @@ impl ValidationConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(20_000.0),
-                
+
             // GPS Coordinate Validation
             latitude_min: env::var("VALIDATION_LATITUDE_MIN")
                 .ok()
@@ -155,7 +157,7 @@ impl ValidationConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(180.0),
-                
+
             // Workout Validation
             workout_heart_rate_min: env::var("VALIDATION_WORKOUT_HEART_RATE_MIN")
                 .ok()
@@ -171,41 +173,43 @@ impl ValidationConfig {
                 .unwrap_or(24),
         }
     }
-    
+
     /// Validate that configuration values make sense
     pub fn validate(&self) -> Result<(), String> {
         if self.heart_rate_min >= self.heart_rate_max {
             return Err("heart_rate_min must be less than heart_rate_max".to_string());
         }
-        
+
         if self.systolic_min >= self.systolic_max {
             return Err("systolic_min must be less than systolic_max".to_string());
         }
-        
+
         if self.diastolic_min >= self.diastolic_max {
             return Err("diastolic_min must be less than diastolic_max".to_string());
         }
-        
+
         if self.sleep_efficiency_min >= self.sleep_efficiency_max {
             return Err("sleep_efficiency_min must be less than sleep_efficiency_max".to_string());
         }
-        
+
         if self.steps_min >= self.steps_max {
             return Err("steps_min must be less than steps_max".to_string());
         }
-        
+
         if self.latitude_min >= self.latitude_max {
             return Err("latitude_min must be less than latitude_max".to_string());
         }
-        
+
         if self.longitude_min >= self.longitude_max {
             return Err("longitude_min must be less than longitude_max".to_string());
         }
-        
+
         if self.workout_heart_rate_min >= self.workout_heart_rate_max {
-            return Err("workout_heart_rate_min must be less than workout_heart_rate_max".to_string());
+            return Err(
+                "workout_heart_rate_min must be less than workout_heart_rate_max".to_string(),
+            );
         }
-        
+
         Ok(())
     }
 }

@@ -158,7 +158,7 @@ mod heart_rate_edge_cases {
             source: Some("Test".to_string()),
             context: Some("resting".to_string()),
         };
-        
+
         match invalid_hr_low.validate() {
             Err(error_msg) => {
                 assert!(error_msg.contains("15-300"));
@@ -176,7 +176,7 @@ mod heart_rate_edge_cases {
             source: Some("Test".to_string()),
             context: Some("resting".to_string()),
         };
-        
+
         match invalid_hr_high.validate() {
             Err(error_msg) => {
                 assert!(error_msg.contains("15-300"));

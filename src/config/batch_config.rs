@@ -10,13 +10,15 @@ pub struct BatchConfig {
     pub chunk_size: usize,
     pub memory_limit_mb: f64,
     // Chunking configurations to stay under PostgreSQL 65,535 parameter limit
-    pub heart_rate_chunk_size: usize,     // 6 params per record -> max 10,922
+    pub heart_rate_chunk_size: usize, // 6 params per record -> max 10,922
     pub blood_pressure_chunk_size: usize, // 6 params per record -> max 10,922
-    pub sleep_chunk_size: usize,          // 10 params per record -> max 6,553
-    pub activity_chunk_size: usize,       // 7 params per record -> max 9,362
-    pub workout_chunk_size: usize,        // 10 params per record -> max 6,553
-    pub enable_progress_tracking: bool,   // Track progress for large batches
+    pub sleep_chunk_size: usize,      // 10 params per record -> max 6,553
+    pub activity_chunk_size: usize,   // 7 params per record -> max 9,362
+    pub workout_chunk_size: usize,    // 10 params per record -> max 6,553
+    pub enable_progress_tracking: bool, // Track progress for large batches
     pub enable_intra_batch_deduplication: bool, // Enable deduplication within batches
+    // Dual-write configuration for activity_metrics migration
+    pub enable_dual_write_activity_metrics: bool, // Feature flag for dual-write pattern
 }
 
 impl Default for BatchConfig {
@@ -29,13 +31,14 @@ impl Default for BatchConfig {
             chunk_size: 1000,
             memory_limit_mb: 500.0,
             // Safe chunk sizes (80% of theoretical max for reliability)
-            heart_rate_chunk_size: 8000,      // 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000 (max ~48,000 params)
-            blood_pressure_chunk_size: 8000,  // 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000 (max ~48,000 params)
-            sleep_chunk_size: 5000,           // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000 (max ~50,000 params)
-            activity_chunk_size: 7000,        // 7 params: 65,535 ÷ 7 × 0.8 ≈ 7,000 (max ~49,000 params)
-            workout_chunk_size: 5000,         // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000 (max ~50,000 params)
+            heart_rate_chunk_size: 8000, // 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000 (max ~48,000 params)
+            blood_pressure_chunk_size: 8000, // 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000 (max ~48,000 params)
+            sleep_chunk_size: 5000, // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000 (max ~50,000 params)
+            activity_chunk_size: 7000, // 7 params: 65,535 ÷ 7 × 0.8 ≈ 7,000 (max ~49,000 params)
+            workout_chunk_size: 5000, // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000 (max ~50,000 params)
             enable_progress_tracking: true,
             enable_intra_batch_deduplication: true, // Enable by default for performance
+            enable_dual_write_activity_metrics: false, // Disabled by default for safe rollout
         }
     }
 }
@@ -97,6 +100,10 @@ impl BatchConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(true),
+            enable_dual_write_activity_metrics: env::var("DUAL_WRITE_ACTIVITY_METRICS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(false),
         }
     }
 

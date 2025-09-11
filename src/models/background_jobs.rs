@@ -13,25 +13,25 @@ pub struct ProcessingJob {
     pub status: String,
     pub job_type: String,
     pub priority: i32,
-    
+
     // Progress tracking
     pub total_metrics: i32,
     pub processed_metrics: i32,
     pub failed_metrics: i32,
     pub progress_percentage: f64,
-    
+
     // Timing information
     pub created_at: DateTime<Utc>,
     pub started_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
     pub estimated_completion_at: Option<DateTime<Utc>>,
-    
+
     // Error handling
     pub error_message: Option<String>,
     pub retry_count: i32,
     pub max_retries: i32,
     pub last_retry_at: Option<DateTime<Utc>>,
-    
+
     // Configuration and results
     pub config: serde_json::Value,
     pub result_summary: Option<serde_json::Value>,
@@ -51,7 +51,7 @@ impl JobStatus {
     pub fn as_str(&self) -> &'static str {
         match self {
             JobStatus::Pending => "pending",
-            JobStatus::Processing => "processing", 
+            JobStatus::Processing => "processing",
             JobStatus::Completed => "completed",
             JobStatus::Failed => "failed",
         }

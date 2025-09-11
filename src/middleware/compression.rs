@@ -1,8 +1,8 @@
 use actix_web::{
     body::MessageBody,
     dev::{ServiceRequest, ServiceResponse, Transform},
-    http::header::{HeaderName, HeaderValue, CACHE_CONTROL, CONTENT_ENCODING, ETAG, EXPIRES},
-    Error, HttpMessage, HttpResponse, Result,
+    http::header::{HeaderName, HeaderValue, CACHE_CONTROL, ETAG, EXPIRES},
+    Error, Result,
 };
 use futures_util::future::{ready, Ready};
 use std::{

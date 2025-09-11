@@ -1,6 +1,6 @@
+use crate::config::ValidationConfig;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use crate::config::ValidationConfig;
 
 /// Heart rate metric with validation
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -46,6 +46,42 @@ pub struct ActivityMetric {
     pub calories_burned: Option<f64>,
     pub active_minutes: Option<i32>,
     pub flights_climbed: Option<i32>,
+    pub source: Option<String>,
+}
+
+/// Activity metrics v2 with Apple Health schema fields
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct ActivityMetricV2 {
+    pub recorded_at: DateTime<Utc>,
+    
+    // Basic Activity Fields (from Apple Health)
+    pub step_count: Option<i32>,
+    pub flights_climbed: Option<i32>,
+    
+    // Distance Fields by Activity Type
+    pub distance_walking_running_meters: Option<f64>,
+    pub distance_cycling_meters: Option<f64>,
+    pub distance_swimming_meters: Option<f64>,
+    pub distance_wheelchair_meters: Option<f64>,
+    pub distance_downhill_snow_sports_meters: Option<f64>,
+    
+    // Additional Activity Counts
+    pub push_count: Option<i32>,  // wheelchair pushes
+    pub swimming_stroke_count: Option<i32>,
+    pub nike_fuel: Option<f64>,  // Nike Fuel points
+    
+    // Energy Fields (Apple Health standard names)
+    pub active_energy_burned_kcal: Option<f64>,
+    pub basal_energy_burned_kcal: Option<f64>,
+    
+    // Apple Fitness Ring Metrics
+    pub exercise_time_minutes: Option<i32>,
+    pub stand_time_minutes: Option<i32>,
+    pub move_time_minutes: Option<i32>,
+    pub stand_hour_achieved: Option<bool>,
+    
+    // Data tracking and aggregation
+    pub aggregation_period: Option<String>, // 'minute', 'hourly', 'daily', 'weekly'
     pub source: Option<String>,
 }
 
@@ -339,7 +375,9 @@ impl SleepMetric {
         }
 
         let calculated_duration = (self.sleep_end - self.sleep_start).num_minutes() as i32;
-        if (self.total_sleep_minutes - calculated_duration).abs() > config.sleep_duration_tolerance_minutes {
+        if (self.total_sleep_minutes - calculated_duration).abs()
+            > config.sleep_duration_tolerance_minutes
+        {
             return Err(format!(
                 "total_sleep_minutes doesn't match sleep duration (tolerance: {} minutes)",
                 config.sleep_duration_tolerance_minutes
@@ -427,6 +465,173 @@ impl ActivityMetric {
             }
         }
         Ok(())
+    }
+}
+
+impl ActivityMetricV2 {
+    pub fn validate(&self) -> Result<(), String> {
+        self.validate_with_config(&ValidationConfig::default())
+    }
+
+    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
+        // Step count validation
+        if let Some(steps) = self.step_count {
+            if steps < config.steps_min || steps > config.steps_max {
+                return Err(format!(
+                    "step_count {} is out of range ({}-{})",
+                    steps, config.steps_min, config.steps_max
+                ));
+            }
+        }
+
+        // Flights climbed validation
+        if let Some(flights) = self.flights_climbed {
+            if flights < 0 || flights > 10000 {
+                return Err(format!(
+                    "flights_climbed {} is out of range (0-10000)",
+                    flights
+                ));
+            }
+        }
+
+        // Distance validations - all should be non-negative
+        let distance_fields = [
+            ("distance_walking_running_meters", self.distance_walking_running_meters),
+            ("distance_cycling_meters", self.distance_cycling_meters),
+            ("distance_swimming_meters", self.distance_swimming_meters),
+            ("distance_wheelchair_meters", self.distance_wheelchair_meters),
+            ("distance_downhill_snow_sports_meters", self.distance_downhill_snow_sports_meters),
+        ];
+
+        for (field_name, distance_opt) in distance_fields {
+            if let Some(distance) = distance_opt {
+                if distance < 0.0 {
+                    return Err(format!("{} cannot be negative", field_name));
+                }
+                let distance_km = distance / 1000.0;
+                if distance_km > config.distance_max_km {
+                    return Err(format!(
+                        "{} {} km exceeds maximum of {} km",
+                        field_name, distance_km, config.distance_max_km
+                    ));
+                }
+            }
+        }
+
+        // Activity count validations
+        if let Some(push_count) = self.push_count {
+            if push_count < 0 || push_count > 50000 {
+                return Err(format!(
+                    "push_count {} is out of range (0-50000)",
+                    push_count
+                ));
+            }
+        }
+
+        if let Some(stroke_count) = self.swimming_stroke_count {
+            if stroke_count < 0 || stroke_count > 100000 {
+                return Err(format!(
+                    "swimming_stroke_count {} is out of range (0-100000)",
+                    stroke_count
+                ));
+            }
+        }
+
+        if let Some(nike_fuel) = self.nike_fuel {
+            if nike_fuel < 0.0 || nike_fuel > 50000.0 {
+                return Err(format!(
+                    "nike_fuel {} is out of range (0-50000)",
+                    nike_fuel
+                ));
+            }
+        }
+
+        // Energy validations
+        if let Some(active_energy) = self.active_energy_burned_kcal {
+            if active_energy < 0.0 || active_energy > config.calories_max {
+                return Err(format!(
+                    "active_energy_burned_kcal {} is out of range (0-{})",
+                    active_energy, config.calories_max
+                ));
+            }
+        }
+
+        if let Some(basal_energy) = self.basal_energy_burned_kcal {
+            if basal_energy < 0.0 || basal_energy > 10000.0 {
+                return Err(format!(
+                    "basal_energy_burned_kcal {} is out of range (0-10000)",
+                    basal_energy
+                ));
+            }
+        }
+
+        // Apple Fitness ring validations (minutes should be within daily range)
+        let time_fields = [
+            ("exercise_time_minutes", self.exercise_time_minutes),
+            ("stand_time_minutes", self.stand_time_minutes),
+            ("move_time_minutes", self.move_time_minutes),
+        ];
+
+        for (field_name, time_opt) in time_fields {
+            if let Some(minutes) = time_opt {
+                if minutes < 0 || minutes > 1440 { // 1440 minutes = 24 hours
+                    return Err(format!(
+                        "{} {} is out of range (0-1440 minutes)",
+                        field_name, minutes
+                    ));
+                }
+            }
+        }
+
+        // Aggregation period validation
+        if let Some(ref period) = self.aggregation_period {
+            if !["minute", "hourly", "daily", "weekly"].contains(&period.as_str()) {
+                return Err(format!(
+                    "aggregation_period '{}' must be one of: minute, hourly, daily, weekly",
+                    period
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Convert ActivityMetric to ActivityMetricV2 with field mapping
+    pub fn from_activity_metric(metric: &ActivityMetric) -> Self {
+        Self {
+            recorded_at: metric.date.and_hms_opt(12, 0, 0).unwrap().and_utc(), // Convert date to datetime at noon UTC
+            step_count: metric.steps,
+            flights_climbed: metric.flights_climbed,
+            distance_walking_running_meters: metric.distance_meters,
+            distance_cycling_meters: None,
+            distance_swimming_meters: None,
+            distance_wheelchair_meters: None,
+            distance_downhill_snow_sports_meters: None,
+            push_count: None,
+            swimming_stroke_count: None,
+            nike_fuel: None,
+            active_energy_burned_kcal: metric.calories_burned,
+            basal_energy_burned_kcal: None,
+            exercise_time_minutes: metric.active_minutes,
+            stand_time_minutes: None,
+            move_time_minutes: None,
+            stand_hour_achieved: None,
+            aggregation_period: Some("daily".to_string()),
+            source: metric.source.clone(),
+        }
+    }
+
+    /// Convert ActivityMetricV2 to ActivityMetric for backward compatibility
+    pub fn to_activity_metric(&self) -> ActivityMetric {
+        ActivityMetric {
+            date: self.recorded_at.date_naive(),
+            steps: self.step_count,
+            distance_meters: self.distance_walking_running_meters,
+            calories_burned: self.active_energy_burned_kcal,
+            active_minutes: self.exercise_time_minutes,
+            flights_climbed: self.flights_climbed,
+            source: self.source.clone(),
+        }
     }
 }
 

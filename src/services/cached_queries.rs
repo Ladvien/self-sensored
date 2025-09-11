@@ -1,17 +1,15 @@
-use actix_web::{web, HttpResponse, Result};
+use actix_web::Result;
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::time::Duration;
-use tracing::{error, info, instrument, warn};
+use tracing::{info, instrument};
 use uuid::Uuid;
 
 use crate::handlers::query::{
     get_activity_summary, get_blood_pressure_summary, get_heart_rate_summary, get_sleep_summary,
-    get_workout_summary, ActivitySummary, BloodPressureSummary, HealthSummary, HeartRateSummary,
-    QueryParams, QueryResponse, SleepSummary, WorkoutSummary,
+    get_workout_summary, HealthSummary, QueryParams, QueryResponse,
 };
-use crate::models::{db::*, ApiResponse};
+use crate::models::db::*;
 use crate::services::auth::AuthContext;
 use crate::services::cache::{generate_query_hash, CacheKey, CacheService};
 
@@ -180,18 +178,16 @@ impl CachedQueryService {
 
         let mut param_count = 2;
         if params.start_date.is_some() {
-            query.push_str(&format!(" AND recorded_at >= ${}", param_count));
+            query.push_str(&format!(" AND recorded_at >= ${param_count}"));
             param_count += 1;
         }
         if params.end_date.is_some() {
-            query.push_str(&format!(" AND recorded_at <= ${}", param_count));
+            query.push_str(&format!(" AND recorded_at <= ${param_count}"));
             param_count += 1;
         }
 
         query.push_str(&format!(
-            " ORDER BY recorded_at {} LIMIT ${} OFFSET ${}",
-            sort_order,
-            param_count,
+            " ORDER BY recorded_at {sort_order} LIMIT ${param_count} OFFSET ${}",
             param_count + 1
         ));
 
@@ -235,11 +231,11 @@ impl CachedQueryService {
         let mut param_count = 2;
 
         if params.start_date.is_some() {
-            query.push_str(&format!(" AND recorded_at >= ${}", param_count));
+            query.push_str(&format!(" AND recorded_at >= ${param_count}"));
             param_count += 1;
         }
         if params.end_date.is_some() {
-            query.push_str(&format!(" AND recorded_at <= ${}", param_count));
+            query.push_str(&format!(" AND recorded_at <= ${param_count}"));
         }
 
         let mut db_query = sqlx::query_scalar(&query).bind(user_id);

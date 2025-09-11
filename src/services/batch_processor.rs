@@ -1,13 +1,13 @@
 use futures::future::join_all;
 use sqlx::{PgPool, Postgres, QueryBuilder};
 use std::collections::{HashMap, HashSet};
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Semaphore;
 use tokio::time::sleep;
-use tracing::{error, info, instrument, warn};
+use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::config::BatchConfig;
@@ -111,7 +111,6 @@ pub enum ProcessingStatus {
     Retrying,
 }
 
-
 impl BatchProcessor {
     pub fn new(pool: PgPool) -> Self {
         // Limit concurrent DB operations to 10 (half of the 20 connection pool)
@@ -157,25 +156,6 @@ impl BatchProcessor {
 
         self.reset_counters();
 
-        let mut result = BatchProcessingResult {
-            processed_count: 0,
-            failed_count: 0,
-            errors: Vec::new(),
-            processing_time_ms: 0,
-            retry_attempts: 0,
-            memory_peak_mb: None,
-            chunk_progress: if self.config.enable_progress_tracking { 
-                Some(ChunkProgress {
-                    total_chunks: 0,
-                    completed_chunks: 0,
-                    metric_type_progress: HashMap::new(),
-                })
-            } else { 
-                None 
-            },
-            deduplication_stats: None,
-        };
-
         // Validate payload size first - total_metrics already calculated above
         info!(
             user_id = %user_id,
@@ -187,25 +167,26 @@ impl BatchProcessor {
         let mut grouped = self.group_metrics_by_type(payload.data.metrics);
         let mut all_workouts = std::mem::take(&mut grouped.workouts);
         all_workouts.extend(payload.data.workouts);
-        
+
         // Put workouts back into grouped for deduplication
         grouped.workouts = all_workouts;
 
         // Deduplicate metrics within the batch before database operations
-        let (deduplicated_grouped, dedup_stats) = self.deduplicate_grouped_metrics(user_id, grouped);
-        
+        let (deduplicated_grouped, dedup_stats) =
+            self.deduplicate_grouped_metrics(user_id, grouped);
+
         // Extract workouts after deduplication
         let all_workouts = deduplicated_grouped.workouts.clone();
 
         // Process in parallel if enabled, otherwise sequential
-        if self.config.enable_parallel_processing {
-            result = self.process_parallel(user_id, deduplicated_grouped, all_workouts).await;
+        let mut result = if self.config.enable_parallel_processing {
+            self.process_parallel(user_id, deduplicated_grouped, all_workouts)
+                .await
         } else {
-            result = self
-                .process_sequential(user_id, deduplicated_grouped, all_workouts)
-                .await;
-        }
-        
+            self.process_sequential(user_id, deduplicated_grouped, all_workouts)
+                .await
+        };
+
         // Add deduplication statistics to the result
         result.deduplication_stats = Some(dedup_stats);
 
@@ -225,7 +206,7 @@ impl BatchProcessor {
         if result.failed_count > 0 {
             Metrics::record_error("batch_processing", "/api/v1/ingest", "warning");
         }
-        
+
         // Record deduplication metrics
         if let Some(dedup_stats) = &result.deduplication_stats {
             if dedup_stats.total_duplicates > 0 {
@@ -233,9 +214,17 @@ impl BatchProcessor {
             }
         }
 
-        let dedup_info = result.deduplication_stats.as_ref().map(|s| s.total_duplicates).unwrap_or(0);
-        let dedup_time = result.deduplication_stats.as_ref().map(|s| s.deduplication_time_ms).unwrap_or(0);
-        
+        let dedup_info = result
+            .deduplication_stats
+            .as_ref()
+            .map(|s| s.total_duplicates)
+            .unwrap_or(0);
+        let dedup_time = result
+            .deduplication_stats
+            .as_ref()
+            .map(|s| s.deduplication_time_ms)
+            .unwrap_or(0);
+
         info!(
             user_id = %user_id,
             processed = result.processed_count,
@@ -267,14 +256,14 @@ impl BatchProcessor {
             processing_time_ms: 0,
             retry_attempts: 0,
             memory_peak_mb: None,
-            chunk_progress: if self.config.enable_progress_tracking { 
+            chunk_progress: if self.config.enable_progress_tracking {
                 Some(ChunkProgress {
                     total_chunks: 0,
                     completed_chunks: 0,
                     metric_type_progress: HashMap::new(),
                 })
-            } else { 
-                None 
+            } else {
+                None
             },
             deduplication_stats: None,
         };
@@ -291,7 +280,14 @@ impl BatchProcessor {
                 let _permit = semaphore.acquire().await.expect("Semaphore closed");
                 Self::process_with_retry(
                     "HeartRate",
-                    || Self::insert_heart_rates_chunked(&pool, user_id, heart_rates.clone(), chunk_size),
+                    || {
+                        Self::insert_heart_rates_chunked(
+                            &pool,
+                            user_id,
+                            heart_rates.clone(),
+                            chunk_size,
+                        )
+                    },
                     &config,
                 )
                 .await
@@ -306,7 +302,14 @@ impl BatchProcessor {
             tasks.push(tokio::spawn(async move {
                 Self::process_with_retry(
                     "BloodPressure",
-                    || Self::insert_blood_pressures_chunked(&pool, user_id, blood_pressures.clone(), chunk_size),
+                    || {
+                        Self::insert_blood_pressures_chunked(
+                            &pool,
+                            user_id,
+                            blood_pressures.clone(),
+                            chunk_size,
+                        )
+                    },
                     &config,
                 )
                 .await
@@ -321,7 +324,14 @@ impl BatchProcessor {
             tasks.push(tokio::spawn(async move {
                 Self::process_with_retry(
                     "Sleep",
-                    || Self::insert_sleep_metrics_chunked(&pool, user_id, sleep_metrics.clone(), chunk_size),
+                    || {
+                        Self::insert_sleep_metrics_chunked(
+                            &pool,
+                            user_id,
+                            sleep_metrics.clone(),
+                            chunk_size,
+                        )
+                    },
                     &config,
                 )
                 .await
@@ -336,7 +346,15 @@ impl BatchProcessor {
             tasks.push(tokio::spawn(async move {
                 Self::process_with_retry(
                     "Activity",
-                    || Self::insert_activities_chunked(&pool, user_id, activities.clone(), chunk_size),
+                    || {
+                        Self::insert_activities_dual_write_static(
+                            &pool,
+                            user_id,
+                            activities.clone(),
+                            chunk_size,
+                            config.enable_dual_write_activity_metrics,
+                        )
+                    },
                     &config,
                 )
                 .await
@@ -400,14 +418,14 @@ impl BatchProcessor {
             processing_time_ms: 0,
             retry_attempts: 0,
             memory_peak_mb: None,
-            chunk_progress: if self.config.enable_progress_tracking { 
+            chunk_progress: if self.config.enable_progress_tracking {
                 Some(ChunkProgress {
                     total_chunks: 0,
                     completed_chunks: 0,
                     metric_type_progress: HashMap::new(),
                 })
-            } else { 
-                None 
+            } else {
+                None
             },
             deduplication_stats: None,
         };
@@ -457,12 +475,12 @@ impl BatchProcessor {
             result.retry_attempts += retries;
         }
 
-        // Process activity metrics
+        // Process activity metrics with dual-write support
         if !grouped.activities.is_empty() {
             let activities = std::mem::take(&mut grouped.activities);
             let (processed, failed, errors, retries) = Self::process_with_retry(
                 "Activity",
-                || self.insert_activities(user_id, activities.clone()),
+                || self.insert_activities_dual_write(user_id, activities.clone()),
                 &self.config,
             )
             .await;
@@ -668,9 +686,10 @@ impl BatchProcessor {
         grouped.heart_rates = self.deduplicate_heart_rates(user_id, grouped.heart_rates);
         stats.heart_rate_duplicates = original_hr_count - grouped.heart_rates.len();
 
-        // Deduplicate blood pressure metrics  
+        // Deduplicate blood pressure metrics
         let original_bp_count = grouped.blood_pressures.len();
-        grouped.blood_pressures = self.deduplicate_blood_pressures(user_id, grouped.blood_pressures);
+        grouped.blood_pressures =
+            self.deduplicate_blood_pressures(user_id, grouped.blood_pressures);
         stats.blood_pressure_duplicates = original_bp_count - grouped.blood_pressures.len();
 
         // Deduplicate sleep metrics
@@ -809,16 +828,20 @@ impl BatchProcessor {
                         existing.steps = Some(existing.steps.unwrap_or(0).max(steps));
                     }
                     if let Some(distance) = metric.distance_meters {
-                        existing.distance_meters = Some(existing.distance_meters.unwrap_or(0.0).max(distance));
+                        existing.distance_meters =
+                            Some(existing.distance_meters.unwrap_or(0.0).max(distance));
                     }
                     if let Some(calories) = metric.calories_burned {
-                        existing.calories_burned = Some(existing.calories_burned.unwrap_or(0.0).max(calories));
+                        existing.calories_burned =
+                            Some(existing.calories_burned.unwrap_or(0.0).max(calories));
                     }
                     if let Some(active_minutes) = metric.active_minutes {
-                        existing.active_minutes = Some(existing.active_minutes.unwrap_or(0).max(active_minutes));
+                        existing.active_minutes =
+                            Some(existing.active_minutes.unwrap_or(0).max(active_minutes));
                     }
                     if let Some(flights) = metric.flights_climbed {
-                        existing.flights_climbed = Some(existing.flights_climbed.unwrap_or(0).max(flights));
+                        existing.flights_climbed =
+                            Some(existing.flights_climbed.unwrap_or(0).max(flights));
                     }
                     // Keep the most recent source or first non-null source
                     if metric.source.is_some() {
@@ -863,7 +886,13 @@ impl BatchProcessor {
         user_id: Uuid,
         metrics: Vec<crate::models::HeartRateMetric>,
     ) -> Result<usize, sqlx::Error> {
-        Self::insert_heart_rates_chunked(&self.pool, user_id, metrics, self.config.heart_rate_chunk_size).await
+        Self::insert_heart_rates_chunked(
+            &self.pool,
+            user_id,
+            metrics,
+            self.config.heart_rate_chunk_size,
+        )
+        .await
     }
 
     /// Batch insert blood pressure metrics
@@ -872,7 +901,13 @@ impl BatchProcessor {
         user_id: Uuid,
         metrics: Vec<crate::models::BloodPressureMetric>,
     ) -> Result<usize, sqlx::Error> {
-        Self::insert_blood_pressures_chunked(&self.pool, user_id, metrics, self.config.blood_pressure_chunk_size).await
+        Self::insert_blood_pressures_chunked(
+            &self.pool,
+            user_id,
+            metrics,
+            self.config.blood_pressure_chunk_size,
+        )
+        .await
     }
 
     /// Batch insert sleep metrics
@@ -881,7 +916,13 @@ impl BatchProcessor {
         user_id: Uuid,
         metrics: Vec<crate::models::SleepMetric>,
     ) -> Result<usize, sqlx::Error> {
-        Self::insert_sleep_metrics_chunked(&self.pool, user_id, metrics, self.config.sleep_chunk_size).await
+        Self::insert_sleep_metrics_chunked(
+            &self.pool,
+            user_id,
+            metrics,
+            self.config.sleep_chunk_size,
+        )
+        .await
     }
 
     /// Batch insert activity metrics (daily aggregates)
@@ -890,7 +931,13 @@ impl BatchProcessor {
         user_id: Uuid,
         metrics: Vec<crate::models::ActivityMetric>,
     ) -> Result<usize, sqlx::Error> {
-        Self::insert_activities_chunked(&self.pool, user_id, metrics, self.config.activity_chunk_size).await
+        Self::insert_activities_chunked(
+            &self.pool,
+            user_id,
+            metrics,
+            self.config.activity_chunk_size,
+        )
+        .await
     }
 
     /// Batch insert workout records
@@ -899,7 +946,13 @@ impl BatchProcessor {
         user_id: Uuid,
         workouts: Vec<crate::models::WorkoutData>,
     ) -> Result<usize, sqlx::Error> {
-        Self::insert_workouts_chunked(&self.pool, user_id, workouts, self.config.workout_chunk_size).await
+        Self::insert_workouts_chunked(
+            &self.pool,
+            user_id,
+            workouts,
+            self.config.workout_chunk_size,
+        )
+        .await
     }
 
     /// Static version of insert_heart_rates for parallel processing with chunking
@@ -914,7 +967,7 @@ impl BatchProcessor {
 
         // Use safe default chunking to prevent parameter limit errors
         let chunk_size = 8000; // Safe default for heart rate (6 params per record)
-        
+
         Self::insert_heart_rates_chunked(pool, user_id, metrics, chunk_size).await
     }
 
@@ -931,19 +984,23 @@ impl BatchProcessor {
 
         let mut total_inserted = 0;
         let chunks: Vec<_> = metrics.chunks(chunk_size).collect();
-        
+
         // Validate parameter count to prevent PostgreSQL limit errors
         let max_params_per_chunk = chunk_size * 6; // 6 params per heart rate record
-        if max_params_per_chunk > 52428 { // Safe limit (80% of 65,535)
-            return Err(sqlx::Error::Configuration(format!(
-                "Chunk size {} would result in {} parameters, exceeding safe limit",
-                chunk_size, max_params_per_chunk
-            ).into()));
+        if max_params_per_chunk > 52428 {
+            // Safe limit (80% of 65,535)
+            return Err(sqlx::Error::Configuration(
+                format!(
+                    "Chunk size {} would result in {} parameters, exceeding safe limit",
+                    chunk_size, max_params_per_chunk
+                )
+                .into(),
+            ));
         }
-        
+
         // AUDIT-007: Record parameter usage for monitoring
         Metrics::record_batch_parameter_usage("heart_rate", "chunked_insert", max_params_per_chunk);
-        
+
         info!(
             metric_type = "heart_rate",
             total_records = metrics.len(),
@@ -960,12 +1017,12 @@ impl BatchProcessor {
 
             query_builder.push_values(chunk.iter(), |mut b, metric| {
                 let heart_rate = metric.avg_bpm.or(metric.max_bpm).unwrap_or(0);
-                let resting_heart_rate = if metric.min_bpm.is_some() && metric.min_bpm != metric.avg_bpm
-                {
-                    metric.min_bpm
-                } else {
-                    None
-                };
+                let resting_heart_rate =
+                    if metric.min_bpm.is_some() && metric.min_bpm != metric.avg_bpm {
+                        metric.min_bpm
+                    } else {
+                        None
+                    };
 
                 b.push_bind(user_id)
                     .push_bind(metric.recorded_at)
@@ -1005,7 +1062,7 @@ impl BatchProcessor {
 
         // Use safe default chunking to prevent parameter limit errors
         let chunk_size = 8000; // Safe default for blood pressure (6 params per record)
-        
+
         Self::insert_blood_pressures_chunked(pool, user_id, metrics, chunk_size).await
     }
 
@@ -1022,19 +1079,27 @@ impl BatchProcessor {
 
         let mut total_inserted = 0;
         let chunks: Vec<_> = metrics.chunks(chunk_size).collect();
-        
+
         // Validate parameter count to prevent PostgreSQL limit errors
         let max_params_per_chunk = chunk_size * 6; // 6 params per blood pressure record
-        if max_params_per_chunk > 52428 { // Safe limit (80% of 65,535)
-            return Err(sqlx::Error::Configuration(format!(
-                "Chunk size {} would result in {} parameters, exceeding safe limit",
-                chunk_size, max_params_per_chunk
-            ).into()));
+        if max_params_per_chunk > 52428 {
+            // Safe limit (80% of 65,535)
+            return Err(sqlx::Error::Configuration(
+                format!(
+                    "Chunk size {} would result in {} parameters, exceeding safe limit",
+                    chunk_size, max_params_per_chunk
+                )
+                .into(),
+            ));
         }
-        
+
         // AUDIT-007: Record parameter usage for monitoring
-        Metrics::record_batch_parameter_usage("blood_pressure", "chunked_insert", max_params_per_chunk);
-        
+        Metrics::record_batch_parameter_usage(
+            "blood_pressure",
+            "chunked_insert",
+            max_params_per_chunk,
+        );
+
         info!(
             metric_type = "blood_pressure",
             total_records = metrics.len(),
@@ -1088,7 +1153,7 @@ impl BatchProcessor {
 
         // Use safe default chunking to prevent parameter limit errors
         let chunk_size = 5000; // Safe default for sleep (10 params per record)
-        
+
         Self::insert_sleep_metrics_chunked(pool, user_id, metrics, chunk_size).await
     }
 
@@ -1105,19 +1170,23 @@ impl BatchProcessor {
 
         let mut total_inserted = 0;
         let chunks: Vec<_> = metrics.chunks(chunk_size).collect();
-        
+
         // Validate parameter count to prevent PostgreSQL limit errors
         let max_params_per_chunk = chunk_size * 10; // 10 params per sleep record
-        if max_params_per_chunk > 52428 { // Safe limit (80% of 65,535)
-            return Err(sqlx::Error::Configuration(format!(
-                "Chunk size {} would result in {} parameters, exceeding safe limit",
-                chunk_size, max_params_per_chunk
-            ).into()));
+        if max_params_per_chunk > 52428 {
+            // Safe limit (80% of 65,535)
+            return Err(sqlx::Error::Configuration(
+                format!(
+                    "Chunk size {} would result in {} parameters, exceeding safe limit",
+                    chunk_size, max_params_per_chunk
+                )
+                .into(),
+            ));
         }
-        
+
         // AUDIT-007: Record parameter usage for monitoring
         Metrics::record_batch_parameter_usage("sleep", "chunked_insert", max_params_per_chunk);
-        
+
         info!(
             metric_type = "sleep",
             total_records = metrics.len(),
@@ -1136,13 +1205,16 @@ impl BatchProcessor {
                 let duration_minutes = metric.total_sleep_minutes;
                 let efficiency = metric.efficiency_percentage.map(|e| e as f64);
                 // Calculate light sleep as remainder if not provided
-                let light_sleep = if let (Some(deep), Some(rem), Some(awake)) = 
-                    (metric.deep_sleep_minutes, metric.rem_sleep_minutes, metric.awake_minutes) {
+                let light_sleep = if let (Some(deep), Some(rem), Some(awake)) = (
+                    metric.deep_sleep_minutes,
+                    metric.rem_sleep_minutes,
+                    metric.awake_minutes,
+                ) {
                     Some(duration_minutes - deep - rem - awake)
                 } else {
                     None
                 };
-                
+
                 b.push_bind(user_id)
                     .push_bind(metric.sleep_start)
                     .push_bind(metric.sleep_end)
@@ -1192,7 +1264,7 @@ impl BatchProcessor {
 
         // Use safe default chunking to prevent parameter limit errors
         let chunk_size = 7000; // Safe default for activity (7 params per record)
-        
+
         Self::insert_activities_chunked(pool, user_id, metrics, chunk_size).await
     }
 
@@ -1209,19 +1281,23 @@ impl BatchProcessor {
 
         let mut total_inserted = 0;
         let chunks: Vec<_> = metrics.chunks(chunk_size).collect();
-        
+
         // Validate parameter count to prevent PostgreSQL limit errors
         let max_params_per_chunk = chunk_size * 7; // 7 params per activity record
-        if max_params_per_chunk > 52428 { // Safe limit (80% of 65,535)
-            return Err(sqlx::Error::Configuration(format!(
-                "Chunk size {} would result in {} parameters, exceeding safe limit",
-                chunk_size, max_params_per_chunk
-            ).into()));
+        if max_params_per_chunk > 52428 {
+            // Safe limit (80% of 65,535)
+            return Err(sqlx::Error::Configuration(
+                format!(
+                    "Chunk size {} would result in {} parameters, exceeding safe limit",
+                    chunk_size, max_params_per_chunk
+                )
+                .into(),
+            ));
         }
-        
+
         // AUDIT-007: Record parameter usage for monitoring
         Metrics::record_batch_parameter_usage("activity", "chunked_insert", max_params_per_chunk);
-        
+
         info!(
             metric_type = "activity",
             total_records = metrics.len(),
@@ -1277,7 +1353,7 @@ impl BatchProcessor {
 
         // Use safe default chunking to prevent parameter limit errors
         let chunk_size = 5000; // Safe default for workouts (10 params per record)
-        
+
         Self::insert_workouts_chunked(pool, user_id, workouts, chunk_size).await
     }
 
@@ -1294,19 +1370,23 @@ impl BatchProcessor {
 
         let mut total_inserted = 0;
         let chunks: Vec<_> = workouts.chunks(chunk_size).collect();
-        
+
         // Validate parameter count to prevent PostgreSQL limit errors
         let max_params_per_chunk = chunk_size * 10; // 10 params per workout record
-        if max_params_per_chunk > 52428 { // Safe limit (80% of 65,535)
-            return Err(sqlx::Error::Configuration(format!(
-                "Chunk size {} would result in {} parameters, exceeding safe limit",
-                chunk_size, max_params_per_chunk
-            ).into()));
+        if max_params_per_chunk > 52428 {
+            // Safe limit (80% of 65,535)
+            return Err(sqlx::Error::Configuration(
+                format!(
+                    "Chunk size {} would result in {} parameters, exceeding safe limit",
+                    chunk_size, max_params_per_chunk
+                )
+                .into(),
+            ));
         }
-        
+
         // AUDIT-007: Record parameter usage for monitoring
         Metrics::record_batch_parameter_usage("workout", "chunked_insert", max_params_per_chunk);
-        
+
         info!(
             metric_type = "workout",
             total_records = workouts.len(),
@@ -1356,6 +1436,349 @@ impl BatchProcessor {
         }
 
         Ok(total_inserted)
+    }
+
+    /// Dual-write insert for activity metrics - writes to both old and new tables with transaction rollback
+    async fn insert_activities_dual_write(
+        &self,
+        user_id: Uuid,
+        metrics: Vec<crate::models::ActivityMetric>,
+    ) -> Result<usize, sqlx::Error> {
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        if !self.config.enable_dual_write_activity_metrics {
+            // If dual-write is disabled, just write to the old table
+            return self.insert_activities(user_id, metrics).await;
+        }
+
+        let start_time = std::time::Instant::now();
+        
+        // Begin transaction for dual-write atomicity
+        let mut tx = self.pool.begin().await?;
+
+        info!(
+            user_id = %user_id,
+            metric_count = metrics.len(),
+            "Starting dual-write activity metrics transaction"
+        );
+
+        // Record dual-write metrics start
+        Metrics::record_dual_write_start("activity_metrics", metrics.len() as u64);
+
+        // Convert old metrics to new format for the v2 table
+        let v2_metrics: Vec<crate::models::ActivityMetricV2> = metrics
+            .iter()
+            .map(|metric| crate::models::ActivityMetricV2::from_activity_metric(metric))
+            .collect();
+
+        // Attempt to insert into both tables
+        let old_table_result = Self::insert_activities_chunked_tx(
+            &mut tx,
+            user_id,
+            metrics.clone(),
+            self.config.activity_chunk_size,
+        )
+        .await;
+
+        let new_table_result = Self::insert_activities_v2_chunked_tx(
+            &mut tx,
+            user_id,
+            v2_metrics,
+            self.config.activity_chunk_size,
+        )
+        .await;
+
+        match (old_table_result, new_table_result) {
+            (Ok(old_count), Ok(new_count)) => {
+                // Both insertions succeeded, commit transaction
+                tx.commit().await?;
+                
+                let duration = start_time.elapsed();
+                info!(
+                    user_id = %user_id,
+                    old_table_count = old_count,
+                    new_table_count = new_count,
+                    duration_ms = duration.as_millis(),
+                    "Dual-write activity metrics completed successfully"
+                );
+
+                // Record successful dual-write metrics
+                Metrics::record_dual_write_success("activity_metrics", old_count as u64, duration);
+                
+                Ok(old_count) // Return count from primary table
+            }
+            (old_result, new_result) => {
+                // At least one insertion failed, rollback transaction
+                tx.rollback().await?;
+                
+                let duration = start_time.elapsed();
+                error!(
+                    user_id = %user_id,
+                    old_table_error = ?old_result.as_ref().err(),
+                    new_table_error = ?new_result.as_ref().err(),
+                    duration_ms = duration.as_millis(),
+                    "Dual-write activity metrics failed, transaction rolled back"
+                );
+
+                // Record failed dual-write metrics
+                Metrics::record_dual_write_failure("activity_metrics", metrics.len() as u64, duration);
+
+                // Return the first error encountered
+                if let Err(old_error) = old_result {
+                    Err(old_error)
+                } else {
+                    new_result
+                }
+            }
+        }
+    }
+
+    /// Insert activity metrics into old table within transaction
+    async fn insert_activities_chunked_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        user_id: Uuid,
+        metrics: Vec<crate::models::ActivityMetric>,
+        chunk_size: usize,
+    ) -> Result<usize, sqlx::Error> {
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        let mut total_inserted = 0;
+        let chunks: Vec<_> = metrics.chunks(chunk_size).collect();
+
+        for (chunk_idx, chunk) in chunks.iter().enumerate() {
+            let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
+                "INSERT INTO activity_metrics (user_id, recorded_date, steps, distance_meters, calories_burned, active_minutes, flights_climbed, source_device) "
+            );
+
+            query_builder.push_values(chunk.iter(), |mut b, metric| {
+                b.push_bind(user_id)
+                    .push_bind(metric.date)
+                    .push_bind(metric.steps)
+                    .push_bind(metric.distance_meters)
+                    .push_bind(metric.calories_burned)
+                    .push_bind(metric.active_minutes)
+                    .push_bind(metric.flights_climbed)
+                    .push_bind(&metric.source);
+            });
+
+            query_builder.push(" ON CONFLICT (user_id, recorded_date) DO NOTHING");
+
+            let result = query_builder.build().execute(&mut **tx).await?;
+            let chunk_inserted = result.rows_affected() as usize;
+            total_inserted += chunk_inserted;
+
+            debug!(
+                chunk_index = chunk_idx + 1,
+                chunk_records = chunk.len(),
+                chunk_inserted = chunk_inserted,
+                total_inserted = total_inserted,
+                "Activity old table chunk processed in transaction"
+            );
+        }
+
+        Ok(total_inserted)
+    }
+
+    /// Insert activity metrics into new v2 table within transaction
+    async fn insert_activities_v2_chunked_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        user_id: Uuid,
+        metrics: Vec<crate::models::ActivityMetricV2>,
+        chunk_size: usize,
+    ) -> Result<usize, sqlx::Error> {
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        let mut total_inserted = 0;
+        let chunks: Vec<_> = metrics.chunks(chunk_size).collect();
+
+        // Calculate parameter count for v2 table (24 params per record based on schema)
+        let max_params_per_chunk = chunk_size * 24;
+        if max_params_per_chunk > 52428 {
+            return Err(sqlx::Error::Configuration(
+                format!(
+                    "V2 chunk size {} would result in {} parameters, exceeding safe limit",
+                    chunk_size, max_params_per_chunk
+                )
+                .into(),
+            ));
+        }
+
+        for (chunk_idx, chunk) in chunks.iter().enumerate() {
+            let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
+                "INSERT INTO activity_metrics_v2 (
+                    user_id, recorded_at, step_count, flights_climbed,
+                    distance_walking_running_meters, distance_cycling_meters, distance_swimming_meters,
+                    distance_wheelchair_meters, distance_downhill_snow_sports_meters,
+                    push_count, swimming_stroke_count, nike_fuel,
+                    active_energy_burned_kcal, basal_energy_burned_kcal,
+                    exercise_time_minutes, stand_time_minutes, move_time_minutes, stand_hour_achieved,
+                    aggregation_period, source, created_at
+                ) "
+            );
+
+            query_builder.push_values(chunk.iter(), |mut b, metric| {
+                b.push_bind(user_id)
+                    .push_bind(metric.recorded_at)
+                    .push_bind(metric.step_count)
+                    .push_bind(metric.flights_climbed)
+                    .push_bind(metric.distance_walking_running_meters)
+                    .push_bind(metric.distance_cycling_meters)
+                    .push_bind(metric.distance_swimming_meters)
+                    .push_bind(metric.distance_wheelchair_meters)
+                    .push_bind(metric.distance_downhill_snow_sports_meters)
+                    .push_bind(metric.push_count)
+                    .push_bind(metric.swimming_stroke_count)
+                    .push_bind(metric.nike_fuel)
+                    .push_bind(metric.active_energy_burned_kcal)
+                    .push_bind(metric.basal_energy_burned_kcal)
+                    .push_bind(metric.exercise_time_minutes)
+                    .push_bind(metric.stand_time_minutes)
+                    .push_bind(metric.move_time_minutes)
+                    .push_bind(metric.stand_hour_achieved)
+                    .push_bind(&metric.aggregation_period)
+                    .push_bind(&metric.source)
+                    .push_bind(chrono::Utc::now()); // created_at
+            });
+
+            query_builder.push(" ON CONFLICT (user_id, recorded_at) DO UPDATE SET
+                step_count = COALESCE(EXCLUDED.step_count, activity_metrics_v2.step_count),
+                flights_climbed = COALESCE(EXCLUDED.flights_climbed, activity_metrics_v2.flights_climbed),
+                distance_walking_running_meters = COALESCE(EXCLUDED.distance_walking_running_meters, activity_metrics_v2.distance_walking_running_meters),
+                distance_cycling_meters = COALESCE(EXCLUDED.distance_cycling_meters, activity_metrics_v2.distance_cycling_meters),
+                distance_swimming_meters = COALESCE(EXCLUDED.distance_swimming_meters, activity_metrics_v2.distance_swimming_meters),
+                distance_wheelchair_meters = COALESCE(EXCLUDED.distance_wheelchair_meters, activity_metrics_v2.distance_wheelchair_meters),
+                distance_downhill_snow_sports_meters = COALESCE(EXCLUDED.distance_downhill_snow_sports_meters, activity_metrics_v2.distance_downhill_snow_sports_meters),
+                push_count = COALESCE(EXCLUDED.push_count, activity_metrics_v2.push_count),
+                swimming_stroke_count = COALESCE(EXCLUDED.swimming_stroke_count, activity_metrics_v2.swimming_stroke_count),
+                nike_fuel = COALESCE(EXCLUDED.nike_fuel, activity_metrics_v2.nike_fuel),
+                active_energy_burned_kcal = COALESCE(EXCLUDED.active_energy_burned_kcal, activity_metrics_v2.active_energy_burned_kcal),
+                basal_energy_burned_kcal = COALESCE(EXCLUDED.basal_energy_burned_kcal, activity_metrics_v2.basal_energy_burned_kcal),
+                exercise_time_minutes = COALESCE(EXCLUDED.exercise_time_minutes, activity_metrics_v2.exercise_time_minutes),
+                stand_time_minutes = COALESCE(EXCLUDED.stand_time_minutes, activity_metrics_v2.stand_time_minutes),
+                move_time_minutes = COALESCE(EXCLUDED.move_time_minutes, activity_metrics_v2.move_time_minutes),
+                stand_hour_achieved = COALESCE(EXCLUDED.stand_hour_achieved, activity_metrics_v2.stand_hour_achieved),
+                aggregation_period = COALESCE(EXCLUDED.aggregation_period, activity_metrics_v2.aggregation_period),
+                source = COALESCE(EXCLUDED.source, activity_metrics_v2.source)");
+
+            let result = query_builder.build().execute(&mut **tx).await?;
+            let chunk_inserted = result.rows_affected() as usize;
+            total_inserted += chunk_inserted;
+
+            debug!(
+                chunk_index = chunk_idx + 1,
+                chunk_records = chunk.len(),
+                chunk_inserted = chunk_inserted,
+                total_inserted = total_inserted,
+                "Activity v2 table chunk processed in transaction"
+            );
+        }
+
+        Ok(total_inserted)
+    }
+
+    /// Static version of dual-write for parallel processing
+    async fn insert_activities_dual_write_static(
+        pool: &PgPool,
+        user_id: Uuid,
+        metrics: Vec<crate::models::ActivityMetric>,
+        chunk_size: usize,
+        enable_dual_write: bool,
+    ) -> Result<usize, sqlx::Error> {
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        if !enable_dual_write {
+            // If dual-write is disabled, just write to the old table
+            return Self::insert_activities_chunked(pool, user_id, metrics, chunk_size).await;
+        }
+
+        let start_time = std::time::Instant::now();
+        
+        // Begin transaction for dual-write atomicity
+        let mut tx = pool.begin().await?;
+
+        info!(
+            user_id = %user_id,
+            metric_count = metrics.len(),
+            "Starting static dual-write activity metrics transaction"
+        );
+
+        // Record dual-write metrics start
+        Metrics::record_dual_write_start("activity_metrics", metrics.len() as u64);
+
+        // Convert old metrics to new format for the v2 table
+        let v2_metrics: Vec<crate::models::ActivityMetricV2> = metrics
+            .iter()
+            .map(|metric| crate::models::ActivityMetricV2::from_activity_metric(metric))
+            .collect();
+
+        // Attempt to insert into both tables
+        let old_table_result = Self::insert_activities_chunked_tx(
+            &mut tx,
+            user_id,
+            metrics.clone(),
+            chunk_size,
+        )
+        .await;
+
+        let new_table_result = Self::insert_activities_v2_chunked_tx(
+            &mut tx,
+            user_id,
+            v2_metrics,
+            chunk_size,
+        )
+        .await;
+
+        match (old_table_result, new_table_result) {
+            (Ok(old_count), Ok(new_count)) => {
+                // Both insertions succeeded, commit transaction
+                tx.commit().await?;
+                
+                let duration = start_time.elapsed();
+                info!(
+                    user_id = %user_id,
+                    old_table_count = old_count,
+                    new_table_count = new_count,
+                    duration_ms = duration.as_millis(),
+                    "Static dual-write activity metrics completed successfully"
+                );
+
+                // Record successful dual-write metrics
+                Metrics::record_dual_write_success("activity_metrics", old_count as u64, duration);
+                
+                Ok(old_count) // Return count from primary table
+            }
+            (old_result, new_result) => {
+                // At least one insertion failed, rollback transaction
+                tx.rollback().await?;
+                
+                let duration = start_time.elapsed();
+                error!(
+                    user_id = %user_id,
+                    old_table_error = ?old_result.as_ref().err(),
+                    new_table_error = ?new_result.as_ref().err(),
+                    duration_ms = duration.as_millis(),
+                    "Static dual-write activity metrics failed, transaction rolled back"
+                );
+
+                // Record failed dual-write metrics
+                Metrics::record_dual_write_failure("activity_metrics", metrics.len() as u64, duration);
+
+                // Return the first error encountered
+                if let Err(old_error) = old_result {
+                    Err(old_error)
+                } else {
+                    new_result
+                }
+            }
+        }
     }
 }
 
