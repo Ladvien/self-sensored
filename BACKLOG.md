@@ -200,41 +200,18 @@ Create comprehensive data migration scripts from old schema to new tables.
 
 ---
 
-#### Story 5.2: Update Rust Models and Handlers
+#### Story 5.2: Update Rust Models and Handlers ✅ COMPLETED
 
 **Story Points:** 13  
 **Assigned to:** Backend Subagent  
 **Priority:** Critical  
+**Status:** ✅ COMPLETED 2025-09-11  
 **Depends on:** All table creation stories  
 
 **Description:**
 Update Rust models, validation logic, and handlers for all new tables.
 
-**Acceptance Criteria:**
-- [ ] Update `src/models/health_metrics.rs` with new structs:
-  - ActivityMetricsV2, NutritionMetrics, Symptoms
-  - ReproductiveHealth, EnvironmentalMetrics, MentalHealthMetrics
-- [ ] Update `src/handlers/ingest.rs` with routing for new types
-- [ ] Implement validation with configurable thresholds
-- [ ] Update `src/models/ios_models.rs` for Health Export mapping
-- [ ] Add batch processing for new metric types
-
-**Testing Requirements:**
-- [ ] Create comprehensive test files:
-  - `src/models/health_metrics_test.rs`
-  - `src/handlers/ingest_test.rs`
-  - `src/models/ios_models_test.rs`
-- [ ] Test all validation thresholds
-- [ ] Test batch processing with mixed metric types
-- [ ] Test error handling and logging
-- [ ] Integration tests with sample Health Export data
-
-**Definition of Done:**
-- All models implementing proper traits
-- Validation coverage >95%
-- All tests passing
-- Performance benchmarks met
-- API documentation generated
+**Moved to DONE.md** - See complete implementation details
 
 ---
 

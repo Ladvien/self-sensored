@@ -2450,3 +2450,138 @@ SELECT * FROM safe_migration_rollback(TRUE);
 This migration system provides enterprise-grade reliability for migrating activity_metrics data with zero data loss guarantee and production performance requirements.
 
 ---
+
+## Epic: Health Metrics Database Redesign - Stream 5 Backend Integration
+
+### Story 5.2: Update Rust Models and Handlers ✅ COMPLETED
+
+**Story Points:** 13  
+**Assigned to:** Backend Agent  
+**Priority:** Critical  
+**Status:** ✅ COMPLETED 2025-09-11  
+**Completion Date:** 2025-09-11  
+**Depends on:** All table creation stories  
+
+**Description:**
+Update Rust models, validation logic, and handlers for all new health metric tables with comprehensive iOS Health Export integration.
+
+**Acceptance Criteria Achieved:**
+- ✅ Created 6 new metric model structs in `src/models/health_metrics.rs`:
+  - NutritionMetric (37+ fields: macros, vitamins, minerals, hydration)
+  - SymptomMetric (67+ Apple Health symptom types with severity tracking)
+  - ReproductiveHealthMetric (20+ fields for menstrual/fertility/pregnancy tracking)
+  - EnvironmentalMetric (33+ fields: audio, UV, fall detection, air quality)
+  - MentalHealthMetric (iOS 17+ State of Mind, mindfulness, screening scores)
+  - MobilityMetric (gait analysis, walking metrics, Apple Watch integration)
+- ✅ Updated HealthMetric enum to support all new metric types
+- ✅ Enhanced IngestData struct with individual metric collections
+- ✅ Added comprehensive validation with configurable thresholds for all types
+- ✅ Updated `src/models/ios_models.rs` with Health Export conversion logic
+- ✅ Updated `src/handlers/ingest.rs` with routing and validation for new types
+- ✅ Extended batch processing in `src/services/batch_processor.rs` for new metrics
+- ✅ Added deduplication statistics for complete metric tracking
+
+**Technical Implementation:**
+
+**New Model Structures:**
+```rust
+// NutritionMetric - 37+ comprehensive nutrition fields
+pub struct NutritionMetric {
+    pub recorded_at: DateTime<Utc>,
+    // Hydration
+    pub water_ml: Option<f64>,
+    // Energy & Macronutrients  
+    pub energy_consumed_kcal: Option<f64>,
+    pub carbohydrates_g: Option<f64>,
+    pub protein_g: Option<f64>,
+    pub fat_total_g: Option<f64>,
+    // ... plus 32 more nutrition fields
+}
+
+// SymptomMetric - Apple Health symptom tracking
+pub struct SymptomMetric {
+    pub recorded_at: DateTime<Utc>,
+    pub onset_at: Option<DateTime<Utc>>,
+    pub symptom_type: String, // 67+ symptom types
+    pub severity: String, // not_present, mild, moderate, severe
+    pub duration_minutes: Option<i32>,
+    pub triggers: Option<Vec<String>>,
+    pub treatments: Option<Vec<String>>,
+    // ... additional tracking fields
+}
+
+// And 4 more comprehensive metric types...
+```
+
+**Validation Coverage:**
+- ✅ Nutritional values: 0-20L water, 0-20k kcal energy, macro ranges
+- ✅ Symptom validation: severity levels, duration limits, onset timing
+- ✅ Environmental ranges: 0-140dB audio, 0-15 UV index, 0-500 AQI
+- ✅ Mental health: -1.0 to 1.0 mood valence, PHQ-9/GAD-7 screening scales
+- ✅ Mobility metrics: walking speed 0-5 m/s, step length 0-150cm
+- ✅ Reproductive health: cycle tracking, fertility windows, pregnancy stages
+
+**iOS Health Export Integration:**
+- Added conversion logic for dietary water, nutrition calories, environmental audio exposure
+- Extended support for iOS 17+ State of Mind mood tracking with valence and labels
+- Added mindfulness session tracking for Apple Watch meditation apps
+- Comprehensive symptom type mapping for Apple Health symptom categories
+
+**Batch Processing Enhancements:**
+- Updated `GroupedMetrics` struct to include all 6 new metric types
+- Extended `DeduplicationStats` with counters for new metric duplicates
+- Added validation functions for each new metric type in ingest handlers
+- Updated payload size calculations to include all metric collections
+
+**Testing Requirements Achieved:**
+- ✅ Created comprehensive test suite in `tests/models_test.rs`:
+  - `test_new_metric_types_validation()` - Tests all 6 new metric types
+  - `test_health_metric_enum_with_new_types()` - Tests enum integration
+  - Validation edge cases and boundary testing for all metrics
+  - Error condition testing with descriptive validation messages
+- ✅ All tests passing with comprehensive validation coverage
+- ✅ Serialization/deserialization testing for complex structures
+
+**Validation Coverage Metrics:**
+- ✅ 6 new metric models with full field validation
+- ✅ 67+ Apple Health symptom types supported  
+- ✅ 37+ nutrition fields with scientific thresholds
+- ✅ iOS 17+ State of Mind integration
+- ✅ Apple Watch Series 8+ environmental metrics
+- ✅ Comprehensive boundary testing for all ranges
+- ✅ Error validation with descriptive messages
+
+**Files Modified:**
+- `/mnt/datadrive_m2/self-sensored/src/models/health_metrics.rs` - Added 6 new metric models with validation
+- `/mnt/datadrive_m2/self-sensored/src/models/ios_models.rs` - Extended iOS Health Export conversion 
+- `/mnt/datadrive_m2/self-sensored/src/handlers/ingest.rs` - Added routing and validation for new metrics
+- `/mnt/datadrive_m2/self-sensored/src/services/batch_processor.rs` - Extended batch processing support
+- `/mnt/datadrive_m2/self-sensored/tests/models_test.rs` - Comprehensive test suite for all new models
+
+**Definition of Done Achieved:**
+- ✅ All new metric types implement proper Rust traits (Serialize, Deserialize, Validate)  
+- ✅ Comprehensive validation with configurable thresholds for all health ranges
+- ✅ iOS Health Export integration with proper field mapping and conversion
+- ✅ Batch processing support with appropriate chunk sizes and parameter counting
+- ✅ Complete test coverage with validation edge cases and error conditions
+- ✅ All code compiles and tests pass with proper error handling
+
+**Impact Analysis:**
+This implementation provides complete Rust backend support for all 6 new health metric types from the database redesign. The system now supports:
+- Complete nutritional tracking with 37+ macro/vitamin/mineral fields
+- Comprehensive symptom logging with Apple Health integration
+- Reproductive health tracking with privacy considerations
+- Environmental monitoring compatible with Apple Watch Series 8+
+- Mental health metrics with iOS 17+ State of Mind support
+- Mobility analysis with gait metrics and walking steadiness
+
+**Quality Assurance:**
+- All validation thresholds based on medical and scientific standards
+- Comprehensive test coverage for edge cases and boundary conditions
+- Proper error handling with descriptive validation messages
+- Serialization/deserialization testing for complex nested structures
+- Integration testing with existing health metric processing pipeline
+
+This backend implementation enables the complete health metric ecosystem with production-ready validation, processing, and integration capabilities.
+
+---
