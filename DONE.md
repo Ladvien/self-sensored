@@ -1803,3 +1803,77 @@ Addresses Cloudflare 520 errors through:
 **Impact Analysis:** Provides developers with accurate API documentation that matches the implemented system, reducing integration issues and support requests. The troubleshooting guide enables self-service problem resolution for common scenarios.
 
 ---
+
+### [Story 2.1] Create Nutrition Metrics Table ✅
+**Status:** COMPLETED  
+**Priority:** High (8 story points)  
+**Completion Date:** 2025-09-11  
+**Agent:** Database Subagent  
+
+**Description:**
+Created comprehensive nutrition_metrics table supporting 37+ nutrition fields from Apple Health Export with complete macronutrient, vitamin, and mineral tracking.
+
+**Acceptance Criteria Achieved:**
+- ✅ Created migration `migrations/0013_create_nutrition_metrics.sql` with:
+  - Complete Apple Health nutrition schema with 37+ fields
+  - Comprehensive hydration tracking (water_ml with 0-20L validation)
+  - All macronutrients: carbohydrates, protein, fats (total/saturated/mono/poly), fiber, sugar, cholesterol, sodium
+  - Complete vitamin fields: A, D, E, K, C, B-complex (B1, B2, B3, B5, B6, B7, B9, B12)
+  - Complete mineral fields: calcium, iron, magnesium, potassium, zinc, selenium, copper, manganese, iodine, etc.
+  - Caffeine tracking for stimulant intake monitoring
+- ✅ Applied proper decimal precision (NUMERIC(8,2) standard, NUMERIC(8,3) for trace elements)
+- ✅ Implemented comprehensive validation constraints based on nutritional upper limits
+- ✅ Added unique constraint on (user_id, recorded_at)
+- ✅ Implemented monthly partitioning with 3-month ahead creation
+- ✅ Added BRIN indexes for time-series optimization
+
+**Testing Requirements Achieved:**
+- ✅ Created `tests/migrations/0013_create_nutrition_metrics_test.rs` with 17 comprehensive test scenarios
+- ✅ Test all 37+ field validations including edge cases and boundary conditions
+- ✅ Test decimal precision handling for trace elements (3 decimals) vs standard nutrients (2 decimals)
+- ✅ Test negative value constraints preventing impossible nutritional values
+- ✅ Test partition management with automatic creation and maintenance
+- ✅ Performance benchmark validates 100 insert operations in under 5 seconds
+- ✅ Test aggregation period enum validation (meal/daily/weekly)
+- ✅ Test comprehensive data integrity across all nutrition field types
+
+**Technical Implementation:**
+- **Complete Apple Health Field Mapping**: 37 nutrition fields matching Apple Health identifiers
+- **Nutritional Science Validation**: Upper limit constraints based on established nutritional science
+- **Precision Optimization**: NUMERIC(8,2) for most fields, NUMERIC(8,3) for trace vitamins/minerals
+- **Time-Series Optimization**: Monthly partitioning with BRIN indexes for optimal query performance
+- **Daily Summary View**: Aggregation view for nutrition analysis and reporting
+- **Performance Functions**: Monitoring and partition management functions
+- **Safe Deployment**: Complete rollback migration for production safety
+
+**Files Created:**
+- `/mnt/datadrive_m2/self-sensored/migrations/0013_create_nutrition_metrics.sql` - Main migration (365 lines)
+- `/mnt/datadrive_m2/self-sensored/migrations/0013_create_nutrition_metrics_rollback.sql` - Rollback migration (145 lines)
+- `/mnt/datadrive_m2/self-sensored/tests/migrations/0013_create_nutrition_metrics_test.rs` - Test suite (560+ lines)
+
+**Nutrition Fields Implemented (37 total):**
+- **Hydration**: water_ml
+- **Energy & Macros (11)**: energy_consumed_kcal, carbohydrates_g, protein_g, fat_total_g, fat_saturated_g, fat_monounsaturated_g, fat_polyunsaturated_g, cholesterol_mg, fiber_g, sugar_g, sodium_mg
+- **Vitamins (13)**: vitamin_a_mcg, vitamin_d_mcg, vitamin_e_mg, vitamin_k_mcg, vitamin_c_mg, thiamin_mg, riboflavin_mg, niacin_mg, pantothenic_acid_mg, vitamin_b6_mg, biotin_mcg, folate_mcg, vitamin_b12_mcg
+- **Minerals (12)**: calcium_mg, phosphorus_mg, magnesium_mg, potassium_mg, chloride_mg, iron_mg, zinc_mg, copper_mg, manganese_mg, iodine_mcg, selenium_mcg, chromium_mcg, molybdenum_mcg
+- **Other**: caffeine_mg
+
+**Definition of Done Achieved:**
+- All 37 nutrition fields implemented following Apple Health specifications
+- Validation rules based on established nutritional upper limits prevent dangerous values
+- Performance benchmarks documented and validated (100 records < 5s)
+- Sample data imports successfully with proper constraint validation
+- Monthly partitioning ensures scalable time-series storage
+- Comprehensive test coverage provides confidence for production deployment
+- Rollback migration tested and validated for safe deployment
+
+**Database Design Excellence:**
+- Comprehensive constraint system prevents nutritionally impossible values
+- Optimized decimal precision balances storage efficiency with accuracy requirements
+- Monthly partitioning with BRIN indexes provides optimal time-series query performance
+- Daily summary view enables efficient nutrition analysis and reporting
+- Complete audit trail with raw_data preservation for debugging and compliance
+
+**Impact Analysis:** Enables comprehensive nutrition tracking for health applications, supporting detailed dietary analysis, meal planning, and nutritional goal tracking. The implementation follows Apple Health standards while providing robust validation and scalable storage architecture.
+
+---

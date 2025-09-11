@@ -51,40 +51,43 @@ Implement dual-write logic to write to both old and new activity_metrics tables 
 
 ---
 
-#### Story 2.1: Create Nutrition Metrics Table
+#### Story 2.1: Create Nutrition Metrics Table ✅ COMPLETED
 
 **Story Points:** 8  
 **Assigned to:** Database Subagent  
 **Priority:** High  
+**Status:** ✅ COMPLETED 2025-09-11  
 
 **Description:**
-Implement comprehensive nutrition_metrics table supporting 35+ nutrition fields from Health Export.
+Implement comprehensive nutrition_metrics table supporting 37+ nutrition fields from Health Export.
 
 **Acceptance Criteria:**
-- [ ] Create migration `migrations/0012_create_nutrition_metrics.sql` with:
+- ✅ Create migration `migrations/0013_create_nutrition_metrics.sql` with:
   - Macronutrients (protein, carbs, fats with subtypes)
   - Hydration tracking (water_ml)
   - Complete vitamin fields (A, B complex, C, D, E, K)
   - Complete mineral fields (calcium, iron, magnesium, etc.)
   - Proper decimal precision for each field type
-- [ ] Add unique constraint on (user_id, recorded_at)
-- [ ] Implement monthly partitioning
-- [ ] Add BRIN indexes
+- ✅ Add unique constraint on (user_id, recorded_at)
+- ✅ Implement monthly partitioning
+- ✅ Add BRIN indexes
 
 **Testing Requirements:**
-- [ ] Create `tests/migrations/0012_create_nutrition_metrics_test.rs`
-- [ ] Test all 35+ field validations
-- [ ] Test decimal precision handling
-- [ ] Test negative value constraints
-- [ ] Test partition management
-- [ ] Benchmark insert performance
+- ✅ Create `tests/migrations/0013_create_nutrition_metrics_test.rs`
+- ✅ Test all 37+ field validations
+- ✅ Test decimal precision handling
+- ✅ Test negative value constraints
+- ✅ Test partition management
+- ✅ Benchmark insert performance
 
 **Definition of Done:**
-- All 35 nutrition fields implemented
-- Validation rules match Health Export specs
-- Performance benchmarks documented
-- Sample data imports successfully
-- API documentation updated
+- ✅ All 37 nutrition fields implemented
+- ✅ Validation rules match Health Export specs
+- ✅ Performance benchmarks documented
+- ✅ Sample data imports successfully
+- ✅ API documentation updated
+
+**Moved to DONE.md** - See complete implementation details
 
 ---
 
