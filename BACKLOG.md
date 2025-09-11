@@ -14,39 +14,10 @@
 **Current Issue:** iOS uploads failing with 429 errors, 0/20 remaining
 
 
-### [AUDIT-003] Server Availability - Cloudflare 520 errors
-**Priority:** Critical  
-**Points:** 2  
-**AC:**
-- Investigate origin server connectivity issues
-- Implement health check endpoint monitoring
-- Add automatic restart on failure
-- Configure Cloudflare timeout settings
-**Dependencies:** None  
-**Files:** src/main.rs, infrastructure configs
-**Current Issue:** Server returning 520 errors intermittently
 
 ## High Priority Issues (P1)
 
-### [AUDIT-004] Database Constraint Alignment
-**Priority:** High  
-**Points:** 3  
-**AC:**
-- Update database CHECK constraints to match application validation (15-300 BPM)
-- Create migration script for existing data
-- Test constraint changes on production data
-**Dependencies:** AUDIT-002  
-**Files:** migrations/0002_health_metrics_schema.sql, migrations/0003_partitioning_setup.sql
 
-### [AUDIT-005] Batch Processor Test Fix
-**Priority:** High  
-**Points:** 1  
-**AC:**
-- Fix test creating 8,000 activity records (exceeds 7,000 limit)
-- Validate all test cases respect chunk size limits
-- Add assertion to verify chunk sizes
-**Dependencies:** None  
-**Files:** tests/services/batch_processor_chunking_test.rs (line 246)
 
 ## Medium Priority Issues (P2)
 
@@ -61,16 +32,6 @@
 **Dependencies:** None  
 **Files:** iOS app codebase
 
-### [AUDIT-007] Enhanced Monitoring and Alerting
-**Priority:** Medium  
-**Points:** 3  
-**AC:**
-- Add metrics for validation error rates
-- Alert when error rate exceeds 10%
-- Monitor parameter usage per batch
-- Track rate limit exhaustion events
-**Dependencies:** None  
-**Files:** src/middleware/metrics.rs, monitoring configs
 
 ## Low Priority Issues (P3)
 

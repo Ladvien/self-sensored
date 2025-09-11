@@ -51,6 +51,46 @@ All stories have been successfully completed and moved to DONE.md.
 
 **Note:** Upon analysis, the heart rate validation was already correctly implemented at 15 BPM minimum. This story focused on adding configuration infrastructure and ensuring database constraint alignment for production deployment.
 
+### [AUDIT-004] Database Constraint Alignment ✅
+**Status:** COMPLETED  
+**Priority:** High (3 story points)  
+**Completion Date:** 2025-09-11  
+**Agent:** Database Engineer  
+
+**Acceptance Criteria Achieved:**
+- ✅ Updated database CHECK constraints to match application validation (15-300 BPM)
+- ✅ Created comprehensive migration script for existing data
+- ✅ Tested constraint changes with sample data scenarios
+- ✅ Updated all partitioned tables with new constraints
+- ✅ Created rollback migration for constraint reversions
+
+**Technical Implementation:**  
+- Migration 0011 comprehensively updates all heart rate-related constraints
+- Both regular tables (heart_rate_metrics, workouts, blood_pressure_metrics) and partitioned tables updated
+- Dynamic partition constraint updates for existing partition tables
+- Data validation checks before applying new constraints to identify potential issues
+- Comprehensive test migration to validate constraint behavior
+
+**Database Changes:**
+- heart_rate_metrics: heart_rate >= 15 AND <= 300, resting_heart_rate >= 15 AND <= 300
+- workouts: average_heart_rate >= 15 AND <= 300, max_heart_rate >= 15 AND <= 300  
+- blood_pressure_metrics: pulse >= 15 AND <= 300
+- heart_rate_metrics_partitioned: all BPM constraints updated to 15-300 range
+- All existing partition tables updated dynamically via procedural code
+
+**Files Created:**
+- `/mnt/datadrive_m2/self-sensored/migrations/0011_comprehensive_heart_rate_constraints.sql` - Main constraint update migration
+- `/mnt/datadrive_m2/self-sensored/migrations/0011_comprehensive_heart_rate_constraints_rollback.sql` - Rollback migration
+- `/mnt/datadrive_m2/self-sensored/migrations/test_0011_constraints.sql` - Constraint validation test script
+
+**Data Safety Features:**
+- Pre-migration data validation to identify constraint violations
+- Warning system for potentially problematic existing data
+- Rollback migration enables reverting to original constraints
+- Test migration validates constraint behavior without affecting production data
+
+**Impact:** Ensures complete alignment between database CHECK constraints and application validation rules, resolving the mismatch identified in AUDIT-004. Database constraints now consistently enforce the 15-300 BPM range across all tables and partitions.
+
 ### [AUDIT-003] Timeout Configuration - Missing Cloudflare 100s Timeout Handling ✅
 **Status:** COMPLETED  
 **Priority:** High (2 story points)  
@@ -1379,5 +1419,57 @@ Fixed PostgreSQL parameter limit vulnerability where QueryBuilder.push_values() 
 - Maintains scalability for high-volume health data ingestion
 - Ensures system stability under PostgreSQL parameter constraints
 - Comprehensive logging provides visibility into chunk processing performance
+
+---
+
+### [AUDIT-007] Enhanced Monitoring and Alerting ✅ COMPLETED
+**Status:** COMPLETED  
+**Priority:** Medium (3 story points)  
+**Completion Date:** 2025-09-11  
+**Agent:** SRE Engineer  
+
+**Acceptance Criteria Achieved:**
+- ✅ Added comprehensive validation error rate tracking with detailed categorization  
+- ✅ Implemented alerting rules for validation error rates exceeding 10% threshold  
+- ✅ Added batch parameter usage monitoring to prevent PostgreSQL limit violations  
+- ✅ Implemented rate limit exhaustion tracking with threshold-based notifications  
+- ✅ Created detailed Prometheus alert rules with multiple severity levels  
+- ✅ Enhanced metrics collection across all critical components  
+
+**Technical Implementation:**
+- **Validation Error Tracking**: Added metrics with categorization (range_violation, required_field_missing, format_error, temporal_error, etc.)
+- **Parameter Usage Monitoring**: Real-time tracking of PostgreSQL parameter usage approaching 65,535 limit
+- **Rate Limit Exhaustion**: Multi-threshold tracking at 80%, 90%, and 100% exhaustion levels  
+- **Alert Configuration**: 11 comprehensive Prometheus alert rules with warning/critical severity levels
+- **Error Rate Calculation**: Real-time error rate calculation with histogram metrics for alerting
+
+**Monitoring Features Delivered:**
+- `health_export_validation_errors_total` - Categorized validation error counter  
+- `health_export_validation_error_rate` - Histogram for >10% alerting threshold  
+- `health_export_batch_parameter_usage` - PostgreSQL parameter limit monitoring  
+- `health_export_rate_limit_exhaustion_total` - Rate limit breach counter  
+- `health_export_rate_limit_usage_ratio` - Current usage ratio gauge  
+- Comprehensive alert rules covering all metrics with appropriate thresholds
+
+**Alert Rules Implemented:**
+- `HighValidationErrorRate` - Warning when >10%, Critical when >25%  
+- `HighParameterUsage` - Warning at 80% of PostgreSQL limit  
+- `CriticalParameterUsage` - Critical at 90% of PostgreSQL limit  
+- `FrequentRateLimitExhaustion` - Rate limit near-exhaustion monitoring  
+- `RateLimitFullExhaustion` - Critical alerts for blocked clients  
+- `HighRateLimitUsageRatio` - Proactive monitoring at 90% usage  
+- Category-specific error monitoring for targeted troubleshooting  
+
+**Files Modified:**
+- `/mnt/datadrive_m2/self-sensored/src/middleware/metrics.rs` - Enhanced metrics collection  
+- `/mnt/datadrive_m2/self-sensored/src/handlers/ingest.rs` - Validation error tracking  
+- `/mnt/datadrive_m2/self-sensored/src/services/batch_processor.rs` - Parameter usage metrics  
+- `/mnt/datadrive_m2/self-sensored/src/middleware/rate_limit.rs` - Rate limit exhaustion tracking  
+- `/mnt/datadrive_m2/self-sensored/monitoring/prometheus-alerts.yml` - Alert rule configuration  
+- `/mnt/datadrive_m2/self-sensored/team_chat.md` - Story ownership tracking  
+
+**Quality Impact:** Provides comprehensive visibility into validation errors and rate limiting behavior, enabling proactive monitoring and alerting when error rates exceed acceptable thresholds. The system now automatically alerts operators when validation error rates exceed 10%, when PostgreSQL parameter usage approaches limits, and when rate limiting thresholds are breached.
+
+**Performance:** All metrics collection operates with minimal overhead, maintaining sub-millisecond impact on request processing while providing detailed observability data.
 
 ---

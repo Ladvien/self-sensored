@@ -10,7 +10,8 @@ async fn test_batch_processor_compilation() {
     // It doesn't run actual database operations
 
     // Check that we can create batch processor types
-    use self_sensored::services::batch_processor::{BatchConfig, ProcessingStatus};
+    use self_sensored::config::BatchConfig;
+    use self_sensored::services::batch_processor::ProcessingStatus;
 
     let config = BatchConfig::default();
     assert_eq!(config.max_retries, 3);
@@ -37,7 +38,7 @@ async fn test_batch_processor_compilation() {
 
 #[tokio::test]
 async fn test_batch_config_custom() {
-    use self_sensored::services::batch_processor::BatchConfig;
+    use self_sensored::config::BatchConfig;
 
     let config = BatchConfig {
         max_retries: 5,
