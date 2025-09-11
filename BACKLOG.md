@@ -96,8 +96,9 @@ Implement comprehensive nutrition_metrics table supporting 37+ nutrition fields 
 ---
 
 
-#### Story 3.2: Create Environmental Metrics Table
+#### Story 3.2: Create Environmental Metrics Table ✅ COMPLETED
 
+**Status:** ✅ COMPLETED 2025-09-11  
 **Story Points:** 5  
 **Assigned to:** Database Subagent  
 **Priority:** Medium  
@@ -105,29 +106,12 @@ Implement comprehensive nutrition_metrics table supporting 37+ nutrition fields 
 **Description:**
 Implement environmental_metrics for audio exposure, UV, and safety tracking.
 
-**Acceptance Criteria:**
-- [ ] Create migration `migrations/0015_create_environmental_metrics.sql` with:
-  - Audio exposure fields (environmental, headphone, reduction)
-  - UV exposure tracking
-  - Fall detection events
-  - Hygiene tracking (handwashing, toothbrushing)
-- [ ] Add appropriate value constraints
-- [ ] Implement hourly aggregation support
-- [ ] Add safety event alerting hooks
+**Files Created:**
+- `migrations/0015_create_environmental_metrics.sql` - Environmental health schema with Apple Watch Series 8+ support
+- `migrations/0015_create_environmental_metrics_rollback.sql` - Rollback migration  
+- `tests/migrations/0015_create_environmental_metrics_test.rs` - Comprehensive test suite
 
-**Testing Requirements:**
-- [ ] Create `tests/migrations/0015_create_environmental_metrics_test.rs`
-- [ ] Test decibel range validations
-- [ ] Test UV index constraints
-- [ ] Test fall event recording
-- [ ] Test aggregation queries
-
-**Definition of Done:**
-- All environmental fields implemented
-- Safety alerting tested
-- Apple Watch Series 8+ compatibility verified
-- Performance benchmarks met
-- Documentation includes safety protocols
+**Moved to DONE.md** - See complete implementation details
 
 ---
 

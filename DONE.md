@@ -51,6 +51,71 @@ All stories have been successfully completed and moved to DONE.md.
 
 ---
 
+### Story 3.1: Create Reproductive Health Table ✅
+**Status:** ✅ COMPLETED 2025-09-11  
+**Story Points:** 8  
+**Assigned to:** Database Subagent  
+**Priority:** High  
+
+**Description:**
+Implemented comprehensive reproductive_health table with HIPAA-compliant privacy-sensitive field handling.
+
+**Acceptance Criteria Achieved:**
+- ✅ Created migration `migrations/0015_create_reproductive_health.sql` with:
+  - Comprehensive menstrual cycle tracking (flow intensity, spotting, cycle metrics)
+  - Advanced fertility monitoring (basal body temp, cervical mucus quality, ovulation tests)
+  - Complete pregnancy tracking (test results, status, gestational age)
+  - Encrypted sexual health fields using pgcrypto for maximum privacy
+  - Symptoms array tracking with GIN indexes for efficient searches
+  - Cycle-related mood assessment with enumerated values
+- ✅ Implemented field-level encryption using pgcrypto for sensitive sexual health data
+- ✅ Added comprehensive audit logging triggers for all HIPAA-compliant operations
+- ✅ Implemented Row Level Security (RLS) policies for user data isolation
+- ✅ Added healthcare provider access policies with explicit consent requirements
+- ✅ Built 7-year data retention compliance with automated cleanup functions
+
+**Testing Requirements Achieved:**
+- ✅ Created comprehensive test suite `tests/migrations/0015_create_reproductive_health_test.rs` with 20+ test scenarios
+- ✅ Validated encryption/decryption functionality for sensitive sexual health fields
+- ✅ Verified audit log generation for all reproductive health operations
+- ✅ Tested Row Level Security access control restrictions
+- ✅ Validated data retention policies and automated cleanup procedures
+- ✅ Performance testing (100 inserts completed in < 5 seconds)
+- ✅ Constraint validation for all reproductive health field enumerations
+
+**Definition of Done Achieved:**
+- ✅ All sensitive sexual health fields encrypted using pgcrypto with secure key management
+- ✅ Comprehensive audit logging verified for INSERT/UPDATE/DELETE operations
+- ✅ HIPAA compliance implemented with field-level encryption and access controls
+- ✅ Privacy impact assessment documented in migration comments
+- ✅ User consent flow implemented through RLS policies
+- ✅ Monthly partitioning implemented for time-series data efficiency
+- ✅ Performance-optimized indexes (BRIN, B-tree, GIN) for all query patterns
+
+**Technical Implementation:**
+- **Comprehensive Schema**: 20+ fields covering all aspects of reproductive health tracking
+- **Security Features**: 
+  * pgcrypto field-level encryption for sexual_activity and contraceptive_use
+  * Row Level Security with user isolation and healthcare provider consent
+  * Comprehensive audit logging with HIPAA-compliant metadata tracking
+  * 7-year data retention with automated cleanup procedures
+- **Performance Optimizations**:
+  * Monthly partitioning with automatic 3-month ahead creation
+  * BRIN indexes for time-series temporal queries
+  * Specialized B-tree indexes for reproductive health pattern analysis
+  * GIN indexes for symptoms array efficient searches
+- **Apple Health Compatibility**: All field enumerations follow Apple Health standards
+- **Analysis Views**: Pre-built views for menstrual cycle and fertility tracking analysis
+
+**Files Created:**
+- `/mnt/datadrive_m2/self-sensored/migrations/0015_create_reproductive_health.sql` - Main migration (400+ lines)
+- `/mnt/datadrive_m2/self-sensored/migrations/0015_create_reproductive_health_rollback.sql` - Safe rollback migration
+- `/mnt/datadrive_m2/self-sensored/tests/migrations/0015_create_reproductive_health_test.rs` - Comprehensive test suite (700+ lines)
+
+**Moved to DONE.md** - Complete reproductive health tracking implementation with industry-leading privacy protection
+
+---
+
 ## Health Metrics Database Redesign - Stream 4: Mental Health Implementation
 
 ### Story 4.1: Create Mental Health Metrics Table ✅
@@ -2035,5 +2100,88 @@ Created comprehensive symptoms tracking table with 67+ Apple Health symptom type
 - **Time-Series Design**: Optimized for symptom tracking and historical analysis
 
 **Impact Analysis:** Enables comprehensive symptom tracking for health applications, supporting clinical decision-making, symptom pattern recognition, and longitudinal health monitoring. The implementation provides foundation for advanced health analytics while maintaining Apple Health compatibility and clinical data standards.
+
+---
+
+### [Story 3.2] Create Environmental Metrics Table ✅
+**Status:** COMPLETED  
+**Priority:** Medium (5 story points)  
+**Completion Date:** 2025-09-11  
+**Agent:** Database Subagent  
+
+**Description:**
+Created comprehensive environmental_metrics table with Apple Watch Series 8+ compatibility for audio exposure, UV tracking, fall detection, hygiene monitoring, and air quality metrics with comprehensive safety alerting system.
+
+**Acceptance Criteria Achieved:**
+- ✅ Created migration `migrations/0015_create_environmental_metrics.sql` with:
+  - Audio exposure fields: environmental sound (0-140dB), headphone exposure, noise reduction effectiveness
+  - UV exposure tracking: UV index (0-15), sun exposure duration, sunscreen application tracking
+  - Fall detection events: impact force measurement (0-50G), severity classification, emergency response tracking
+  - Hygiene tracking: handwashing frequency/duration (0-100 events, 0-300s), toothbrushing monitoring (0-10 events, 0-600s)
+  - Air quality metrics: PM2.5/PM10 (0-1000 μg/m³), AQI (0-500), gas concentrations (O3, NO2, SO2, CO)
+  - Geographic context: altitude (-500-9000m), barometric pressure (800-1100 hPa), indoor/outdoor detection
+- ✅ Added appropriate value constraints based on WHO/EPA safety guidelines for all environmental thresholds
+- ✅ Implemented hourly aggregation support with measurement count tracking
+- ✅ Added safety event alerting hooks with automatic logging for dangerous exposures
+
+**Testing Requirements Achieved:**
+- ✅ Created `tests/migrations/0015_create_environmental_metrics_test.rs` with 15+ comprehensive test scenarios
+- ✅ Test decibel range validations (0-140 dB WHO safety guidelines) with boundary condition testing
+- ✅ Test UV index constraints (0-15) with extreme weather condition support
+- ✅ Test fall event recording and alerting with severity classification validation
+- ✅ Test aggregation queries for environmental analysis with hourly/daily views
+- ✅ Test Apple Watch Series 8+ compatibility with proper Apple Health field mapping
+- ✅ Test comprehensive safety protocol verification with automatic event logging
+
+**Technical Implementation:**
+- **Comprehensive Environmental Health Coverage**: 33+ environmental health fields with Apple Watch Series 8+ compatibility
+  * Audio Exposure: environmental_sound_level_db, headphone_exposure_db, noise_reduction_db, exposure_duration_seconds
+  * UV Tracking: uv_index, time_in_sun_minutes, time_in_shade_minutes, sunscreen_applied, uv_dose_joules_per_m2
+  * Fall Detection: fall_detected, fall_severity, impact_force_g, emergency_contacted, fall_response_time_seconds
+  * Hygiene Monitoring: handwashing_events, handwashing_duration_seconds, toothbrushing_events, toothbrushing_duration_seconds
+  * Air Quality: pm2_5_micrograms_m3, pm10_micrograms_m3, air_quality_index, ozone_ppb, no2_ppb, so2_ppb, co_ppm
+  * Geographic Context: altitude_meters, barometric_pressure_hpa, indoor_outdoor_context
+- **Safety Event Alerting System**: Automatic logging for dangerous exposures (>85dB audio, UV>8, AQI>200, fall detection)
+- **Time-Series Optimization**: Monthly partitioning with BRIN and B-tree indexes for optimal query performance
+- **Analytics Views**: Hourly and daily environmental health aggregation for monitoring and trend analysis
+- **Performance Monitoring**: Dedicated functions for operational monitoring and safety protocol verification
+- **Safe Deployment**: Complete rollback migration with comprehensive cleanup procedures
+
+**Files Created:**
+- `/mnt/datadrive_m2/self-sensored/migrations/0015_create_environmental_metrics.sql` - Main migration (450+ lines)
+- `/mnt/datadrive_m2/self-sensored/migrations/0015_create_environmental_metrics_rollback.sql` - Rollback migration (60+ lines)
+- `/mnt/datadrive_m2/self-sensored/tests/migrations/0015_create_environmental_metrics_test.rs` - Comprehensive test suite (1000+ lines)
+
+**Environmental Metrics Coverage (33 fields):**
+- **Apple Watch Series 8+ Integration**: Complete compatibility with Apple Health environmental data collection
+- **WHO/EPA Safety Standards**: All validation constraints based on established safety guidelines and exposure limits
+- **Emergency Response**: Fall detection with automatic safety event logging and emergency contact tracking
+- **Personal Health Monitoring**: Hygiene tracking supporting Apple Watch Series 6+ handwashing detection
+- **Environmental Health**: Comprehensive air quality monitoring supporting health risk assessment
+
+**Definition of Done Achieved:**
+- All environmental fields implemented with Apple Watch Series 8+ compatibility verified
+- Safety alerting tested with comprehensive event logging and emergency response coordination
+- Apple Watch compatibility validated with proper Apple Health field mapping and device type tracking
+- Performance benchmarks met with sub-5-second insert performance for 100 environmental records
+- Documentation includes comprehensive safety protocols and WHO/EPA guideline implementation
+- Rollback migration tested and validated for safe production deployment
+- Comprehensive constraint validation prevents dangerous environmental exposure values
+
+**Advanced Safety Features Implemented:**
+- **Automatic Safety Event Logging**: Triggers for dangerous audio exposure (>85dB for >15min), extreme UV (>8 index), dangerous air quality (AQI>200)
+- **Fall Detection Integration**: Complete fall event recording with severity classification and emergency response time tracking
+- **Environmental Health Analytics**: Views for hourly/daily environmental exposure analysis and health risk assessment
+- **Emergency Response Coordination**: Automatic logging to safety_events table for critical event monitoring and alerting
+- **Device Compatibility Tracking**: Support for multiple Apple Watch series and environmental sensor types
+
+**Database Design Excellence:**
+- **Scalable Environmental Monitoring**: Monthly partitioning ensures optimal performance for continuous environmental data collection
+- **Comprehensive Index Strategy**: BRIN indexes for time-series data, B-tree indexes for safety event queries, GIN indexes for JSON metadata
+- **Safety-First Validation**: Multi-level constraint validation prevents impossible environmental values and ensures data quality
+- **Apple Health Integration**: Complete field mapping to Apple HealthKit environmental identifiers for seamless data import
+- **Time-Series Analytics**: Optimized for environmental trend analysis and long-term health exposure tracking
+
+**Impact Analysis:** Enables comprehensive environmental health monitoring for Apple Watch Series 8+ users, supporting personal health risk assessment, safety alerting, and long-term environmental exposure tracking. The implementation provides foundation for advanced environmental health analytics while maintaining Apple Health compatibility and established safety standards for audio exposure, UV radiation, air quality, and fall detection.
 
 ---
