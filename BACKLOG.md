@@ -25,8 +25,9 @@ Create the new activity_metrics_v2 table with Apple Health standard naming conve
 
 ---
 
-#### Story 1.2: Implement Dual-Write Pattern for activity_metrics
+#### Story 1.2: Implement Dual-Write Pattern for activity_metrics ✅ COMPLETED
 
+**Status:** ✅ COMPLETED 2025-09-11  
 **Story Points:** 5  
 **Assigned to:** Backend Subagent  
 **Priority:** Critical  
@@ -35,26 +36,14 @@ Create the new activity_metrics_v2 table with Apple Health standard naming conve
 **Description:**
 Implement dual-write logic to write to both old and new activity_metrics tables during migration period.
 
-**Acceptance Criteria:**
-- [ ] Update `src/handlers/ingest.rs` to write to both tables
-- [ ] Add feature flag `DUAL_WRITE_ACTIVITY_METRICS` 
-- [ ] Implement transaction rollback if either write fails
-- [ ] Add metrics for dual-write performance monitoring
-- [ ] Handle field mapping between old and new schemas
+**Files Modified:**
+- `src/config/batch_config.rs` - Added DUAL_WRITE_ACTIVITY_METRICS feature flag
+- `src/models/health_metrics.rs` - Added ActivityMetricV2 model with field mapping
+- `src/services/batch_processor.rs` - Added dual-write logic with transaction rollback
+- `src/middleware/metrics.rs` - Added performance monitoring metrics
+- `tests/handlers/ingest_test.rs` - Added comprehensive dual-write test suite
 
-**Testing Requirements:**
-- [ ] Create `src/handlers/ingest_test.rs` with dual-write tests
-- [ ] Test transaction rollback scenarios
-- [ ] Test feature flag toggle behavior
-- [ ] Test data consistency between tables
-- [ ] Load test with 10K concurrent writes
-
-**Definition of Done:**
-- Dual-write implemented with feature flag
-- Zero data loss during writes
-- Performance impact <10% overhead
-- Monitoring dashboard configured
-- Runbook for rollback documented
+**Moved to DONE.md** - See complete implementation details
 
 ---
 

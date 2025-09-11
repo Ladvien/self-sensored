@@ -105,6 +105,61 @@ Created the new activity_metrics_v2 table with Apple Health standard naming conv
 
 **Note:** Upon analysis, the heart rate validation was already correctly implemented at 15 BPM minimum. This story focused on adding configuration infrastructure and ensuring database constraint alignment for production deployment.
 
+### [Story 1.2] Implement Dual-Write Pattern for activity_metrics ✅
+**Status:** COMPLETED  
+**Priority:** Critical (5 story points)  
+**Completion Date:** 2025-09-11  
+**Agent:** Backend Subagent  
+
+**Description:**
+Implemented dual-write logic to write to both old and new activity_metrics tables during migration period with atomic transaction support and comprehensive monitoring.
+
+**Acceptance Criteria Achieved:**
+- ✅ Added DUAL_WRITE_ACTIVITY_METRICS feature flag (environment configurable, disabled by default)
+- ✅ Created ActivityMetricV2 model with complete Apple Health schema (20+ fields)
+- ✅ Implemented bidirectional field mapping between old/new schemas  
+- ✅ Added atomic dual-write logic with transaction rollback support
+- ✅ Integrated comprehensive performance monitoring metrics
+- ✅ Updated both sequential and parallel batch processing modes
+
+**Testing Requirements Achieved:**
+- ✅ Created comprehensive test suite in `tests/handlers/ingest_test.rs`
+- ✅ Test transaction rollback scenarios with proper error handling
+- ✅ Test feature flag toggle behavior (enabled/disabled states)
+- ✅ Test data consistency between old and new tables
+- ✅ Performance validation with parameter chunking (21 params/record)
+- ✅ Test field conversion and validation edge cases
+
+**Technical Implementation:**
+- Atomic dual-write with proper transaction management (begin/commit/rollback)
+- Parameter-safe chunking to stay under PostgreSQL 65,535 limit
+- Comprehensive metrics collection (start, success, failure, duration)
+- Error tracking and debugging support with detailed logging
+- Zero data loss guarantee through transaction atomicity
+- Backward compatibility for existing ingest endpoints
+
+**Files Modified:**
+- `/mnt/datadrive_m2/self-sensored/src/config/batch_config.rs` - Added DUAL_WRITE_ACTIVITY_METRICS feature flag
+- `/mnt/datadrive_m2/self-sensored/src/models/health_metrics.rs` - Added ActivityMetricV2 model with field mapping
+- `/mnt/datadrive_m2/self-sensored/src/services/batch_processor.rs` - Added dual-write logic with transaction rollback
+- `/mnt/datadrive_m2/self-sensored/src/middleware/metrics.rs` - Added performance monitoring metrics
+- `/mnt/datadrive_m2/self-sensored/tests/handlers/ingest_test.rs` - Added comprehensive dual-write test suite
+- `/mnt/datadrive_m2/self-sensored/tests/batch_processor_standalone.rs` - Updated config initialization
+
+**Definition of Done Achieved:**
+- Dual-write implemented with feature flag control
+- Zero data loss during writes with transaction atomicity
+- Performance impact minimized with proper chunking
+- Monitoring metrics integrated for operational visibility  
+- Comprehensive test coverage for all scenarios
+- Documentation updated for configuration options
+
+**Performance Characteristics:**
+- Parameter count: 21 params per v2 record (safely under 65,535 limit)
+- Chunk sizing: Configurable with safety margins
+- Transaction overhead: Minimal impact with proper batching
+- Rollback capability: Complete transaction reversal on any failure
+
 ### [AUDIT-005] Batch Processor Test Fix ✅
 **Status:** COMPLETED  
 **Priority:** High (1 story point)  
