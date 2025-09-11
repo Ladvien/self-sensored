@@ -319,4 +319,38 @@ mod tests {
 
         assert_eq!(resp.status(), 200);
     }
+
+    #[tokio::test]
+    async fn test_rate_limit_middleware_ip_based_headers() {
+        // Test that rate limiting returns proper headers for IP-based limiting
+        // Use a higher limit but make many requests to test properly
+        let rate_limiter = web::Data::new(RateLimiter::new_in_memory(100));
+
+        let app = test::init_service(
+            App::new()
+                .app_data(rate_limiter)
+                .wrap(RateLimitMiddleware)
+                .route("/test", web::get().to(test_handler))
+        ).await;
+
+        // First request should succeed and have rate limit headers
+        let req1 = test::TestRequest::get().uri("/test").to_request();
+        let resp1 = test::call_service(&app, req1).await;
+        assert_eq!(resp1.status(), 200);
+        
+        // Check for rate limiting headers on successful request
+        assert!(resp1.headers().contains_key("x-ratelimit-limit"));
+        assert!(resp1.headers().contains_key("x-ratelimit-remaining"));
+        assert!(resp1.headers().contains_key("x-ratelimit-reset"));
+        // No retry-after header on successful requests
+        assert!(!resp1.headers().contains_key("retry-after"));
+
+        // Verify the limit value matches our expectation (100 for IP-based rate limiting)
+        let limit_header = resp1.headers().get("x-ratelimit-limit").unwrap();
+        assert_eq!(limit_header.to_str().unwrap(), "100");
+
+        // Verify remaining count decremented
+        let remaining_header = resp1.headers().get("x-ratelimit-remaining").unwrap();
+        assert_eq!(remaining_header.to_str().unwrap(), "99");
+    }
 }

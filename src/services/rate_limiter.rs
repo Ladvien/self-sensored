@@ -604,8 +604,39 @@ mod tests {
         // Test IP rate limiting uses the higher default (100) instead of old 20
         let result = rate_limiter.check_ip_rate_limit("192.168.1.1").await.unwrap();
         
-        // With new default of 100, we should have 99 remaining after first request
+        // IP rate limiting should use 100 as default (environmental variable override)
+        // With default of 100, we should have 99 remaining after first request
         assert_eq!(result.requests_limit, 100);
         assert_eq!(result.requests_remaining, 99);
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiter_user_vs_ip_rate_limits() {
+        // Test that user rate limiting and IP rate limiting are independent
+        let rate_limiter = RateLimiter::new_in_memory(100);
+        let user_id = Uuid::new_v4();
+        let ip_address = "192.168.1.100";
+
+        // Make requests on both user and IP limits
+        let user_result1 = rate_limiter.check_user_rate_limit(user_id).await.unwrap();
+        let ip_result1 = rate_limiter.check_ip_rate_limit(ip_address).await.unwrap();
+
+        // Both should succeed and have independent counters
+        assert_eq!(user_result1.requests_remaining, 99);
+        assert_eq!(ip_result1.requests_remaining, 99);
+        
+        // Verify they're truly independent by using up one limit
+        for _ in 0..99 {
+            rate_limiter.check_user_rate_limit(user_id).await.unwrap();
+        }
+        
+        // User limit should be exhausted
+        let user_result2 = rate_limiter.check_user_rate_limit(user_id).await.unwrap();
+        assert_eq!(user_result2.requests_remaining, 0);
+        assert!(user_result2.retry_after.is_some());
+        
+        // IP limit should still work
+        let ip_result2 = rate_limiter.check_ip_rate_limit(ip_address).await.unwrap();
+        assert_eq!(ip_result2.requests_remaining, 98); // One request made earlier
     }
 }
