@@ -49,6 +49,60 @@ All stories have been successfully completed and moved to DONE.md.
 
 **Quality Assurance:** Comprehensive test coverage for edge cases, error message validation, and both heart rate metrics and workout heart rate validation scenarios.
 
+---
+
+## Epic: Health Metrics Database Redesign
+
+### [Story 1.1] Create activity_metrics_v2 Table with Proper Schema ✅
+**Status:** COMPLETED  
+**Priority:** Critical (8 story points)  
+**Completion Date:** 2025-09-11  
+**Agent:** Database Subagent  
+
+**Description:**
+Created the new activity_metrics_v2 table with Apple Health standard naming conventions, TIMESTAMPTZ for proper granularity, and optimized indexing strategy.
+
+**Acceptance Criteria Achieved:**
+- ✅ Created migration file `migrations/0012_create_activity_metrics_v2.sql` with:
+  - TIMESTAMPTZ instead of DATE for recorded_at
+  - Apple Health standard field names (active_energy_burned_kcal, basal_energy_burned_kcal)
+  - Activity-specific distance fields (walking_running, cycling, swimming, wheelchair, snow_sports)
+  - Apple Fitness metrics (exercise_time, stand_time, move_time, stand_hour_achieved)
+  - Aggregation_period field for granularity tracking
+- ✅ Implemented monthly partitioning with 3 months ahead creation
+- ✅ Added BRIN indexes for time-series optimization
+- ✅ Added validation constraints matching Health Export limits
+- ✅ Created rollback migration
+
+**Testing Requirements Achieved:**
+- ✅ Created `tests/migrations/0012_create_activity_metrics_v2_test.rs`
+- ✅ Test partition creation and pruning
+- ✅ Test BRIN index performance expectations
+- ✅ Test constraint validation with edge cases
+- ✅ Test concurrent inserts (1K records < 5s)
+- ✅ Test rollback functionality
+
+**Technical Implementation:**
+- Complete Apple Health field mapping with 20+ activity-specific fields
+- Monthly partitioning with automatic 3-month-ahead partition creation
+- BRIN indexes for optimal time-series query performance
+- Comprehensive validation constraints for all metric types
+- Daily summary view for aggregation queries
+- Performance monitoring function for operational insights
+- Complete rollback migration for safe deployment
+
+**Files Created:**
+- `/mnt/datadrive_m2/self-sensored/migrations/0012_create_activity_metrics_v2.sql` - Main migration
+- `/mnt/datadrive_m2/self-sensored/migrations/0012_create_activity_metrics_v2_rollback.sql` - Rollback migration
+- `/mnt/datadrive_m2/self-sensored/tests/migrations/0012_create_activity_metrics_v2_test.rs` - Comprehensive test suite
+
+**Definition of Done Achieved:**
+- Migration script reviewed and approved
+- All tests passing with comprehensive coverage
+- Performance benchmarks documented
+- Rollback tested and validated
+- Schema properly documented
+
 **Note:** Upon analysis, the heart rate validation was already correctly implemented at 15 BPM minimum. This story focused on adding configuration infrastructure and ensuring database constraint alignment for production deployment.
 
 ### [AUDIT-005] Batch Processor Test Fix ✅
