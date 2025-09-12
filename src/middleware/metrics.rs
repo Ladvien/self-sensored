@@ -522,10 +522,20 @@ fn classify_payload_size(size_bytes: u64) -> &'static str {
 /// Normalize endpoint paths to reduce cardinality
 fn normalize_endpoint(path: &str) -> String {
     // Replace UUIDs and IDs with placeholders to prevent high cardinality
-    let uuid_regex =
-        regex::Regex::new(r"/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
-            .unwrap();
-    let id_regex = regex::Regex::new(r"/\d+").unwrap();
+    let uuid_regex = match regex::Regex::new(r"/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}") {
+        Ok(regex) => regex,
+        Err(e) => {
+            tracing::error!("Failed to compile UUID regex: {}", e);
+            return path.to_string(); // Return original path if regex fails
+        }
+    };
+    let id_regex = match regex::Regex::new(r"/\d+") {
+        Ok(regex) => regex,
+        Err(e) => {
+            tracing::error!("Failed to compile ID regex: {}", e);
+            return path.to_string(); // Return original path if regex fails
+        }
+    };
 
     let normalized = uuid_regex.replace_all(path, "/{uuid}");
     let normalized = id_regex.replace_all(&normalized, "/{id}").to_string();

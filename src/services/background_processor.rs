@@ -172,8 +172,8 @@ impl BackgroundProcessor {
             SELECT 
                 id, user_id, api_key_id, raw_ingestion_id, status, job_type, priority,
                 total_metrics, processed_metrics, failed_metrics, progress_percentage,
-                created_at, started_at, completed_at, estimated_completion_at,
-                error_message, retry_count, max_retries, last_retry_at,
+                created_at, started_at, completed_at,
+                error_message, retry_count,
                 config, result_summary
             FROM processing_jobs 
             WHERE id = $1 AND user_id = $2
@@ -204,9 +204,18 @@ impl BackgroundProcessor {
             return Ok(());
         };
 
-        let job_id = job_row.job_id.unwrap();
-        let user_id = job_row.user_id.unwrap();
-        let raw_ingestion_id = job_row.raw_ingestion_id.unwrap();
+        let Some(job_id) = job_row.job_id else {
+            error!("Background job missing job_id");
+            return Err("Invalid job data: missing job_id".into());
+        };
+        let Some(user_id) = job_row.user_id else {
+            error!(job_id = %job_id, "Background job missing user_id");
+            return Err("Invalid job data: missing user_id".into());
+        };
+        let Some(raw_ingestion_id) = job_row.raw_ingestion_id else {
+            error!(job_id = %job_id, user_id = %user_id, "Background job missing raw_ingestion_id");
+            return Err("Invalid job data: missing raw_ingestion_id".into());
+        };
         let total_metrics = job_row.total_metrics.unwrap_or(0);
 
         info!(
@@ -304,7 +313,13 @@ impl BackgroundProcessor {
             &pool,
             job_id,
             final_status,
-            Some(serde_json::to_value(result_summary).unwrap()),
+            match serde_json::to_value(result_summary) {
+                Ok(value) => Some(value),
+                Err(e) => {
+                    error!(job_id = %job_id, error = %e, "Failed to serialize result summary");
+                    None
+                }
+            },
             error_message,
         ).await?;
 

@@ -95,7 +95,13 @@ impl LazyDataLoader {
         }
 
         // Get from cache
-        let cache = self.cache.read().unwrap();
+        let cache = match self.cache.read() {
+            Ok(guard) => guard,
+            Err(e) => {
+                error!("Failed to acquire read lock on cache: {}", e);
+                return None;
+            }
+        };
         cache.as_ref()?.get(identifier).cloned()
     }
 
@@ -108,14 +114,21 @@ impl LazyDataLoader {
             }
         }
 
-        let cache = self.cache.read().unwrap();
-        if let Some(data) = cache.as_ref() {
-            data.values()
-                .filter(|entry| entry.category.eq_ignore_ascii_case(category))
-                .cloned()
-                .collect()
-        } else {
-            Vec::new()
+        match self.cache.read() {
+            Ok(cache) => {
+                if let Some(data) = cache.as_ref() {
+                    data.values()
+                        .filter(|entry| entry.category.eq_ignore_ascii_case(category))
+                        .cloned()
+                        .collect()
+                } else {
+                    Vec::new()
+                }
+            }
+            Err(e) => {
+                error!("Failed to acquire read lock on cache: {}", e);
+                Vec::new()
+            }
         }
     }
 
@@ -128,14 +141,21 @@ impl LazyDataLoader {
             }
         }
 
-        let cache = self.cache.read().unwrap();
-        if let Some(data) = cache.as_ref() {
-            data.values()
-                .filter(|entry| entry.support_level == SupportLevel::FullySupported)
-                .map(|entry| entry.healthkit_identifier.clone())
-                .collect()
-        } else {
-            Vec::new()
+        match self.cache.read() {
+            Ok(cache) => {
+                if let Some(data) = cache.as_ref() {
+                    data.values()
+                        .filter(|entry| entry.support_level == SupportLevel::FullySupported)
+                        .map(|entry| entry.healthkit_identifier.clone())
+                        .collect()
+                } else {
+                    Vec::new()
+                }
+            }
+            Err(e) => {
+                error!("Failed to acquire read lock on cache: {}", e);
+                Vec::new()
+            }
         }
     }
 
@@ -153,24 +173,31 @@ impl LazyDataLoader {
             }
         }
 
-        let cache = self.cache.read().unwrap();
-        if let Some(data) = cache.as_ref() {
-            let mut stats = DataMappingStats::default();
-            
-            for entry in data.values() {
-                stats.total_count += 1;
-                match entry.support_level {
-                    SupportLevel::FullySupported => stats.fully_supported += 1,
-                    SupportLevel::PartialUncertain => stats.partial_uncertain += 1,
-                    SupportLevel::NotSupported => stats.not_supported += 1,
+        match self.cache.read() {
+            Ok(cache) => {
+                if let Some(data) = cache.as_ref() {
+                    let mut stats = DataMappingStats::default();
+                    
+                    for entry in data.values() {
+                        stats.total_count += 1;
+                        match entry.support_level {
+                            SupportLevel::FullySupported => stats.fully_supported += 1,
+                            SupportLevel::PartialUncertain => stats.partial_uncertain += 1,
+                            SupportLevel::NotSupported => stats.not_supported += 1,
+                        }
+                        
+                        *stats.category_counts.entry(entry.category.clone()).or_insert(0) += 1;
+                    }
+                    
+                    stats
+                } else {
+                    DataMappingStats::default()
                 }
-                
-                *stats.category_counts.entry(entry.category.clone()).or_insert(0) += 1;
             }
-            
-            stats
-        } else {
-            DataMappingStats::default()
+            Err(e) => {
+                error!("Failed to acquire read lock on cache: {}", e);
+                DataMappingStats::default()
+            }
         }
     }
 
@@ -181,16 +208,26 @@ impl LazyDataLoader {
 
     /// Clear the cache
     pub fn clear_cache(&self) {
-        let mut cache = self.cache.write().unwrap();
-        *cache = None;
-        let mut last_loaded = self.last_loaded.write().unwrap();
-        *last_loaded = None;
+        match self.cache.write() {
+            Ok(mut cache) => *cache = None,
+            Err(e) => error!("Failed to acquire write lock on cache: {}", e),
+        }
+        match self.last_loaded.write() {
+            Ok(mut last_loaded) => *last_loaded = None,
+            Err(e) => error!("Failed to acquire write lock on last_loaded: {}", e),
+        }
         info!("Health data mappings cache cleared");
     }
 
     /// Check if data should be reloaded
     async fn should_reload(&self) -> bool {
-        let last_loaded = self.last_loaded.read().unwrap();
+        let last_loaded = match self.last_loaded.read() {
+            Ok(guard) => guard,
+            Err(e) => {
+                error!("Failed to acquire read lock on last_loaded: {}", e);
+                return true; // Assume reload needed on error
+            }
+        };
         
         match *last_loaded {
             None => true, // Never loaded
@@ -215,15 +252,21 @@ impl LazyDataLoader {
         };
 
         // Update cache
-        {
-            let mut cache = self.cache.write().unwrap();
-            *cache = Some(data);
+        match self.cache.write() {
+            Ok(mut cache) => *cache = Some(data),
+            Err(e) => {
+                error!("Failed to acquire write lock on cache: {}", e);
+                return Err(format!("Failed to update cache: {}", e).into());
+            }
         }
 
         // Update last loaded time
-        {
-            let mut last_loaded = self.last_loaded.write().unwrap();
-            *last_loaded = Some(std::time::Instant::now());
+        match self.last_loaded.write() {
+            Ok(mut last_loaded) => *last_loaded = Some(std::time::Instant::now()),
+            Err(e) => {
+                error!("Failed to acquire write lock on last_loaded: {}", e);
+                return Err(format!("Failed to update last loaded time: {}", e).into());
+            }
         }
 
         info!("Health data mappings loaded successfully");

@@ -186,10 +186,17 @@ async fn export_as_json(
                         .await
                 {
                     total_records += data.len();
-                    export_data.insert(
-                        "heart_rate".to_string(),
-                        serde_json::to_value(data).unwrap(),
-                    );
+                    match serde_json::to_value(data) {
+                        Ok(value) => {
+                            export_data.insert("heart_rate".to_string(), value);
+                        }
+                        Err(e) => {
+                            error!(user_id = %auth.user.id, error = %e, "Failed to serialize heart rate data");
+                            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                                "Failed to process heart rate data".to_string(),
+                            )));
+                        }
+                    }
                 }
             }
             "blood_pressure" => {
@@ -198,10 +205,17 @@ async fn export_as_json(
                         .await
                 {
                     total_records += data.len();
-                    export_data.insert(
-                        "blood_pressure".to_string(),
-                        serde_json::to_value(data).unwrap(),
-                    );
+                    match serde_json::to_value(data) {
+                        Ok(value) => {
+                            export_data.insert("blood_pressure".to_string(), value);
+                        }
+                        Err(e) => {
+                            error!(user_id = %auth.user.id, error = %e, "Failed to serialize blood pressure data");
+                            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                                "Failed to process blood pressure data".to_string(),
+                            )));
+                        }
+                    }
                 }
             }
             "sleep" => {
@@ -209,7 +223,17 @@ async fn export_as_json(
                     fetch_sleep_data(pool, auth.user.id, start_date, end_date, include_raw).await
                 {
                     total_records += data.len();
-                    export_data.insert("sleep".to_string(), serde_json::to_value(data).unwrap());
+                    match serde_json::to_value(data) {
+                        Ok(value) => {
+                            export_data.insert("sleep".to_string(), value);
+                        }
+                        Err(e) => {
+                            error!(user_id = %auth.user.id, error = %e, "Failed to serialize sleep data");
+                            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                                "Failed to process sleep data".to_string(),
+                            )));
+                        }
+                    }
                 }
             }
             "activity" => {
@@ -217,7 +241,17 @@ async fn export_as_json(
                     fetch_activity_data(pool, auth.user.id, start_date, end_date, include_raw).await
                 {
                     total_records += data.len();
-                    export_data.insert("activity".to_string(), serde_json::to_value(data).unwrap());
+                    match serde_json::to_value(data) {
+                        Ok(value) => {
+                            export_data.insert("activity".to_string(), value);
+                        }
+                        Err(e) => {
+                            error!(user_id = %auth.user.id, error = %e, "Failed to serialize activity data");
+                            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                                "Failed to process activity data".to_string(),
+                            )));
+                        }
+                    }
                 }
             }
             "workouts" => {
@@ -225,7 +259,17 @@ async fn export_as_json(
                     fetch_workout_data(pool, auth.user.id, start_date, end_date, include_raw).await
                 {
                     total_records += data.len();
-                    export_data.insert("workouts".to_string(), serde_json::to_value(data).unwrap());
+                    match serde_json::to_value(data) {
+                        Ok(value) => {
+                            export_data.insert("workouts".to_string(), value);
+                        }
+                        Err(e) => {
+                            error!(user_id = %auth.user.id, error = %e, "Failed to serialize workouts data");
+                            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                                "Failed to process workouts data".to_string(),
+                            )));
+                        }
+                    }
                 }
             }
             _ => {} // Skip unknown types
@@ -243,7 +287,15 @@ async fn export_as_json(
         metric_types: metric_types.to_vec(),
         record_count: total_records,
         export_timestamp: Utc::now(),
-        data: serde_json::to_string_pretty(&export_data).unwrap(),
+        data: match serde_json::to_string_pretty(&export_data) {
+            Ok(json_string) => json_string,
+            Err(e) => {
+                error!(user_id = %auth.user.id, error = %e, "Failed to serialize export data");
+                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to serialize export data".to_string(),
+                )));
+            }
+        },
     };
 
     Ok(HttpResponse::Ok()
@@ -270,11 +322,15 @@ async fn export_as_csv(
     let mut total_records = 0;
 
     // Create comprehensive CSV with all metric types
-    writeln!(
+    if let Err(e) = writeln!(
         csv_content,
         "metric_type,timestamp,value1,value2,value3,value4,value5,source,context"
-    )
-    .unwrap();
+    ) {
+        error!(user_id = %auth.user.id, error = %e, "Failed to write CSV header");
+        return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+            "Failed to generate CSV export".to_string(),
+        )));
+    }
 
     for metric_type in metric_types {
         match metric_type.as_str() {
@@ -284,7 +340,7 @@ async fn export_as_csv(
                         .await
                 {
                     for record in &data {
-                        writeln!(
+                        if let Err(e) = writeln!(
                             csv_content,
                             "heart_rate,{},{},{},,,,,{},{}",
                             record.recorded_at.format("%Y-%m-%d %H:%M:%S"),
@@ -294,8 +350,12 @@ async fn export_as_csv(
                                 .map_or("".to_string(), |v| v.to_string()),
                             record.source_device.as_deref().unwrap_or(""),
                             record.context.as_deref().unwrap_or("")
-                        )
-                        .unwrap();
+                        ) {
+                            error!(user_id = %auth.user.id, error = %e, "Failed to write heart rate CSV data");
+                            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                                "Failed to generate CSV export".to_string(),
+                            )));
+                        }
                     }
                     total_records += data.len();
                 }
@@ -306,7 +366,7 @@ async fn export_as_csv(
                         .await
                 {
                     for record in &data {
-                        writeln!(
+                        if let Err(e) = writeln!(
                             csv_content,
                             "blood_pressure,{},{},{},{},,,{},",
                             record.recorded_at.format("%Y-%m-%d %H:%M:%S"),
@@ -314,8 +374,12 @@ async fn export_as_csv(
                             record.diastolic,
                             record.pulse.map_or("".to_string(), |v| v.to_string()),
                             record.source_device.as_deref().unwrap_or("")
-                        )
-                        .unwrap();
+                        ) {
+                            error!(user_id = %auth.user.id, error = %e, "Failed to write blood pressure CSV data");
+                            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                                "Failed to generate CSV export".to_string(),
+                            )));
+                        }
                     }
                     total_records += data.len();
                 }
@@ -325,7 +389,7 @@ async fn export_as_csv(
                     fetch_sleep_data(pool, auth.user.id, start_date, end_date, include_raw).await
                 {
                     for record in &data {
-                        writeln!(
+                        if let Err(e) = writeln!(
                             csv_content,
                             "sleep,{},{},{},{},{},{},{},",
                             record.sleep_start.format("%Y-%m-%d %H:%M:%S"),
@@ -345,8 +409,12 @@ async fn export_as_csv(
                                 .and_then(|v| v.to_f32())
                                 .map_or("".to_string(), |v| v.to_string()),
                             record.source_device.as_deref().unwrap_or("")
-                        )
-                        .unwrap();
+                        ) {
+                            error!(user_id = %auth.user.id, error = %e, "Failed to write sleep CSV data");
+                            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                                "Failed to generate CSV export".to_string(),
+                            )));
+                        }
                     }
                     total_records += data.len();
                 }
@@ -356,7 +424,7 @@ async fn export_as_csv(
                     fetch_activity_data(pool, auth.user.id, start_date, end_date, include_raw).await
                 {
                     for record in &data {
-                        writeln!(
+                        if let Err(e) = writeln!(
                             csv_content,
                             "activity,{},{},{},{},{},{},",
                             record.recorded_at.format("%Y-%m-%d"),
@@ -365,8 +433,12 @@ async fn export_as_csv(
                             record.active_energy_burned_kcal.map_or("".to_string(), |v| v.to_string()),
                             record.flights_climbed.map_or("".to_string(), |v| v.to_string()),
                             record.source_device.as_deref().unwrap_or("")
-                        )
-                        .unwrap();
+                        ) {
+                            error!(user_id = %auth.user.id, error = %e, "Failed to write activity CSV data");
+                            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                                "Failed to generate CSV export".to_string(),
+                            )));
+                        }
                     }
                     total_records += data.len();
                 }
@@ -376,7 +448,7 @@ async fn export_as_csv(
                     fetch_workout_data(pool, auth.user.id, start_date, end_date, include_raw).await
                 {
                     for record in &data {
-                        writeln!(
+                        if let Err(e) = writeln!(
                             csv_content,
                             "workout,{},{},{},{},{},{},{},{}",
                             record.started_at.format("%Y-%m-%d %H:%M:%S"),
@@ -395,8 +467,12 @@ async fn export_as_csv(
                                 .map_or("".to_string(), |v| v.to_string()),
                             record.source_device.as_deref().unwrap_or(""),
                             record.workout_type
-                        )
-                        .unwrap();
+                        ) {
+                            error!(user_id = %auth.user.id, error = %e, "Failed to write workout CSV data");
+                            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                                "Failed to generate CSV export".to_string(),
+                            )));
+                        }
                     }
                     total_records += data.len();
                 }
@@ -451,7 +527,15 @@ async fn export_heart_rate_json(
                 metric_types: vec!["heart_rate".to_string()],
                 record_count: data.len(),
                 export_timestamp: Utc::now(),
-                data: serde_json::to_string_pretty(&data).unwrap(),
+                data: match serde_json::to_string_pretty(&data) {
+                    Ok(json_string) => json_string,
+                    Err(e) => {
+                        error!(user_id = %auth.user.id, error = %e, "Failed to serialize heart rate data");
+                        return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                            "Failed to serialize heart rate data".to_string(),
+                        )));
+                    }
+                },
             };
 
             Ok(HttpResponse::Ok()
@@ -490,14 +574,18 @@ async fn export_heart_rate_csv(
     match fetch_heart_rate_data(pool, auth.user.id, start_date, end_date, include_raw).await {
         Ok(data) => {
             let mut csv_content = String::new();
-            writeln!(
+            if let Err(e) = writeln!(
                 csv_content,
                 "recorded_at,heart_rate,resting_heart_rate,context,source"
-            )
-            .unwrap();
+            ) {
+                error!(user_id = %auth.user.id, error = %e, "Failed to write heart rate CSV header");
+                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to generate heart rate CSV".to_string(),
+                )));
+            }
 
             for record in &data {
-                writeln!(
+                if let Err(e) = writeln!(
                     csv_content,
                     "{},{},{},{},{}",
                     record.recorded_at.format("%Y-%m-%d %H:%M:%S"),
@@ -507,8 +595,12 @@ async fn export_heart_rate_csv(
                         .map_or("".to_string(), |v| v.to_string()),
                     record.context.as_deref().unwrap_or(""),
                     record.source_device.as_deref().unwrap_or("")
-                )
-                .unwrap();
+                ) {
+                    error!(user_id = %auth.user.id, error = %e, "Failed to write heart rate CSV record");
+                    return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                        "Failed to generate heart rate CSV".to_string(),
+                    )));
+                }
             }
 
             let response = ExportResponse {
@@ -620,7 +712,7 @@ async fn fetch_heart_rate_data(
     sqlx::query_as!(
         HeartRateRecord,
         r#"
-        SELECT user_id, recorded_at, heart_rate, resting_heart_rate, context, source_device, NULL::jsonb as raw_data, NULL::jsonb as metadata, COALESCE(created_at, NOW()) as created_at
+        SELECT id, user_id, recorded_at, heart_rate, resting_heart_rate, heart_rate_variability, context::text, source_device, created_at
         FROM heart_rate_metrics 
         WHERE user_id = $1 AND recorded_at BETWEEN $2 AND $3
         ORDER BY recorded_at ASC

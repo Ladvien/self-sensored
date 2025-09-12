@@ -167,7 +167,14 @@ pub trait LazyValidation {
             
             // Try to read from cache first
             {
-                let mut cache = cache_arc.write().unwrap();
+                let mut cache = match cache_arc.write() {
+                    Ok(cache) => cache,
+                    Err(e) => {
+                        // Log cache error but continue with validation
+                        tracing::warn!("Failed to acquire cache write lock: {}, proceeding without cache", e);
+                        return self.validate_without_cache();
+                    }
+                };
                 if let Some(cached) = cache.get(&cache_key) {
                     return if cached.is_valid {
                         Ok(())
@@ -181,14 +188,21 @@ pub trait LazyValidation {
             let validation_result = self.validate_impl(config);
             let is_valid = validation_result.is_ok();
             let error_message = if !is_valid {
-                Some(validation_result.as_ref().err().unwrap().to_string())
+                validation_result.as_ref().err().map(|e| e.to_string())
             } else {
                 None
             };
             
             // Store in cache
             {
-                let mut cache = cache_arc.write().unwrap();
+                let mut cache = match cache_arc.write() {
+                    Ok(cache) => cache,
+                    Err(e) => {
+                        tracing::warn!("Failed to acquire cache write lock for storing result: {}", e);
+                        // Still return the validation result even if caching failed
+                        return validation_result;
+                    }
+                };
                 cache.put(cache_key, CachedValidation {
                     is_valid,
                     error_message,
@@ -202,6 +216,15 @@ pub trait LazyValidation {
             // No caching - validate directly
             self.validate_impl(config)
         }
+    }
+
+    /// Validation without cache when cache is unavailable
+    fn validate_without_cache(&self) -> Result<(), crate::models::health_metrics::ValidationError> 
+    where 
+        T: ValidatedMetric 
+    {
+        let config = crate::config::ValidationConfig::from_env();
+        self.validate_impl(&config)
     }
 }
 
