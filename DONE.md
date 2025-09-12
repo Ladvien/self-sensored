@@ -7,6 +7,33 @@ Based on the comprehensive database redesign analysis, I'll create Jira stories 
 
 ---
 
+#### [SCHEMA-016] Clean Up Migration References ✅ COMPLETED
+
+**Status:** ✅ COMPLETED 2025-09-12 03:15 PM  
+**Story Points:** 1
+**Completed by:** Claude Code Agent
+**Commit:** c6fd283 - "feat: clean up migration references"
+
+**Acceptance Criteria Met:**
+- ✅ Removed migration file references for deleted health metric tables
+- ✅ Cleaned up migration test files for non-existent tables 
+- ✅ Updated migration documentation in CLAUDE.md
+- ✅ Added historical context notices to documentation files
+- ✅ Removed migration scripts that are no longer needed
+- ✅ Removed dual-write functionality tests and references
+
+**Technical Implementation:**
+- Updated CLAUDE.md to reference schema.sql instead of migration commands
+- Added migration reference notices to review_notes.md, resolution_log.md, DONE.md, team_chat.md
+- Removed scripts/migrate_activity_metrics.sql and scripts/monitor_migration.sql
+- Removed tests/dual_write_rollback_test.rs (activity_metrics_v2 related)
+- Removed dual-write test functions from tests/integration/api_endpoints_test.rs
+- Cleaned up activity_metrics_v2 references throughout test files
+
+**Impact:** Clean codebase with no references to deleted migration files or deprecated functionality
+
+---
+
 #### [SCHEMA-015] Update Integration Tests ✅ COMPLETED
 
 **Status:** ✅ COMPLETED 2025-09-12 03:00 PM  
@@ -3546,5 +3573,51 @@ Update CLAUDE.md and .env.example to reflect the simplified schema with accurate
 ✅ Story moved from BACKLOG.md to DONE.md  
 
 **Result:** Configuration documentation fully aligned with simplified schema. Developers have accurate information for working with the 5 core health metric types and their corresponding database fields.
+
+---
+
+
+## [SCHEMA-006] Fix Activity Metrics Field Name Mapping ✅
+**Completed:** September 12, 2025 2:30 PM  
+**Story Points:** 3  
+**Assignee:** Claude Code Agent  
+**Priority:** High  
+
+### Acceptance Criteria:
+- ✅ Update all references from 'steps' to 'step_count' in validation logic
+- ✅ Update all references from 'calories_burned' to 'active_energy_burned_kcal'  
+- ✅ Fix conversion methods between ActivityMetric and database structs
+- ✅ Update field validation ranges for new field names
+
+### Implementation Details:
+- ✅ Fixed batch_processor.rs INSERT query to use 'recorded_at' instead of 'recorded_date'
+- ✅ Updated activity metrics column binding order to match database schema exactly
+- ✅ Verified all handlers (query.rs, export.rs) already use correct field names (step_count, active_energy_burned_kcal)  
+- ✅ Verified db.rs model conversions already use correct field names
+- ✅ Confirmed blood pressure and workout queries already use correct 'source_device' and 'avg_heart_rate'
+- ✅ Activity metrics field mapping now fully aligned with simplified database schema
+
+**Files Modified:**
+- `src/services/batch_processor.rs` - Fixed INSERT query column names and binding order
+
+**Technical Details:**
+- **Database Alignment**: Activity metrics INSERT now uses database column name 'recorded_at' instead of incorrect 'recorded_date'
+- **Column Binding Order**: Fixed parameter binding order to match database schema: user_id, recorded_at, step_count, distance_meters, active_energy_burned_kcal, basal_energy_burned_kcal, flights_climbed, source_device
+- **Field Name Consistency**: Verified all handlers and models already use correct field names from simplified schema
+- **Query Verification**: Confirmed blood pressure uses 'source_device', workouts use 'avg_heart_rate', activity metrics use 'step_count'
+
+**Impact:** Activity metrics database operations now use correct column names, preventing SQL errors and ensuring data integrity. Field name mapping is consistent across the entire codebase for the simplified schema.
+
+**Dependencies:** SCHEMA-002 ✅
+
+**Definition of Done:**
+✅ All activity metrics field references updated to simplified schema  
+✅ Batch processor INSERT queries use correct database column names  
+✅ Field binding order matches database schema exactly  
+✅ Verification that handlers already use correct field names  
+✅ Code committed: "feat: fix activity metrics field name mapping" (commit a0524cc)  
+✅ Story moved from BACKLOG.md to DONE.md  
+
+**Result:** Activity metrics field name mapping fully aligned with simplified database schema. All database operations use correct column names, preventing SQL errors and ensuring data consistency.
 
 ---

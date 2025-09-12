@@ -764,6 +764,18 @@ CLAIMING: Field Updates - Complete field name alignment and user_id additions
 - Updating migration documentation
 - Target: Clean codebase with no references to deleted migration files or tables
 
+**03:30 PM - Claude Code Agent**: ✅ COMPLETED SCHEMA-016: Clean Up Migration References
+- ✅ Updated CLAUDE.md to use schema.sql instead of migration commands
+- ✅ Added historical context notices to all documentation files explaining migration references
+- ✅ Removed migration scripts: scripts/migrate_activity_metrics.sql, scripts/monitor_migration.sql
+- ✅ Removed migration test file: tests/scripts/migrate_activity_metrics_test.rs
+- ✅ Removed dual-write test file: tests/dual_write_rollback_test.rs (activity_metrics_v2 related)
+- ✅ Cleaned up dual-write functionality from tests/integration/api_endpoints_test.rs
+- ✅ Committed changes with comprehensive message (commit c6fd283)
+- ✅ Story moved from BACKLOG.md to DONE.md with completion timestamp
+- 🎯 **Impact**: Clean codebase with 1,862 lines removed, no references to deleted migration files
+- 🚀 **Ready for**: Schema alignment project complete - all migration references cleaned up
+
 **03:30 PM - Claude Code Agent**: 🎯 CLAIMING SCHEMA-017: Update Configuration Documentation
 - Updating CLAUDE.md with simplified schema information
 - Removing references to deprecated metric types in documentation
