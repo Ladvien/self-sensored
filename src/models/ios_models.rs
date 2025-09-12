@@ -29,7 +29,7 @@ pub struct IosMetric {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct IosMetricData {
     // Common fields across all metrics
-    pub source: Option<String>,
+    pub source_device: Option<String>,
 
     // Time fields - iOS uses string dates
     pub date: Option<String>,
@@ -51,7 +51,7 @@ pub struct IosWorkout {
     pub name: Option<String>,
     pub start: Option<String>,
     pub end: Option<String>,
-    pub source: Option<String>,
+    pub source_device: Option<String>,
     #[serde(flatten)]
     pub extra: std::collections::HashMap<String, serde_json::Value>,
 }
@@ -101,12 +101,15 @@ impl IosIngestPayload {
                                 });
 
                                 let metric = crate::models::HeartRateMetric {
+                                    id: uuid::Uuid::new_v4(),
+                                    user_id: uuid::Uuid::new_v4(), // This will need to be provided by auth context
                                     recorded_at,
                                     heart_rate: Some(qty as i16),
                                     resting_heart_rate: if context_str == Some("resting") { Some(qty as i16) } else { None },
                                     heart_rate_variability: None,
-                                    source_device: data_point.source.clone(),
+                                    source_device: data_point.source_device.clone(),
                                     context,
+                                    created_at: Utc::now(),
                                 };
                                 internal_metrics.push(HealthMetric::HeartRate(metric));
                             }
@@ -152,215 +155,20 @@ impl IosIngestPayload {
                                 .map(|v| v as i32);
 
                             let metric = crate::models::SleepMetric {
-                                recorded_at,
+                                id: uuid::Uuid::new_v4(),
+                                user_id: uuid::Uuid::new_v4(), // This will need to be provided by auth context
                                 sleep_start: start_time,
                                 sleep_end: end_time,
                                 duration_minutes: Some(total_minutes),
                                 deep_sleep_minutes,
                                 rem_sleep_minutes,
+                                light_sleep_minutes: None, // iOS may not provide this separately
                                 awake_minutes,
                                 efficiency: None,
-                                source: data_point.source.clone(),
+                                source_device: data_point.source_device.clone(),
+                                created_at: Utc::now(),
                             };
                             internal_metrics.push(HealthMetric::Sleep(metric));
-                        }
-                    }
-                    // New metric types - Nutrition
-                    "dietary_water" | "water" => {
-                        if let Some(qty) = data_point.qty {
-                            if qty >= 0.0 {
-                                let metric = crate::models::NutritionMetric {
-                                    recorded_at,
-                                    water_ml: Some(qty),
-                                    energy_consumed_kcal: None,
-                                    carbohydrates_g: None,
-                                    protein_g: None,
-                                    fat_total_g: None,
-                                    fat_saturated_g: None,
-                                    fat_monounsaturated_g: None,
-                                    fat_polyunsaturated_g: None,
-                                    cholesterol_mg: None,
-                                    fiber_g: None,
-                                    sugar_g: None,
-                                    sodium_mg: None,
-                                    vitamin_a_mcg: None,
-                                    vitamin_d_mcg: None,
-                                    vitamin_e_mg: None,
-                                    vitamin_k_mcg: None,
-                                    vitamin_c_mg: None,
-                                    thiamin_mg: None,
-                                    riboflavin_mg: None,
-                                    niacin_mg: None,
-                                    pantothenic_acid_mg: None,
-                                    vitamin_b6_mg: None,
-                                    biotin_mcg: None,
-                                    folate_mcg: None,
-                                    vitamin_b12_mcg: None,
-                                    calcium_mg: None,
-                                    phosphorus_mg: None,
-                                    magnesium_mg: None,
-                                    potassium_mg: None,
-                                    chloride_mg: None,
-                                    iron_mg: None,
-                                    zinc_mg: None,
-                                    copper_mg: None,
-                                    manganese_mg: None,
-                                    iodine_mcg: None,
-                                    selenium_mcg: None,
-                                    chromium_mcg: None,
-                                    molybdenum_mcg: None,
-                                    caffeine_mg: None,
-                                    aggregation_period: Some("daily".to_string()),
-                                    source: data_point.source.clone(),
-                                };
-                                internal_metrics.push(HealthMetric::Nutrition(metric));
-                            }
-                        }
-                    }
-                    "dietary_energy_consumed" | "nutrition_calories" => {
-                        if let Some(qty) = data_point.qty {
-                            if qty >= 0.0 {
-                                let metric = crate::models::NutritionMetric {
-                                    recorded_at,
-                                    water_ml: None,
-                                    energy_consumed_kcal: Some(qty),
-                                    carbohydrates_g: None,
-                                    protein_g: None,
-                                    fat_total_g: None,
-                                    fat_saturated_g: None,
-                                    fat_monounsaturated_g: None,
-                                    fat_polyunsaturated_g: None,
-                                    cholesterol_mg: None,
-                                    fiber_g: None,
-                                    sugar_g: None,
-                                    sodium_mg: None,
-                                    vitamin_a_mcg: None,
-                                    vitamin_d_mcg: None,
-                                    vitamin_e_mg: None,
-                                    vitamin_k_mcg: None,
-                                    vitamin_c_mg: None,
-                                    thiamin_mg: None,
-                                    riboflavin_mg: None,
-                                    niacin_mg: None,
-                                    pantothenic_acid_mg: None,
-                                    vitamin_b6_mg: None,
-                                    biotin_mcg: None,
-                                    folate_mcg: None,
-                                    vitamin_b12_mcg: None,
-                                    calcium_mg: None,
-                                    phosphorus_mg: None,
-                                    magnesium_mg: None,
-                                    potassium_mg: None,
-                                    chloride_mg: None,
-                                    iron_mg: None,
-                                    zinc_mg: None,
-                                    copper_mg: None,
-                                    manganese_mg: None,
-                                    iodine_mcg: None,
-                                    selenium_mcg: None,
-                                    chromium_mcg: None,
-                                    molybdenum_mcg: None,
-                                    caffeine_mg: None,
-                                    aggregation_period: Some("daily".to_string()),
-                                    source: data_point.source.clone(),
-                                };
-                                internal_metrics.push(HealthMetric::Nutrition(metric));
-                            }
-                        }
-                    }
-                    // Environmental metrics
-                    "environmental_audio_exposure" | "headphone_audio_exposure" => {
-                        if let Some(qty) = data_point.qty {
-                            if qty >= 0.0 && qty <= 140.0 {
-                                let metric = crate::models::EnvironmentalMetric {
-                                    recorded_at,
-                                    environmental_sound_level_db: if ios_metric.name.to_lowercase().contains("environmental") {
-                                        Some(qty)
-                                    } else { None },
-                                    headphone_exposure_db: if ios_metric.name.to_lowercase().contains("headphone") {
-                                        Some(qty)
-                                    } else { None },
-                                    noise_reduction_db: None,
-                                    exposure_duration_seconds: None,
-                                    uv_index: None,
-                                    time_in_sun_minutes: None,
-                                    time_in_shade_minutes: None,
-                                    sunscreen_applied: None,
-                                    uv_dose_joules_per_m2: None,
-                                    fall_detected: None,
-                                    fall_severity: None,
-                                    impact_force_g: None,
-                                    emergency_contacted: None,
-                                    fall_response_time_seconds: None,
-                                    handwashing_events: None,
-                                    handwashing_duration_seconds: None,
-                                    toothbrushing_events: None,
-                                    toothbrushing_duration_seconds: None,
-                                    pm2_5_micrograms_m3: None,
-                                    pm10_micrograms_m3: None,
-                                    air_quality_index: None,
-                                    ozone_ppb: None,
-                                    no2_ppb: None,
-                                    so2_ppb: None,
-                                    co_ppm: None,
-                                    altitude_meters: None,
-                                    barometric_pressure_hpa: None,
-                                    indoor_outdoor_context: None,
-                                    aggregation_period: Some("event".to_string()),
-                                    measurement_count: Some(1),
-                                    source: data_point.source.clone(),
-                                    device_type: Some("Apple Watch".to_string()),
-                                };
-                                internal_metrics.push(HealthMetric::Environmental(metric));
-                            }
-                        }
-                    }
-                    // Mental health metrics
-                    "mindful_session" => {
-                        if let Some(qty) = data_point.qty {
-                            if qty >= 0.0 {
-                                let metric = crate::models::MentalHealthMetric {
-                                    recorded_at,
-                                    mindful_minutes: Some(qty),
-                                    mood_valence: None,
-                                    mood_labels: None,
-                                    daylight_minutes: None,
-                                    stress_level: None,
-                                    depression_score: None,
-                                    anxiety_score: None,
-                                    sleep_quality_score: None,
-                                    source: data_point.source.clone(),
-                                    notes: None,
-                                };
-                                internal_metrics.push(HealthMetric::MentalHealth(metric));
-                            }
-                        }
-                    }
-                    "state_of_mind" => {
-                        // iOS 17+ State of Mind data - extract from extra fields
-                        let mood_valence = data_point.extra.get("valence")
-                            .and_then(|v| v.as_f64());
-                        let mood_labels = data_point.extra.get("labels")
-                            .and_then(|v| v.as_array())
-                            .map(|arr| arr.iter()
-                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                                .collect::<Vec<String>>());
-                        
-                        if mood_valence.is_some() || mood_labels.is_some() {
-                            let metric = crate::models::MentalHealthMetric {
-                                recorded_at,
-                                mindful_minutes: None,
-                                mood_valence,
-                                mood_labels,
-                                daylight_minutes: None,
-                                stress_level: None,
-                                depression_score: None,
-                                anxiety_score: None,
-                                sleep_quality_score: None,
-                                source: data_point.source.clone(),
-                                notes: None,
-                            };
-                            internal_metrics.push(HealthMetric::MentalHealth(metric));
                         }
                     }
                     "steps"
@@ -368,15 +176,21 @@ impl IosIngestPayload {
                     | "distance_walking_running"
                     | "distance"
                     | "active_energy_burned"
+                    | "basal_energy_burned"
                     | "calories"
-                    | "flights_climbed"
-                    | "active_minutes" => {
+                    | "flights_climbed" => {
                         if let Some(qty) = data_point.qty {
                             if qty >= 0.0 {
+                                // Generate UUIDs for the activity metric
+                                let id = uuid::Uuid::new_v4();
+                                let user_id = uuid::Uuid::new_v4(); // This will need to be provided by auth context
+                                
                                 // Basic validation - no negative values
                                 let metric = crate::models::ActivityMetric {
-                                    date: recorded_at.date_naive(),
-                                    steps: if matches!(
+                                    id,
+                                    user_id,
+                                    recorded_at,
+                                    step_count: if matches!(
                                         ios_metric.name.to_lowercase().as_str(),
                                         "steps" | "step_count"
                                     ) {
@@ -392,7 +206,7 @@ impl IosIngestPayload {
                                     } else {
                                         None
                                     },
-                                    calories_burned: if matches!(
+                                    active_energy_burned_kcal: if matches!(
                                         ios_metric.name.to_lowercase().as_str(),
                                         "active_energy_burned" | "calories"
                                     ) {
@@ -400,10 +214,10 @@ impl IosIngestPayload {
                                     } else {
                                         None
                                     },
-                                    active_minutes: if ios_metric.name.to_lowercase().as_str()
-                                        == "active_minutes"
+                                    basal_energy_burned_kcal: if ios_metric.name.to_lowercase().as_str()
+                                        == "basal_energy_burned"
                                     {
-                                        Some(qty as i32)
+                                        Some(qty)
                                     } else {
                                         None
                                     },
@@ -414,7 +228,8 @@ impl IosIngestPayload {
                                     } else {
                                         None
                                     },
-                                    source: data_point.source.clone(),
+                                    source_device: data_point.source_device.clone(),
+                                    created_at: Utc::now(),
                                 };
                                 internal_metrics.push(HealthMetric::Activity(metric));
                             }
@@ -447,11 +262,14 @@ impl IosIngestPayload {
             if let (Some(sys), Some(dia)) = (systolic, diastolic) {
                 if let Ok(timestamp) = DateTime::parse_from_rfc3339(&timestamp_str) {
                     let metric = crate::models::BloodPressureMetric {
+                        id: uuid::Uuid::new_v4(),
+                        user_id: uuid::Uuid::new_v4(), // This will need to be provided by auth context
                         recorded_at: timestamp.with_timezone(&Utc),
                         systolic: sys,
                         diastolic: dia,
                         pulse: None, // iOS might not provide pulse separately
-                        source: Some("Auto Health Export iOS".to_string()),
+                        source_device: Some("Auto Health Export iOS".to_string()),
+                        created_at: Utc::now(),
                     };
                     internal_metrics.push(HealthMetric::BloodPressure(metric));
                 }
@@ -480,29 +298,39 @@ impl IosIngestPayload {
                 .extra
                 .get("avg_heart_rate")
                 .and_then(|v| v.as_i64())
-                .map(|v| v as i16);
+                .map(|v| v as i32);
 
             let max_heart_rate = ios_workout
                 .extra
                 .get("max_heart_rate")
                 .and_then(|v| v.as_i64())
-                .map(|v| v as i16);
+                .map(|v| v as i32);
+
+            let active_energy_kcal = ios_workout
+                .extra
+                .get("active_energy_kcal")
+                .or_else(|| ios_workout.extra.get("active_calories"))
+                .and_then(|v| v.as_f64());
 
             if start_time < end_time {
                 // Basic validation
+                let workout_type = WorkoutType::from_ios_string(
+                    &ios_workout.name.clone().unwrap_or_else(|| "Unknown".to_string())
+                ).unwrap_or(WorkoutType::Other);
+
                 let workout = WorkoutData {
-                    workout_type: ios_workout
-                        .name
-                        .clone()
-                        .unwrap_or_else(|| "Unknown".to_string()),
-                    start_time,
-                    end_time,
+                    id: uuid::Uuid::new_v4(),
+                    user_id: uuid::Uuid::new_v4(), // This will need to be provided by auth context
+                    workout_type,
+                    started_at: start_time,
+                    ended_at: end_time,
                     total_energy_kcal,
+                    active_energy_kcal,
                     distance_meters,
                     avg_heart_rate,
                     max_heart_rate,
-                    source: ios_workout.source.clone(),
-                    route_points: None, // iOS data typically doesn't include detailed GPS routes
+                    source_device: ios_workout.source.clone(),
+                    created_at: Utc::now(),
                 };
                 internal_workouts.push(workout);
             }
@@ -512,12 +340,6 @@ impl IosIngestPayload {
             data: IngestData {
                 metrics: internal_metrics,
                 workouts: internal_workouts,
-                nutrition_metrics: Vec::new(),
-                symptom_metrics: Vec::new(),
-                reproductive_health_metrics: Vec::new(),
-                environmental_metrics: Vec::new(),
-                mental_health_metrics: Vec::new(),
-                mobility_metrics: Vec::new(),
             },
         }
     }
