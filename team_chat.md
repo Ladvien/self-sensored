@@ -1,5 +1,8 @@
 # Team Chat Log
 
+## ⚠️ MIGRATION REFERENCES NOTICE
+**Historical Context**: This file contains references to migration files and expanded schema features that were part of the expanded schema implementation but have been removed as part of the schema simplification (SCHEMA-016). All references to migration files, nutrition metrics, symptoms, reproductive health metrics, environmental metrics, mental health metrics, and mobility metrics are historical and relate to work completed before schema simplification to the core 5 metric types.
+
 ## September 11, 2025
 
 **12:24 PM - Database Agent**: Claiming Story 1.1: Create activity_metrics_v2 Table with Proper Schema. Starting work on migration file and comprehensive tests.
@@ -565,6 +568,29 @@ CLAIMING: Field Updates - Complete field name alignment and user_id additions
 - Testing iOS payload conversion and ensuring proper field mapping
 - Target: iOS model conversion logic aligned with simplified 5-table schema
 
+**02:45 PM - Claude Code Agent**: ✅ COMPLETED SCHEMA-014: Fix iOS Model Conversion Logic
+- ✅ Removed conversion logic for 6 deprecated metric types (Nutrition, Environmental, MentalHealth, etc.) - 169 lines removed
+- ✅ Updated field name mappings to match simplified schema:
+  * ActivityMetric uses step_count instead of steps
+  * ActivityMetric uses active_energy_burned_kcal instead of calories_burned
+  * Added basal_energy_burned_kcal mapping for basal energy
+  * All metrics use source_device consistently throughout conversion
+- ✅ Added required database fields to all iOS-converted metrics:
+  * UUID generation for id and user_id fields on all metrics
+  * created_at timestamps with proper UTC handling
+  * HeartRateMetric, SleepMetric, BloodPressureMetric with complete field sets
+- ✅ Fixed WorkoutData creation with correct field mappings:
+  * Uses started_at/ended_at (not start_time/end_time)
+  * Heart rates converted to i32 to match INTEGER database columns
+  * Added active_energy_kcal field mapping from iOS extra data
+  * Uses WorkoutType enum conversion with fallback to Other
+- ✅ Updated metric type routing to support only 5 core types (removed 6 deprecated types)
+- ✅ Removed deprecated metric arrays from IngestData return structure
+- ✅ Committed comprehensive changes (commit b84e83a)
+- ✅ Story moved from BACKLOG.md to DONE.md with full documentation
+- 🎯 **Impact**: iOS Auto Health Export app payloads now convert correctly using simplified 5-table schema
+- 🚀 **Ready for**: Next schema alignment stories and database query updates
+
 **02:15 PM - Claude Code Agent**: 🎯 CLAIMING SCHEMA-013: Update Validation Configuration
 - Removing validation configs for deprecated metric types from ValidationConfig
 - Updating field name references in validation configuration  
@@ -649,6 +675,22 @@ CLAIMING: Field Updates - Complete field name alignment and user_id additions
 - Removing all INSERT queries for deleted metric tables (nutrition_metrics, symptoms, etc.)
 - Target: All batch processor SQL queries aligned with simplified schema
 
+**02:30 PM - Claude Code Agent**: ✅ COMPLETED SCHEMA-008: Fix Batch Processor SQL Queries
+- ✅ Fixed INSERT INTO blood_pressure_metrics to use source_device instead of source column
+- ✅ Fixed INSERT INTO workouts to use avg_heart_rate instead of average_heart_rate column
+- ✅ Updated INSERT INTO activity_metrics to include basal_energy_burned_kcal field with correct order
+- ✅ Removed all references to deprecated metric tables from process_batch method
+- ✅ Removed all activity_metrics_v2 table references and dual-write functionality (~500 lines)
+- ✅ Cleaned up DeduplicationStats struct to remove 6 deprecated metric types
+- ✅ Cleaned up GroupedMetrics struct to remove deprecated metric collections
+- ✅ Fixed activity metric deduplication to remove non-existent active_minutes field
+- ✅ Updated parameter count calculations for activity metrics (7 params per record)
+- ✅ Simplified batch processing to support only 5 core metric types
+- ✅ Commit: cb6a832 "feat: fix batch processor SQL queries for simplified schema"
+- ✅ Story moved from BACKLOG.md to DONE.md
+- 🎯 **Impact**: All batch processor SQL queries now work with simplified schema
+- 🚀 **Ready for**: Query handlers and export functionality updates (SCHEMA-009)
+
 **01:45 PM - Claude Code Agent**: 🎯 CLAIMING SCHEMA-009: Fix Handler Query Field Names
 - Fixing SQL queries in src/handlers/query.rs with step_count, active_energy_burned_kcal field names
 - Updating export.rs field references for activity metrics
@@ -700,3 +742,20 @@ CLAIMING: Field Updates - Complete field name alignment and user_id additions
 - Updating field name examples in documentation
 - Updating environment variable documentation in .env.example
 - Target: Complete documentation alignment with simplified 5-table schema
+
+**03:45 PM - Claude Code Agent**: ✅ COMPLETED SCHEMA-017: Update Configuration Documentation
+- ✅ Updated CLAUDE.md with simplified schema information:
+  * Parameter counts for all 5 core metric types (Heart Rate: 7 params, Blood Pressure: 6 params, Sleep: 9 params, Activity: 7 params, Workout: 10 params)
+  * Fixed field name references (steps → step_count, source → source_device)
+  * Added core 5 health metric types documentation section
+  * Updated debugging section for simplified raw_ingestions table fields
+- ✅ Removed references to deprecated metric types from documentation
+- ✅ Updated field name examples throughout documentation for consistency
+- ✅ Updated .env.example for simplified schema:
+  * Changed VALIDATION_STEPS_* to VALIDATION_STEP_COUNT_* 
+  * Updated batch processing parameter counts for accurate PostgreSQL chunking
+  * Added simplified schema clarification comments
+  * Updated Sleep chunk size to 6000 for 9 parameters
+- ✅ Committed changes (b78b81e) and moved story from BACKLOG.md to DONE.md
+- 🎯 **Impact**: Configuration documentation now accurately reflects simplified schema with correct field names, parameter counts, and environment variables
+- 🚀 **Result**: Developers have accurate documentation for working with the 5 core health metric types and their database fields
