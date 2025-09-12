@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use crate::config::BatchConfig;
 use crate::models::{IngestPayload, ProcessingError};
+use crate::models::enums::{JobStatus, JobType};
 use crate::services::auth::AuthContext;
 
 /// Background job types supported by the system
@@ -109,9 +110,9 @@ impl BackgroundJobCoordinator {
             r#"
             INSERT INTO processing_jobs (
                 user_id, api_key_id, raw_ingestion_id, status, job_type, priority,
-                total_metrics, max_retries, config, estimated_completion_at
+                total_metrics, config
             )
-            VALUES ($1, $2, $3, 'pending', $4, $5, $6, $7, $8, $9)
+            VALUES ($1, $2, $3, 'pending'::job_status, $4::job_type, $5, $6, $7)
             RETURNING id
             "#,
             auth.user.id,
@@ -120,9 +121,7 @@ impl BackgroundJobCoordinator {
             config.job_type.as_str(),
             i32::from(config.priority),
             total_metrics as i32,
-            config.max_retries,
-            job_config,
-            estimated_completion
+            job_config
         )
         .fetch_one(&self.pool)
         .await?
@@ -170,9 +169,9 @@ impl BackgroundJobCoordinator {
         let job = sqlx::query!(
             r#"
             SELECT 
-                status, job_type, priority, total_metrics, processed_metrics, 
+                status as "status: JobStatus", job_type as "job_type: JobType", priority, total_metrics, processed_metrics, 
                 failed_metrics, progress_percentage, created_at, started_at, 
-                completed_at, estimated_completion_at, error_message, retry_count,
+                completed_at, error_message, retry_count,
                 result_summary
             FROM processing_jobs 
             WHERE id = $1
@@ -199,7 +198,6 @@ impl BackgroundJobCoordinator {
                 created_at: job.created_at.unwrap(),
                 started_at: job.started_at,
                 completed_at: job.completed_at,
-                estimated_completion_at: job.estimated_completion_at,
                 error_message: job.error_message,
                 retry_count: job.retry_count.unwrap_or(0),
                 result_summary: job.result_summary,
@@ -218,7 +216,18 @@ impl BackgroundJobCoordinator {
         error_message: Option<String>,
     ) -> Result<(), sqlx::Error> {
         sqlx::query!(
-            "SELECT update_job_progress($1, $2, $3, $4)",
+            r#"
+            UPDATE processing_jobs 
+            SET 
+                processed_metrics = $2,
+                failed_metrics = $3,
+                progress_percentage = CASE 
+                    WHEN total_metrics > 0 THEN (($2::decimal / total_metrics) * 100.0)
+                    ELSE 0.0 
+                END,
+                error_message = COALESCE($4, error_message)
+            WHERE id = $1
+            "#,
             job_id,
             processed_metrics as i32,
             failed_metrics as i32,
@@ -241,7 +250,15 @@ impl BackgroundJobCoordinator {
         let status = if success { "completed" } else { "failed" };
 
         sqlx::query!(
-            "SELECT complete_job($1, $2, $3, $4)",
+            r#"
+            UPDATE processing_jobs 
+            SET 
+                status = $2::job_status,
+                completed_at = CURRENT_TIMESTAMP,
+                result_summary = $3,
+                error_message = COALESCE($4, error_message)
+            WHERE id = $1
+            "#,
             job_id,
             status,
             result_summary,
@@ -347,7 +364,6 @@ pub struct JobStatus {
     pub created_at: sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>,
     pub started_at: Option<sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>>,
     pub completed_at: Option<sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>>,
-    pub estimated_completion_at: Option<sqlx::types::chrono::DateTime<sqlx::types::chrono::Utc>>,
     pub error_message: Option<String>,
     pub retry_count: i32,
     pub result_summary: Option<serde_json::Value>,

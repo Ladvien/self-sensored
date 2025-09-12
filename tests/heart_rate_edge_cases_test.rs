@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
-use self_sensored::models::{HeartRateMetric, WorkoutData};
+use self_sensored::models::{HeartRateMetric, WorkoutData, enums::ActivityContext};
+use uuid::Uuid;
 
 /// Test heart rate validation edge cases to ensure 15 BPM minimum is working
 #[cfg(test)]
@@ -10,23 +11,29 @@ mod heart_rate_edge_cases {
     fn test_heart_rate_validation_edge_cases() {
         // Test with exactly 15 BPM (minimum allowed) - should pass
         let valid_hr = HeartRateMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
-            min_bpm: Some(15),
-            avg_bpm: Some(15),
-            max_bpm: Some(15),
-            source: Some("Test".to_string()),
-            context: Some("resting".to_string()),
+            heart_rate: Some(15),
+            resting_heart_rate: Some(15),
+            heart_rate_variability: None,
+            source_device: Some("Test".to_string()),
+            context: Some(ActivityContext::Resting),
+            created_at: Utc::now(),
         };
         assert!(valid_hr.validate().is_ok());
 
         // Test with 14 BPM (below minimum) - should fail
         let invalid_hr = HeartRateMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
-            min_bpm: Some(14),
-            avg_bpm: Some(14),
-            max_bpm: Some(14),
-            source: Some("Test".to_string()),
-            context: Some("resting".to_string()),
+            heart_rate: Some(14),
+            resting_heart_rate: Some(14),
+            heart_rate_variability: None,
+            source_device: Some("Test".to_string()),
+            context: Some(ActivityContext::Resting),
+            created_at: Utc::now(),
         };
         assert!(invalid_hr.validate().is_err());
 

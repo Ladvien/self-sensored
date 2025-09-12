@@ -2,8 +2,9 @@ use chrono::{DateTime, Utc, NaiveDate};
 use serde_json::json;
 use self_sensored::models::{
     HeartRateMetric, BloodPressureMetric, SleepMetric, ActivityMetric, 
-    WorkoutData, GpsCoordinate, HealthMetric
+    WorkoutData, GpsCoordinate, HealthMetric, enums::{ActivityContext, WorkoutType}
 };
+use uuid::Uuid;
 
 /// Comprehensive tests for HeartRateMetric validation and processing
 mod heart_rate_tests {
@@ -12,12 +13,15 @@ mod heart_rate_tests {
     #[test]
     fn test_heart_rate_validation_valid() {
         let metric = HeartRateMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
-            min_bpm: Some(55),
-            avg_bpm: Some(72),
-            max_bpm: Some(95),
-            source: Some("Apple Watch".to_string()),
-            context: Some("exercise".to_string()),
+            heart_rate: Some(72),
+            resting_heart_rate: Some(55),
+            heart_rate_variability: None,
+            source_device: Some("Apple Watch".to_string()),
+            context: Some(ActivityContext::Exercise),
+            created_at: Utc::now(),
         };
 
         assert!(metric.validate().is_ok());
@@ -27,23 +31,29 @@ mod heart_rate_tests {
     fn test_heart_rate_validation_ranges() {
         // Test low boundary
         let low_valid = HeartRateMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
-            min_bpm: Some(20),
-            avg_bpm: Some(20),
-            max_bpm: Some(20),
-            source: None,
+            heart_rate: Some(20),
+            resting_heart_rate: Some(20),
+            heart_rate_variability: None,
+            source_device: None,
             context: None,
+            created_at: Utc::now(),
         };
         assert!(low_valid.validate().is_ok());
 
         // Test high boundary
         let high_valid = HeartRateMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
-            min_bpm: Some(300),
-            avg_bpm: Some(300),
-            max_bpm: Some(300),
-            source: None,
+            heart_rate: Some(300),
+            resting_heart_rate: Some(300),
+            heart_rate_variability: None,
+            source_device: None,
             context: None,
+            created_at: Utc::now(),
         };
         assert!(high_valid.validate().is_ok());
 

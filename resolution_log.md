@@ -7,7 +7,34 @@
 **Historical Context**: This file contains references to migration files that were part of the expanded schema implementation but have been removed as part of the schema simplification (SCHEMA-016). References to migration files are historical and relate to work completed before schema simplification.
 
 ## Overview
-Addressing HIGH and MEDIUM priority security issues identified in review_notes.md:
+Addressing CRITICAL test compilation failures and database schema issues identified in review_notes.md:
+
+## CRITICAL Priority Issues - IN PROGRESS
+
+### [CRITICAL] Test Suite Compilation Failures (2025-09-12)
+- **Issue:** All tests failing compilation due to model field name mismatches
+- **Status:** 🔄 PARTIAL RESOLUTION
+- **Progress:** Fixed 5 critical test files, 13 files remaining
+- **Resolution Details:**
+  - ✅ **Database Schema Fixed:** Removed phantom columns (estimated_completion_at, max_retries, last_retry_at) from SQL queries
+  - ✅ **HeartRateMetric Tests:** Updated from min_bpm/avg_bmp/max_bpm to heart_rate/resting_heart_rate in 3 files
+  - ✅ **Context Field Type:** Fixed String to ActivityContext enum in test fixtures
+  - ✅ **Missing Fields:** Added missing UUID, timestamp, and heart_rate_variability fields
+  - ✅ **WorkoutType Enum:** Confirmed exists in src/models/enums.rs, updated test usage
+  - 🔄 **Remaining Work:** 13 test files still need field name updates
+
+**Files Fixed:**
+- `/tests/handlers/ingest_test.rs` - Updated HeartRateMetric and WorkoutData field names
+- `/tests/heart_rate_edge_cases_test.rs` - Updated all HeartRateMetric test cases
+- `/tests/models/health_metrics_comprehensive_test.rs` - Partially updated (needs completion)
+- `/src/handlers/background.rs` - Fixed SQL queries removing phantom columns
+- `/src/handlers/background_coordinator.rs` - Fixed SQL INSERT parameters
+- `/src/services/background_processor.rs` - Fixed SQL SELECT queries
+
+**Compilation Status:**
+- Before: 108+ compilation errors
+- Current: 156 errors remaining (mix of test and handler issues)
+- Next: Complete remaining test file updates
 
 ## CRITICAL Priority Issues - RESOLVED
 

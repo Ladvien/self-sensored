@@ -451,11 +451,11 @@ fn validate_workouts(
 
 /// Validate a single workout
 fn validate_single_workout(workout: &crate::models::WorkoutData) -> Result<(), String> {
-    if workout.start_time >= workout.end_time {
-        return Err("Workout end_time must be after start_time".to_string());
+    if workout.started_at >= workout.ended_at {
+        return Err("Workout ended_at must be after started_at".to_string());
     }
 
-    let duration = workout.end_time - workout.start_time;
+    let duration = workout.ended_at - workout.started_at;
     if duration.num_hours() > 24 {
         return Err("Workout duration cannot exceed 24 hours".to_string());
     }
@@ -491,9 +491,7 @@ fn validate_single_workout(workout: &crate::models::WorkoutData) -> Result<(), S
         }
     }
 
-    if workout.workout_type.is_empty() {
-        return Err("workout_type cannot be empty".to_string());
-    }
+    // WorkoutType is an enum, so it's always valid
 
     Ok(())
 }

@@ -15,7 +15,7 @@ mod services;
 use config::LoggingConfig;
 use db::database::{create_connection_pool, update_db_pool_metrics};
 use middleware::{
-    AuthMiddleware, CompressionAndCaching, MetricsMiddleware, RateLimitMiddleware, StructuredLogger,
+    AdminMiddleware, AuthMiddleware, CompressionAndCaching, MetricsMiddleware, RateLimitMiddleware, StructuredLogger,
 };
 use services::{auth::AuthService, rate_limiter::RateLimiter};
 
@@ -260,9 +260,10 @@ async fn main() -> std::io::Result<()> {
                         "/export/activity-analytics",
                         web::get().to(handlers::export::export_activity_summary),
                     )
-                    // Admin endpoints for logging management
+                    // Admin endpoints for logging management (admin-only)
                     .service(
                         web::scope("/admin")
+                            .wrap(AdminMiddleware) // Apply admin authorization middleware
                             .route(
                                 "/logging/level",
                                 web::get().to(handlers::admin::get_log_level),

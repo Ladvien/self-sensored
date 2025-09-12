@@ -242,7 +242,7 @@ async fn validate_payload_parallel(
 /// Batch validation for metrics (CPU intensive)
 fn validate_metrics_batch(metrics: &[HealthMetric]) -> Vec<crate::models::ProcessingError> {
     metrics
-        .par_iter() // Use rayon for parallel processing
+        .iter() // Sequential processing to avoid rayon dependency
         .enumerate()
         .filter_map(|(index, metric)| {
             match metric.validate() {
@@ -260,7 +260,7 @@ fn validate_metrics_batch(metrics: &[HealthMetric]) -> Vec<crate::models::Proces
 /// Batch validation for workouts (CPU intensive)
 fn validate_workouts_batch(workouts: &[crate::models::WorkoutData]) -> Vec<crate::models::ProcessingError> {
     workouts
-        .par_iter() // Use rayon for parallel processing
+        .iter() // Sequential processing to avoid rayon dependency
         .enumerate()
         .filter_map(|(index, workout)| {
             match validate_single_workout_optimized(workout) {
@@ -278,11 +278,11 @@ fn validate_workouts_batch(workouts: &[crate::models::WorkoutData]) -> Vec<crate
 /// Optimized workout validation with early returns
 fn validate_single_workout_optimized(workout: &crate::models::WorkoutData) -> Result<(), String> {
     // Early returns for performance
-    if workout.start_time >= workout.end_time {
-        return Err("Workout end_time must be after start_time".to_string());
+    if workout.started_at >= workout.ended_at {
+        return Err("Workout ended_at must be after started_at".to_string());
     }
     
-    let duration = workout.end_time - workout.start_time;
+    let duration = workout.ended_at - workout.started_at;
     if duration.num_hours() > 24 {
         return Err("Workout duration cannot exceed 24 hours".to_string());
     }
@@ -314,9 +314,7 @@ fn validate_single_workout_optimized(workout: &crate::models::WorkoutData) -> Re
         }
     }
     
-    if workout.workout_type.is_empty() {
-        return Err("workout_type cannot be empty".to_string());
-    }
+    // WorkoutType is an enum, so it's always valid
     
     Ok(())
 }
@@ -402,7 +400,6 @@ pub fn configure_optimized_pool() -> sqlx::postgres::PgPoolOptions {
     sqlx::postgres::PgPoolOptions::new()
         .max_connections(50) // Optimize based on CPU cores and workload
         .min_connections(10) // Keep minimum connections warm
-        .connect_timeout(std::time::Duration::from_secs(5))
         .idle_timeout(Some(std::time::Duration::from_secs(300))) // 5 minutes
         .max_lifetime(Some(std::time::Duration::from_secs(1800))) // 30 minutes
         .test_before_acquire(true) // Ensure connection health

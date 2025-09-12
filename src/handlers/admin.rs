@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{info, warn, Level};
 
 use crate::middleware::get_request_id;
-use crate::services::auth::AuthContext;
+use crate::services::auth::{AuthContext, AuthService};
 
 /// Request to change log level at runtime
 #[derive(Deserialize)]
@@ -25,6 +25,24 @@ pub struct LogLevelResponse {
 /// Get current log level configuration
 pub async fn get_log_level(auth: AuthContext, req: actix_web::HttpRequest) -> Result<HttpResponse> {
     let request_id = get_request_id(&req);
+
+    // Double-check admin permissions (defense in depth)
+    if !AuthService::has_admin_permission(&auth) {
+        warn!(
+            event = "admin_permission_denied",
+            user_id = %auth.user.id,
+            api_key_id = %auth.api_key.id,
+            endpoint = "get_log_level",
+            request_id = request_id.map(|id| id.to_string()).as_deref(),
+            permissions = ?auth.api_key.permissions,
+            message = "User without admin permissions attempted to access admin endpoint"
+        );
+        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+            "error": "access_denied",
+            "message": "Admin privileges required to access this endpoint",
+            "required_permission": "admin"
+        })));
+    }
 
     info!(
         event = "admin_log_level_check",
@@ -53,6 +71,24 @@ pub async fn set_log_level(
     payload: web::Json<LogLevelRequest>,
 ) -> Result<HttpResponse> {
     let request_id = get_request_id(&req);
+
+    // Double-check admin permissions (defense in depth)
+    if !AuthService::has_admin_permission(&auth) {
+        warn!(
+            event = "admin_permission_denied",
+            user_id = %auth.user.id,
+            api_key_id = %auth.api_key.id,
+            endpoint = "set_log_level",
+            request_id = request_id.map(|id| id.to_string()).as_deref(),
+            permissions = ?auth.api_key.permissions,
+            message = "User without admin permissions attempted to change log level"
+        );
+        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+            "error": "access_denied",
+            "message": "Admin privileges required to modify system log level",
+            "required_permission": "admin"
+        })));
+    }
 
     // Validate log level
     let new_level = match payload.level.to_lowercase().as_str() {
@@ -134,6 +170,24 @@ pub async fn get_logging_stats(
 ) -> Result<HttpResponse> {
     let request_id = get_request_id(&req);
 
+    // Double-check admin permissions (defense in depth)
+    if !AuthService::has_admin_permission(&auth) {
+        warn!(
+            event = "admin_permission_denied",
+            user_id = %auth.user.id,
+            api_key_id = %auth.api_key.id,
+            endpoint = "get_logging_stats",
+            request_id = request_id.map(|id| id.to_string()).as_deref(),
+            permissions = ?auth.api_key.permissions,
+            message = "User without admin permissions attempted to access logging statistics"
+        );
+        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+            "error": "access_denied",
+            "message": "Admin privileges required to access system logging statistics",
+            "required_permission": "admin"
+        })));
+    }
+
     info!(
         event = "admin_logging_stats_request",
         user_id = %auth.user.id,
@@ -175,6 +229,24 @@ pub async fn generate_test_logs(
     let request_id = get_request_id(&req);
     let count = payload.count.unwrap_or(5);
     let include_sensitive = payload.include_sensitive.unwrap_or(false);
+
+    // Double-check admin permissions (defense in depth)
+    if !AuthService::has_admin_permission(&auth) {
+        warn!(
+            event = "admin_permission_denied",
+            user_id = %auth.user.id,
+            api_key_id = %auth.api_key.id,
+            endpoint = "generate_test_logs",
+            request_id = request_id.map(|id| id.to_string()).as_deref(),
+            permissions = ?auth.api_key.permissions,
+            message = "User without admin permissions attempted to generate test logs"
+        );
+        return Ok(HttpResponse::Forbidden().json(serde_json::json!({
+            "error": "access_denied",
+            "message": "Admin privileges required to generate test logs",
+            "required_permission": "admin"
+        })));
+    }
 
     info!(
         event = "admin_test_logs_requested",

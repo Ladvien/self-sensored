@@ -693,4 +693,49 @@ impl AuthService {
         self.rate_limiter.is_some()
     }
 
+    /// Check if a user has admin permissions
+    pub fn has_admin_permission(auth_context: &AuthContext) -> bool {
+        // Check if the permissions field contains "admin" permission
+        if let Some(permissions) = &auth_context.api_key.permissions {
+            // Support both array format ["read", "write", "admin"] and object format {"admin": true}
+            match permissions {
+                serde_json::Value::Array(perms) => {
+                    perms.iter().any(|p| {
+                        p.as_str().map_or(false, |s| s == "admin")
+                    })
+                }
+                serde_json::Value::Object(perms) => {
+                    perms.get("admin").and_then(|v| v.as_bool()).unwrap_or(false)
+                }
+                _ => false,
+            }
+        } else {
+            false
+        }
+    }
+
+    /// Check if a user has a specific permission
+    pub fn has_permission(auth_context: &AuthContext, permission: &str) -> bool {
+        // Admin users have all permissions
+        if Self::has_admin_permission(auth_context) {
+            return true;
+        }
+
+        if let Some(permissions) = &auth_context.api_key.permissions {
+            match permissions {
+                serde_json::Value::Array(perms) => {
+                    perms.iter().any(|p| {
+                        p.as_str().map_or(false, |s| s == permission)
+                    })
+                }
+                serde_json::Value::Object(perms) => {
+                    perms.get(permission).and_then(|v| v.as_bool()).unwrap_or(false)
+                }
+                _ => false,
+            }
+        } else {
+            false
+        }
+    }
+
 }

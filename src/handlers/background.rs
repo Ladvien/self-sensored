@@ -4,8 +4,9 @@ use tracing::{error, info, instrument};
 use uuid::Uuid;
 
 use crate::models::{
-    ApiResponse, CreateJobResponse, JobStatus, JobStatusResponse, ProcessingJob,
+    ApiResponse, CreateJobResponse, JobStatusResponse, ProcessingJob,
 };
+use crate::models::enums::{JobStatus, JobType};
 use crate::services::auth::AuthContext;
 use crate::services::background_processor::BackgroundProcessor;
 
@@ -79,13 +80,13 @@ pub async fn list_user_jobs(
                 crate::models::ProcessingJob,
                 r#"
                 SELECT 
-                    id, user_id, api_key_id, raw_ingestion_id, status, job_type, priority,
+                    id, user_id, api_key_id, raw_ingestion_id, status as "status: JobStatus", job_type as "job_type: JobType", priority,
                     total_metrics, processed_metrics, failed_metrics, progress_percentage,
-                    created_at, started_at, completed_at, estimated_completion_at,
-                    error_message, retry_count, max_retries, last_retry_at,
+                    created_at, started_at, completed_at,
+                    error_message, retry_count,
                     config, result_summary
                 FROM processing_jobs 
-                WHERE user_id = $1 AND status = $2
+                WHERE user_id = $1 AND status = $2::job_status
                 ORDER BY created_at DESC
                 LIMIT $3 OFFSET $4
                 "#,
@@ -102,10 +103,10 @@ pub async fn list_user_jobs(
                 crate::models::ProcessingJob,
                 r#"
                 SELECT 
-                    id, user_id, api_key_id, raw_ingestion_id, status, job_type, priority,
+                    id, user_id, api_key_id, raw_ingestion_id, status as "status: JobStatus", job_type as "job_type: JobType", priority,
                     total_metrics, processed_metrics, failed_metrics, progress_percentage,
-                    created_at, started_at, completed_at, estimated_completion_at,
-                    error_message, retry_count, max_retries, last_retry_at,
+                    created_at, started_at, completed_at,
+                    error_message, retry_count,
                     config, result_summary
                 FROM processing_jobs 
                 WHERE user_id = $1

@@ -99,7 +99,7 @@ impl LazyDataLoader {
             Ok(guard) => guard,
             Err(e) => {
                 error!("Failed to acquire read lock on cache: {}", e);
-                return None;
+                return None::<DataMappingEntry>;
             }
         };
         cache.as_ref()?.get(identifier).cloned()

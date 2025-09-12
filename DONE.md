@@ -1137,10 +1137,10 @@ Implemented dual-write logic to write to both old and new activity_metrics table
 **Configuration Structure:**
 ```rust
 // Batch Processing Configuration
-BATCH_HEART_RATE_CHUNK_SIZE=8000    // 6 params × 8000 = 48k (75% of 65k limit)
-BATCH_BLOOD_PRESSURE_CHUNK_SIZE=8000 // 6 params × 8000 = 48k (75% of 65k limit)  
-BATCH_SLEEP_CHUNK_SIZE=5000          // 10 params × 5000 = 50k (76% of 65k limit)
-BATCH_ACTIVITY_CHUNK_SIZE=7000       // 7 params × 7000 = 49k (75% of 65k limit)
+BATCH_HEART_RATE_CHUNK_SIZE=8000    // 6 params × 8000 = 48k (73% of 65k limit)
+BATCH_BLOOD_PRESSURE_CHUNK_SIZE=8000 // 6 params × 8000 = 48k (73% of 65k limit)  
+BATCH_SLEEP_CHUNK_SIZE=6000          // 10 params × 6000 = 60k (92% of 65k limit)
+BATCH_ACTIVITY_CHUNK_SIZE=6500       // 8 params × 6500 = 52k (79% of 65k limit)
 BATCH_WORKOUT_CHUNK_SIZE=5000        // 10 params × 5000 = 50k (76% of 65k limit)
 
 // Health Metric Validation Thresholds

@@ -840,7 +840,7 @@ pub async fn get_sleep_summary(
         SELECT 
             COUNT(*) as count,
             AVG(duration_minutes::float / 60.0) as avg_duration_hours,
-            AVG(sleep_efficiency) as avg_efficiency,
+            AVG(efficiency) as avg_efficiency,
             SUM(duration_minutes) as total_sleep_time
         FROM sleep_metrics 
         WHERE user_id = $1 AND sleep_start BETWEEN $2 AND $3
@@ -908,7 +908,7 @@ pub async fn get_workout_summary(
             COUNT(*) as count,
             SUM(EXTRACT(EPOCH FROM (ended_at - started_at)) / 3600.0) as total_duration_hours,
             SUM(total_energy_kcal) as total_calories,
-            array_agg(DISTINCT workout_type) as workout_types
+            array_agg(DISTINCT workout_type::text) as workout_types
         FROM workouts 
         WHERE user_id = $1 AND started_at BETWEEN $2 AND $3
         "#,

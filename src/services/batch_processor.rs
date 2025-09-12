@@ -10,7 +10,7 @@ use tokio::time::sleep;
 use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
-use crate::config::BatchConfig;
+use crate::config::{BatchConfig, SAFE_PARAM_LIMIT, HEART_RATE_PARAMS_PER_RECORD, BLOOD_PRESSURE_PARAMS_PER_RECORD, SLEEP_PARAMS_PER_RECORD, ACTIVITY_PARAMS_PER_RECORD, WORKOUT_PARAMS_PER_RECORD};
 use crate::middleware::metrics::Metrics;
 use crate::models::{HealthMetric, IngestPayload, ProcessingError};
 
@@ -982,9 +982,8 @@ impl BatchProcessor {
         let chunks: Vec<_> = metrics.chunks(chunk_size).collect();
 
         // Validate parameter count to prevent PostgreSQL limit errors
-        let max_params_per_chunk = chunk_size * 6; // 6 params per heart rate record
-        if max_params_per_chunk > 52428 {
-            // Safe limit (80% of 65,535)
+        let max_params_per_chunk = chunk_size * HEART_RATE_PARAMS_PER_RECORD;
+        if max_params_per_chunk > SAFE_PARAM_LIMIT {
             return Err(sqlx::Error::Configuration(
                 format!(
                     "Chunk size {} would result in {} parameters, exceeding safe limit",
@@ -1072,9 +1071,8 @@ impl BatchProcessor {
         let chunks: Vec<_> = metrics.chunks(chunk_size).collect();
 
         // Validate parameter count to prevent PostgreSQL limit errors
-        let max_params_per_chunk = chunk_size * 6; // 6 params per blood pressure record
-        if max_params_per_chunk > 52428 {
-            // Safe limit (80% of 65,535)
+        let max_params_per_chunk = chunk_size * BLOOD_PRESSURE_PARAMS_PER_RECORD;
+        if max_params_per_chunk > SAFE_PARAM_LIMIT {
             return Err(sqlx::Error::Configuration(
                 format!(
                     "Chunk size {} would result in {} parameters, exceeding safe limit",
@@ -1143,7 +1141,7 @@ impl BatchProcessor {
         }
 
         // Use safe default chunking to prevent parameter limit errors
-        let chunk_size = 5000; // Safe default for sleep (10 params per record)
+        let chunk_size = 6000; // Safe default for sleep (10 params per record)
 
         Self::insert_sleep_metrics_chunked(pool, user_id, metrics, chunk_size).await
     }
@@ -1163,9 +1161,8 @@ impl BatchProcessor {
         let chunks: Vec<_> = metrics.chunks(chunk_size).collect();
 
         // Validate parameter count to prevent PostgreSQL limit errors
-        let max_params_per_chunk = chunk_size * 10; // 10 params per sleep record
-        if max_params_per_chunk > 52428 {
-            // Safe limit (80% of 65,535)
+        let max_params_per_chunk = chunk_size * SLEEP_PARAMS_PER_RECORD;
+        if max_params_per_chunk > SAFE_PARAM_LIMIT {
             return Err(sqlx::Error::Configuration(
                 format!(
                     "Chunk size {} would result in {} parameters, exceeding safe limit",
@@ -1254,7 +1251,7 @@ impl BatchProcessor {
         }
 
         // Use safe default chunking to prevent parameter limit errors
-        let chunk_size = 7000; // Safe default for activity (7 params per record)
+        let chunk_size = 6500; // Safe default for activity (8 params per record)
 
         Self::insert_activities_chunked(pool, user_id, metrics, chunk_size).await
     }
@@ -1274,9 +1271,8 @@ impl BatchProcessor {
         let chunks: Vec<_> = metrics.chunks(chunk_size).collect();
 
         // Validate parameter count to prevent PostgreSQL limit errors
-        let max_params_per_chunk = chunk_size * 7; // 7 params per activity record
-        if max_params_per_chunk > 52428 {
-            // Safe limit (80% of 65,535)
+        let max_params_per_chunk = chunk_size * ACTIVITY_PARAMS_PER_RECORD;
+        if max_params_per_chunk > SAFE_PARAM_LIMIT {
             return Err(sqlx::Error::Configuration(
                 format!(
                     "Chunk size {} would result in {} parameters, exceeding safe limit",
@@ -1363,9 +1359,8 @@ impl BatchProcessor {
         let chunks: Vec<_> = workouts.chunks(chunk_size).collect();
 
         // Validate parameter count to prevent PostgreSQL limit errors
-        let max_params_per_chunk = chunk_size * 10; // 10 params per workout record
-        if max_params_per_chunk > 52428 {
-            // Safe limit (80% of 65,535)
+        let max_params_per_chunk = chunk_size * WORKOUT_PARAMS_PER_RECORD;
+        if max_params_per_chunk > SAFE_PARAM_LIMIT {
             return Err(sqlx::Error::Configuration(
                 format!(
                     "Chunk size {} would result in {} parameters, exceeding safe limit",

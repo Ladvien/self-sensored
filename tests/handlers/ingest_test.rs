@@ -10,7 +10,8 @@ use self_sensored::{
     models::{
         ApiResponse, HealthMetric, HeartRateMetric, BloodPressureMetric, SleepMetric, 
         ActivityMetric, WorkoutData, IngestPayload, IngestData, IngestResponse,
-        IosIngestPayload, IosIngestData, IosMetric, IosMetricData, IosWorkout
+        IosIngestPayload, IosIngestData, IosMetric, IosMetricData, IosWorkout,
+        enums::{ActivityContext, WorkoutType}
     },
     services::auth::{AuthContext, AuthenticatedUser},
     db::models::{User, ApiKey},
@@ -32,9 +33,10 @@ impl TestFixtures {
                         id: Uuid::new_v4(),
                         user_id: Uuid::new_v4(),
                         recorded_at: now,
-                        heart_rate: 75,
+                        heart_rate: Some(75),
                         resting_heart_rate: Some(65),
-                        context: Some("resting".to_string()),
+                        heart_rate_variability: None,
+                        context: Some(ActivityContext::Resting),
                         source_device: Some("Apple Watch".to_string()),
                         created_at: now,
                     }),
@@ -42,9 +44,10 @@ impl TestFixtures {
                         id: Uuid::new_v4(),
                         user_id: Uuid::new_v4(),
                         recorded_at: now - chrono::Duration::hours(1),
-                        heart_rate: 120,
+                        heart_rate: Some(120),
                         resting_heart_rate: None,
-                        context: Some("exercise".to_string()),
+                        heart_rate_variability: Some(35.2),
+                        context: Some(ActivityContext::Exercise),
                         source_device: Some("Apple Watch".to_string()),
                         created_at: now,
                     }),
@@ -96,7 +99,7 @@ impl TestFixtures {
                     WorkoutData {
                         id: Uuid::new_v4(),
                         user_id: Uuid::new_v4(),
-                        workout_type: "Running".to_string(),
+                        workout_type: WorkoutType::Running,
                         started_at: now - chrono::Duration::hours(3),
                         ended_at: now - chrono::Duration::hours(2),
                         total_energy_kcal: Some(450.0),
@@ -346,7 +349,7 @@ impl TestFixtures {
                         recorded_at: timestamp,
                         heart_rate: 70 + (i % 50) as i32,
                         resting_heart_rate: None,
-                        context: Some("resting".to_string()),
+                        context: Some(ActivityContext::Resting),
                         source_device: Some("Performance Test".to_string()),
                         created_at: timestamp,
                     }));

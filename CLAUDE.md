@@ -189,8 +189,8 @@ BATCH_MEMORY_LIMIT_MB=500.0
 # Metric-Specific Chunk Sizes (Environment Configurable)
 BATCH_HEART_RATE_CHUNK_SIZE=8000      # 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000
 BATCH_BLOOD_PRESSURE_CHUNK_SIZE=8000  # 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000  
-BATCH_SLEEP_CHUNK_SIZE=5000           # 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000
-BATCH_ACTIVITY_CHUNK_SIZE=7000        # 7 params: 65,535 ÷ 7 × 0.8 ≈ 7,000
+BATCH_SLEEP_CHUNK_SIZE=6000           # 10 params: 65,535 ÷ 10 × 0.8 ≈ 6,000
+BATCH_ACTIVITY_CHUNK_SIZE=6500        # 8 params: 65,535 ÷ 8 × 0.8 ≈ 6,500
 BATCH_WORKOUT_CHUNK_SIZE=5000         # 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000
 
 BATCH_ENABLE_PROGRESS_TRACKING=true   # Track progress for large batches

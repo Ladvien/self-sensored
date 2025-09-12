@@ -341,7 +341,7 @@ impl SleepMetric {
         }
 
         if let Some(eff) = self.efficiency {
-            if !(config.sleep_efficiency_min..=config.sleep_efficiency_max).contains(&eff) {
+            if !(config.sleep_efficiency_min..=config.sleep_efficiency_max).contains(&(eff as f32)) {
                 return Err(format!(
                     "efficiency {} is out of range ({}-{})",
                     eff, config.sleep_efficiency_min, config.sleep_efficiency_max

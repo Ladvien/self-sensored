@@ -196,8 +196,9 @@ impl StreamingProcessor {
         &self,
         content: &[u8],
     ) -> std::result::Result<IosIngestPayload, String> {
+        let content_owned = content.to_vec();
         tokio::task::spawn_blocking(move || {
-            serde_json::from_slice::<IosIngestPayload>(content)
+            serde_json::from_slice::<IosIngestPayload>(&content_owned)
                 .map_err(|e| format!("iOS format parse error: {}", e))
         })
         .await
@@ -209,8 +210,9 @@ impl StreamingProcessor {
         &self,
         content: &[u8],
     ) -> std::result::Result<IngestPayload, String> {
+        let content_owned = content.to_vec();
         tokio::task::spawn_blocking(move || {
-            serde_json::from_slice::<IngestPayload>(content)
+            serde_json::from_slice::<IngestPayload>(&content_owned)
                 .map_err(|e| format!("Standard format parse error: {}", e))
         })
         .await

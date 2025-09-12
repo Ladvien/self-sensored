@@ -1,5 +1,16 @@
 use std::env;
 
+/// PostgreSQL parameter limit constants for batch processing optimization
+pub const POSTGRESQL_MAX_PARAMS: usize = 65535; // PostgreSQL absolute maximum
+pub const SAFE_PARAM_LIMIT: usize = 52428;      // 80% of max for safety margin
+
+/// Parameter counts per metric type for chunk size calculations
+pub const HEART_RATE_PARAMS_PER_RECORD: usize = 6; // user_id, recorded_at, heart_rate, resting_heart_rate, context, source_device
+pub const BLOOD_PRESSURE_PARAMS_PER_RECORD: usize = 6; // user_id, recorded_at, systolic, diastolic, pulse, source_device  
+pub const SLEEP_PARAMS_PER_RECORD: usize = 10; // user_id, sleep_start, sleep_end, duration_minutes, deep_sleep_minutes, rem_sleep_minutes, light_sleep_minutes, awake_minutes, efficiency, source_device
+pub const ACTIVITY_PARAMS_PER_RECORD: usize = 8; // user_id, recorded_at, step_count, distance_meters, active_energy_burned_kcal, basal_energy_burned_kcal, flights_climbed, source_device 
+pub const WORKOUT_PARAMS_PER_RECORD: usize = 10; // id, user_id, workout_type, started_at, ended_at, total_energy_kcal, distance_meters, avg_heart_rate, max_heart_rate, source_device
+
 /// Configuration for batch processing operations
 #[derive(Debug, Clone)]
 pub struct BatchConfig {
@@ -33,8 +44,8 @@ impl Default for BatchConfig {
             // Safe chunk sizes (80% of theoretical max for reliability)
             heart_rate_chunk_size: 8000, // 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000 (max ~48,000 params)
             blood_pressure_chunk_size: 8000, // 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000 (max ~48,000 params)
-            sleep_chunk_size: 5000, // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000 (max ~50,000 params)
-            activity_chunk_size: 7000, // 7 params: 65,535 ÷ 7 × 0.8 ≈ 7,000 (max ~49,000 params)
+            sleep_chunk_size: 6000, // 10 params: 65,535 ÷ 10 × 0.8 ≈ 6,000 (max ~60,000 params)
+            activity_chunk_size: 6500, // 8 params: 65,535 ÷ 8 × 0.8 ≈ 6,500 (max ~52,000 params)
             workout_chunk_size: 5000, // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000 (max ~50,000 params)
             enable_progress_tracking: true,
             enable_intra_batch_deduplication: true, // Enable by default for performance
@@ -83,11 +94,11 @@ impl BatchConfig {
             sleep_chunk_size: env::var("BATCH_SLEEP_CHUNK_SIZE")
                 .ok()
                 .and_then(|v| v.parse().ok())
-                .unwrap_or(5000),
+                .unwrap_or(6000),
             activity_chunk_size: env::var("BATCH_ACTIVITY_CHUNK_SIZE")
                 .ok()
                 .and_then(|v| v.parse().ok())
-                .unwrap_or(7000),
+                .unwrap_or(6500),
             workout_chunk_size: env::var("BATCH_WORKOUT_CHUNK_SIZE")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -110,14 +121,12 @@ impl BatchConfig {
     /// Validate chunk sizes against PostgreSQL parameter limits
     pub fn validate(&self) -> Result<(), String> {
         let validations = vec![
-            ("heart_rate", self.heart_rate_chunk_size, 6),
-            ("blood_pressure", self.blood_pressure_chunk_size, 6),
-            ("sleep", self.sleep_chunk_size, 10),
-            ("activity", self.activity_chunk_size, 7),
-            ("workout", self.workout_chunk_size, 10),
+            ("heart_rate", self.heart_rate_chunk_size, HEART_RATE_PARAMS_PER_RECORD),
+            ("blood_pressure", self.blood_pressure_chunk_size, BLOOD_PRESSURE_PARAMS_PER_RECORD),
+            ("sleep", self.sleep_chunk_size, SLEEP_PARAMS_PER_RECORD),
+            ("activity", self.activity_chunk_size, ACTIVITY_PARAMS_PER_RECORD),
+            ("workout", self.workout_chunk_size, WORKOUT_PARAMS_PER_RECORD),
         ];
-
-        const SAFE_PARAM_LIMIT: usize = 52428; // 80% of PostgreSQL's 65,535 limit
 
         for (metric_type, chunk_size, params_per_record) in validations {
             let total_params = chunk_size * params_per_record;
