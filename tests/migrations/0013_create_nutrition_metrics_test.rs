@@ -426,18 +426,131 @@ async fn test_validation_constraints_vitamins(pool: PgPool) -> sqlx::Result<()> 
 
     assert!(valid_insert.is_ok(), "Valid vitamin values should succeed");
 
-    // Test invalid vitamin C (too high)
-    let recorded_at_invalid = Utc.ymd(2025, 9, 11).and_hms(20, 0, 0);
-    let invalid_insert = sqlx::query!(
-        "INSERT INTO nutrition_metrics (user_id, recorded_at, vitamin_c_mg) VALUES ($1, $2, $3)",
-        user_id,
-        recorded_at_invalid,
-        6000.0 // Dangerously high vitamin C
-    )
-    .execute(&pool)
-    .await;
+    // Test comprehensive vitamin upper limit boundary cases
+    let vitamin_boundary_tests = [
+        // Vitamin A - Upper limit around 3000 mcg (10000 IU)
+        ("vitamin_a_mcg", 3000.0, true),   // At safe upper limit
+        ("vitamin_a_mcg", 3001.0, false), // Just over safe limit
+        ("vitamin_a_mcg", 5000.0, false), // Dangerous level
+        ("vitamin_a_mcg", 10000.0, false), // Extremely dangerous
+        
+        // Vitamin D - Upper limit around 100 mcg (4000 IU)
+        ("vitamin_d_mcg", 100.0, true),   // At safe upper limit
+        ("vitamin_d_mcg", 125.0, false),  // Over safe limit
+        ("vitamin_d_mcg", 250.0, false),  // Dangerous level
+        ("vitamin_d_mcg", 1000.0, false), // Extremely dangerous
+        
+        // Vitamin E - Upper limit around 1000 mg
+        ("vitamin_e_mg", 1000.0, true),   // At safe upper limit
+        ("vitamin_e_mg", 1200.0, false),  // Over safe limit
+        ("vitamin_e_mg", 2000.0, false),  // Dangerous level
+        
+        // Vitamin C - Upper limit around 2000 mg for most people
+        ("vitamin_c_mg", 2000.0, true),   // At tolerable upper limit
+        ("vitamin_c_mg", 3000.0, false),  // Over upper limit
+        ("vitamin_c_mg", 6000.0, false),  // Dangerously high
+        ("vitamin_c_mg", 10000.0, false), // Extremely dangerous
+        
+        // Vitamin K - Generally safe but test reasonable upper bounds
+        ("vitamin_k_mcg", 1000.0, true),  // High but safe
+        ("vitamin_k_mcg", 5000.0, false), // Very high
+        
+        // B Vitamins - Test upper limits
+        ("vitamin_b6_mg", 100.0, true),   // Upper safe limit
+        ("vitamin_b6_mg", 200.0, false),  // Over safe limit (can cause neuropathy)
+        ("vitamin_b6_mg", 500.0, false),  // Dangerous
+        
+        // Niacin (B3) - Upper limit around 35 mg from supplements
+        ("niacin_mg", 35.0, true),        // Safe upper limit
+        ("niacin_mg", 100.0, false),      // Can cause flushing
+        ("niacin_mg", 500.0, false),      // Liver toxicity risk
+        
+        // Folate - Upper limit 1000 mcg from supplements
+        ("folate_mcg", 1000.0, true),     // Safe upper limit
+        ("folate_mcg", 1500.0, false),    // Over safe limit
+        ("folate_mcg", 5000.0, false),    // Dangerous
+        
+        // B12 - Generally safe even at high doses, but test reasonable bounds
+        ("vitamin_b12_mcg", 1000.0, true), // High therapeutic dose
+        ("vitamin_b12_mcg", 5000.0, true), // Very high but still safe
+        ("vitamin_b12_mcg", 50000.0, false), // Unreasonably high
+    ];
 
-    assert!(invalid_insert.is_err(), "Invalid vitamin C amount should fail");
+    for (i, (field_name, value, should_succeed)) in vitamin_boundary_tests.iter().enumerate() {
+        let test_time = recorded_at_invalid + chrono::Duration::minutes(i as i64 + 1);
+        
+        let insert_query = match *field_name {
+            "vitamin_a_mcg" => {
+                sqlx::query!(
+                    "INSERT INTO nutrition_metrics (user_id, recorded_at, vitamin_a_mcg) VALUES ($1, $2, $3)",
+                    user_id, test_time, value
+                ).execute(&pool).await
+            },
+            "vitamin_d_mcg" => {
+                sqlx::query!(
+                    "INSERT INTO nutrition_metrics (user_id, recorded_at, vitamin_d_mcg) VALUES ($1, $2, $3)",
+                    user_id, test_time, value
+                ).execute(&pool).await
+            },
+            "vitamin_e_mg" => {
+                sqlx::query!(
+                    "INSERT INTO nutrition_metrics (user_id, recorded_at, vitamin_e_mg) VALUES ($1, $2, $3)",
+                    user_id, test_time, value
+                ).execute(&pool).await
+            },
+            "vitamin_c_mg" => {
+                sqlx::query!(
+                    "INSERT INTO nutrition_metrics (user_id, recorded_at, vitamin_c_mg) VALUES ($1, $2, $3)",
+                    user_id, test_time, value
+                ).execute(&pool).await
+            },
+            "vitamin_k_mcg" => {
+                sqlx::query!(
+                    "INSERT INTO nutrition_metrics (user_id, recorded_at, vitamin_k_mcg) VALUES ($1, $2, $3)",
+                    user_id, test_time, value
+                ).execute(&pool).await
+            },
+            "vitamin_b6_mg" => {
+                sqlx::query!(
+                    "INSERT INTO nutrition_metrics (user_id, recorded_at, vitamin_b6_mg) VALUES ($1, $2, $3)",
+                    user_id, test_time, value
+                ).execute(&pool).await
+            },
+            "niacin_mg" => {
+                sqlx::query!(
+                    "INSERT INTO nutrition_metrics (user_id, recorded_at, niacin_mg) VALUES ($1, $2, $3)",
+                    user_id, test_time, value
+                ).execute(&pool).await
+            },
+            "folate_mcg" => {
+                sqlx::query!(
+                    "INSERT INTO nutrition_metrics (user_id, recorded_at, folate_mcg) VALUES ($1, $2, $3)",
+                    user_id, test_time, value
+                ).execute(&pool).await
+            },
+            "vitamin_b12_mcg" => {
+                sqlx::query!(
+                    "INSERT INTO nutrition_metrics (user_id, recorded_at, vitamin_b12_mcg) VALUES ($1, $2, $3)",
+                    user_id, test_time, value
+                ).execute(&pool).await
+            },
+            _ => panic!("Unknown vitamin field: {}", field_name)
+        };
+
+        if *should_succeed {
+            assert!(
+                insert_query.is_ok(),
+                "Vitamin {} at {} should succeed (within safe limits)",
+                field_name, value
+            );
+        } else {
+            assert!(
+                insert_query.is_err(),
+                "Vitamin {} at {} should fail (exceeds safe limits)",
+                field_name, value
+            );
+        }
+    }
 
     Ok(())
 }
@@ -472,18 +585,176 @@ async fn test_validation_constraints_minerals(pool: PgPool) -> sqlx::Result<()> 
 
     assert!(valid_insert.is_ok(), "Valid mineral values should succeed");
 
-    // Test invalid iron (too high)
-    let recorded_at_invalid = Utc.ymd(2025, 9, 11).and_hms(22, 0, 0);
-    let invalid_insert = sqlx::query!(
-        "INSERT INTO nutrition_metrics (user_id, recorded_at, iron_mg) VALUES ($1, $2, $3)",
-        user_id,
-        recorded_at_invalid,
-        300.0 // Dangerously high iron
-    )
-    .execute(&pool)
-    .await;
+    // Test comprehensive mineral upper limit boundary cases
+    let mineral_boundary_tests = [
+        // Iron - Upper limit around 45 mg for adults
+        ("iron_mg", 45.0, true),      // Safe upper limit
+        ("iron_mg", 65.0, false),     // Over safe limit
+        ("iron_mg", 100.0, false),    // Dangerous
+        ("iron_mg", 300.0, false),    // Extremely dangerous
+        
+        // Zinc - Upper limit around 40 mg
+        ("zinc_mg", 40.0, true),      // Safe upper limit
+        ("zinc_mg", 60.0, false),     // Over safe limit (can interfere with copper)
+        ("zinc_mg", 100.0, false),    // Dangerous
+        
+        // Copper - Upper limit around 10 mg
+        ("copper_mg", 10.0, true),    // Safe upper limit
+        ("copper_mg", 15.0, false),   // Over safe limit
+        ("copper_mg", 50.0, false),   // Dangerous
+        
+        // Selenium - Upper limit around 400 mcg
+        ("selenium_mcg", 400.0, true), // Safe upper limit
+        ("selenium_mcg", 600.0, false), // Over safe limit (selenium toxicity)
+        ("selenium_mcg", 1000.0, false), // Dangerous
+        
+        // Manganese - Upper limit around 11 mg
+        ("manganese_mg", 11.0, true), // Safe upper limit
+        ("manganese_mg", 20.0, false), // Over safe limit
+        ("manganese_mg", 50.0, false), // Dangerous
+        
+        // Iodine - Upper limit around 1100 mcg
+        ("iodine_mcg", 1100.0, true), // Safe upper limit
+        ("iodine_mcg", 1500.0, false), // Over safe limit
+        ("iodine_mcg", 3000.0, false), // Dangerous
+        
+        // Chromium - Upper limit around 200-300 mcg
+        ("chromium_mcg", 200.0, true), // Safe level
+        ("chromium_mcg", 1000.0, false), // Very high
+        ("chromium_mcg", 5000.0, false), // Extremely high
+        
+        // Molybdenum - Upper limit around 2000 mcg
+        ("molybdenum_mcg", 2000.0, true), // Safe upper limit
+        ("molybdenum_mcg", 3000.0, false), // Over safe limit
+        ("molybdenum_mcg", 10000.0, false), // Dangerous
+        
+        // Calcium - Generally safe but very high amounts can cause issues
+        ("calcium_mg", 2500.0, true),  // High but tolerable
+        ("calcium_mg", 4000.0, false), // Over upper limit (kidney stones risk)
+        ("calcium_mg", 10000.0, false), // Dangerous
+        
+        // Magnesium - Upper limit for supplements around 350 mg
+        ("magnesium_mg", 350.0, true), // Safe supplemental limit
+        ("magnesium_mg", 700.0, true),  // High from food (generally safe)
+        ("magnesium_mg", 5000.0, false), // Unreasonably high
+        
+        // Potassium - Very high amounts could be dangerous
+        ("potassium_mg", 4700.0, true), // Adequate intake level
+        ("potassium_mg", 10000.0, true), // High but generally safe from food
+        ("potassium_mg", 50000.0, false), // Dangerously high
+        
+        // Sodium - Upper limits for health
+        ("sodium_mg", 2300.0, true),    // Recommended limit
+        ("sodium_mg", 6000.0, true),    // High but possible from food
+        ("sodium_mg", 20000.0, false),  // Extremely high and dangerous
+        
+        // Phosphorus - Upper limit around 4000 mg
+        ("phosphorus_mg", 4000.0, true), // Safe upper limit
+        ("phosphorus_mg", 6000.0, false), // Over safe limit
+        ("phosphorus_mg", 15000.0, false), // Dangerous
+    ];
 
-    assert!(invalid_insert.is_err(), "Invalid iron amount should fail");
+    let recorded_at_invalid = Utc.ymd(2025, 9, 11).and_hms(22, 0, 0);
+    
+    for (i, (field_name, value, should_succeed)) in mineral_boundary_tests.iter().enumerate() {
+        let test_time = recorded_at_invalid + chrono::Duration::minutes(i as i64 + 1);
+        
+        let insert_query = match *field_name {
+            "iron_mg" => {
+                sqlx::query!(
+                    "INSERT INTO nutrition_metrics (user_id, recorded_at, iron_mg) VALUES ($1, $2, $3)",
+                    user_id, test_time, value
+                ).execute(&pool).await
+            },
+            "zinc_mg" => {
+                sqlx::query!(
+                    "INSERT INTO nutrition_metrics (user_id, recorded_at, zinc_mg) VALUES ($1, $2, $3)",
+                    user_id, test_time, value
+                ).execute(&pool).await
+            },
+            "copper_mg" => {
+                sqlx::query!(
+                    "INSERT INTO nutrition_metrics (user_id, recorded_at, copper_mg) VALUES ($1, $2, $3)",
+                    user_id, test_time, value
+                ).execute(&pool).await
+            },
+            "selenium_mcg" => {
+                sqlx::query!(
+                    "INSERT INTO nutrition_metrics (user_id, recorded_at, selenium_mcg) VALUES ($1, $2, $3)",
+                    user_id, test_time, value
+                ).execute(&pool).await
+            },
+            "manganese_mg" => {
+                sqlx::query!(
+                    "INSERT INTO nutrition_metrics (user_id, recorded_at, manganese_mg) VALUES ($1, $2, $3)",
+                    user_id, test_time, value
+                ).execute(&pool).await
+            },
+            "iodine_mcg" => {
+                sqlx::query!(
+                    "INSERT INTO nutrition_metrics (user_id, recorded_at, iodine_mcg) VALUES ($1, $2, $3)",
+                    user_id, test_time, value
+                ).execute(&pool).await
+            },
+            "chromium_mcg" => {
+                sqlx::query!(
+                    "INSERT INTO nutrition_metrics (user_id, recorded_at, chromium_mcg) VALUES ($1, $2, $3)",
+                    user_id, test_time, value
+                ).execute(&pool).await
+            },
+            "molybdenum_mcg" => {
+                sqlx::query!(
+                    "INSERT INTO nutrition_metrics (user_id, recorded_at, molybdenum_mcg) VALUES ($1, $2, $3)",
+                    user_id, test_time, value
+                ).execute(&pool).await
+            },
+            "calcium_mg" => {
+                sqlx::query!(
+                    "INSERT INTO nutrition_metrics (user_id, recorded_at, calcium_mg) VALUES ($1, $2, $3)",
+                    user_id, test_time, value
+                ).execute(&pool).await
+            },
+            "magnesium_mg" => {
+                sqlx::query!(
+                    "INSERT INTO nutrition_metrics (user_id, recorded_at, magnesium_mg) VALUES ($1, $2, $3)",
+                    user_id, test_time, value
+                ).execute(&pool).await
+            },
+            "potassium_mg" => {
+                sqlx::query!(
+                    "INSERT INTO nutrition_metrics (user_id, recorded_at, potassium_mg) VALUES ($1, $2, $3)",
+                    user_id, test_time, value
+                ).execute(&pool).await
+            },
+            "sodium_mg" => {
+                sqlx::query!(
+                    "INSERT INTO nutrition_metrics (user_id, recorded_at, sodium_mg) VALUES ($1, $2, $3)",
+                    user_id, test_time, value
+                ).execute(&pool).await
+            },
+            "phosphorus_mg" => {
+                sqlx::query!(
+                    "INSERT INTO nutrition_metrics (user_id, recorded_at, phosphorus_mg) VALUES ($1, $2, $3)",
+                    user_id, test_time, value
+                ).execute(&pool).await
+            },
+            _ => panic!("Unknown mineral field: {}", field_name)
+        };
+
+        if *should_succeed {
+            assert!(
+                insert_query.is_ok(),
+                "Mineral {} at {} should succeed (within safe limits)",
+                field_name, value
+            );
+        } else {
+            assert!(
+                insert_query.is_err(),
+                "Mineral {} at {} should fail (exceeds safe limits)",
+                field_name, value
+            );
+        }
+    }
 
     Ok(())
 }

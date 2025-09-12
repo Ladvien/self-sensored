@@ -183,7 +183,7 @@ pub async fn cancel_job(
 
             // Also update the raw_ingestions status
             let _ = sqlx::query!(
-                "UPDATE raw_ingestions SET status = 'error', error_message = 'Cancelled by user' WHERE processing_job_id = $1",
+                "UPDATE raw_ingestions SET processing_status = 'error', processing_errors = jsonb_build_object('error', 'Cancelled by user') WHERE processing_job_id = $1",
                 job_id
             )
             .execute(pool.get_ref())

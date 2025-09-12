@@ -4,7 +4,7 @@ use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::Instant;
-use tracing::{debug, error, info, instrument};
+use tracing::{error, info, instrument};
 use uuid::Uuid;
 
 use crate::models::{ApiResponse, IngestPayload, IngestResponse, IosIngestPayload, HealthMetric, IngestData};
@@ -108,7 +108,7 @@ pub async fn optimized_ingest_handler(
     // Optimization 5: Process batch with optimized processor
     let processor = BatchProcessor::new(pool.get_ref().clone());
     let mut result = processor
-        .process_batch_optimized(auth.user.id, (*payload_arc).clone())
+        .process_batch(auth.user.id, (*payload_arc).clone())
         .await;
 
     let processing_time = start_time.elapsed().as_millis() as u64;
@@ -222,6 +222,12 @@ async fn validate_payload_parallel(
             data: IngestData {
                 metrics: valid_metrics,
                 workouts: valid_workouts,
+                nutrition_metrics: Vec::new(),
+                symptom_metrics: Vec::new(),
+                reproductive_health_metrics: Vec::new(),
+                environmental_metrics: Vec::new(),
+                mental_health_metrics: Vec::new(),
+                mobility_metrics: Vec::new(),
             }
         };
 

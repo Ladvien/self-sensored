@@ -1,6 +1,9 @@
 use std::env;
+use std::fs;
 use std::io;
+use std::path::PathBuf;
 use tracing::Level;
+use tracing_appender::{non_blocking, rolling};
 use tracing_subscriber::{
     fmt::time::SystemTime, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Registry,
 };
@@ -20,6 +23,12 @@ pub struct LoggingConfig {
     pub app_version: String,
     /// Environment (development, staging, production)
     pub environment: String,
+    /// Enable file logging
+    pub file_logging: bool,
+    /// Log directory path
+    pub log_dir: PathBuf,
+    /// Log file rotation (daily, hourly, never)
+    pub rotation: String,
 }
 
 impl Default for LoggingConfig {
@@ -31,6 +40,9 @@ impl Default for LoggingConfig {
             app_name: "health-export-api".to_string(),
             app_version: env!("CARGO_PKG_VERSION").to_string(),
             environment: "development".to_string(),
+            file_logging: true,
+            log_dir: PathBuf::from("/mnt/codex_fs/logs/self-sensored"),
+            rotation: "daily".to_string(),
         }
     }
 }
@@ -65,11 +77,31 @@ impl LoggingConfig {
             .or_else(|_| env::var("RUST_ENV"))
             .unwrap_or_else(|_| "development".to_string());
 
+        // File logging
+        config.file_logging = env::var("LOG_TO_FILE")
+            .map(|v| v.parse().unwrap_or(true))
+            .unwrap_or(true);
+
+        // Log directory
+        if let Ok(dir) = env::var("LOG_DIR") {
+            config.log_dir = PathBuf::from(dir);
+        }
+
+        // Log rotation
+        if let Ok(rotation) = env::var("LOG_ROTATION") {
+            config.rotation = rotation;
+        }
+
         config
     }
 
     /// Initialize structured logging with the current configuration
     pub fn init(self) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+        // Create log directory if it doesn't exist
+        if self.file_logging {
+            fs::create_dir_all(&self.log_dir)?;
+        }
+
         let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
             // Create a more sophisticated default filter
             let level = self.level.as_str();
@@ -81,9 +113,22 @@ impl LoggingConfig {
             EnvFilter::new(filter_str)
         });
 
+        // Setup file appender if enabled
+        let (file_writer, _guard) = if self.file_logging {
+            let file_appender = match self.rotation.as_str() {
+                "hourly" => rolling::hourly(&self.log_dir, "self-sensored.log"),
+                "never" => rolling::never(&self.log_dir, "self-sensored.log"),
+                _ => rolling::daily(&self.log_dir, "self-sensored.log"), // default to daily
+            };
+            let (non_blocking, guard) = non_blocking(file_appender);
+            (Some(non_blocking), Some(guard))
+        } else {
+            (None, None)
+        };
+
         if self.json_format {
             // JSON structured logging for production
-            let fmt_layer = tracing_subscriber::fmt::layer()
+            let stdout_layer = tracing_subscriber::fmt::layer()
                 .json()
                 .with_timer(SystemTime)
                 .with_target(true)
@@ -94,12 +139,35 @@ impl LoggingConfig {
                 .with_line_number(false)
                 .flatten_event(false)
                 .with_current_span(true)
-                .with_span_list(false);
+                .with_span_list(false)
+                .with_writer(io::stdout);
 
-            Registry::default()
-                .with(env_filter)
-                .with(fmt_layer.with_writer(io::stdout))
-                .init();
+            if let Some(file_writer) = file_writer {
+                let file_layer = tracing_subscriber::fmt::layer()
+                    .json()
+                    .with_timer(SystemTime)
+                    .with_target(true)
+                    .with_level(true)
+                    .with_thread_ids(false)
+                    .with_thread_names(false)
+                    .with_file(false)
+                    .with_line_number(false)
+                    .flatten_event(false)
+                    .with_current_span(true)
+                    .with_span_list(false)
+                    .with_writer(file_writer);
+
+                Registry::default()
+                    .with(env_filter)
+                    .with(stdout_layer)
+                    .with(file_layer)
+                    .init();
+            } else {
+                Registry::default()
+                    .with(env_filter)
+                    .with(stdout_layer)
+                    .init();
+            }
         } else if self.pretty_print {
             // Pretty printed logs for development
             let fmt_layer = tracing_subscriber::fmt::layer()

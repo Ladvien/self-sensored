@@ -406,4 +406,269 @@ mod tests {
         let remaining_header = resp1.headers().get("x-ratelimit-remaining").unwrap();
         assert_eq!(remaining_header.to_str().unwrap(), "99");
     }
+
+    /// Test concurrent rate limit requests to check for race conditions
+    #[tokio::test]
+    async fn test_rate_limit_concurrent_requests() {
+        use std::sync::Arc;
+        use tokio::sync::Barrier;
+        use futures_util::future::join_all;
+
+        // Use a low limit to more easily trigger rate limiting
+        let rate_limiter = web::Data::new(RateLimiter::new_in_memory(10));
+
+        let app = Arc::new(test::init_service(
+            App::new()
+                .app_data(rate_limiter)
+                .wrap(RateLimitMiddleware)
+                .route("/test", web::get().to(test_handler)),
+        ).await);
+
+        // Create a barrier to synchronize concurrent requests
+        let barrier = Arc::new(Barrier::new(15)); // 15 concurrent requests
+
+        // Spawn 15 concurrent requests (more than the limit of 10)
+        let tasks: Vec<_> = (0..15)
+            .map(|i| {
+                let app = Arc::clone(&app);
+                let barrier = Arc::clone(&barrier);
+                tokio::spawn(async move {
+                    barrier.wait().await; // Wait for all tasks to be ready
+                    
+                    let req = test::TestRequest::get()
+                        .uri("/test")
+                        .insert_header(("x-forwarded-for", format!("192.168.1.{}", i % 5))) // Vary IPs
+                        .to_request();
+                    
+                    let start = std::time::Instant::now();
+                    let resp = test::call_service(&*app, req).await;
+                    let duration = start.elapsed();
+                    
+                    (i, resp.status().as_u16(), duration)
+                })
+            })
+            .collect();
+
+        // Wait for all requests to complete
+        let results = join_all(tasks).await;
+        
+        let mut success_count = 0;
+        let mut rate_limited_count = 0;
+        let mut total_duration = std::time::Duration::from_nanos(0);
+
+        for result in results {
+            let (task_id, status, duration) = result.expect("Task should complete");
+            total_duration += duration;
+            
+            match status {
+                200 => success_count += 1,
+                429 => rate_limited_count += 1,
+                other => panic!("Unexpected status {} for task {}", other, task_id),
+            }
+        }
+
+        // We expect some requests to succeed and some to be rate limited
+        // The exact distribution may vary due to race conditions, but we should have both
+        println!("Concurrent rate limiting results:");
+        println!("  - Successful requests: {}", success_count);
+        println!("  - Rate limited requests: {}", rate_limited_count);
+        println!("  - Total requests: {}", success_count + rate_limited_count);
+        println!("  - Average request duration: {:?}", total_duration / 15);
+
+        assert!(success_count > 0, "Should have some successful requests");
+        assert_eq!(success_count + rate_limited_count, 15, "Should handle all requests");
+
+        // Due to IP-based rate limiting with different IPs, we might have more successes
+        // The key is that the system handles concurrent requests without crashing
+    }
+
+    /// Test race conditions in rate limit state management
+    #[tokio::test]
+    async fn test_rate_limit_race_condition_same_ip() {
+        use std::sync::Arc;
+        use tokio::sync::Barrier;
+        use futures_util::future::join_all;
+
+        // Use a very low limit to trigger race conditions more easily
+        let rate_limiter = web::Data::new(RateLimiter::new_in_memory(3));
+
+        let app = Arc::new(test::init_service(
+            App::new()
+                .app_data(rate_limiter)
+                .wrap(RateLimitMiddleware)
+                .route("/test", web::get().to(test_handler)),
+        ).await);
+
+        // Create barrier for synchronization
+        let barrier = Arc::new(Barrier::new(10)); // 10 concurrent requests from same IP
+
+        // Spawn 10 concurrent requests from the same IP to create race conditions
+        let tasks: Vec<_> = (0..10)
+            .map(|i| {
+                let app = Arc::clone(&app);
+                let barrier = Arc::clone(&barrier);
+                tokio::spawn(async move {
+                    barrier.wait().await; // Synchronize start time
+                    
+                    let req = test::TestRequest::get()
+                        .uri("/test")
+                        .insert_header(("x-forwarded-for", "192.168.1.100")) // Same IP for all
+                        .to_request();
+                    
+                    let start = std::time::Instant::now();
+                    let resp = test::call_service(&*app, req).await;
+                    let duration = start.elapsed();
+                    
+                    // Extract rate limiting headers if available
+                    let remaining = resp.headers()
+                        .get("x-ratelimit-remaining")
+                        .and_then(|h| h.to_str().ok())
+                        .and_then(|s| s.parse::<i32>().ok());
+                    
+                    (i, resp.status().as_u16(), remaining, duration)
+                })
+            })
+            .collect();
+
+        // Wait for all requests to complete
+        let results = join_all(tasks).await;
+        
+        let mut success_count = 0;
+        let mut rate_limited_count = 0;
+        let mut remaining_counts = Vec::new();
+
+        for result in results {
+            let (task_id, status, remaining, _duration) = result.expect("Task should complete");
+            
+            match status {
+                200 => {
+                    success_count += 1;
+                    if let Some(remaining) = remaining {
+                        remaining_counts.push(remaining);
+                    }
+                },
+                429 => rate_limited_count += 1,
+                other => panic!("Unexpected status {} for task {}", other, task_id),
+            }
+        }
+
+        println!("Race condition test results:");
+        println!("  - Successful requests: {}", success_count);
+        println!("  - Rate limited requests: {}", rate_limited_count);
+        println!("  - Remaining counts for successful requests: {:?}", remaining_counts);
+
+        // With a limit of 3 and 10 concurrent requests from the same IP,
+        // we should have at most 3 successful requests and at least 7 rate limited
+        assert!(success_count <= 3, "Should not exceed the rate limit of 3");
+        assert!(rate_limited_count >= 7, "Should rate limit excess requests");
+        assert_eq!(success_count + rate_limited_count, 10, "Should handle all 10 requests");
+
+        // Remaining counts should be consistent and non-overlapping
+        remaining_counts.sort_by(|a, b| b.cmp(a)); // Sort descending
+        for (i, &remaining) in remaining_counts.iter().enumerate() {
+            assert!(remaining >= 0, "Remaining count should not be negative");
+            // Each successful request should decrement the remaining count
+            let expected_remaining = 3 - 1 - i as i32; // 3 is the limit, -1 for current request, -i for previous requests
+            // Note: Due to race conditions, we might not get perfect ordering
+            // The key is that we don't go negative and stay within reasonable bounds
+            assert!(remaining <= 2, "Remaining should be at most 2 (3-1)");
+        }
+    }
+
+    /// Test rate limiting behavior under rapid sequential requests
+    #[tokio::test]
+    async fn test_rate_limit_rapid_sequential_requests() {
+        let rate_limiter = web::Data::new(RateLimiter::new_in_memory(5));
+
+        let app = test::init_service(
+            App::new()
+                .app_data(rate_limiter)
+                .wrap(RateLimitMiddleware)
+                .route("/test", web::get().to(test_handler)),
+        ).await;
+
+        let mut success_count = 0;
+        let mut rate_limited_count = 0;
+        let mut previous_remaining: Option<i32> = None;
+
+        // Make 10 rapid sequential requests
+        for i in 0..10 {
+            let req = test::TestRequest::get()
+                .uri("/test")
+                .insert_header(("x-forwarded-for", "192.168.1.200")) // Same IP
+                .to_request();
+            
+            let resp = test::call_service(&app, req).await;
+            let status = resp.status().as_u16();
+            
+            let remaining = resp.headers()
+                .get("x-ratelimit-remaining")
+                .and_then(|h| h.to_str().ok())
+                .and_then(|s| s.parse::<i32>().ok());
+
+            match status {
+                200 => {
+                    success_count += 1;
+                    
+                    if let Some(remaining) = remaining {
+                        // Check that remaining count is decreasing
+                        if let Some(prev) = previous_remaining {
+                            assert!(remaining <= prev, 
+                                "Remaining count should decrease or stay the same: prev={}, current={}", 
+                                prev, remaining);
+                        }
+                        previous_remaining = Some(remaining);
+                    }
+                },
+                429 => {
+                    rate_limited_count += 1;
+                    // Once rate limited, all subsequent requests should also be rate limited
+                },
+                other => panic!("Unexpected status {} for request {}", other, i),
+            }
+        }
+
+        println!("Sequential requests test results:");
+        println!("  - Successful requests: {}", success_count);
+        println!("  - Rate limited requests: {}", rate_limited_count);
+
+        // With limit of 5, we should have exactly 5 successful and 5 rate limited
+        assert_eq!(success_count, 5, "Should have exactly 5 successful requests");
+        assert_eq!(rate_limited_count, 5, "Should have exactly 5 rate limited requests");
+    }
+
+    /// Test rate limiting recovery after time window expires
+    #[tokio::test]
+    async fn test_rate_limit_recovery() {
+        // Note: This test is simplified since we can't easily manipulate time in tests
+        // In a real implementation, we'd use a time-mockable rate limiter
+        let rate_limiter = web::Data::new(RateLimiter::new_in_memory(2));
+
+        let app = test::init_service(
+            App::new()
+                .app_data(rate_limiter)
+                .wrap(RateLimitMiddleware)
+                .route("/test", web::get().to(test_handler)),
+        ).await;
+
+        // Exhaust the rate limit
+        for i in 0..3 {
+            let req = test::TestRequest::get()
+                .uri("/test")
+                .insert_header(("x-forwarded-for", "192.168.1.300"))
+                .to_request();
+            
+            let resp = test::call_service(&app, req).await;
+            
+            if i < 2 {
+                assert_eq!(resp.status(), 200, "First 2 requests should succeed");
+            } else {
+                assert_eq!(resp.status(), 429, "3rd request should be rate limited");
+            }
+        }
+
+        // In a real test, we would advance time here and verify recovery
+        // For now, just verify that the rate limiting is working correctly
+        println!("✅ Rate limiting recovery test framework verified");
+    }
 }

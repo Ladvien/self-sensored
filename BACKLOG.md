@@ -1,268 +1,194 @@
-Based on the comprehensive database redesign analysis, I'll create Jira stories organized into parallel work streams. Each story includes detailed acceptance criteria, testing requirements, and definition of done.
-
-## Epic: Health Metrics Database Redesign
-
-### Stream 1: Core Activity Metrics Redesign
-
----
-
-#### Story 1.1: Create activity_metrics_v2 Table with Proper Schema ✅ COMPLETED
-
-**Status:** ✅ COMPLETED 2025-09-11  
-**Story Points:** 8  
-**Assigned to:** Database Subagent  
-**Priority:** Critical  
-
-**Description:**
-Create the new activity_metrics_v2 table with Apple Health standard naming conventions, TIMESTAMPTZ for proper granularity, and optimized indexing strategy.
-
-**Files Created:**
-- `migrations/0012_create_activity_metrics_v2.sql` - Main migration
-- `migrations/0012_create_activity_metrics_v2_rollback.sql` - Rollback migration  
-- `tests/migrations/0012_create_activity_metrics_v2_test.rs` - Comprehensive test suite
-
-**Moved to DONE.md** - See complete implementation details
-
----
-
-#### Story 1.2: Implement Dual-Write Pattern for activity_metrics ✅ COMPLETED
-
-**Status:** ✅ COMPLETED 2025-09-11  
-**Story Points:** 5  
-**Assigned to:** Backend Subagent  
-**Priority:** Critical  
-**Depends on:** Story 1.1  
-
-**Description:**
-Implement dual-write logic to write to both old and new activity_metrics tables during migration period.
-
-**Files Modified:**
-- `src/config/batch_config.rs` - Added DUAL_WRITE_ACTIVITY_METRICS feature flag
-- `src/models/health_metrics.rs` - Added ActivityMetricV2 model with field mapping
-- `src/services/batch_processor.rs` - Added dual-write logic with transaction rollback
-- `src/middleware/metrics.rs` - Added performance monitoring metrics
-- `tests/handlers/ingest_test.rs` - Added comprehensive dual-write test suite
-
-**Moved to DONE.md** - See complete implementation details
-
----
-
-### Stream 2: Nutrition and Symptoms Implementation
-
----
-
-#### Story 2.1: Create Nutrition Metrics Table ✅ COMPLETED
-
-**Story Points:** 8  
-**Assigned to:** Database Subagent  
-**Priority:** High  
-**Status:** ✅ COMPLETED 2025-09-11  
-
-**Description:**
-Implement comprehensive nutrition_metrics table supporting 37+ nutrition fields from Health Export.
-
-**Acceptance Criteria:**
-- ✅ Create migration `migrations/0013_create_nutrition_metrics.sql` with:
-  - Macronutrients (protein, carbs, fats with subtypes)
-  - Hydration tracking (water_ml)
-  - Complete vitamin fields (A, B complex, C, D, E, K)
-  - Complete mineral fields (calcium, iron, magnesium, etc.)
-  - Proper decimal precision for each field type
-- ✅ Add unique constraint on (user_id, recorded_at)
-- ✅ Implement monthly partitioning
-- ✅ Add BRIN indexes
-
-**Testing Requirements:**
-- ✅ Create `tests/migrations/0013_create_nutrition_metrics_test.rs`
-- ✅ Test all 37+ field validations
-- ✅ Test decimal precision handling
-- ✅ Test negative value constraints
-- ✅ Test partition management
-- ✅ Benchmark insert performance
-
-**Definition of Done:**
-- ✅ All 37 nutrition fields implemented
-- ✅ Validation rules match Health Export specs
-- ✅ Performance benchmarks documented
-- ✅ Sample data imports successfully
-- ✅ API documentation updated
-
-**Moved to DONE.md** - See complete implementation details
-
----
-
-### Stream 3: Reproductive and Environmental Health
-
----
-
-
-#### Story 3.2: Create Environmental Metrics Table ✅ COMPLETED
-
-**Status:** ✅ COMPLETED 2025-09-11  
-**Story Points:** 5  
-**Assigned to:** Database Subagent  
-**Priority:** Medium  
-
-**Description:**
-Implement environmental_metrics for audio exposure, UV, and safety tracking.
-
-**Files Created:**
-- `migrations/0015_create_environmental_metrics.sql` - Environmental health schema with Apple Watch Series 8+ support
-- `migrations/0015_create_environmental_metrics_rollback.sql` - Rollback migration  
-- `tests/migrations/0015_create_environmental_metrics_test.rs` - Comprehensive test suite
-
-**Moved to DONE.md** - See complete implementation details
-
----
-
-### Stream 4: Mental Health and Advanced Metrics
-
----
-
-#### Story 4.1: Create Mental Health Metrics Table ✅ COMPLETED
-
-**Status:** ✅ COMPLETED 2025-09-11  
-**Story Points:** 3  
-**Assigned to:** Database Subagent  
-**Priority:** Medium  
-
-**Description:**
-Implement mental_health_metrics for mindfulness and mood tracking (iOS 17+).
-
-**Files Created:**
-- `migrations/0017_create_mental_health_metrics.sql` - Mental health schema with iOS 17+ support
-- `migrations/0017_create_mental_health_metrics_rollback.sql` - Rollback migration  
-- `tests/migrations/0017_create_mental_health_metrics_test.rs` - Comprehensive test suite
-
-**Moved to DONE.md** - See complete implementation details
-
----
-
-#### Story 4.2: Create Mobility Metrics Table ✅ COMPLETED
-
-**Status:** ✅ COMPLETED 2025-09-11  
-**Story Points:** 5  
-**Assigned to:** Database Subagent  
-**Priority:** Low  
-
-**Description:**
-Implement mobility_metrics for advanced walking/running analysis (iOS 14+).
-
-**Acceptance Criteria:**
-- ✅ Create migration `migrations/0018_create_mobility_metrics.sql` with:
-  - Walking speed and step length
-  - Walking asymmetry percentage
-  - Double support percentage
-  - Six-minute walk test distance
-  - Stair speed (up/down)
-- ✅ Add appropriate biomechanical constraints
-- ✅ Support high-frequency sampling
-
-**Testing Requirements:**
-- ✅ Create `tests/migrations/0018_create_mobility_metrics_test.rs`
-- ✅ Test biomechanical range validations
-- ✅ Test asymmetry calculations
-- ✅ Test high-frequency data ingestion
-- ✅ Test aggregation performance
-
-**Definition of Done:**
-- ✅ All 26 mobility fields implemented (exceeded 15 field requirement)
-- ✅ iOS 14+ compatibility verified
-- ✅ Medical accuracy validated
-- ✅ Performance targets met
-- ✅ Clinical use cases documented
-
-**Moved to DONE.md** - See complete implementation details
-
----
-
-### Stream 5: Migration and Testing Infrastructure
-
----
-
-#### Story 5.1: Create Data Migration Scripts ✅ COMPLETED
-
-**Status:** ✅ COMPLETED 2025-09-11  
-**Story Points:** 8  
-**Assigned to:** Data Migration Subagent  
-**Priority:** Critical  
-**Depends on:** Stories 1.1, 2.1, 2.2  
-
-**Description:**
-Create comprehensive data migration scripts from old schema to new tables.
-
-**Files Created:**
-- `scripts/migrate_activity_metrics.sql` - Complete migration script with batch processing
-- `scripts/monitor_migration.sql` - Comprehensive monitoring and validation queries
-- `tests/scripts/migrate_activity_metrics_test.rs` - Extensive test suite with performance validation
-
-**Moved to DONE.md** - See complete implementation details
-
----
-
-#### Story 5.2: Update Rust Models and Handlers ✅ COMPLETED
-
-**Story Points:** 13  
-**Assigned to:** Backend Subagent  
-**Priority:** Critical  
-**Status:** ✅ COMPLETED 2025-09-11  
-**Depends on:** All table creation stories  
-
-**Description:**
-Update Rust models, validation logic, and handlers for all new tables.
-
-**Moved to DONE.md** - See complete implementation details
-
----
-
-#### Story 5.3: Create Integration Test Suite
-
-**Story Points:** 8  
-**Assigned to:** QA Subagent  
-**Priority:** High  
-**Depends on:** Story 5.2  
-
-**Description:**
-Create comprehensive integration test suite for end-to-end validation.
-
-**Acceptance Criteria:**
-- [ ] Create `tests/integration/health_export_flow_test.rs`
-- [ ] Test complete Health Export payload processing
-- [ ] Test all 45 currently supported fields
-- [ ] Test new nutrition/symptoms/reproductive fields
-- [ ] Create performance benchmark suite
-- [ ] Add data quality validation tests
-
-**Testing Requirements:**
-- [ ] Load test with 10K concurrent users
-- [ ] Process 1M record payload in <5 minutes
-- [ ] Validate field coverage reaches 85% target
-- [ ] Test partition management under load
-- [ ] Test monitoring and alerting triggers
-
-**Definition of Done:**
-- All integration tests passing
-- Performance SLAs validated
-- Field coverage report generated
-- Load test results documented
-- Monitoring dashboards configured
-
----
-
-### Parallel Execution Plan
-
-**Week 1-2:**
-- Stream 1: Stories 1.1, 1.2 (Database & Backend teams)
-- Stream 2: Stories 2.1, 2.2 (Database team)
-- Stream 3: Story 3.1 (Database team with Security)
-
-**Week 3-4:**
-- Stream 3: Story 3.2 (Database team)
-- Stream 4: Stories 4.1, 4.2 (Database team)
-- Stream 5: Story 5.1 (Migration team)
-
-**Week 5-6:**
-- Stream 5: Stories 5.2, 5.3 (Backend & QA teams)
-- All streams: Integration testing and performance validation
-
-Each story includes comprehensive testing to ensure quality and compliance with architectural standards. The parallel execution allows multiple teams to work simultaneously while managing dependencies effectively.
+# BACKLOG
+
+# SCHEMA ALIGNMENT CRITICAL FIXES
+*Created: September 12, 2025*
+*Priority: Critical - Must be completed before production deployment*
+
+## Component 1: Model Structure Updates (Critical Priority)
+
+
+
+
+
+## Component 2: Field Mapping Fixes (High Priority)
+
+**[SCHEMA-005] Fix Blood Pressure Model Context Field**
+Priority: High
+Points: 1
+AC:
+- Remove context field (BloodPressureContext enum) from BloodPressureMetric
+- Remove BloodPressureContext enum from imports
+- Update validation logic to not check context
+- Ensure only systolic, diastolic, pulse, source_device remain
+Dependencies: SCHEMA-001
+Files: src/models/health_metrics.rs
+
+**[SCHEMA-006] Fix Activity Metrics Field Name Mapping**
+Priority: High
+Points: 3
+AC:
+- Update all references from 'steps' to 'step_count' in validation logic
+- Update all references from 'calories_burned' to 'active_energy_burned_kcal'
+- Fix conversion methods between ActivityMetric and database structs
+- Update field validation ranges for new field names
+Dependencies: SCHEMA-002
+Files: src/models/health_metrics.rs, src/models/db.rs
+
+**[SCHEMA-007] Fix Source Field Mapping**
+Priority: High
+Points: 2
+AC:
+- Change all 'source' fields to 'source_device' in all metric models
+- Update validation logic for source_device field
+- Update conversion logic in iOS models
+- Update database struct mappings
+Dependencies: SCHEMA-001, SCHEMA-002, SCHEMA-003
+Files: src/models/health_metrics.rs, src/models/ios_models.rs, src/models/db.rs
+
+## Component 3: Database Query Updates (High Priority)
+
+**[SCHEMA-008] Fix Batch Processor SQL Queries**
+Priority: High
+Points: 5
+AC:
+- Update INSERT INTO activity_metrics queries to use step_count, active_energy_burned_kcal
+- Update INSERT INTO blood_pressure_metrics to use source_device instead of source
+- Update INSERT INTO workouts to use avg_heart_rate instead of average_heart_rate
+- Remove all references to activity_metrics_v2 table
+- Remove all INSERT queries for deleted metric tables (nutrition_metrics, symptoms, etc.)
+Dependencies: SCHEMA-002, SCHEMA-003, SCHEMA-005
+Files: src/services/batch_processor.rs
+
+**[SCHEMA-009] Fix Handler Query Field Names**
+Priority: High
+Points: 4
+AC:
+- Update query.rs SELECT statements to use step_count, active_energy_burned_kcal
+- Fix export.rs field references for activity metrics
+- Update workout queries to use started_at/ended_at field names
+- Update all query responses to match simplified schema fields
+Dependencies: SCHEMA-002, SCHEMA-003
+Files: src/handlers/query.rs, src/handlers/export.rs
+
+**[SCHEMA-010] Fix Raw Ingestions Table Queries**
+Priority: High
+Points: 3
+AC:
+- Update INSERT queries to use payload_hash, payload_size_bytes, raw_payload
+- Remove references to api_key_id, raw_data, data_hash columns
+- Update status handling to use processing_status instead of status
+- Update error handling to use processing_errors instead of error_message
+- Fix all conflict resolution queries
+Dependencies: None
+Files: src/handlers/optimized_ingest.rs, src/handlers/payload_processor.rs, src/handlers/ingest.rs, src/services/mqtt_subscriber.rs, src/handlers/ingest_async_simple.rs
+
+## Component 4: Database Structure Updates (Medium Priority)
+
+**[SCHEMA-011] Fix Database Model Structs**
+Priority: Medium
+Points: 3
+AC:
+- Update ActivityRecord struct to match simplified schema fields
+- Update WorkoutRecord struct field mappings
+- Fix database conversion logic for all metric types
+- Update merge logic for simplified field set
+- Remove deprecated table references
+Dependencies: SCHEMA-002, SCHEMA-003
+Files: src/models/db.rs
+
+**[SCHEMA-012] Fix Authentication and User Table Queries**
+Priority: Medium
+Points: 2
+AC:
+- Remove references to full_name, scopes columns in users/api_keys queries
+- Remove audit_log table references
+- Update user creation and API key validation queries
+- Ensure queries match simplified users and api_keys schema
+Dependencies: None
+Files: src/services/auth.rs
+
+## Component 5: Validation and Testing (Medium Priority)
+
+**[SCHEMA-013] Update Validation Configuration**
+Priority: Medium
+Points: 2
+AC:
+- Remove validation configs for deprecated metric types
+- Update field name references in ValidationConfig
+- Remove deprecated enum validation logic
+- Update environment variable mappings for simplified schema
+Dependencies: SCHEMA-001, SCHEMA-002
+Files: src/config/validation_config.rs
+
+**[SCHEMA-014] Fix iOS Model Conversion Logic**
+Priority: Medium
+Points: 3
+AC:
+- Update iOS health metric parsing for simplified schema
+- Remove conversion logic for deprecated metric types
+- Fix field name mappings in iOS model conversions
+- Update metric type routing to only support 5 core types
+Dependencies: SCHEMA-001, SCHEMA-002, SCHEMA-003
+Files: src/models/ios_models.rs
+
+**[SCHEMA-015] Update Integration Tests**
+Priority: Medium
+Points: 4
+AC:
+- Remove tests for deprecated metric types
+- Update test payloads for simplified schema
+- Fix field name assertions in existing tests
+- Update test database setup for simplified schema
+- Verify all tests pass with schema changes
+Dependencies: SCHEMA-001, SCHEMA-002, SCHEMA-003
+Files: tests/handlers/ingest_test.rs, tests/migrations/*.rs
+
+## Component 6: Cleanup and Documentation (Low Priority)
+
+**[SCHEMA-016] Clean Up Migration References**
+Priority: Low
+Points: 1
+AC:
+- Remove migration file references for deleted health metric tables
+- Clean up migration test files for non-existent tables
+- Update migration documentation
+Dependencies: SCHEMA-001
+Files: migrations/ (cleanup), tests/migrations/
+
+**[SCHEMA-017] Update Configuration Documentation**
+Priority: Low
+Points: 1
+AC:
+- Update CLAUDE.md with simplified schema information
+- Remove references to deprecated metric types in documentation
+- Update field name examples in documentation
+- Update environment variable documentation
+Dependencies: All previous
+Files: CLAUDE.md, .env.example
+
+# STORY SUMMARY
+
+**Total Stories Created: 17**
+
+**Priority Breakdown:**
+- Critical: 4 stories (17 points)
+- High: 6 stories (18 points) 
+- Medium: 5 stories (14 points)
+- Low: 2 stories (2 points)
+
+**Total Story Points: 51**
+
+**Critical Path Dependencies:**
+1. Component 1 (Model Structure Updates) - Must be completed first
+2. Component 2 (Field Mapping Fixes) - Depends on Component 1
+3. Component 3 (Database Query Updates) - Depends on Components 1 & 2
+4. Components 4-6 can be worked in parallel after Component 3
+
+**Files Most Affected:**
+- src/models/health_metrics.rs (7 stories)
+- src/services/batch_processor.rs (2 stories)
+- src/handlers/*.rs (4 stories)
+- src/models/db.rs (3 stories)
+
+**Completion Order Recommendation:**
+SCHEMA-001 � SCHEMA-002 � SCHEMA-003 � SCHEMA-004 � SCHEMA-005 � SCHEMA-006 � SCHEMA-007 � SCHEMA-008 � SCHEMA-009 � SCHEMA-010 � Remaining stories in parallel

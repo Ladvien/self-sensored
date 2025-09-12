@@ -1,0 +1,599 @@
+{
+  "dashboard": {
+    "title": "Health Export API - New Metrics Monitoring",
+    "description": "Comprehensive monitoring dashboard for 6 new health metric types and field coverage validation",
+    "version": "1.0.0",
+    "created": "2025-09-11",
+    "story": "5.3 - Create Integration Test Suite",
+    "tags": ["health-export", "metrics", "monitoring", "performance"],
+    "refresh_interval": "30s",
+    "time_range": {
+      "from": "now-1h",
+      "to": "now"
+    }
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Health Metrics Processing Overview",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 4
+      },
+      "targets": [
+        {
+          "metric": "health_export_metrics_processed_total",
+          "labels": {
+            "metric_type": "nutrition|symptoms|reproductive|environmental|mental_health|mobility"
+          },
+          "aggregation": "rate",
+          "legend": "{{metric_type}} - {{rate}}rps"
+        }
+      ],
+      "thresholds": {
+        "warning": 1000,
+        "critical": 500
+      }
+    },
+    {
+      "id": 2,
+      "title": "Nutrition Metrics Processing Rate",
+      "type": "graph",
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "metric": "health_export_nutrition_metrics_processed_total",
+          "aggregation": "rate",
+          "legend": "Nutrition Processing Rate"
+        },
+        {
+          "metric": "health_export_nutrition_fields_populated_total",
+          "aggregation": "rate",
+          "legend": "Fields Populated/sec"
+        }
+      ],
+      "yAxes": {
+        "left": {
+          "unit": "rps",
+          "min": 0
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Symptoms Tracking Metrics",
+      "type": "graph", 
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "metric": "health_export_symptoms_processed_total",
+          "aggregation": "rate",
+          "legend": "Symptoms/sec"
+        },
+        {
+          "metric": "health_export_symptoms_by_severity",
+          "labels": {
+            "severity": "mild|moderate|severe"
+          },
+          "aggregation": "rate",
+          "legend": "{{severity}} symptoms/sec"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Environmental Metrics Dashboard",
+      "type": "graph",
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "metric": "health_export_environmental_sound_level_avg",
+          "aggregation": "avg",
+          "legend": "Avg Sound Level (dB)"
+        },
+        {
+          "metric": "health_export_environmental_uv_index_avg", 
+          "aggregation": "avg",
+          "legend": "Avg UV Index"
+        },
+        {
+          "metric": "health_export_environmental_aqi_avg",
+          "aggregation": "avg",
+          "legend": "Avg Air Quality Index"
+        }
+      ],
+      "yAxes": {
+        "left": {
+          "unit": "mixed",
+          "min": 0
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Mental Health Metrics Processing",
+      "type": "graph",
+      "gridPos": {
+        "x": 8,
+        "y": 12,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "metric": "health_export_mental_health_processed_total",
+          "aggregation": "rate", 
+          "legend": "Mental Health Metrics/sec"
+        },
+        {
+          "metric": "health_export_mindful_minutes_avg",
+          "aggregation": "avg",
+          "legend": "Avg Mindful Minutes"
+        },
+        {
+          "metric": "health_export_mood_valence_avg",
+          "aggregation": "avg",
+          "legend": "Avg Mood Valence"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Mobility & Reproductive Health",
+      "type": "graph",
+      "gridPos": {
+        "x": 16,
+        "y": 12,
+        "w": 8,
+        "h": 8
+      },
+      "targets": [
+        {
+          "metric": "health_export_mobility_processed_total",
+          "aggregation": "rate",
+          "legend": "Mobility Metrics/sec"
+        },
+        {
+          "metric": "health_export_reproductive_health_processed_total", 
+          "aggregation": "rate",
+          "legend": "Reproductive Health/sec"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Field Coverage Validation",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 24,
+        "h": 6
+      },
+      "targets": [
+        {
+          "metric": "health_export_field_coverage_percentage",
+          "labels": {
+            "metric_type": "nutrition"
+          },
+          "aggregation": "last",
+          "legend": "Nutrition Coverage"
+        },
+        {
+          "metric": "health_export_field_coverage_percentage",
+          "labels": {
+            "metric_type": "symptoms"
+          },
+          "aggregation": "last",
+          "legend": "Symptoms Coverage"
+        },
+        {
+          "metric": "health_export_field_coverage_percentage",
+          "labels": {
+            "metric_type": "environmental"
+          },
+          "aggregation": "last",
+          "legend": "Environmental Coverage"
+        },
+        {
+          "metric": "health_export_field_coverage_percentage",
+          "labels": {
+            "metric_type": "mental_health"
+          },
+          "aggregation": "last",
+          "legend": "Mental Health Coverage"
+        },
+        {
+          "metric": "health_export_field_coverage_percentage",
+          "labels": {
+            "metric_type": "mobility"
+          },
+          "aggregation": "last",
+          "legend": "Mobility Coverage"
+        },
+        {
+          "metric": "health_export_field_coverage_percentage",
+          "labels": {
+            "metric_type": "reproductive"
+          },
+          "aggregation": "last",
+          "legend": "Reproductive Coverage"
+        }
+      ],
+      "thresholds": {
+        "steps": [
+          {
+            "color": "red",
+            "value": 0
+          },
+          {
+            "color": "yellow", 
+            "value": 75
+          },
+          {
+            "color": "green",
+            "value": 85
+          }
+        ]
+      },
+      "displayMode": "gradient",
+      "orientation": "horizontal"
+    },
+    {
+      "id": 8,
+      "title": "API Performance Metrics",
+      "type": "graph",
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "metric": "health_export_ingest_duration_seconds",
+          "aggregation": "avg",
+          "legend": "Avg Response Time"
+        },
+        {
+          "metric": "health_export_ingest_duration_seconds",
+          "aggregation": "p95",
+          "legend": "P95 Response Time"
+        },
+        {
+          "metric": "health_export_ingest_duration_seconds",
+          "aggregation": "p99", 
+          "legend": "P99 Response Time"
+        }
+      ],
+      "yAxes": {
+        "left": {
+          "unit": "s",
+          "min": 0
+        }
+      },
+      "thresholds": [
+        {
+          "value": 2.0,
+          "colorMode": "critical",
+          "op": "gt"
+        },
+        {
+          "value": 1.0,
+          "colorMode": "warning",
+          "op": "gt"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Error Rates & Success Metrics",
+      "type": "graph",
+      "gridPos": {
+        "x": 12,
+        "y": 26,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "metric": "health_export_ingest_total",
+          "labels": {
+            "status": "success"
+          },
+          "aggregation": "rate",
+          "legend": "Success Rate"
+        },
+        {
+          "metric": "health_export_ingest_errors_total",
+          "labels": {
+            "error_type": "validation|processing|database"
+          },
+          "aggregation": "rate",
+          "legend": "{{error_type}} errors/sec"
+        }
+      ],
+      "yAxes": {
+        "left": {
+          "unit": "rps",
+          "min": 0
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "Database Performance - New Metric Tables",
+      "type": "graph",
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "metric": "health_export_db_query_duration_seconds",
+          "labels": {
+            "table": "nutrition_metrics|symptoms|environmental_metrics|mental_health_metrics|mobility_metrics|reproductive_health"
+          },
+          "aggregation": "avg",
+          "legend": "{{table}} query time"
+        }
+      ],
+      "yAxes": {
+        "left": {
+          "unit": "s",
+          "min": 0,
+          "max": 1.0
+        }
+      }
+    },
+    {
+      "id": 11,
+      "title": "Partition Management Status",
+      "type": "stat",
+      "gridPos": {
+        "x": 12,
+        "y": 34,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "metric": "health_export_active_partitions_count",
+          "labels": {
+            "table": "nutrition_metrics"
+          },
+          "aggregation": "last",
+          "legend": "Nutrition Partitions"
+        },
+        {
+          "metric": "health_export_active_partitions_count",
+          "labels": {
+            "table": "symptoms"
+          },
+          "aggregation": "last",
+          "legend": "Symptoms Partitions"
+        },
+        {
+          "metric": "health_export_active_partitions_count",
+          "labels": {
+            "table": "environmental_metrics"
+          },
+          "aggregation": "last",
+          "legend": "Environmental Partitions"
+        }
+      ],
+      "thresholds": {
+        "warning": 10,
+        "critical": 20
+      }
+    },
+    {
+      "id": 12,
+      "title": "Memory & Resource Usage",
+      "type": "graph",
+      "gridPos": {
+        "x": 0,
+        "y": 42,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "metric": "process_resident_memory_bytes",
+          "aggregation": "last",
+          "legend": "Memory Usage"
+        },
+        {
+          "metric": "process_cpu_seconds_total",
+          "aggregation": "rate",
+          "legend": "CPU Usage"
+        },
+        {
+          "metric": "health_export_db_connections_active",
+          "aggregation": "last",
+          "legend": "DB Connections"
+        },
+        {
+          "metric": "health_export_redis_connections_active",
+          "aggregation": "last", 
+          "legend": "Redis Connections"
+        }
+      ]
+    }
+  ],
+  "alerts": [
+    {
+      "name": "Field Coverage Below Target",
+      "condition": "health_export_field_coverage_percentage < 85",
+      "severity": "warning",
+      "description": "Field coverage for new metrics has dropped below 85% target"
+    },
+    {
+      "name": "High API Response Time",
+      "condition": "health_export_ingest_duration_seconds:p95 > 5.0",
+      "severity": "warning", 
+      "description": "P95 response time exceeds 5 seconds"
+    },
+    {
+      "name": "Processing Rate Too Low",
+      "condition": "rate(health_export_metrics_processed_total[5m]) < 1000",
+      "severity": "critical",
+      "description": "Metric processing rate has dropped below 1000/sec"
+    },
+    {
+      "name": "High Error Rate",
+      "condition": "rate(health_export_ingest_errors_total[5m]) > 100",
+      "severity": "critical",
+      "description": "Error rate exceeds 100 errors per second"
+    },
+    {
+      "name": "Database Query Performance",
+      "condition": "health_export_db_query_duration_seconds > 1.0",
+      "severity": "warning",
+      "description": "Database queries for new metric tables are taking >1 second"
+    }
+  ],
+  "metrics_definitions": [
+    {
+      "name": "health_export_nutrition_metrics_processed_total",
+      "type": "counter",
+      "help": "Total number of nutrition metrics processed",
+      "labels": ["user_id", "aggregation_period", "status"]
+    },
+    {
+      "name": "health_export_symptoms_processed_total", 
+      "type": "counter",
+      "help": "Total number of symptom records processed",
+      "labels": ["user_id", "symptom_type", "severity", "status"]
+    },
+    {
+      "name": "health_export_environmental_processed_total",
+      "type": "counter", 
+      "help": "Total number of environmental metrics processed",
+      "labels": ["user_id", "measurement_type", "status"]
+    },
+    {
+      "name": "health_export_mental_health_processed_total",
+      "type": "counter",
+      "help": "Total number of mental health metrics processed", 
+      "labels": ["user_id", "mood_category", "status"]
+    },
+    {
+      "name": "health_export_mobility_processed_total",
+      "type": "counter",
+      "help": "Total number of mobility metrics processed",
+      "labels": ["user_id", "measurement_type", "status"]
+    },
+    {
+      "name": "health_export_reproductive_health_processed_total",
+      "type": "counter",
+      "help": "Total number of reproductive health metrics processed",
+      "labels": ["user_id", "metric_type", "status"]
+    },
+    {
+      "name": "health_export_field_coverage_percentage",
+      "type": "gauge",
+      "help": "Percentage of fields populated for each metric type",
+      "labels": ["metric_type", "user_id", "time_period"]
+    },
+    {
+      "name": "health_export_environmental_sound_level_avg",
+      "type": "gauge",
+      "help": "Average environmental sound level in dB",
+      "labels": ["location_context", "user_id"]
+    },
+    {
+      "name": "health_export_environmental_uv_index_avg",
+      "type": "gauge", 
+      "help": "Average UV index measurement",
+      "labels": ["location_context", "user_id"]
+    },
+    {
+      "name": "health_export_environmental_aqi_avg",
+      "type": "gauge",
+      "help": "Average Air Quality Index",
+      "labels": ["location_context", "user_id"]
+    },
+    {
+      "name": "health_export_mindful_minutes_avg",
+      "type": "gauge",
+      "help": "Average mindful minutes per user per day",
+      "labels": ["user_id", "activity_type"]
+    },
+    {
+      "name": "health_export_mood_valence_avg",
+      "type": "gauge",
+      "help": "Average mood valence (-1.0 to 1.0 scale)",
+      "labels": ["user_id", "time_period"]
+    },
+    {
+      "name": "health_export_active_partitions_count",
+      "type": "gauge",
+      "help": "Number of active database partitions per table",
+      "labels": ["table", "partition_type"]
+    },
+    {
+      "name": "health_export_db_query_duration_seconds",
+      "type": "histogram",
+      "help": "Database query duration for new metric tables",
+      "labels": ["table", "operation", "status"],
+      "buckets": [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
+    }
+  ],
+  "monitoring_configuration": {
+    "prometheus": {
+      "scrape_interval": "15s",
+      "evaluation_interval": "30s",
+      "retention": "30d",
+      "targets": [
+        {
+          "job_name": "health-export-api",
+          "static_configs": [
+            {
+              "targets": ["localhost:8080", "api-server:8080"],
+              "labels": {
+                "service": "health-export",
+                "environment": "production"
+              }
+            }
+          ],
+          "metrics_path": "/metrics",
+          "scrape_interval": "15s"
+        }
+      ]
+    },
+    "grafana": {
+      "refresh_interval": "30s",
+      "default_time_range": "1h",
+      "auto_refresh": true,
+      "theme": "dark"
+    }
+  },
+  "sla_monitoring": {
+    "field_coverage_target": 85.0,
+    "processing_rate_target": 3333,
+    "response_time_target_p95": 5.0,
+    "success_rate_target": 95.0,
+    "availability_target": 99.9
+  }
+}

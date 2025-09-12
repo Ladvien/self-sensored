@@ -163,10 +163,10 @@ impl HeartRateRecord {
         HeartRateRecord {
             user_id: Uuid::nil(), // Will be set by caller
             recorded_at: metric.recorded_at,
-            heart_rate: metric.avg_bpm.unwrap_or(70) as i32,
-            resting_heart_rate: metric.min_bpm.map(|v| v as i32),
+            heart_rate: metric.heart_rate.unwrap_or(70) as i32,
+            resting_heart_rate: metric.resting_heart_rate.map(|v| v as i32),
             context: metric.context,
-            source_device: metric.source,
+            source_device: metric.source_device,
             raw_data: Some(raw_json),
             metadata: None,
             created_at: Some(Utc::now()),
@@ -179,10 +179,10 @@ impl From<crate::models::health_metrics::HeartRateMetric> for HeartRateRecord {
         HeartRateRecord {
             user_id: Uuid::nil(), // Will be set by caller
             recorded_at: metric.recorded_at,
-            heart_rate: metric.avg_bpm.unwrap_or(70) as i32,
-            resting_heart_rate: metric.min_bpm.map(|v| v as i32),
+            heart_rate: metric.heart_rate.unwrap_or(70) as i32,
+            resting_heart_rate: metric.resting_heart_rate.map(|v| v as i32),
             context: metric.context,
-            source_device: metric.source,
+            source_device: metric.source_device,
             raw_data: None,
             metadata: None,
             created_at: Some(Utc::now()),
@@ -198,7 +198,7 @@ impl From<crate::models::health_metrics::BloodPressureMetric> for BloodPressureR
             systolic: metric.systolic as i32,
             diastolic: metric.diastolic as i32,
             pulse: metric.pulse.map(|v| v as i32),
-            source_device: metric.source,
+            source_device: metric.source_device,
             raw_data: None,
             metadata: None,
             created_at: Some(Utc::now()),
@@ -211,13 +211,13 @@ impl SleepRecord {
         metric: crate::models::health_metrics::SleepMetric,
         raw_json: serde_json::Value,
     ) -> Self {
-        let efficiency = metric.get_efficiency_percentage();
+        let efficiency = metric.efficiency.map(|e| e as f32).unwrap_or(0.0);
 
         SleepRecord {
             user_id: Uuid::nil(), // Will be set by caller
             sleep_start: metric.sleep_start,
             sleep_end: metric.sleep_end,
-            duration_minutes: metric.total_sleep_minutes,
+            duration_minutes: metric.duration_minutes,
             deep_sleep_minutes: metric.deep_sleep_minutes,
             rem_sleep_minutes: metric.rem_sleep_minutes,
             light_sleep_minutes: None, // Not provided by API model
@@ -225,7 +225,7 @@ impl SleepRecord {
             sleep_efficiency: Some(
                 sqlx::types::BigDecimal::from_str(&efficiency.to_string()).unwrap(),
             ),
-            source_device: metric.source,
+            source_device: metric.source_device,
             raw_data: Some(raw_json),
             metadata: None,
             created_at: Some(Utc::now()),
@@ -235,13 +235,13 @@ impl SleepRecord {
 
 impl From<crate::models::health_metrics::SleepMetric> for SleepRecord {
     fn from(metric: crate::models::health_metrics::SleepMetric) -> Self {
-        let efficiency = metric.get_efficiency_percentage();
+        let efficiency = metric.efficiency.map(|e| e as f32).unwrap_or(0.0);
 
         SleepRecord {
             user_id: Uuid::nil(), // Will be set by caller
             sleep_start: metric.sleep_start,
             sleep_end: metric.sleep_end,
-            duration_minutes: metric.total_sleep_minutes,
+            duration_minutes: metric.duration_minutes,
             deep_sleep_minutes: metric.deep_sleep_minutes,
             rem_sleep_minutes: metric.rem_sleep_minutes,
             light_sleep_minutes: None, // Not provided by API model
@@ -249,7 +249,7 @@ impl From<crate::models::health_metrics::SleepMetric> for SleepRecord {
             sleep_efficiency: Some(
                 sqlx::types::BigDecimal::from_str(&efficiency.to_string()).unwrap(),
             ),
-            source_device: metric.source,
+            source_device: metric.source_device,
             raw_data: None,
             metadata: None,
             created_at: Some(Utc::now()),
@@ -273,7 +273,7 @@ impl ActivityRecord {
             calories_burned: metric.calories_burned.map(|v| v as i32),
             active_minutes: metric.active_minutes,
             flights_climbed: metric.flights_climbed,
-            source_device: metric.source,
+            source_device: metric.source_device,
             raw_data: Some(raw_json),
             metadata: None,
             created_at: Some(now),
@@ -335,7 +335,7 @@ impl From<crate::models::health_metrics::ActivityMetric> for ActivityRecord {
             calories_burned: metric.calories_burned.map(|v| v as i32),
             active_minutes: metric.active_minutes,
             flights_climbed: metric.flights_climbed,
-            source_device: metric.source,
+            source_device: metric.source_device,
             raw_data: None,
             metadata: None,
             created_at: Some(now),

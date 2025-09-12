@@ -87,22 +87,25 @@ impl IosIngestPayload {
                         if let Some(qty) = data_point.qty {
                             if qty > 0.0 && qty <= 300.0 {
                                 // Basic validation
-                                let context = match ios_metric.name.to_lowercase().as_str() {
-                                    "resting_heart_rate" => Some("resting".to_string()),
-                                    "walking_heart_rate" => Some("walking".to_string()),
+                                let context_str = match ios_metric.name.to_lowercase().as_str() {
+                                    "resting_heart_rate" => Some("resting"),
+                                    "walking_heart_rate" => Some("walking"),
                                     _ => data_point
                                         .extra
                                         .get("context")
-                                        .and_then(|v| v.as_str())
-                                        .map(|s| s.to_string()),
+                                        .and_then(|v| v.as_str()),
                                 };
+                                
+                                let context = context_str.and_then(|s| {
+                                    crate::models::ActivityContext::from_ios_string(s)
+                                });
 
                                 let metric = crate::models::HeartRateMetric {
                                     recorded_at,
-                                    min_bpm: None,
-                                    avg_bpm: Some(qty as i16),
-                                    max_bpm: None,
-                                    source: data_point.source.clone(),
+                                    heart_rate: Some(qty as i16),
+                                    resting_heart_rate: if context_str == Some("resting") { Some(qty as i16) } else { None },
+                                    heart_rate_variability: None,
+                                    source_device: data_point.source.clone(),
                                     context,
                                 };
                                 internal_metrics.push(HealthMetric::HeartRate(metric));
@@ -152,11 +155,11 @@ impl IosIngestPayload {
                                 recorded_at,
                                 sleep_start: start_time,
                                 sleep_end: end_time,
-                                total_sleep_minutes: total_minutes,
+                                duration_minutes: Some(total_minutes),
                                 deep_sleep_minutes,
                                 rem_sleep_minutes,
                                 awake_minutes,
-                                efficiency_percentage: None,
+                                efficiency: None,
                                 source: data_point.source.clone(),
                             };
                             internal_metrics.push(HealthMetric::Sleep(metric));

@@ -2,6 +2,7 @@
 
 pub mod background_jobs;
 pub mod db;
+pub mod enums;
 pub mod health_metrics;
 pub mod ios_models;
 
@@ -9,7 +10,8 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 // Re-export commonly used types
-// pub use background_jobs::*; // Temporarily commented out - missing database tables
+pub use background_jobs::*;
+pub use enums::*;
 pub use health_metrics::*;
 pub use ios_models::*;
 

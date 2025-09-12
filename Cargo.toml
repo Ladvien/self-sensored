@@ -36,6 +36,7 @@ env_logger = "0.11"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 tracing-actix-web = "0.7"
+tracing-appender = "0.2"
 
 # Redis for Caching
 redis = { version = "0.24", features = ["tokio-comp", "connection-manager"] }
@@ -67,12 +68,15 @@ nonzero_ext = "0.3"
 
 # MQTT support
 rumqttc = { version = "0.24", features = ["websocket"] }
+tempfile = "3.22.0"
+simd-json = "0.16.0"
 
 [dev-dependencies]
 tokio-test = "0.4"
 reqwest = { version = "0.11", features = ["json"] }
 rand = "0.8"
 rust_decimal = { version = "1.33", features = ["serde"] }
+dotenv = "0.15"
 
 [features]
 default = []
@@ -86,4 +90,17 @@ path = "src/main.rs"
 [[test]]
 name = "migrate_activity_metrics_test"
 path = "tests/scripts/migrate_activity_metrics_test.rs"
+
+# Integration test configurations
+[[test]]
+name = "health_export_flow_test"
+path = "tests/integration/health_export_flow_test.rs"
+
+[[test]]
+name = "load_test"
+path = "tests/integration/load_test.rs"
+
+[[test]]
+name = "api_endpoints_test"
+path = "tests/integration/api_endpoints_test.rs"
 

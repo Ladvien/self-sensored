@@ -895,3 +895,415 @@ mod dual_write_tests {
         println!("Validated {} metrics in {:?}", v2_metrics.len(), validation_time);
     }
 }
+
+/// Integration tests for dual-write functionality with real database transactions
+#[cfg(test)]
+mod dual_write_integration_tests {
+    use super::*;
+    use self_sensored::{
+        config::BatchConfig,
+        services::batch_processor::BatchProcessor,
+        models::ActivityMetricV2,
+    };
+    use sqlx::PgPool;
+    use tokio_test;
+
+    /// Test dual-write integration with real database transactions
+    #[sqlx::test]
+    async fn test_dual_write_integration_with_real_transactions(pool: PgPool) -> sqlx::Result<()> {
+        // Create test user
+        let user_id = Uuid::new_v4();
+        sqlx::query!(
+            "INSERT INTO users (id, email, created_at, updated_at) VALUES ($1, $2, NOW(), NOW())",
+            user_id,
+            "dualwrite@test.com"
+        )
+        .execute(&pool)
+        .await?;
+
+        // Create BatchProcessor with dual-write enabled
+        let mut config = BatchConfig::default();
+        config.enable_dual_write_activity_metrics = true;
+        config.activity_chunk_size = 1000; // Smaller chunk for testing
+        let batch_processor = BatchProcessor::with_config(pool.clone(), config);
+        
+        // Create test activity metrics
+        let now = Utc::now();
+        let test_metrics = vec![
+            ActivityMetric {
+                date: now.date_naive(),
+                steps: Some(10000),
+                distance_meters: Some(8000.0),
+                calories_burned: Some(500.0),
+                active_minutes: Some(60),
+                flights_climbed: Some(15),
+                source: Some("Integration Test".to_string()),
+            },
+            ActivityMetric {
+                date: (now - chrono::Duration::days(1)).date_naive(),
+                steps: Some(8500),
+                distance_meters: Some(6500.0),
+                calories_burned: Some(450.0),
+                active_minutes: Some(45),
+                flights_climbed: Some(12),
+                source: Some("Integration Test".to_string()),
+            },
+            ActivityMetric {
+                date: (now - chrono::Duration::days(2)).date_naive(),
+                steps: Some(12000),
+                distance_meters: Some(9500.0),
+                calories_burned: Some(600.0),
+                active_minutes: Some(75),
+                flights_climbed: Some(20),
+                source: Some("Integration Test".to_string()),
+            },
+        ];
+        
+        // Process metrics with dual-write
+        let mut tx = pool.begin().await?;
+        let result = batch_processor.process_activity_metrics(
+            &mut tx, 
+            user_id, 
+            &test_metrics
+        ).await;
+        tx.commit().await?;
+        
+        assert!(result.is_ok(), "Dual-write processing should succeed");
+        
+        // Verify data was written to both tables
+        
+        // Check original table (activity_metrics)
+        let original_count = sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM activity_metrics WHERE user_id = $1",
+            user_id
+        )
+        .fetch_one(&pool)
+        .await?;
+        
+        assert_eq!(original_count, Some(3), "Original table should have 3 records");
+        
+        // Check v2 table (activity_metrics_v2)
+        let v2_count = sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM activity_metrics_v2 WHERE user_id = $1",
+            user_id
+        )
+        .fetch_one(&pool)
+        .await?;
+        
+        assert_eq!(v2_count, Some(3), "V2 table should have 3 records");
+        
+        // Verify data consistency between tables
+        let original_records = sqlx::query!(
+            "SELECT date, steps, distance_meters, calories_burned, active_minutes, flights_climbed, source 
+             FROM activity_metrics 
+             WHERE user_id = $1 
+             ORDER BY date DESC",
+            user_id
+        )
+        .fetch_all(&pool)
+        .await?;
+        
+        let v2_records = sqlx::query!(
+            "SELECT recorded_at, step_count, distance_walking_running_meters, active_energy_burned_kcal, 
+                    exercise_time_minutes, flights_climbed, source 
+             FROM activity_metrics_v2 
+             WHERE user_id = $1 
+             ORDER BY recorded_at DESC",
+            user_id
+        )
+        .fetch_all(&pool)
+        .await?;
+        
+        assert_eq!(original_records.len(), v2_records.len(), "Both tables should have same number of records");
+        
+        // Check field mapping consistency
+        for (orig, v2) in original_records.iter().zip(v2_records.iter()) {
+            // Date mapping
+            let orig_date = orig.date;
+            let v2_date = v2.recorded_at.date_naive();
+            assert_eq!(orig_date, v2_date, "Dates should match");
+            
+            // Field mappings
+            assert_eq!(orig.steps, v2.step_count, "Steps should match");
+            assert_eq!(orig.distance_meters, v2.distance_walking_running_meters, "Distance should match");
+            assert_eq!(orig.calories_burned, v2.active_energy_burned_kcal, "Calories should match");
+            assert_eq!(orig.active_minutes, v2.exercise_time_minutes, "Active minutes should match");
+            assert_eq!(orig.flights_climbed, v2.flights_climbed, "Flights climbed should match");
+            assert_eq!(orig.source, v2.source, "Source should match");
+        }
+        
+        // Test query performance on both tables
+        let start_time = std::time::Instant::now();
+        let _original_query = sqlx::query!(
+            "SELECT * FROM activity_metrics WHERE user_id = $1 AND date >= $2",
+            user_id,
+            (now - chrono::Duration::days(7)).date_naive()
+        )
+        .fetch_all(&pool)
+        .await?;
+        let original_query_time = start_time.elapsed();
+        
+        let start_time = std::time::Instant::now();
+        let _v2_query = sqlx::query!(
+            "SELECT * FROM activity_metrics_v2 WHERE user_id = $1 AND recorded_at >= $2",
+            user_id,
+            now - chrono::Duration::days(7)
+        )
+        .fetch_all(&pool)
+        .await?;
+        let v2_query_time = start_time.elapsed();
+        
+        // Both queries should complete quickly (under 100ms for this small dataset)
+        assert!(original_query_time.as_millis() < 100, "Original table query should be fast");
+        assert!(v2_query_time.as_millis() < 100, "V2 table query should be fast");
+        
+        println!("✅ Dual-write integration test completed successfully");
+        println!("   - Original table query time: {:?}", original_query_time);
+        println!("   - V2 table query time: {:?}", v2_query_time);
+        println!("   - Data consistency verified across {} records", test_metrics.len());
+        
+        Ok(())
+    }
+
+    /// Test dual-write batch processing with larger dataset
+    #[sqlx::test]
+    async fn test_dual_write_batch_processing_integration(pool: PgPool) -> sqlx::Result<()> {
+        // Create test user
+        let user_id = Uuid::new_v4();
+        sqlx::query!(
+            "INSERT INTO users (id, email, created_at, updated_at) VALUES ($1, $2, NOW(), NOW())",
+            user_id,
+            "batch@test.com"
+        )
+        .execute(&pool)
+        .await?;
+
+        // Create BatchProcessor with dual-write enabled and smaller chunks for testing
+        let mut config = BatchConfig::default();
+        config.enable_dual_write_activity_metrics = true;
+        config.activity_chunk_size = 50; // Small chunks to test batch processing
+        let batch_processor = BatchProcessor::with_config(pool.clone(), config);
+        
+        // Create large batch of test data (150 records to test multiple chunks)
+        let now = Utc::now();
+        let test_metrics: Vec<ActivityMetric> = (0..150)
+            .map(|i| ActivityMetric {
+                date: (now - chrono::Duration::days(i % 30)).date_naive(),
+                steps: Some(8000 + (i * 100) % 5000),
+                distance_meters: Some(6000.0 + (i as f64 * 50.0) % 3000.0),
+                calories_burned: Some(400.0 + (i as f64 * 10.0) % 400.0),
+                active_minutes: Some(45 + (i * 2) % 60),
+                flights_climbed: Some(10 + (i % 15)),
+                source: Some(format!("Batch Test {}", i)),
+            })
+            .collect();
+        
+        // Process large batch with dual-write
+        let start_time = std::time::Instant::now();
+        let mut tx = pool.begin().await?;
+        let result = batch_processor.process_activity_metrics(
+            &mut tx, 
+            user_id, 
+            &test_metrics
+        ).await;
+        tx.commit().await?;
+        let processing_time = start_time.elapsed();
+        
+        assert!(result.is_ok(), "Large batch dual-write processing should succeed");
+        
+        // Verify all records were inserted in both tables
+        let original_count = sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM activity_metrics WHERE user_id = $1",
+            user_id
+        )
+        .fetch_one(&pool)
+        .await?;
+        
+        let v2_count = sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM activity_metrics_v2 WHERE user_id = $1",
+            user_id
+        )
+        .fetch_one(&pool)
+        .await?;
+        
+        assert_eq!(original_count, Some(150), "Original table should have 150 records");
+        assert_eq!(v2_count, Some(150), "V2 table should have 150 records");
+        
+        // Test deduplication works across both tables
+        // Try to insert duplicate records
+        let duplicate_metrics = test_metrics[0..5].to_vec(); // First 5 records
+        let mut tx = pool.begin().await?;
+        let duplicate_result = batch_processor.process_activity_metrics(
+            &mut tx, 
+            user_id, 
+            &duplicate_metrics
+        ).await;
+        tx.commit().await?;
+        
+        // Should handle duplicates gracefully
+        assert!(duplicate_result.is_ok(), "Duplicate processing should be handled gracefully");
+        
+        // Count should remain the same (no duplicates added)
+        let final_original_count = sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM activity_metrics WHERE user_id = $1",
+            user_id
+        )
+        .fetch_one(&pool)
+        .await?;
+        
+        let final_v2_count = sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM activity_metrics_v2 WHERE user_id = $1",
+            user_id
+        )
+        .fetch_one(&pool)
+        .await?;
+        
+        assert_eq!(final_original_count, Some(150), "Original table count should remain 150 after duplicates");
+        assert_eq!(final_v2_count, Some(150), "V2 table count should remain 150 after duplicates");
+        
+        // Performance check - should complete in reasonable time
+        assert!(processing_time.as_secs() < 30, "Batch processing should complete in under 30 seconds");
+        
+        println!("✅ Dual-write batch processing integration test completed successfully");
+        println!("   - Processed {} records in {:?}", test_metrics.len(), processing_time);
+        println!("   - Chunk size: 50 records (3 chunks processed)");
+        println!("   - Deduplication verified");
+        
+        Ok(())
+    }
+
+    /// Test dual-write with mixed data types and edge cases
+    #[sqlx::test]
+    async fn test_dual_write_mixed_data_integration(pool: PgPool) -> sqlx::Result<()> {
+        // Create test user
+        let user_id = Uuid::new_v4();
+        sqlx::query!(
+            "INSERT INTO users (id, email, created_at, updated_at) VALUES ($1, $2, NOW(), NOW())",
+            user_id,
+            "mixed@test.com"
+        )
+        .execute(&pool)
+        .await?;
+
+        let mut config = BatchConfig::default();
+        config.enable_dual_write_activity_metrics = true;
+        let batch_processor = BatchProcessor::with_config(pool.clone(), config);
+        
+        let now = Utc::now();
+        
+        // Test with mixed data - some with all fields, some with minimal fields
+        let mixed_metrics = vec![
+            // Complete record
+            ActivityMetric {
+                date: now.date_naive(),
+                steps: Some(10000),
+                distance_meters: Some(8000.0),
+                calories_burned: Some(500.0),
+                active_minutes: Some(60),
+                flights_climbed: Some(15),
+                source: Some("Complete Record".to_string()),
+            },
+            // Minimal record (only required fields)
+            ActivityMetric {
+                date: (now - chrono::Duration::days(1)).date_naive(),
+                steps: None,
+                distance_meters: None,
+                calories_burned: None,
+                active_minutes: None,
+                flights_climbed: None,
+                source: None,
+            },
+            // Partial record
+            ActivityMetric {
+                date: (now - chrono::Duration::days(2)).date_naive(),
+                steps: Some(5000),
+                distance_meters: Some(0.0), // Zero distance
+                calories_burned: None,
+                active_minutes: Some(0), // Zero active minutes
+                flights_climbed: Some(0), // Zero flights
+                source: Some("Partial Record".to_string()),
+            },
+            // High values (boundary testing)
+            ActivityMetric {
+                date: (now - chrono::Duration::days(3)).date_naive(),
+                steps: Some(50000), // Very high step count
+                distance_meters: Some(42195.0), // Marathon distance
+                calories_burned: Some(3000.0), // High calorie burn
+                active_minutes: Some(300), // 5 hours active
+                flights_climbed: Some(200), // Many flights
+                source: Some("High Values Record".to_string()),
+            },
+        ];
+        
+        // Process mixed data
+        let mut tx = pool.begin().await?;
+        let result = batch_processor.process_activity_metrics(
+            &mut tx, 
+            user_id, 
+            &mixed_metrics
+        ).await;
+        tx.commit().await?;
+        
+        assert!(result.is_ok(), "Mixed data processing should succeed");
+        
+        // Verify all records in both tables
+        let original_records = sqlx::query!(
+            "SELECT date, steps, distance_meters, calories_burned, active_minutes, flights_climbed, source 
+             FROM activity_metrics 
+             WHERE user_id = $1 
+             ORDER BY date DESC",
+            user_id
+        )
+        .fetch_all(&pool)
+        .await?;
+        
+        let v2_records = sqlx::query!(
+            "SELECT recorded_at, step_count, distance_walking_running_meters, active_energy_burned_kcal, 
+                    exercise_time_minutes, flights_climbed, source 
+             FROM activity_metrics_v2 
+             WHERE user_id = $1 
+             ORDER BY recorded_at DESC",
+            user_id
+        )
+        .fetch_all(&pool)
+        .await?;
+        
+        assert_eq!(original_records.len(), 4, "Should have 4 original records");
+        assert_eq!(v2_records.len(), 4, "Should have 4 v2 records");
+        
+        // Verify NULL handling
+        let minimal_orig = original_records.iter().find(|r| r.steps.is_none()).unwrap();
+        let minimal_v2 = v2_records.iter().find(|r| r.step_count.is_none()).unwrap();
+        
+        assert_eq!(minimal_orig.steps, minimal_v2.step_count);
+        assert_eq!(minimal_orig.distance_meters, minimal_v2.distance_walking_running_meters);
+        assert_eq!(minimal_orig.calories_burned, minimal_v2.active_energy_burned_kcal);
+        assert_eq!(minimal_orig.active_minutes, minimal_v2.exercise_time_minutes);
+        
+        // Verify zero values are preserved
+        let zero_orig = original_records.iter().find(|r| 
+            r.distance_meters == Some(0.0) && r.active_minutes == Some(0)
+        ).unwrap();
+        let zero_v2 = v2_records.iter().find(|r| 
+            r.distance_walking_running_meters == Some(0.0) && r.exercise_time_minutes == Some(0)
+        ).unwrap();
+        
+        assert_eq!(zero_orig.distance_meters, zero_v2.distance_walking_running_meters);
+        assert_eq!(zero_orig.active_minutes, zero_v2.exercise_time_minutes);
+        
+        // Verify high values are handled correctly
+        let high_orig = original_records.iter().find(|r| r.steps == Some(50000)).unwrap();
+        let high_v2 = v2_records.iter().find(|r| r.step_count == Some(50000)).unwrap();
+        
+        assert_eq!(high_orig.steps, high_v2.step_count);
+        assert_eq!(high_orig.distance_meters, high_v2.distance_walking_running_meters);
+        assert_eq!(high_orig.calories_burned, high_v2.active_energy_burned_kcal);
+        
+        println!("✅ Mixed data integration test completed successfully");
+        println!("   - NULL values handled correctly");
+        println!("   - Zero values preserved");
+        println!("   - High boundary values processed correctly");
+        
+        Ok(())
+    }
+}

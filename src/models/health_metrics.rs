@@ -7,6 +7,7 @@ use sqlx::FromRow;
 /// Heart rate metric with validation
 #[derive(Debug, Deserialize, Serialize, Clone, FromRow)]
 pub struct HeartRateMetric {
+    pub id: uuid::Uuid,
     pub user_id: uuid::Uuid,
     pub recorded_at: DateTime<Utc>,
     pub heart_rate: Option<i16>,
@@ -14,22 +15,26 @@ pub struct HeartRateMetric {
     pub heart_rate_variability: Option<f64>,
     pub source_device: Option<String>,
     pub context: Option<ActivityContext>,
+    pub created_at: DateTime<Utc>,
 }
 
 /// Blood pressure metric
 #[derive(Debug, Deserialize, Serialize, Clone, FromRow)]
 pub struct BloodPressureMetric {
+    pub id: uuid::Uuid,
     pub user_id: uuid::Uuid,
     pub recorded_at: DateTime<Utc>,
     pub systolic: i16,
     pub diastolic: i16,
     pub pulse: Option<i16>,
     pub source_device: Option<String>,
+    pub created_at: DateTime<Utc>,
 }
 
 /// Sleep metrics
 #[derive(Debug, Deserialize, Serialize, Clone, FromRow)]
 pub struct SleepMetric {
+    pub id: uuid::Uuid,
     pub user_id: uuid::Uuid,
     pub sleep_start: DateTime<Utc>,
     pub sleep_end: DateTime<Utc>,
@@ -40,6 +45,7 @@ pub struct SleepMetric {
     pub awake_minutes: Option<i32>,
     pub efficiency: Option<f64>,
     pub source_device: Option<String>,
+    pub created_at: DateTime<Utc>,
 }
 
 /// Activity metrics (simplified schema matching database)

@@ -163,19 +163,52 @@ async fn test_severity_validation(pool: PgPool) -> sqlx::Result<()> {
         assert!(insert_result.is_ok(), "Severity '{}' should be valid", severity);
     }
 
-    // Test invalid severity
-    let invalid_insert = sqlx::query!(
+    // Test invalid severity - comprehensive edge cases
+    let invalid_severities = [
+        "extreme",     // Not in valid enum
+        "invalid",    // Random string
+        "severe_plus", // Close to valid but invalid
+        "MILD",       // Wrong case
+        "Moderate",   // Mixed case
+        "not present", // Space instead of underscore
+        "",           // Empty string
+        "none",       // Different valid-sounding option
+        "low",        // Alternative valid-sounding option
+        "high",       // Alternative valid-sounding option
+        "critical",   // Medical-sounding but invalid
+    ];
+
+    for (i, invalid_severity) in invalid_severities.iter().enumerate() {
+        let test_time = recorded_at + chrono::Duration::hours(i as i64 + 1);
+        let invalid_insert = sqlx::query!(
+            "INSERT INTO symptoms (user_id, recorded_at, symptom_type, severity) 
+             VALUES ($1, $2, $3, $4)",
+            user_id,
+            test_time,
+            "headache",
+            invalid_severity
+        )
+        .execute(&pool)
+        .await;
+
+        assert!(
+            invalid_insert.is_err(), 
+            "Invalid severity '{}' should fail constraint validation", 
+            invalid_severity
+        );
+    }
+
+    // Test NULL severity (should fail since severity is required)
+    let null_severity_insert = sqlx::query!(
         "INSERT INTO symptoms (user_id, recorded_at, symptom_type, severity) 
-         VALUES ($1, $2, $3, $4)",
+         VALUES ($1, $2, $3, NULL)",
         user_id,
-        recorded_at + chrono::Duration::hours(1),
-        "headache",
-        "extreme"
+        recorded_at + chrono::Duration::hours(20)
     )
     .execute(&pool)
     .await;
 
-    assert!(invalid_insert.is_err(), "Invalid severity should fail");
+    assert!(null_severity_insert.is_err(), "NULL severity should fail NOT NULL constraint");
 
     Ok(())
 }

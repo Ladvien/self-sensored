@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
+use crate::models::enums::{JobStatus, JobType};
+
 /// Background processing job model
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct ProcessingJob {
@@ -10,8 +12,8 @@ pub struct ProcessingJob {
     pub user_id: Uuid,
     pub api_key_id: Uuid,
     pub raw_ingestion_id: Uuid,
-    pub status: String,
-    pub job_type: String,
+    pub status: JobStatus,
+    pub job_type: JobType,
     pub priority: i32,
 
     // Progress tracking
@@ -24,70 +26,16 @@ pub struct ProcessingJob {
     pub created_at: DateTime<Utc>,
     pub started_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
-    pub estimated_completion_at: Option<DateTime<Utc>>,
 
     // Error handling
     pub error_message: Option<String>,
     pub retry_count: i32,
-    pub max_retries: i32,
-    pub last_retry_at: Option<DateTime<Utc>>,
 
     // Configuration and results
     pub config: serde_json::Value,
     pub result_summary: Option<serde_json::Value>,
 }
 
-/// Job status enumeration
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum JobStatus {
-    Pending,
-    Processing,
-    Completed,
-    Failed,
-}
-
-impl JobStatus {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            JobStatus::Pending => "pending",
-            JobStatus::Processing => "processing",
-            JobStatus::Completed => "completed",
-            JobStatus::Failed => "failed",
-        }
-    }
-}
-
-impl From<String> for JobStatus {
-    fn from(s: String) -> Self {
-        match s.as_str() {
-            "pending" => JobStatus::Pending,
-            "processing" => JobStatus::Processing,
-            "completed" => JobStatus::Completed,
-            "failed" => JobStatus::Failed,
-            _ => JobStatus::Pending, // Default fallback
-        }
-    }
-}
-
-/// Job type enumeration
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum JobType {
-    IngestBatch,
-    DataExport,
-    DataCleanup,
-}
-
-impl JobType {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            JobType::IngestBatch => "ingest_batch",
-            JobType::DataExport => "data_export",
-            JobType::DataCleanup => "data_cleanup",
-        }
-    }
-}
 
 /// Priority levels for job processing
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -116,7 +64,6 @@ pub struct CreateJobRequest {
 pub struct CreateJobResponse {
     pub job_id: Uuid,
     pub status: JobStatus,
-    pub estimated_completion_time: Option<DateTime<Utc>>,
     pub message: String,
 }
 
@@ -133,7 +80,6 @@ pub struct JobStatusResponse {
     pub created_at: DateTime<Utc>,
     pub started_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
-    pub estimated_completion_at: Option<DateTime<Utc>>,
     pub error_message: Option<String>,
     pub result_summary: Option<serde_json::Value>,
 }
@@ -143,7 +89,7 @@ impl From<ProcessingJob> for JobStatusResponse {
         Self {
             job_id: job.id,
             user_id: job.user_id,
-            status: JobStatus::from(job.status),
+            status: job.status,
             progress_percentage: job.progress_percentage,
             total_metrics: job.total_metrics,
             processed_metrics: job.processed_metrics,
@@ -151,7 +97,6 @@ impl From<ProcessingJob> for JobStatusResponse {
             created_at: job.created_at,
             started_at: job.started_at,
             completed_at: job.completed_at,
-            estimated_completion_at: job.estimated_completion_at,
             error_message: job.error_message,
             result_summary: job.result_summary,
         }
