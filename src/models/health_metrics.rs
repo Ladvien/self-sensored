@@ -67,7 +67,7 @@ pub struct GpsCoordinate {
     pub recorded_at: DateTime<Utc>,
 }
 
-/// Workout data with GPS tracking
+/// Workout data matching workouts table schema
 #[derive(Debug, Deserialize, Serialize, Clone, FromRow)]
 pub struct WorkoutData {
     pub id: uuid::Uuid,
@@ -76,10 +76,12 @@ pub struct WorkoutData {
     pub started_at: DateTime<Utc>,
     pub ended_at: DateTime<Utc>,
     pub total_energy_kcal: Option<f64>,
+    pub active_energy_kcal: Option<f64>,
     pub distance_meters: Option<f64>,
-    pub avg_heart_rate: Option<i16>,
-    pub max_heart_rate: Option<i16>,
+    pub avg_heart_rate: Option<i32>,
+    pub max_heart_rate: Option<i32>,
     pub source_device: Option<String>,
+    pub created_at: DateTime<Utc>,
 }
 
 impl GpsCoordinate {
@@ -140,6 +142,18 @@ impl WorkoutData {
             }
         }
 
+        if let Some(energy) = self.active_energy_kcal {
+            if energy < 0.0 {
+                return Err("active_energy_kcal cannot be negative".to_string());
+            }
+            if energy > config.calories_max {
+                return Err(format!(
+                    "active_energy_kcal {} exceeds maximum of {}",
+                    energy, config.calories_max
+                ));
+            }
+        }
+
         if let Some(distance) = self.distance_meters {
             if distance < 0.0 {
                 return Err("distance_meters cannot be negative".to_string());
@@ -154,7 +168,8 @@ impl WorkoutData {
         }
 
         if let Some(hr) = self.avg_heart_rate {
-            if !(config.workout_heart_rate_min..=config.workout_heart_rate_max).contains(&hr) {
+            let hr_i16 = hr as i16;
+            if !(config.workout_heart_rate_min..=config.workout_heart_rate_max).contains(&hr_i16) {
                 return Err(format!(
                     "avg_heart_rate {} is out of range ({}-{})",
                     hr, config.workout_heart_rate_min, config.workout_heart_rate_max
@@ -163,7 +178,8 @@ impl WorkoutData {
         }
 
         if let Some(hr) = self.max_heart_rate {
-            if !(config.workout_heart_rate_min..=config.workout_heart_rate_max).contains(&hr) {
+            let hr_i16 = hr as i16;
+            if !(config.workout_heart_rate_min..=config.workout_heart_rate_max).contains(&hr_i16) {
                 return Err(format!(
                     "max_heart_rate {} is out of range ({}-{})",
                     hr, config.workout_heart_rate_min, config.workout_heart_rate_max
