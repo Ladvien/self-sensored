@@ -165,7 +165,7 @@ impl BackgroundJobCoordinator {
     }
 
     /// Get job status and progress
-    pub async fn get_job_status(&self, job_id: Uuid) -> Result<Option<JobStatus>, sqlx::Error> {
+    pub async fn get_job_status(&self, job_id: Uuid) -> Result<Option<JobStatusInfo>, sqlx::Error> {
         let job = sqlx::query!(
             r#"
             SELECT 
@@ -182,10 +182,10 @@ impl BackgroundJobCoordinator {
         .await?;
 
         if let Some(job) = job {
-            Ok(Some(JobStatus {
+            Ok(Some(JobStatusInfo {
                 id: job_id,
-                status: job.status,
-                job_type: BackgroundJobType::from_str(&job.job_type).unwrap_or(BackgroundJobType::IngestBatch),
+                status: job.status.as_str().to_string(),
+                job_type: BackgroundJobType::from_str(&job.job_type.as_str()).unwrap_or(BackgroundJobType::IngestBatch),
                 priority: match job.priority {
                     1 => JobPriority::Low,
                     10 => JobPriority::High,
@@ -195,7 +195,7 @@ impl BackgroundJobCoordinator {
                 processed_metrics: job.processed_metrics.unwrap_or(0) as usize,
                 failed_metrics: job.failed_metrics.unwrap_or(0) as usize,
                 progress_percentage: job.progress_percentage.unwrap_or(0.0),
-                created_at: job.created_at.unwrap(),
+                created_at: job.created_at,
                 started_at: job.started_at,
                 completed_at: job.completed_at,
                 error_message: job.error_message,
@@ -350,9 +350,9 @@ impl BackgroundJobCoordinator {
     }
 }
 
-/// Job status information
+/// Job status information with detailed progress
 #[derive(Debug, Clone)]
-pub struct JobStatus {
+pub struct JobStatusInfo {
     pub id: Uuid,
     pub status: String,
     pub job_type: BackgroundJobType,
