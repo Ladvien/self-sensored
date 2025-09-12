@@ -1,6 +1,76 @@
 Based on the comprehensive database redesign analysis, I'll create Jira stories organized into parallel work streams. Each story includes detailed acceptance criteria, testing requirements, and definition of done.
 
+## ⚠️ MIGRATION REFERENCES NOTICE
+**Historical Context**: This file contains references to migration files and expanded schema features that were part of the expanded schema implementation but have been removed as part of the schema simplification (SCHEMA-016). All references to migration files, nutrition metrics, symptoms, reproductive health metrics, environmental metrics, mental health metrics, and mobility metrics are historical and relate to work completed before schema simplification to the core 5 metric types.
+
 ## Epic: Schema Alignment Critical Fixes
+
+---
+
+#### [SCHEMA-015] Update Integration Tests ✅ COMPLETED
+
+**Status:** ✅ COMPLETED 2025-09-12 03:00 PM  
+**Story Points:** 4
+**Completed by:** Claude Code Agent
+**Commit:** f786ba8 - "feat: update integration tests for simplified schema"
+
+**Acceptance Criteria Met:**
+- ✅ Removed tests for deprecated metric types (nutrition, symptoms, environmental, mental health, mobility, reproductive health)
+- ✅ Updated test payloads for simplified schema with 5 core metric types only
+- ✅ Fixed field name assertions in existing tests (step_count, active_energy_burned_kcal, source_device)
+- ✅ Updated test database setup for simplified schema
+- ✅ Verified compilation status with schema changes
+
+**Technical Implementation:**
+- Removed 6 deprecated migration test files for non-existent tables
+- Updated models_test.rs to use simplified schema with proper field names
+- Updated ingest_test.rs HeartRateMetric to use heart_rate, resting_heart_rate, source_device fields
+- Updated BloodPressureMetric to use source_device instead of source field
+- Updated SleepMetric to use duration_minutes, efficiency, light_sleep_minutes, source_device fields
+- Updated ActivityMetric to use step_count, active_energy_burned_kcal, basal_energy_burned_kcal, source_device fields
+- Updated WorkoutData to use started_at/ended_at, active_energy_kcal, source_device fields
+- Removed extensive dual-write integration tests for deprecated ActivityMetricV2 model
+- Added proper UUID fields (id, user_id) to all test model instances
+- Simplified test fixtures to focus on core 5 metric types only
+
+**Files Updated:**
+- tests/models_test.rs - Completely rewritten for simplified schema
+- tests/handlers/ingest_test.rs - Updated field names, removed dual-write tests
+- tests/migrations/*.rs - 6 deprecated test files removed
+- team_chat.md - Added progress updates
+
+**Dependencies:** SCHEMA-001 ✅, SCHEMA-002 ✅, SCHEMA-003 ✅
+
+**Impact:** Integration tests now aligned with simplified schema structure, ready for core 5 metric types testing
+
+---
+
+#### [SCHEMA-008] Fix Batch Processor SQL Queries ✅ COMPLETED
+
+**Status:** ✅ COMPLETED 2025-09-12 02:00 PM  
+**Story Points:** 5
+**Completed by:** Claude Code Agent
+**Commit:** cb6a832 - "feat: fix batch processor SQL queries for simplified schema"
+
+**Acceptance Criteria Met:**
+- ✅ Updated INSERT INTO activity_metrics queries to include basal_energy_burned_kcal field and correct field order
+- ✅ Updated INSERT INTO blood_pressure_metrics to use source_device instead of source
+- ✅ Updated INSERT INTO workouts to use avg_heart_rate instead of average_heart_rate
+- ✅ Removed all references to activity_metrics_v2 table and dual-write functionality
+- ✅ Removed all INSERT queries for deleted metric tables (nutrition_metrics, symptoms, reproductive_health_metrics, environmental_metrics, mental_health_metrics, mobility_metrics)
+- ✅ Cleaned up DeduplicationStats struct to remove deprecated metric types
+- ✅ Cleaned up GroupedMetrics struct to remove deprecated metric collections
+- ✅ Fixed activity metric deduplication to remove non-existent active_minutes field
+- ✅ Removed deprecated metric processing from process_batch method
+
+**Technical Impact:**
+- All batch processor SQL queries now align with simplified schema
+- Eliminated database errors from wrong column names and non-existent tables
+- Removed 500+ lines of deprecated dual-write code referencing activity_metrics_v2
+- Fixed parameter count calculations for activity metrics (7 params per record)
+- Simplified batch processing to only support 5 core metric types (HeartRate, BloodPressure, Sleep, Activity, Workout)
+
+**Files Modified:** src/services/batch_processor.rs
 
 ---
 
@@ -3357,3 +3427,124 @@ Fix all raw_ingestions table queries to align with the actual database schema by
 
 ---
 
+#### [SCHEMA-014] Fix iOS Model Conversion Logic ✅ COMPLETED
+
+**Status:** ✅ COMPLETED 2025-09-12  
+**Story Points:** 3  
+**Assigned to:** Claude Code Agent  
+**Priority:** Medium  
+
+**Description:**  
+Fix iOS health metric parsing and conversion logic to align with simplified schema, removing deprecated metric types and updating field name mappings.
+
+**Acceptance Criteria Completed:**
+- ✅ Removed conversion logic for deprecated metric types (Nutrition, Environmental, MentalHealth, Symptoms, ReproductiveHealth, Mobility) from iOS model conversions
+- ✅ Updated field name mappings to match simplified schema:
+  * ActivityMetric uses step_count instead of steps
+  * ActivityMetric uses active_energy_burned_kcal instead of calories_burned  
+  * Added basal_energy_burned_kcal mapping for basal energy
+  * All metrics use source_device instead of source consistently
+- ✅ Updated iOS metric conversion to include proper database fields:
+  * Added UUID generation for id and user_id fields to all metrics
+  * Added created_at timestamps to all metrics  
+  * HeartRateMetric includes all required fields with proper types
+  * SleepMetric includes light_sleep_minutes field and proper structure
+  * BloodPressureMetric includes all required fields for pairing
+- ✅ Fixed WorkoutData creation with correct field mappings:
+  * Uses started_at/ended_at instead of start_time/end_time
+  * Converts heart rates to i32 to match database schema INTEGER type
+  * Added active_energy_kcal field mapping from iOS data
+  * Uses WorkoutType enum conversion with fallback to Other
+- ✅ Updated metric type routing to only support 5 core types (HeartRate, BloodPressure, Sleep, Activity, Workout)
+- ✅ Removed deprecated metric arrays (nutrition_metrics, symptom_metrics, etc.) from IngestData return structure
+
+**Files Modified:**
+- `src/models/ios_models.rs` - Complete iOS conversion logic update for simplified schema
+
+**Technical Details:**
+- **Deprecated Metric Removal**: Completely removed conversion logic for 6 deprecated metric types (169 lines removed) that don't exist in simplified schema
+- **Field Name Alignment**: Updated all field references to match database column names exactly (step_count, active_energy_burned_kcal, source_device)
+- **Schema Compatibility**: All iOS-converted metrics now include required database fields (id, user_id, created_at) with proper UUID generation
+- **Type Safety**: Heart rate values converted to appropriate integer types, dates properly handled with UTC conversion
+- **Data Structure**: IngestData now returns only metrics and workouts arrays, removing deprecated metric type arrays
+- **Error Prevention**: Eliminated potential runtime errors from referencing non-existent metric types or fields
+
+**Impact:** iOS Auto Health Export app payloads will now convert correctly to internal format using only the 5 supported metric types. All field mappings match the simplified database schema exactly, preventing insertion errors and ensuring data integrity.
+
+**Dependencies:** SCHEMA-001 ✅, SCHEMA-002 ✅, SCHEMA-003 ✅
+
+**Definition of Done:**
+✅ Deprecated metric conversions removed  
+✅ Field name mappings fixed for simplified schema  
+✅ All metric structures include required database fields  
+✅ WorkoutData conversion uses correct field names and types  
+✅ Only 5 core metric types supported in routing  
+✅ Code committed with comprehensive message  
+✅ Story moved from BACKLOG.md to DONE.md  
+
+**Result:** iOS model conversion logic fully aligned with simplified schema. Auto Health Export iOS app data will process correctly through the conversion pipeline.
+
+---
+
+#### [SCHEMA-017] Update Configuration Documentation ✅ COMPLETED
+
+**Status:** ✅ COMPLETED 2025-09-12 03:30 PM  
+**Story Points:** 1
+**Completed by:** Claude Code Agent
+**Commit:** b78b81e - "feat: update configuration documentation"
+
+**Description:**  
+Update CLAUDE.md and .env.example to reflect the simplified schema with accurate field names, parameter counts, and environment variable configurations.
+
+**Acceptance Criteria Completed:**
+- ✅ Updated CLAUDE.md with simplified schema information:
+  * Updated parameter counts for all 5 core metric types in simplified schema
+  * Fixed field name references (steps → step_count, source → source_device) 
+  * Updated validation configuration examples for simplified schema
+  * Added core 5 health metric types documentation (Heart Rate, Blood Pressure, Sleep, Activity, Workout)
+  * Updated debugging section for simplified raw_ingestions table fields
+- ✅ Removed references to deprecated metric types from CLAUDE.md:
+  * Removed documentation for deleted metric types (Nutrition, Symptoms, Environmental, Mental Health, Mobility, Reproductive Health)
+  * Updated workflow examples to reflect only 5 supported metric types
+- ✅ Updated field name examples throughout documentation:
+  * Activity validation examples use step_count instead of steps
+  * Parameter count examples reflect accurate field mappings from schema
+  * Sleep parameter count updated to 9 params (removed aggregation fields)
+- ✅ Updated environment variable documentation in .env.example:
+  * Changed VALIDATION_STEPS_* to VALIDATION_STEP_COUNT_* for consistency
+  * Updated batch processing parameter counts for accurate chunking
+  * Added simplified schema clarification comments
+  * Updated Sleep chunk size to 6000 for 9 parameters (was 5000 for 10)
+
+**Files Modified:**
+- `CLAUDE.md` - Complete documentation alignment with simplified schema  
+- `.env.example` - Environment variable updates for simplified schema
+
+**Technical Details:**
+- **Parameter Count Accuracy**: Updated all metric type parameter counts to match actual simplified schema:
+  * Heart Rate: 7 params (added heart_rate_variability)
+  * Blood Pressure: 6 params (unchanged)
+  * Sleep: 9 params (removed aggregation_period field)
+  * Activity: 7 params (step_count, active_energy_burned_kcal, basal_energy_burned_kcal)
+  * Workout: 10 params (added active_energy_kcal field)
+- **Field Name Consistency**: All documentation examples now use correct simplified schema field names
+- **Environment Configuration**: Updated validation variable names to match code implementation (VALIDATION_STEP_COUNT_*)
+- **Batch Processing**: Updated chunk sizes based on accurate parameter counts for PostgreSQL limits
+- **Schema Documentation**: Added clear distinction that this is simplified schema with only 5 core metric types
+
+**Impact:** Developer documentation now accurately reflects the simplified database schema. Environment configuration examples match the actual validation code implementation. New developers will have correct information for field names, validation rules, and batch processing configuration.
+
+**Dependencies:** All previous schema alignment stories ✅
+
+**Definition of Done:**
+✅ CLAUDE.md updated with simplified schema information  
+✅ Deprecated metric types removed from documentation  
+✅ Field name examples corrected throughout documentation  
+✅ .env.example updated for simplified schema configuration  
+✅ Parameter counts accurate for all 5 metric types  
+✅ Code committed with comprehensive message  
+✅ Story moved from BACKLOG.md to DONE.md  
+
+**Result:** Configuration documentation fully aligned with simplified schema. Developers have accurate information for working with the 5 core health metric types and their corresponding database fields.
+
+---

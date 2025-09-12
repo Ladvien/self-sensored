@@ -3,6 +3,9 @@
 **Date:** 2025-09-11  
 **Branch:** fix/payload-monitoring
 
+## ⚠️ MIGRATION REFERENCES NOTICE
+**Historical Context**: This file contains references to migration files that were part of the expanded schema implementation but have been removed as part of the schema simplification (SCHEMA-016). References to migration files are historical and relate to work completed before schema simplification.
+
 ## Overview
 Addressing HIGH and MEDIUM priority security issues identified in review_notes.md:
 

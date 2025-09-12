@@ -13,31 +13,10 @@
 ## Component 2: Field Mapping Fixes (High Priority)
 
 
-**[SCHEMA-006] Fix Activity Metrics Field Name Mapping**
-Priority: High
-Points: 3
-AC:
-- Update all references from 'steps' to 'step_count' in validation logic
-- Update all references from 'calories_burned' to 'active_energy_burned_kcal'
-- Fix conversion methods between ActivityMetric and database structs
-- Update field validation ranges for new field names
-Dependencies: SCHEMA-002
-Files: src/models/health_metrics.rs, src/models/db.rs
 
 
 ## Component 3: Database Query Updates (High Priority)
 
-**[SCHEMA-008] Fix Batch Processor SQL Queries**
-Priority: High
-Points: 5
-AC:
-- Update INSERT INTO activity_metrics queries to use step_count, active_energy_burned_kcal
-- Update INSERT INTO blood_pressure_metrics to use source_device instead of source
-- Update INSERT INTO workouts to use avg_heart_rate instead of average_heart_rate
-- Remove all references to activity_metrics_v2 table
-- Remove all INSERT queries for deleted metric tables (nutrition_metrics, symptoms, etc.)
-Dependencies: SCHEMA-002, SCHEMA-003, SCHEMA-005
-Files: src/services/batch_processor.rs
 
 **[SCHEMA-009] Fix Handler Query Field Names**
 Priority: High
@@ -57,17 +36,6 @@ Files: src/handlers/query.rs, src/handlers/export.rs
 
 
 
-**[SCHEMA-015] Update Integration Tests**
-Priority: Medium
-Points: 4
-AC:
-- Remove tests for deprecated metric types
-- Update test payloads for simplified schema
-- Fix field name assertions in existing tests
-- Update test database setup for simplified schema
-- Verify all tests pass with schema changes
-Dependencies: SCHEMA-001, SCHEMA-002, SCHEMA-003
-Files: tests/handlers/ingest_test.rs, tests/migrations/*.rs
 
 ## Component 6: Cleanup and Documentation (Low Priority)
 
@@ -81,16 +49,6 @@ AC:
 Dependencies: SCHEMA-001
 Files: migrations/ (cleanup), tests/migrations/
 
-**[SCHEMA-017] Update Configuration Documentation**
-Priority: Low
-Points: 1
-AC:
-- Update CLAUDE.md with simplified schema information
-- Remove references to deprecated metric types in documentation
-- Update field name examples in documentation
-- Update environment variable documentation
-Dependencies: All previous
-Files: CLAUDE.md, .env.example
 
 # STORY SUMMARY
 

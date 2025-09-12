@@ -1,6 +1,9 @@
 # Commit Review Log
 Last Updated: 2025-09-11T19:30:00Z
 
+## ⚠️ MIGRATION REFERENCES NOTICE
+**Historical Context**: This file contains references to migration files that were part of the expanded schema implementation but have been removed as part of the schema simplification (SCHEMA-016). References to `migrations/0012_*`, `migrations/0013_*`, `migrations/0014_*`, `migrations/0015_*`, `migrations/0017_*`, and `migrations/0018_*` are historical and relate to work completed before schema simplification.
+
 ## Active Monitors
 - [AGENT-1] Monitoring: Code Quality & Security | Last Check: 2025-09-11T20:00:00Z
 - [AGENT-2] Monitoring: Performance & Architecture | Last Check: 2025-09-11T20:00:00Z
