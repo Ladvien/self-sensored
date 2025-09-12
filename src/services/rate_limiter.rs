@@ -608,6 +608,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_rate_limiter_ip_based_with_increased_limit() {
+        // Set IP rate limit to 100 for testing BEFORE creating the rate limiter
+        std::env::set_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR", "100");
+        
         let rate_limiter = RateLimiter::new_in_memory(100); // Standard limit
 
         // Test IP rate limiting uses the higher default (100) instead of old 20
@@ -624,6 +627,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_rate_limiter_user_vs_ip_rate_limits() {
+        // Set IP rate limit to 100 for testing BEFORE creating the rate limiter
+        std::env::set_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR", "100");
+        
         // Test that user rate limiting and IP rate limiting are independent
         let rate_limiter = RateLimiter::new_in_memory(100);
         let user_id = Uuid::new_v4();
