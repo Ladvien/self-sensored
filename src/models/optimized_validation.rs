@@ -400,23 +400,6 @@ pub struct ValidationBenchmarkResult {
 }
 
 /// Implementation of lazy validation for existing health metrics
-impl LazyValidation for crate::models::health_metrics::NutritionMetric {
-    fn cache_key(&self) -> String {
-        // Create cache key based on significant validation parameters
-        format!(
-            "nutrition_{}_{}_{}_{}_{}",
-            self.water_ml.unwrap_or(0.0) as u32,
-            self.energy_consumed_kcal.unwrap_or(0.0) as u32,
-            self.carbohydrates_g.unwrap_or(0.0) as u32,
-            self.protein_g.unwrap_or(0.0) as u32,
-            self.vitamin_c_mg.unwrap_or(0.0) as u32
-        )
-    }
-    
-    fn validate_impl(&self, config: &crate::config::ValidationConfig) -> Result<()> {
-        self.validate_with_config(config)
-    }
-}
 
 impl LazyValidation for crate::models::health_metrics::HeartRateMetric {
     fn cache_key(&self) -> String {

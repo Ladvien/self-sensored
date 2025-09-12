@@ -19,8 +19,8 @@ pub struct ValidationConfig {
     pub sleep_duration_tolerance_minutes: i32,
 
     // Activity Validation Thresholds
-    pub steps_min: i32,
-    pub steps_max: i32,
+    pub step_count_min: i32,
+    pub step_count_max: i32,
     pub distance_max_km: f64,
     pub calories_max: f64,
 
@@ -55,8 +55,8 @@ impl Default for ValidationConfig {
             sleep_duration_tolerance_minutes: 60, // Allow 1 hour variance
 
             // Activity limits: reasonable daily maximums
-            steps_min: 0,
-            steps_max: 200_000,     // Extreme but possible
+            step_count_min: 0,
+            step_count_max: 200_000,     // Extreme but possible
             distance_max_km: 500.0, // ~310 miles - marathon+ distance
             calories_max: 20_000.0, // Extreme athletic events
 
@@ -123,11 +123,11 @@ impl ValidationConfig {
             .unwrap_or(60),
 
             // Activity Validation Thresholds
-            steps_min: env::var("VALIDATION_STEPS_MIN")
+            step_count_min: env::var("VALIDATION_STEP_COUNT_MIN")
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(0),
-            steps_max: env::var("VALIDATION_STEPS_MAX")
+            step_count_max: env::var("VALIDATION_STEP_COUNT_MAX")
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(200_000),
@@ -192,8 +192,8 @@ impl ValidationConfig {
             return Err("sleep_efficiency_min must be less than sleep_efficiency_max".to_string());
         }
 
-        if self.steps_min >= self.steps_max {
-            return Err("steps_min must be less than steps_max".to_string());
+        if self.step_count_min >= self.step_count_max {
+            return Err("step_count_min must be less than step_count_max".to_string());
         }
 
         if self.latitude_min >= self.latitude_max {

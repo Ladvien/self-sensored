@@ -391,10 +391,10 @@ impl ActivityMetric {
 
     pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
         if let Some(step_count) = self.step_count {
-            if step_count < config.steps_min || step_count > config.steps_max {
+            if step_count < config.step_count_min || step_count > config.step_count_max {
                 return Err(format!(
                     "step_count {} is out of range ({}-{})",
-                    step_count, config.steps_min, config.steps_max
+                    step_count, config.step_count_min, config.step_count_max
                 ));
             }
         }
