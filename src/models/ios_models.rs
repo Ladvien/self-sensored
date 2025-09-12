@@ -29,7 +29,7 @@ pub struct IosMetric {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct IosMetricData {
     // Common fields across all metrics
-    pub source_device: Option<String>,
+    pub source: Option<String>,
 
     // Time fields - iOS uses string dates
     pub date: Option<String>,
@@ -51,7 +51,7 @@ pub struct IosWorkout {
     pub name: Option<String>,
     pub start: Option<String>,
     pub end: Option<String>,
-    pub source_device: Option<String>,
+    pub source: Option<String>,
     #[serde(flatten)]
     pub extra: std::collections::HashMap<String, serde_json::Value>,
 }
@@ -107,7 +107,7 @@ impl IosIngestPayload {
                                     heart_rate: Some(qty as i16),
                                     resting_heart_rate: if context_str == Some("resting") { Some(qty as i16) } else { None },
                                     heart_rate_variability: None,
-                                    source_device: data_point.source_device.clone(),
+                                    source_device: data_point.source.clone(),
                                     context,
                                     created_at: Utc::now(),
                                 };
@@ -165,7 +165,7 @@ impl IosIngestPayload {
                                 light_sleep_minutes: None, // iOS may not provide this separately
                                 awake_minutes,
                                 efficiency: None,
-                                source_device: data_point.source_device.clone(),
+                                source_device: data_point.source.clone(),
                                 created_at: Utc::now(),
                             };
                             internal_metrics.push(HealthMetric::Sleep(metric));
@@ -228,7 +228,7 @@ impl IosIngestPayload {
                                     } else {
                                         None
                                     },
-                                    source_device: data_point.source_device.clone(),
+                                    source_device: data_point.source.clone(),
                                     created_at: Utc::now(),
                                 };
                                 internal_metrics.push(HealthMetric::Activity(metric));
