@@ -358,22 +358,12 @@ async fn export_as_csv(
                     for record in &data {
                         writeln!(
                             csv_content,
-                            "activity,{},{},{},{},{},{},{},",
-                            record.recorded_date.format("%Y-%m-%d"),
-                            record.steps.map_or("".to_string(), |v| v.to_string()),
-                            record
-                                .distance_meters
-                                .as_ref()
-                                .map_or("".to_string(), |v| v.to_string()),
-                            record
-                                .calories_burned
-                                .map_or("".to_string(), |v| v.to_string()),
-                            record
-                                .active_minutes
-                                .map_or("".to_string(), |v| v.to_string()),
-                            record
-                                .flights_climbed
-                                .map_or("".to_string(), |v| v.to_string()),
+                            "activity,{},{},{},{},{},{},",
+                            record.recorded_at.format("%Y-%m-%d"),
+                            record.step_count.map_or("".to_string(), |v| v.to_string()),
+                            record.distance_meters.map_or("".to_string(), |v| v.to_string()),
+                            record.active_energy_burned_kcal.map_or("".to_string(), |v| v.to_string()),
+                            record.flights_climbed.map_or("".to_string(), |v| v.to_string()),
                             record.source_device.as_deref().unwrap_or("")
                         )
                         .unwrap();
@@ -401,7 +391,7 @@ async fn export_as_csv(
                                 .as_ref()
                                 .map_or("".to_string(), |v| v.to_string()),
                             record
-                                .average_heart_rate
+                                .avg_heart_rate
                                 .map_or("".to_string(), |v| v.to_string()),
                             record.source_device.as_deref().unwrap_or(""),
                             record.workout_type
@@ -580,15 +570,16 @@ async fn export_activity_analytics(
     let records = sqlx::query_as!(
         ActivityRecord,
         r#"
-        SELECT user_id, recorded_date, steps, distance_meters, calories_burned, 
-               active_minutes, flights_climbed, source_device, metadata, metadata as raw_data, COALESCE(created_at, NOW()) as created_at, COALESCE(created_at, NOW()) as updated_at
+        SELECT id, user_id, recorded_at, step_count, distance_meters, 
+               flights_climbed, active_energy_burned_kcal, basal_energy_burned_kcal,
+               source_device, created_at
         FROM activity_metrics 
-        WHERE user_id = $1 AND recorded_date BETWEEN $2 AND $3
-        ORDER BY recorded_date ASC
+        WHERE user_id = $1 AND recorded_at BETWEEN $2 AND $3
+        ORDER BY recorded_at ASC
         "#,
         auth.user.id,
-        start_date.date_naive(),
-        end_date.date_naive()
+        start_date,
+        end_date
     )
     .fetch_all(pool)
     .await?;
@@ -596,7 +587,7 @@ async fn export_activity_analytics(
     let analytics: Vec<ActivityAnalytics> = records
         .into_iter()
         .map(|record| {
-            let steps = record.steps.unwrap_or(0);
+            let steps = record.step_count.unwrap_or(0);
             let step_goal_percentage = if steps > 0 {
                 (steps as f32 / 10000.0) * 100.0 // Assuming 10k step goal
             } else {
@@ -604,15 +595,11 @@ async fn export_activity_analytics(
             };
 
             ActivityAnalytics {
-                date: record.recorded_date.format("%Y-%m-%d").to_string(),
+                date: record.recorded_at.format("%Y-%m-%d").to_string(),
                 steps,
-                distance_km: record
-                    .distance_meters
-                    .and_then(|v| v.to_f64())
-                    .unwrap_or(0.0)
-                    / 1000.0,
-                calories: record.calories_burned.unwrap_or(0) as f64,
-                active_minutes: record.active_minutes.unwrap_or(0),
+                distance_km: record.distance_meters.unwrap_or(0.0) / 1000.0,
+                calories: record.active_energy_burned_kcal.unwrap_or(0.0),
+                active_minutes: 0, // This field doesn't exist in simplified schema
                 step_goal_percentage,
             }
         })
@@ -633,7 +620,7 @@ async fn fetch_heart_rate_data(
     sqlx::query_as!(
         HeartRateRecord,
         r#"
-        SELECT user_id, recorded_at, heart_rate, resting_heart_rate, context, source_device, metadata as raw_data, metadata, COALESCE(created_at, NOW()) as created_at
+        SELECT user_id, recorded_at, heart_rate, resting_heart_rate, context, source_device, NULL::jsonb as raw_data, NULL::jsonb as metadata, COALESCE(created_at, NOW()) as created_at
         FROM heart_rate_metrics 
         WHERE user_id = $1 AND recorded_at BETWEEN $2 AND $3
         ORDER BY recorded_at ASC
@@ -656,7 +643,7 @@ async fn fetch_blood_pressure_data(
     sqlx::query_as!(
         BloodPressureRecord,
         r#"
-        SELECT user_id, recorded_at, systolic, diastolic, pulse, source_device, metadata as raw_data, metadata, COALESCE(created_at, NOW()) as created_at
+        SELECT user_id, recorded_at, systolic, diastolic, pulse, source_device, NULL::jsonb as raw_data, NULL::jsonb as metadata, COALESCE(created_at, NOW()) as created_at
         FROM blood_pressure_metrics 
         WHERE user_id = $1 AND recorded_at BETWEEN $2 AND $3
         ORDER BY recorded_at ASC
@@ -680,8 +667,8 @@ async fn fetch_sleep_data(
         SleepRecord,
         r#"
         SELECT user_id, sleep_start, sleep_end, duration_minutes,
-               deep_sleep_minutes, rem_sleep_minutes, light_sleep_minutes, awake_minutes, sleep_efficiency,
-               source_device, metadata as raw_data, metadata, COALESCE(created_at, NOW()) as created_at
+               deep_sleep_minutes, rem_sleep_minutes, light_sleep_minutes, awake_minutes, efficiency,
+               source_device, NULL::jsonb as raw_data, NULL::jsonb as metadata, COALESCE(created_at, NOW()) as created_at
         FROM sleep_metrics 
         WHERE user_id = $1 AND sleep_start BETWEEN $2 AND $3
         ORDER BY sleep_start ASC
@@ -704,15 +691,16 @@ async fn fetch_activity_data(
     sqlx::query_as!(
         ActivityRecord,
         r#"
-        SELECT user_id, recorded_date, steps, distance_meters, calories_burned,
-               active_minutes, flights_climbed, source_device, metadata as raw_data, metadata, COALESCE(created_at, NOW()) as created_at, COALESCE(created_at, NOW()) as updated_at
+        SELECT id, user_id, recorded_at, step_count, distance_meters,
+               flights_climbed, active_energy_burned_kcal, basal_energy_burned_kcal,
+               source_device, created_at
         FROM activity_metrics 
-        WHERE user_id = $1 AND recorded_date BETWEEN $2 AND $3
-        ORDER BY recorded_date ASC
+        WHERE user_id = $1 AND recorded_at BETWEEN $2 AND $3
+        ORDER BY recorded_at ASC
         "#,
         user_id,
-        start_date.date_naive(),
-        end_date.date_naive()
+        start_date,
+        end_date
     )
     .fetch_all(pool)
     .await
@@ -728,9 +716,9 @@ async fn fetch_workout_data(
     sqlx::query_as!(
         WorkoutRecord,
         r#"
-        SELECT id, user_id, workout_type, started_at, ended_at, distance_meters,
-               average_heart_rate, max_heart_rate, total_energy_kcal, active_energy_kcal,
-               step_count, duration_seconds, NULL::text as route_geometry, source_device, metadata as raw_data, metadata, COALESCE(created_at, NOW()) as created_at
+        SELECT id, user_id, workout_type::text as workout_type, started_at, ended_at, total_energy_kcal, 
+               active_energy_kcal, distance_meters, avg_heart_rate, max_heart_rate,
+               source_device, created_at
         FROM workouts 
         WHERE user_id = $1 AND started_at BETWEEN $2 AND $3
         ORDER BY started_at ASC

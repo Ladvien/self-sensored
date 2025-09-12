@@ -403,8 +403,8 @@ pub async fn get_activity_data(
 
     let mut query = format!(
         r#"
-        SELECT user_id, recorded_date, steps, distance_meters, calories_burned,
-               active_minutes, flights_climbed, source_device, metadata, created_at
+        SELECT user_id, recorded_at, step_count, distance_meters, active_energy_burned_kcal,
+               flights_climbed, source_device, metadata, created_at
         FROM activity_metrics 
         WHERE user_id = $1
         "#
@@ -412,16 +412,16 @@ pub async fn get_activity_data(
 
     let mut param_count = 2;
     if params.start_date.is_some() {
-        query.push_str(&format!(" AND recorded_date >= ${}", param_count));
+        query.push_str(&format!(" AND recorded_at >= ${}", param_count));
         param_count += 1;
     }
     if params.end_date.is_some() {
-        query.push_str(&format!(" AND recorded_date <= ${}", param_count));
+        query.push_str(&format!(" AND recorded_at <= ${}", param_count));
         param_count += 1;
     }
 
     query.push_str(&format!(
-        " ORDER BY recorded_date {} LIMIT ${} OFFSET ${}",
+        " ORDER BY recorded_at {} LIMIT ${} OFFSET ${}",
         sort_order,
         param_count,
         param_count + 1
@@ -430,10 +430,10 @@ pub async fn get_activity_data(
     let mut db_query = sqlx::query_as::<_, ActivityRecord>(&query).bind(auth.user.id);
 
     if let Some(start_date) = params.start_date {
-        db_query = db_query.bind(start_date.date_naive());
+        db_query = db_query.bind(start_date);
     }
     if let Some(end_date) = params.end_date {
-        db_query = db_query.bind(end_date.date_naive());
+        db_query = db_query.bind(end_date);
     }
 
     db_query = db_query.bind(limit as i64).bind(offset as i64);
@@ -498,8 +498,8 @@ pub async fn get_workout_data(
     let mut query = format!(
         r#"
         SELECT id, user_id, workout_type, started_at, ended_at, distance_meters,
-               average_heart_rate, max_heart_rate, total_energy_kcal, active_energy_kcal,
-               step_count, duration_seconds, route_geometry, source_device, metadata, created_at
+               avg_heart_rate, max_heart_rate, total_energy_kcal, active_energy_kcal,
+               source_device, metadata, created_at
         FROM workouts 
         WHERE user_id = $1
         "#
@@ -711,19 +711,19 @@ async fn get_activity_count(
     let mut param_count = 2;
 
     if params.start_date.is_some() {
-        query.push_str(&format!(" AND recorded_date >= ${}", param_count));
+        query.push_str(&format!(" AND recorded_at >= ${}", param_count));
         param_count += 1;
     }
     if params.end_date.is_some() {
-        query.push_str(&format!(" AND recorded_date <= ${}", param_count));
+        query.push_str(&format!(" AND recorded_at <= ${}", param_count));
     }
 
     let mut db_query = sqlx::query_scalar(&query).bind(user_id);
     if let Some(start_date) = params.start_date {
-        db_query = db_query.bind(start_date.date_naive());
+        db_query = db_query.bind(start_date);
     }
     if let Some(end_date) = params.end_date {
-        db_query = db_query.bind(end_date.date_naive());
+        db_query = db_query.bind(end_date);
     }
 
     db_query.fetch_one(pool).await
@@ -870,16 +870,16 @@ pub async fn get_activity_summary(
         r#"
         SELECT 
             COUNT(*) as count,
-            SUM(steps) as total_steps,
+            SUM(step_count) as total_steps,
             SUM(distance_meters) as total_distance_meters,
-            SUM(calories_burned) as total_calories,
-            AVG(steps) as avg_daily_steps
+            SUM(active_energy_burned_kcal) as total_calories,
+            AVG(step_count) as avg_daily_steps
         FROM activity_metrics 
-        WHERE user_id = $1 AND recorded_date BETWEEN $2 AND $3
+        WHERE user_id = $1 AND recorded_at BETWEEN $2 AND $3
         "#,
         user_id,
-        start_date.date_naive(),
-        end_date.date_naive()
+        start_date,
+        end_date
     )
     .fetch_one(pool)
     .await?;
