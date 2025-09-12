@@ -1300,7 +1300,7 @@ impl BatchProcessor {
 
         for (chunk_idx, chunk) in chunks.iter().enumerate() {
             let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
-                "INSERT INTO activity_metrics (user_id, recorded_at, step_count, distance_meters, flights_climbed, active_energy_burned_kcal, basal_energy_burned_kcal, source_device) "
+                "INSERT INTO activity_metrics (user_id, recorded_at, step_count, distance_meters, active_energy_burned_kcal, basal_energy_burned_kcal, flights_climbed, source_device) "
             );
 
             query_builder.push_values(chunk.iter(), |mut b, metric| {
@@ -1308,9 +1308,9 @@ impl BatchProcessor {
                     .push_bind(metric.recorded_at)
                     .push_bind(metric.step_count)
                     .push_bind(metric.distance_meters)
-                    .push_bind(metric.flights_climbed)
                     .push_bind(metric.active_energy_burned_kcal)
                     .push_bind(metric.basal_energy_burned_kcal)
+                    .push_bind(metric.flights_climbed)
                     .push_bind(&metric.source_device);
             });
 
