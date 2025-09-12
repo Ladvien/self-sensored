@@ -591,6 +591,22 @@ CLAIMING: Field Updates - Complete field name alignment and user_id additions
 - Fixing all conflict resolution queries
 - Target: All raw_ingestions table queries aligned with actual schema
 
+**03:45 PM - Claude Code Agent**: ✅ COMPLETED SCHEMA-010: Fix Raw Ingestions Table Queries
+- ✅ Fixed all raw_ingestions INSERT queries across 5 handler files
+- ✅ Updated column mappings: api_key_id→removed, raw_data→raw_payload, data_hash→payload_hash
+- ✅ Fixed status handling: status→processing_status, error_message→processing_errors (JSONB)
+- ✅ Added payload_size_bytes calculation for all INSERT operations
+- ✅ Removed ON CONFLICT clauses (no unique constraints in schema)
+- ✅ Converted error strings to structured JSON in processing_errors field
+- ✅ Updated timeout handling in ingest_async_simple.rs
+- ✅ Fixed MQTT subscriber raw ingestion queries
+- ✅ All queries now match raw_ingestions table schema exactly
+- ✅ Eliminated "column does not exist" database errors
+- ✅ Commit: 578dcde "feat: fix raw ingestions table queries"
+- ✅ Story moved from BACKLOG.md to DONE.md
+- 🎯 **Impact**: All ingestion endpoints now work with actual database schema
+- 🚀 **Ready for**: Next schema alignment stories (SCHEMA-008, SCHEMA-009, SCHEMA-011)
+
 **02:15 PM - Claude Code Agent**: 🎯 CLAIMING SCHEMA-011: Fix Database Model Structs
 - Fixing database model structs in src/models/db.rs
 - Updating ActivityRecord struct to match simplified schema fields
