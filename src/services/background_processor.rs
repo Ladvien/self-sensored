@@ -1,8 +1,10 @@
 use crate::models::{
-    IngestBatchConfig, IngestPayload, JobResultSummary, JobStatus, JobType, ProcessingJob,
+    IngestBatchConfig, IngestPayload, JobResultSummary, ProcessingJob,
 };
+use crate::models::enums::{JobStatus, JobType};
 use crate::services::auth::AuthContext;
-use crate::services::batch_processor::{BatchConfig, BatchProcessor};
+use crate::config::BatchConfig;
+use crate::services::batch_processor::BatchProcessor;
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -133,7 +135,7 @@ impl BackgroundProcessor {
             auth.user.id,
             auth.api_key.id,
             raw_ingestion_id,
-            JobType::IngestBatch.as_str(),
+            JobType::IngestBatch as JobType,
             total_metrics as i32,
             serde_json::to_value(job_config).unwrap_or(serde_json::Value::Null)
         )
@@ -143,7 +145,7 @@ impl BackgroundProcessor {
 
         // Update raw_ingestions record with job_id
         sqlx::query!(
-            "UPDATE raw_ingestions SET processing_job_id = $1, status = 'pending' WHERE id = $2",
+            "UPDATE raw_ingestions SET processing_job_id = $1, processing_status = 'pending' WHERE id = $2",
             job_id,
             raw_ingestion_id
         )
@@ -170,7 +172,7 @@ impl BackgroundProcessor {
             ProcessingJob,
             r#"
             SELECT 
-                id, user_id, api_key_id, raw_ingestion_id, status, job_type, priority,
+                id, user_id, api_key_id, raw_ingestion_id, status as "status: JobStatus", job_type as "job_type: JobType", priority,
                 total_metrics, processed_metrics, failed_metrics, progress_percentage,
                 created_at, started_at, completed_at,
                 error_message, retry_count,
@@ -206,15 +208,15 @@ impl BackgroundProcessor {
 
         let Some(job_id) = job_row.job_id else {
             error!("Background job missing job_id");
-            return Err("Invalid job data: missing job_id".into());
+            return Err(sqlx::Error::Protocol("Invalid job data: missing job_id".into()));
         };
         let Some(user_id) = job_row.user_id else {
             error!(job_id = %job_id, "Background job missing user_id");
-            return Err("Invalid job data: missing user_id".into());
+            return Err(sqlx::Error::Protocol("Invalid job data: missing user_id".into()));
         };
         let Some(raw_ingestion_id) = job_row.raw_ingestion_id else {
             error!(job_id = %job_id, user_id = %user_id, "Background job missing raw_ingestion_id");
-            return Err("Invalid job data: missing raw_ingestion_id".into());
+            return Err(sqlx::Error::Protocol("Invalid job data: missing raw_ingestion_id".into()));
         };
         let total_metrics = job_row.total_metrics.unwrap_or(0);
 
@@ -229,14 +231,14 @@ impl BackgroundProcessor {
 
         // Get the raw payload data
         let raw_data = sqlx::query!(
-            "SELECT raw_data FROM raw_ingestions WHERE id = $1",
+            "SELECT raw_payload FROM raw_ingestions WHERE id = $1",
             raw_ingestion_id
         )
         .fetch_one(&pool)
         .await?;
 
         // Deserialize the payload
-        let payload: IngestPayload = match serde_json::from_value(raw_data.raw_data) {
+        let payload: IngestPayload = match serde_json::from_value(raw_data.raw_payload) {
             Ok(p) => p,
             Err(e) => {
                 let error_msg = format!("Failed to deserialize payload: {}", e);

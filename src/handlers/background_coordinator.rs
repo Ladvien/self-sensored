@@ -1,11 +1,10 @@
 use serde_json::Value;
 use sqlx::PgPool;
 use std::collections::HashMap;
-use tracing::{error, info, warn};
+use tracing::info;
 use uuid::Uuid;
 
 use crate::config::BatchConfig;
-use crate::models::{IngestPayload, ProcessingError};
 use crate::models::enums::{JobStatus, JobType};
 use crate::services::auth::AuthContext;
 
@@ -98,7 +97,7 @@ impl BackgroundJobCoordinator {
         let job_config = serde_json::to_value(&config.custom_config)
             .unwrap_or_else(|_| serde_json::Value::Object(serde_json::Map::new()));
 
-        let estimated_completion = if let Some(duration_mins) = config.estimated_duration_mins {
+        let _estimated_completion = if let Some(duration_mins) = config.estimated_duration_mins {
             Some(sqlx::types::chrono::Utc::now() + chrono::Duration::minutes(duration_mins as i64))
         } else {
             // Estimate based on metrics count (rough: 1000 metrics per minute)
@@ -112,13 +111,14 @@ impl BackgroundJobCoordinator {
                 user_id, api_key_id, raw_ingestion_id, status, job_type, priority,
                 total_metrics, config
             )
-            VALUES ($1, $2, $3, 'pending'::job_status, $4::job_type, $5, $6, $7)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING id
             "#,
             auth.user.id,
             auth.api_key.id,
             raw_ingestion_id,
-            config.job_type.as_str(),
+            JobStatus::Pending as JobStatus,
+            JobType::IngestBatch as JobType,
             i32::from(config.priority),
             total_metrics as i32,
             job_config
@@ -194,7 +194,7 @@ impl BackgroundJobCoordinator {
                 total_metrics: job.total_metrics.unwrap_or(0) as usize,
                 processed_metrics: job.processed_metrics.unwrap_or(0) as usize,
                 failed_metrics: job.failed_metrics.unwrap_or(0) as usize,
-                progress_percentage: job.progress_percentage.unwrap_or(0.0),
+                progress_percentage: job.progress_percentage.unwrap_or(sqlx::types::BigDecimal::from(0)).to_string().parse::<f64>().unwrap_or(0.0),
                 created_at: job.created_at,
                 started_at: job.started_at,
                 completed_at: job.completed_at,
@@ -215,23 +215,38 @@ impl BackgroundJobCoordinator {
         failed_metrics: usize,
         error_message: Option<String>,
     ) -> Result<(), sqlx::Error> {
+        let processed = processed_metrics as i32;
+        let failed = failed_metrics as i32;
+        
+        // Update metrics first
         sqlx::query!(
             r#"
             UPDATE processing_jobs 
             SET 
                 processed_metrics = $2,
                 failed_metrics = $3,
-                progress_percentage = CASE 
-                    WHEN total_metrics > 0 THEN (($2::decimal / total_metrics) * 100.0)
-                    ELSE 0.0 
-                END,
                 error_message = COALESCE($4, error_message)
             WHERE id = $1
             "#,
             job_id,
-            processed_metrics as i32,
-            failed_metrics as i32,
-            error_message
+            processed,
+            failed,
+            error_message.as_deref()
+        )
+        .execute(&self.pool)
+        .await?;
+
+        // Update progress percentage in separate query
+        sqlx::query!(
+            r#"
+            UPDATE processing_jobs 
+            SET progress_percentage = CASE 
+                WHEN total_metrics > 0 THEN ((processed_metrics::decimal / total_metrics) * 100.0)
+                ELSE 0.0 
+            END
+            WHERE id = $1
+            "#,
+            job_id
         )
         .execute(&self.pool)
         .await?;
@@ -247,20 +262,18 @@ impl BackgroundJobCoordinator {
         result_summary: Option<serde_json::Value>,
         error_message: Option<String>,
     ) -> Result<(), sqlx::Error> {
-        let status = if success { "completed" } else { "failed" };
-
         sqlx::query!(
             r#"
             UPDATE processing_jobs 
             SET 
-                status = $2::job_status,
+                status = $2,
                 completed_at = CURRENT_TIMESTAMP,
                 result_summary = $3,
                 error_message = COALESCE($4, error_message)
             WHERE id = $1
             "#,
             job_id,
-            status,
+            if success { JobStatus::Completed } else { JobStatus::Failed } as JobStatus,
             result_summary,
             error_message
         )
@@ -345,7 +358,7 @@ impl BackgroundJobCoordinator {
             processing_jobs: stats.processing_count.unwrap_or(0) as usize,
             completed_jobs_24h: stats.completed_count.unwrap_or(0) as usize,
             failed_jobs_24h: stats.failed_count.unwrap_or(0) as usize,
-            avg_processing_time_secs: stats.avg_processing_time_secs.unwrap_or(0.0),
+            avg_processing_time_secs: stats.avg_processing_time_secs.unwrap_or(sqlx::types::BigDecimal::from(0)).to_string().parse::<f64>().unwrap_or(0.0),
         })
     }
 }

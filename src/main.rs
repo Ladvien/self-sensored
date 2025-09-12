@@ -3,7 +3,7 @@ use actix_web::{http::header, middleware::Compress, web, App, HttpServer};
 use dotenvy::dotenv;
 use std::env;
 use std::time::Duration;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 mod config;
 mod db;

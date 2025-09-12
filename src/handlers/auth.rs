@@ -10,7 +10,7 @@ use crate::services::auth::AuthService;
 pub struct CreateApiKeyRequest {
     pub name: String,
     pub expires_at: Option<DateTime<Utc>>,
-    pub scopes: Vec<String>,
+    pub permissions: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -27,7 +27,7 @@ pub struct ApiKeyInfo {
     pub name: String,
     pub created_at: Option<DateTime<Utc>>,
     pub expires_at: Option<DateTime<Utc>>,
-    pub scopes: Option<Vec<String>>,
+    pub permissions: Option<serde_json::Value>,
     pub is_active: Option<bool>,
 }
 
@@ -103,28 +103,14 @@ pub async fn create_api_key(
         }));
     }
 
-    if request.scopes.is_empty() {
-        return Ok(HttpResponse::BadRequest().json(CreateApiKeyResponse {
-            success: false,
-            api_key: None,
-            key_info: None,
-            error: Some("At least one scope must be specified".to_string()),
-        }));
-    }
-
-    // Valid scopes
-    let valid_scopes = ["read", "write", "admin"];
-    for scope in &request.scopes {
-        if !valid_scopes.contains(&scope.as_str()) {
+    // Basic permissions validation - ensure it's valid JSON if provided
+    if let Some(permissions) = &request.permissions {
+        if !permissions.is_object() && !permissions.is_array() && !permissions.is_null() {
             return Ok(HttpResponse::BadRequest().json(CreateApiKeyResponse {
                 success: false,
                 api_key: None,
                 key_info: None,
-                error: Some(format!(
-                    "Invalid scope '{}'. Valid scopes: {}",
-                    scope,
-                    valid_scopes.join(", ")
-                )),
+                error: Some("Permissions must be a valid JSON object, array, or null".to_string()),
             }));
         }
     }
@@ -144,9 +130,10 @@ pub async fn create_api_key(
     match auth_service
         .create_api_key(
             auth_context.user.id,
-            &request.name,
+            Some(&request.name),
             request.expires_at,
-            request.scopes.clone(),
+            request.permissions.clone(),
+            None, // rate_limit_per_hour - use default
         )
         .await
     {
@@ -162,7 +149,7 @@ pub async fn create_api_key(
                     user_agent,
                     Some(serde_json::json!({
                         "key_name": api_key.name,
-                        "scopes": api_key.scopes,
+                        "permissions": api_key.permissions,
                         "expires_at": api_key.expires_at
                     })),
                 )
@@ -174,10 +161,10 @@ pub async fn create_api_key(
                 api_key: Some(plain_key), // Only returned once!
                 key_info: Some(ApiKeyInfo {
                     id: api_key.id,
-                    name: api_key.name,
+                    name: api_key.name.unwrap_or_else(|| "Unnamed".to_string()),
                     created_at: api_key.created_at,
                     expires_at: api_key.expires_at,
-                    scopes: api_key.scopes,
+                    permissions: api_key.permissions,
                     is_active: api_key.is_active,
                 }),
                 error: None,
@@ -198,7 +185,7 @@ pub async fn create_api_key(
                     Some(serde_json::json!({
                         "error": e.to_string(),
                         "requested_name": request.name,
-                        "requested_scopes": request.scopes
+                        "requested_permissions": request.permissions
                     })),
                 )
                 .await
@@ -228,10 +215,10 @@ pub async fn list_api_keys(
                 .into_iter()
                 .map(|key| ApiKeyInfo {
                     id: key.id,
-                    name: key.name,
+                    name: key.name.unwrap_or_else(|| "Unnamed".to_string()),
                     created_at: key.created_at,
                     expires_at: key.expires_at,
-                    scopes: key.scopes,
+                    permissions: key.permissions,
                     is_active: key.is_active,
                 })
                 .collect();

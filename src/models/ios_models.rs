@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use crate::models::enums::WorkoutType;
 
 /// Models that match the iOS Auto Health Export app JSON structure
 /// Root payload structure from iOS app
@@ -316,7 +317,7 @@ impl IosIngestPayload {
                 // Basic validation
                 let workout_type = WorkoutType::from_ios_string(
                     &ios_workout.name.clone().unwrap_or_else(|| "Unknown".to_string())
-                ).unwrap_or(WorkoutType::Other);
+                );
 
                 let workout = WorkoutData {
                     id: uuid::Uuid::new_v4(),

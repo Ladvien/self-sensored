@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-use std::str::FromStr;
 use uuid::Uuid;
 
 /// User database model
@@ -127,7 +126,7 @@ pub struct WorkoutRecord {
 impl HeartRateRecord {
     pub fn from_metric_with_raw(
         metric: crate::models::health_metrics::HeartRateMetric,
-        raw_json: serde_json::Value,
+        _raw_json: serde_json::Value,
     ) -> Self {
         HeartRateRecord {
             id: metric.id,

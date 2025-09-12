@@ -1,5 +1,4 @@
 use actix_web::{web, HttpResponse, Result};
-use futures_util::StreamExt;
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -114,18 +113,22 @@ pub async fn optimized_ingest_handler(
     let processing_time = start_time.elapsed().as_millis() as u64;
 
     // Wait for raw storage (but don't block response on it)
-    if let Ok(Ok(raw_id)) = tokio::time::timeout(
+    if let Ok(join_result) = tokio::time::timeout(
         std::time::Duration::from_millis(100), 
         raw_storage_task
     ).await {
-        // Update processing status asynchronously
-        let pool_clone = pool.get_ref().clone();
-        let result_clone = result.clone();
-        tokio::spawn(async move {
-            if let Err(e) = update_processing_status(&pool_clone, raw_id, &result_clone).await {
-                error!("Failed to update processing status: {}", e);
+        if let Ok(storage_result) = join_result {
+            if let Ok(raw_uuid) = storage_result {
+                // Update processing status asynchronously
+                let pool_clone = pool.get_ref().clone();
+                let result_clone = result.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = update_processing_status(&pool_clone, raw_uuid, &result_clone).await {
+                        error!("Failed to update processing status: {}", e);
+                    }
+                });
             }
-        });
+        }
     }
 
     // Create optimized response
@@ -222,12 +225,6 @@ async fn validate_payload_parallel(
             data: IngestData {
                 metrics: valid_metrics,
                 workouts: valid_workouts,
-                nutrition_metrics: Vec::new(),
-                symptom_metrics: Vec::new(),
-                reproductive_health_metrics: Vec::new(),
-                environmental_metrics: Vec::new(),
-                mental_health_metrics: Vec::new(),
-                mobility_metrics: Vec::new(),
             }
         };
 

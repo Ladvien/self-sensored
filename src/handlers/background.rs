@@ -4,7 +4,7 @@ use tracing::{error, info, instrument};
 use uuid::Uuid;
 
 use crate::models::{
-    ApiResponse, CreateJobResponse, JobStatusResponse, ProcessingJob,
+    ApiResponse, JobStatusResponse,
 };
 use crate::models::enums::{JobStatus, JobType};
 use crate::services::auth::AuthContext;
@@ -72,7 +72,7 @@ pub async fn list_user_jobs(
     let limit = query.limit.unwrap_or(20).min(100) as i64; // Max 100 results
     let offset = query.offset.unwrap_or(0) as i64;
 
-    let status_filter = query.status.as_ref().map(|s| s.as_str());
+    let status_filter = query.status;
 
     let jobs_result = match status_filter {
         Some(status) => {
@@ -86,12 +86,12 @@ pub async fn list_user_jobs(
                     error_message, retry_count,
                     config, result_summary
                 FROM processing_jobs 
-                WHERE user_id = $1 AND status = $2::job_status
+                WHERE user_id = $1 AND status = $2
                 ORDER BY created_at DESC
                 LIMIT $3 OFFSET $4
                 "#,
                 auth.user.id,
-                status,
+                status as JobStatus,
                 limit,
                 offset
             )
@@ -257,7 +257,9 @@ pub async fn get_job_statistics(
                 "processing_jobs": stats.processing_jobs.unwrap_or(0),
                 "completed_jobs": stats.completed_jobs.unwrap_or(0),
                 "failed_jobs": stats.failed_jobs.unwrap_or(0),
-                "average_processing_progress": stats.avg_progress.unwrap_or(0.0),
+                "average_processing_progress": stats.avg_progress
+                    .map(|p| p.to_string().parse::<f64>().unwrap_or(0.0))
+                    .unwrap_or(0.0),
                 "total_metrics_processed_30d": stats.total_metrics_processed.unwrap_or(0),
                 "period": "last_30_days"
             });

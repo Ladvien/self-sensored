@@ -5,7 +5,7 @@ use uuid::Uuid;
 use self_sensored::models::{
     ActivityMetric, BloodPressureMetric, HealthMetric, HeartRateMetric, IngestData, IngestPayload,
     IosIngestData, IosIngestPayload, IosMetric, IosMetricData, SleepMetric,
-    WorkoutData,
+    WorkoutData, enums::ActivityContext,
 };
 
 #[test]
@@ -20,9 +20,10 @@ fn test_standard_payload_serialization() {
                     id: Uuid::new_v4(),
                     user_id,
                     recorded_at: now,
-                    heart_rate: 75,
+                    heart_rate: Some(75),
                     resting_heart_rate: Some(65),
-                    context: Some("resting".to_string()),
+                    heart_rate_variability: None,
+                    context: Some(ActivityContext::Resting),
                     source_device: Some("Test".to_string()),
                     created_at: now,
                 }),

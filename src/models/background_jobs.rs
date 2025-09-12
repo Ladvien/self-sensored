@@ -11,16 +11,16 @@ pub struct ProcessingJob {
     pub id: Uuid,
     pub user_id: Uuid,
     pub api_key_id: Uuid,
-    pub raw_ingestion_id: Uuid,
+    pub raw_ingestion_id: Option<Uuid>,
     pub status: JobStatus,
     pub job_type: JobType,
     pub priority: i32,
 
     // Progress tracking
-    pub total_metrics: i32,
-    pub processed_metrics: i32,
-    pub failed_metrics: i32,
-    pub progress_percentage: f64,
+    pub total_metrics: Option<i32>,
+    pub processed_metrics: Option<i32>,
+    pub failed_metrics: Option<i32>,
+    pub progress_percentage: Option<sqlx::types::BigDecimal>,
 
     // Timing information
     pub created_at: DateTime<Utc>,
@@ -29,10 +29,10 @@ pub struct ProcessingJob {
 
     // Error handling
     pub error_message: Option<String>,
-    pub retry_count: i32,
+    pub retry_count: Option<i32>,
 
     // Configuration and results
-    pub config: serde_json::Value,
+    pub config: Option<serde_json::Value>,
     pub result_summary: Option<serde_json::Value>,
 }
 
@@ -90,10 +90,12 @@ impl From<ProcessingJob> for JobStatusResponse {
             job_id: job.id,
             user_id: job.user_id,
             status: job.status,
-            progress_percentage: job.progress_percentage,
-            total_metrics: job.total_metrics,
-            processed_metrics: job.processed_metrics,
-            failed_metrics: job.failed_metrics,
+            progress_percentage: job.progress_percentage
+                .map(|p| p.to_string().parse::<f64>().unwrap_or(0.0))
+                .unwrap_or(0.0),
+            total_metrics: job.total_metrics.unwrap_or(0),
+            processed_metrics: job.processed_metrics.unwrap_or(0),
+            failed_metrics: job.failed_metrics.unwrap_or(0),
             created_at: job.created_at,
             started_at: job.started_at,
             completed_at: job.completed_at,

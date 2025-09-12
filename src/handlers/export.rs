@@ -1,5 +1,4 @@
 use actix_web::{web, HttpResponse, Result};
-use bigdecimal::ToPrimitive;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
@@ -344,7 +343,7 @@ async fn export_as_csv(
                             csv_content,
                             "heart_rate,{},{},{},,,,,{},{}",
                             record.recorded_at.format("%Y-%m-%d %H:%M:%S"),
-                            record.heart_rate,
+                            record.heart_rate.map_or("".to_string(), |v| v.to_string()),
                             record
                                 .resting_heart_rate
                                 .map_or("".to_string(), |v| v.to_string()),
@@ -393,7 +392,7 @@ async fn export_as_csv(
                             csv_content,
                             "sleep,{},{},{},{},{},{},{},",
                             record.sleep_start.format("%Y-%m-%d %H:%M:%S"),
-                            record.duration_minutes,
+                            record.duration_minutes.map_or("".to_string(), |v| v.to_string()),
                             record
                                 .deep_sleep_minutes
                                 .map_or("".to_string(), |v| v.to_string()),
@@ -404,9 +403,7 @@ async fn export_as_csv(
                                 .awake_minutes
                                 .map_or("".to_string(), |v| v.to_string()),
                             record
-                                .sleep_efficiency
-                                .as_ref()
-                                .and_then(|v| v.to_f32())
+                                .efficiency
                                 .map_or("".to_string(), |v| v.to_string()),
                             record.source_device.as_deref().unwrap_or("")
                         ) {
@@ -589,7 +586,7 @@ async fn export_heart_rate_csv(
                     csv_content,
                     "{},{},{},{},{}",
                     record.recorded_at.format("%Y-%m-%d %H:%M:%S"),
-                    record.heart_rate,
+                    record.heart_rate.map_or("".to_string(), |v| v.to_string()),
                     record
                         .resting_heart_rate
                         .map_or("".to_string(), |v| v.to_string()),
@@ -662,9 +659,9 @@ async fn export_activity_analytics(
     let records = sqlx::query_as!(
         ActivityRecord,
         r#"
-        SELECT id, user_id, recorded_at, step_count, distance_meters, 
+        SELECT id, user_id, recorded_at::timestamptz as "recorded_at!", step_count, distance_meters, 
                flights_climbed, active_energy_burned_kcal, basal_energy_burned_kcal,
-               source_device, created_at
+               source_device, created_at::timestamptz as "created_at!"
         FROM activity_metrics 
         WHERE user_id = $1 AND recorded_at BETWEEN $2 AND $3
         ORDER BY recorded_at ASC
@@ -712,7 +709,7 @@ async fn fetch_heart_rate_data(
     sqlx::query_as!(
         HeartRateRecord,
         r#"
-        SELECT id, user_id, recorded_at, heart_rate, resting_heart_rate, heart_rate_variability, context::text, source_device, created_at
+        SELECT id, user_id, recorded_at::timestamptz as "recorded_at!", heart_rate, resting_heart_rate, heart_rate_variability, context::text, source_device, created_at::timestamptz as "created_at!"
         FROM heart_rate_metrics 
         WHERE user_id = $1 AND recorded_at BETWEEN $2 AND $3
         ORDER BY recorded_at ASC
@@ -735,7 +732,7 @@ async fn fetch_blood_pressure_data(
     sqlx::query_as!(
         BloodPressureRecord,
         r#"
-        SELECT user_id, recorded_at, systolic, diastolic, pulse, source_device, NULL::jsonb as raw_data, NULL::jsonb as metadata, COALESCE(created_at, NOW()) as created_at
+        SELECT id, user_id, recorded_at::timestamptz as "recorded_at!", systolic, diastolic, pulse, source_device, created_at::timestamptz as "created_at!"
         FROM blood_pressure_metrics 
         WHERE user_id = $1 AND recorded_at BETWEEN $2 AND $3
         ORDER BY recorded_at ASC
@@ -758,9 +755,9 @@ async fn fetch_sleep_data(
     sqlx::query_as!(
         SleepRecord,
         r#"
-        SELECT user_id, sleep_start, sleep_end, duration_minutes,
+        SELECT id, user_id, sleep_start::timestamptz as "sleep_start!", sleep_end::timestamptz as "sleep_end!", duration_minutes,
                deep_sleep_minutes, rem_sleep_minutes, light_sleep_minutes, awake_minutes, efficiency,
-               source_device, NULL::jsonb as raw_data, NULL::jsonb as metadata, COALESCE(created_at, NOW()) as created_at
+               source_device, created_at::timestamptz as "created_at!"
         FROM sleep_metrics 
         WHERE user_id = $1 AND sleep_start BETWEEN $2 AND $3
         ORDER BY sleep_start ASC
@@ -783,9 +780,9 @@ async fn fetch_activity_data(
     sqlx::query_as!(
         ActivityRecord,
         r#"
-        SELECT id, user_id, recorded_at, step_count, distance_meters,
+        SELECT id, user_id, recorded_at::timestamptz as "recorded_at!", step_count, distance_meters,
                flights_climbed, active_energy_burned_kcal, basal_energy_burned_kcal,
-               source_device, created_at
+               source_device, created_at::timestamptz as "created_at!"
         FROM activity_metrics 
         WHERE user_id = $1 AND recorded_at BETWEEN $2 AND $3
         ORDER BY recorded_at ASC
@@ -808,9 +805,9 @@ async fn fetch_workout_data(
     sqlx::query_as!(
         WorkoutRecord,
         r#"
-        SELECT id, user_id, workout_type::text as workout_type, started_at, ended_at, total_energy_kcal, 
+        SELECT id, user_id, workout_type::text as "workout_type!", started_at::timestamptz as "started_at!", ended_at::timestamptz as "ended_at!", total_energy_kcal, 
                active_energy_kcal, distance_meters, avg_heart_rate, max_heart_rate,
-               source_device, created_at
+               source_device, created_at::timestamptz as "created_at!"
         FROM workouts 
         WHERE user_id = $1 AND started_at BETWEEN $2 AND $3
         ORDER BY started_at ASC

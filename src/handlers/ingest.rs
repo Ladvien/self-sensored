@@ -135,13 +135,7 @@ pub async fn ingest_handler(
 
     // Validate payload constraints
     let total_metrics = internal_payload.data.metrics.len() 
-        + internal_payload.data.workouts.len()
-        + internal_payload.data.nutrition_metrics.len()
-        + internal_payload.data.symptom_metrics.len()
-        + internal_payload.data.reproductive_health_metrics.len()
-        + internal_payload.data.environmental_metrics.len()
-        + internal_payload.data.mental_health_metrics.len()
-        + internal_payload.data.mobility_metrics.len();
+        + internal_payload.data.workouts.len();
     if total_metrics > MAX_METRICS_PER_REQUEST {
         error!(
             "Too many metrics: {} exceeds limit of {}",
@@ -160,12 +154,7 @@ pub async fn ingest_handler(
     all_validation_errors.extend(validate_workouts(&internal_payload.data.workouts));
     
     // Validate new metric types
-    all_validation_errors.extend(validate_nutrition_metrics(&internal_payload.data.nutrition_metrics));
-    all_validation_errors.extend(validate_symptom_metrics(&internal_payload.data.symptom_metrics));
-    all_validation_errors.extend(validate_reproductive_health_metrics(&internal_payload.data.reproductive_health_metrics));
-    all_validation_errors.extend(validate_environmental_metrics(&internal_payload.data.environmental_metrics));
-    all_validation_errors.extend(validate_mental_health_metrics(&internal_payload.data.mental_health_metrics));
-    all_validation_errors.extend(validate_mobility_metrics(&internal_payload.data.mobility_metrics));
+    // Removed deprecated metric validation calls
 
     let mut processed_payload = internal_payload;
 
@@ -205,114 +194,16 @@ pub async fn ingest_handler(
             })
             .collect();
 
-        // Validate new metric types
-        let valid_nutrition_metrics: Vec<crate::models::NutritionMetric> = processed_payload
-            .data
-            .nutrition_metrics
-            .into_iter()
-            .enumerate()
-            .filter_map(|(index, metric)| match metric.validate() {
-                Ok(()) => Some(metric),
-                Err(_) => {
-                    debug!("Excluding invalid nutrition metric at index {}", index);
-                    None
-                }
-            })
-            .collect();
-
-        let valid_symptom_metrics: Vec<crate::models::SymptomMetric> = processed_payload
-            .data
-            .symptom_metrics
-            .into_iter()
-            .enumerate()
-            .filter_map(|(index, metric)| match metric.validate() {
-                Ok(()) => Some(metric),
-                Err(_) => {
-                    debug!("Excluding invalid symptom metric at index {}", index);
-                    None
-                }
-            })
-            .collect();
-
-        let valid_reproductive_health_metrics: Vec<crate::models::ReproductiveHealthMetric> = processed_payload
-            .data
-            .reproductive_health_metrics
-            .into_iter()
-            .enumerate()
-            .filter_map(|(index, metric)| match metric.validate() {
-                Ok(()) => Some(metric),
-                Err(_) => {
-                    debug!("Excluding invalid reproductive health metric at index {}", index);
-                    None
-                }
-            })
-            .collect();
-
-        let valid_environmental_metrics: Vec<crate::models::EnvironmentalMetric> = processed_payload
-            .data
-            .environmental_metrics
-            .into_iter()
-            .enumerate()
-            .filter_map(|(index, metric)| match metric.validate() {
-                Ok(()) => Some(metric),
-                Err(_) => {
-                    debug!("Excluding invalid environmental metric at index {}", index);
-                    None
-                }
-            })
-            .collect();
-
-        let valid_mental_health_metrics: Vec<crate::models::MentalHealthMetric> = processed_payload
-            .data
-            .mental_health_metrics
-            .into_iter()
-            .enumerate()
-            .filter_map(|(index, metric)| match metric.validate() {
-                Ok(()) => Some(metric),
-                Err(_) => {
-                    debug!("Excluding invalid mental health metric at index {}", index);
-                    None
-                }
-            })
-            .collect();
-
-        let valid_mobility_metrics: Vec<crate::models::MobilityMetric> = processed_payload
-            .data
-            .mobility_metrics
-            .into_iter()
-            .enumerate()
-            .filter_map(|(index, metric)| match metric.validate() {
-                Ok(()) => Some(metric),
-                Err(_) => {
-                    debug!("Excluding invalid mobility metric at index {}", index);
-                    None
-                }
-            })
-            .collect();
-
-        // Update payload with only valid data
+        // Update payload with only valid data (simplified schema)
         processed_payload = IngestPayload {
             data: IngestData {
                 metrics: valid_metrics,
                 workouts: valid_workouts,
-                nutrition_metrics: valid_nutrition_metrics,
-                symptom_metrics: valid_symptom_metrics,
-                reproductive_health_metrics: valid_reproductive_health_metrics,
-                environmental_metrics: valid_environmental_metrics,
-                mental_health_metrics: valid_mental_health_metrics,
-                mobility_metrics: valid_mobility_metrics,
             },
         };
 
         // If no valid data remains after filtering, return error
-        if processed_payload.data.metrics.is_empty() 
-            && processed_payload.data.workouts.is_empty()
-            && processed_payload.data.nutrition_metrics.is_empty()
-            && processed_payload.data.symptom_metrics.is_empty()
-            && processed_payload.data.reproductive_health_metrics.is_empty()
-            && processed_payload.data.environmental_metrics.is_empty()
-            && processed_payload.data.mental_health_metrics.is_empty()
-            && processed_payload.data.mobility_metrics.is_empty() {
+        if processed_payload.data.metrics.is_empty() && processed_payload.data.workouts.is_empty() {
             error!("No valid metrics remaining after validation");
             return Ok(HttpResponse::BadRequest().json(
                 ApiResponse::<IngestResponse>::error_with_data(
@@ -736,105 +627,5 @@ fn validate_json_structure_basic(data: &[u8]) -> std::result::Result<(), String>
     Ok(())
 }
 
-/// Validate nutrition metrics (placeholder - implement as needed)
-fn validate_nutrition_metrics(metrics: &[crate::models::health_metrics::NutritionMetric]) -> Vec<crate::models::ProcessingError> {
-    let mut errors = Vec::new();
-    
-    for (index, metric) in metrics.iter().enumerate() {
-        if let Err(validation_error) = metric.validate() {
-            errors.push(crate::models::ProcessingError {
-                metric_type: "nutrition".to_string(),
-                error_message: validation_error,
-                index: Some(index),
-            });
-        }
-    }
-    
-    errors
-}
-
-/// Validate symptom metrics (placeholder - implement as needed)
-fn validate_symptom_metrics(metrics: &[crate::models::health_metrics::SymptomMetric]) -> Vec<crate::models::ProcessingError> {
-    let mut errors = Vec::new();
-    
-    for (index, metric) in metrics.iter().enumerate() {
-        if let Err(validation_error) = metric.validate() {
-            errors.push(crate::models::ProcessingError {
-                metric_type: "symptom".to_string(),
-                error_message: validation_error,
-                index: Some(index),
-            });
-        }
-    }
-    
-    errors
-}
-
-/// Validate reproductive health metrics (placeholder - implement as needed)
-fn validate_reproductive_health_metrics(metrics: &[crate::models::health_metrics::ReproductiveHealthMetric]) -> Vec<crate::models::ProcessingError> {
-    let mut errors = Vec::new();
-    
-    for (index, metric) in metrics.iter().enumerate() {
-        if let Err(validation_error) = metric.validate() {
-            errors.push(crate::models::ProcessingError {
-                metric_type: "reproductive_health".to_string(),
-                error_message: validation_error,
-                index: Some(index),
-            });
-        }
-    }
-    
-    errors
-}
-
-/// Validate environmental metrics (placeholder - implement as needed)
-fn validate_environmental_metrics(metrics: &[crate::models::health_metrics::EnvironmentalMetric]) -> Vec<crate::models::ProcessingError> {
-    let mut errors = Vec::new();
-    
-    for (index, metric) in metrics.iter().enumerate() {
-        if let Err(validation_error) = metric.validate() {
-            errors.push(crate::models::ProcessingError {
-                metric_type: "environmental".to_string(),
-                error_message: validation_error,
-                index: Some(index),
-            });
-        }
-    }
-    
-    errors
-}
-
-/// Validate mental health metrics (placeholder - implement as needed)
-fn validate_mental_health_metrics(metrics: &[crate::models::health_metrics::MentalHealthMetric]) -> Vec<crate::models::ProcessingError> {
-    let mut errors = Vec::new();
-    
-    for (index, metric) in metrics.iter().enumerate() {
-        if let Err(validation_error) = metric.validate() {
-            errors.push(crate::models::ProcessingError {
-                metric_type: "mental_health".to_string(),
-                error_message: validation_error,
-                index: Some(index),
-            });
-        }
-    }
-    
-    errors
-}
-
-/// Validate mobility metrics (placeholder - implement as needed)
-fn validate_mobility_metrics(metrics: &[crate::models::health_metrics::MobilityMetric]) -> Vec<crate::models::ProcessingError> {
-    let mut errors = Vec::new();
-    
-    for (index, metric) in metrics.iter().enumerate() {
-        if let Err(validation_error) = metric.validate() {
-            errors.push(crate::models::ProcessingError {
-                metric_type: "mobility".to_string(),
-                error_message: validation_error,
-                index: Some(index),
-            });
-        }
-    }
-    
-    errors
-}
+// Deprecated validation functions removed for simplified schema
 
