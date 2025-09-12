@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Semaphore;
 use tokio::time::sleep;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::config::{BatchConfig, SAFE_PARAM_LIMIT, HEART_RATE_PARAMS_PER_RECORD, BLOOD_PRESSURE_PARAMS_PER_RECORD, SLEEP_PARAMS_PER_RECORD, ACTIVITY_PARAMS_PER_RECORD, WORKOUT_PARAMS_PER_RECORD};

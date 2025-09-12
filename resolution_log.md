@@ -9,7 +9,24 @@
 ## Overview
 Addressing CRITICAL test compilation failures and database schema issues identified in review_notes.md:
 
-## CRITICAL Priority Issues - IN PROGRESS
+## CRITICAL Priority Issues - RECENTLY RESOLVED
+
+### [CRITICAL] Batch Processing Performance Optimization (2025-09-12)
+- **Issue:** Sleep chunk size mismatch causing 16.7% throughput loss
+- **Status:** ✅ RESOLVED
+- **Resolution Summary:**
+  - **Sleep Parameter Fix:** Corrected .env.example comment from "9 params" to "10 params per record"
+  - **Chunk Size Optimization:** Updated sleep_chunk_size from 5000 to 6000 (20% improvement)
+  - **Parameter Utilization:** Increased from 50,000 to 60,000 parameters per chunk (92% of safe limit)
+  - **Configurability:** Extracted hardcoded parameter limits to configurable constants
+  - **Validation Enhancement:** Updated all validation logic to use named constants
+  - **Performance Impact:** 16.7% throughput improvement for sleep data ingestion
+- **Files Modified:**
+  - ✅ `.env.example`: Fixed parameter counts, optimized chunk sizes
+  - ✅ `src/config/batch_config.rs`: Added parameter constants, updated defaults
+  - ✅ `src/services/batch_processor.rs`: Replaced hardcoded limits with constants
+  - ✅ `CLAUDE.md`: Updated documentation with correct values
+  - ✅ `DONE.md`: Aligned configuration documentation
 
 ### [CRITICAL] Test Suite Compilation Failures (2025-09-12)
 - **Issue:** All tests failing compilation due to model field name mismatches
