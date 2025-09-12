@@ -50,31 +50,8 @@ AC:
 Dependencies: SCHEMA-002, SCHEMA-003
 Files: src/handlers/query.rs, src/handlers/export.rs
 
-**[SCHEMA-010] Fix Raw Ingestions Table Queries**
-Priority: High
-Points: 3
-AC:
-- Update INSERT queries to use payload_hash, payload_size_bytes, raw_payload
-- Remove references to api_key_id, raw_data, data_hash columns
-- Update status handling to use processing_status instead of status
-- Update error handling to use processing_errors instead of error_message
-- Fix all conflict resolution queries
-Dependencies: None
-Files: src/handlers/optimized_ingest.rs, src/handlers/payload_processor.rs, src/handlers/ingest.rs, src/services/mqtt_subscriber.rs, src/handlers/ingest_async_simple.rs
-
 ## Component 4: Database Structure Updates (Medium Priority)
 
-**[SCHEMA-011] Fix Database Model Structs**
-Priority: Medium
-Points: 3
-AC:
-- Update ActivityRecord struct to match simplified schema fields
-- Update WorkoutRecord struct field mappings
-- Fix database conversion logic for all metric types
-- Update merge logic for simplified field set
-- Remove deprecated table references
-Dependencies: SCHEMA-002, SCHEMA-003
-Files: src/models/db.rs
 
 ## Component 5: Validation and Testing (Medium Priority)
 

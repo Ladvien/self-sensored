@@ -4,6 +4,59 @@ Based on the comprehensive database redesign analysis, I'll create Jira stories 
 
 ---
 
+#### [SCHEMA-011] Fix Database Model Structs ✅ COMPLETED
+
+**Status:** ✅ COMPLETED 2025-09-12 02:15 PM  
+**Story Points:** 3
+**Completed by:** Claude Code Agent
+**Commit:** 62f6deb - "feat: fix database model structs"
+
+**Acceptance Criteria Met:**
+- ✅ Updated ActivityRecord struct to match simplified schema fields (recorded_date → recorded_at, added id and basal_energy_burned_kcal)
+- ✅ Updated WorkoutRecord struct field mappings (average_heart_rate → avg_heart_rate, removed deprecated fields)
+- ✅ Fixed RawIngestion struct with correct simplified schema fields (payload_hash, payload_size_bytes, processing_status)
+- ✅ Fixed User and ApiKey structs (removed full_name/scopes, added apple_health_id/permissions)
+- ✅ Updated HeartRateRecord, BloodPressureRecord, SleepRecord with missing id fields and correct field types
+- ✅ Fixed database conversion logic for all metric types with proper enum-to-string conversions
+- ✅ Updated aggregate functions for renamed activity fields (step_count, active_energy_burned_kcal)
+- ✅ Removed deprecated table references (AuditLog, WorkoutRoutePoint structs)
+
+**Technical Impact:**
+- Database model structs now 100% aligned with simplified schema
+- Fixed type mismatches (BigDecimal → f64, ActivityContext → String)
+- Removed 210 lines of deprecated code, added 109 lines of schema-aligned structs
+- All conversion functions and From trait implementations updated
+
+**Files Modified:** src/models/db.rs
+
+---
+
+#### [SCHEMA-009] Fix Handler Query Field Names ✅ COMPLETED
+
+**Status:** ✅ COMPLETED 2025-09-12 01:45 PM
+**Story Points:** 4
+**Completed by:** Claude Code Agent
+**Commit:** 3234d02 - "feat: fix handler SQL query field names"
+
+**Acceptance Criteria Met:**
+- ✅ Updated query.rs SELECT statements to use step_count, active_energy_burned_kcal
+- ✅ Fixed export.rs field references for activity metrics
+- ✅ Updated workout queries to use avg_heart_rate instead of average_heart_rate
+- ✅ Updated all query responses to match simplified schema fields
+- ✅ Fixed activity queries to use recorded_at instead of recorded_date  
+- ✅ Added proper enum casting (workout_type::text) for database compatibility
+- ✅ Added NULL handling for non-existent metadata fields
+
+**Technical Changes:**
+- **src/handlers/query.rs**: Fixed activity and workout SELECT queries, updated date field usage, corrected heart rate field references
+- **src/handlers/export.rs**: Updated CSV and JSON export field mappings, fixed activity analytics calculations
+- **Query Performance**: All queries now properly reference simplified schema columns
+- **Data Integrity**: Field name alignment ensures consistent data retrieval across all handler endpoints
+
+**Impact**: All handler SQL queries now correctly reference the simplified database schema, preventing column name errors and ensuring proper data retrieval for API endpoints.
+
+---
+
 #### [SCHEMA-001] Remove Deprecated Health Metric Models ✅ COMPLETED
 
 **Status:** ✅ COMPLETED 2025-09-12  
@@ -3240,6 +3293,67 @@ Fix authentication queries in src/services/auth.rs to align with simplified data
 **Impact:** Authentication system now fully compatible with simplified database schema. All authentication operations (login, API key management, user creation) will work correctly with the updated schema structure. Eliminates runtime database errors from referencing non-existent columns.
 
 **Quality Assurance:** Changes maintain backward compatibility for authentication flows while aligning with current database structure. Structured logging preserves audit capability without requiring additional database tables.
+
+---
+
+#### [SCHEMA-010] Fix Raw Ingestions Table Queries ✅ COMPLETED
+
+**Status:** ✅ COMPLETED 2025-09-12  
+**Story Points:** 3  
+**Assigned to:** Claude Code Agent  
+**Priority:** High  
+
+**Description:**  
+Fix all raw_ingestions table queries to align with the actual database schema by updating column names, removing non-existent column references, and correcting data types.
+
+**Acceptance Criteria Completed:**
+- ✅ **Column Mapping Updates Applied:**
+  - api_key_id → removed (doesn't exist in schema)
+  - raw_data → raw_payload (JSONB column for payload storage)
+  - data_hash → payload_hash (VARCHAR(64) for deduplication)
+  - status → processing_status (VARCHAR(50) for processing state)
+  - error_message → processing_errors (JSONB for structured error data)
+  - ingested_at → created_at (TIMESTAMPTZ, auto-generated)
+- ✅ **INSERT Query Updates:**
+  - Added payload_size_bytes calculation for all INSERT operations
+  - Removed api_key_id references (column doesn't exist)
+  - Updated to use payload_hash instead of data_hash
+  - Added raw_payload JSONB field for complete payload storage
+- ✅ **UPDATE Query Updates:**
+  - Changed status field to processing_status in all UPDATE operations
+  - Converted error_message strings to structured JSON in processing_errors
+  - Maintained processed_at timestamp functionality
+- ✅ **Conflict Resolution Fixes:**
+  - Removed ON CONFLICT clauses (no unique constraints defined in schema)
+  - Simplified duplicate handling logic 
+  - Eliminated conflict resolution dependency on non-existent constraints
+
+**Files Modified:**
+- `src/handlers/optimized_ingest.rs` - Fixed INSERT and UPDATE queries for optimized ingestion
+- `src/handlers/payload_processor.rs` - Updated payload storage queries
+- `src/handlers/ingest.rs` - Fixed raw payload storage and status updates  
+- `src/services/mqtt_subscriber.rs` - Updated MQTT ingestion queries
+- `src/handlers/ingest_async_simple.rs` - Fixed timeout error handling queries
+
+**Technical Details:**
+- **Schema Compliance**: All queries now match raw_ingestions table structure exactly
+- **Error Handling**: Processing errors stored as structured JSONB for better analysis and debugging
+- **Payload Storage**: Complete payload preserved in raw_payload field for data recovery
+- **Hash Calculation**: Payload hash maintained for potential deduplication support
+- **Status Tracking**: Processing status properly tracked using processing_status field
+
+**Impact:** Eliminates all "column does not exist" database errors related to raw_ingestions table operations. All ingestion endpoints (REST API, MQTT, async processing) now work correctly with the actual database schema. Structured error storage enables better debugging and monitoring of processing failures.
+
+**Dependencies:** None - Critical foundational fix
+
+**Quality Assurance:** 
+✅ All raw_ingestions INSERT operations use correct column names  
+✅ All raw_ingestions UPDATE operations align with schema  
+✅ Processing errors stored in structured format for analysis  
+✅ No database runtime errors from column mismatches  
+✅ Payload hash functionality maintained for future deduplication needs  
+
+**Commit:** 578dcde - "feat: fix raw ingestions table queries"
 
 ---
 

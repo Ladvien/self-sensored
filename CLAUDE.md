@@ -54,7 +54,7 @@ self-sensored/
 │   ├── services/        # Business logic layer (auth, batch processing)
 │   ├── db/             # Database operations and connection pooling
 │   └── main.rs         # Application entry point
-├── migrations/          # SQL migration files
+├── schema.sql           # Database schema definition
 ├── tests/              # Integration and unit tests
 ├── CLAUDE.md           # Project documentation and guidelines
 ├── BACKLOG.md          # Project tasks and features
@@ -82,17 +82,8 @@ RUST_ENV=development cargo run
 
 ### Database
 ```bash
-# Run migrations
-sqlx migrate run
-
-# Create new migration
-sqlx migrate add <migration_name>
-
-# Revert last migration
-sqlx migrate revert
-
-# Check migration status
-sqlx migrate info
+# Initialize database with schema
+psql -d health_export_dev < schema.sql
 
 # Prepare offline query data for CI
 cargo sqlx prepare
@@ -241,10 +232,10 @@ VALIDATION_SLEEP_EFFICIENCY_MAX=100.0      # Maximum sleep efficiency (%)
 VALIDATION_SLEEP_DURATION_TOLERANCE_MINUTES=60  # Sleep time calculation tolerance
 ```
 
-**Activity Validation:**
+**Activity Validation (Simplified Schema):**
 ```bash
-VALIDATION_STEPS_MIN=0              # Minimum daily steps
-VALIDATION_STEPS_MAX=200000         # Maximum daily steps (extreme scenarios)
+VALIDATION_STEP_COUNT_MIN=0         # Minimum daily step count
+VALIDATION_STEP_COUNT_MAX=200000    # Maximum daily step count (extreme scenarios)
 VALIDATION_DISTANCE_MAX_KM=500.0    # Maximum daily distance (km)
 VALIDATION_CALORIES_MAX=20000.0     # Maximum daily calories (extreme athletic events)
 ```
@@ -273,12 +264,12 @@ let metric = HeartRateMetric { /* ... */ };
 metric.validate_with_config(&validation_config)?;
 ```
 
-**Parameter Count per Metric Type:**
-- **Heart Rate**: 6 params (user_id, recorded_at, heart_rate, resting_heart_rate, context, source)
-- **Blood Pressure**: 6 params (user_id, recorded_at, systolic, diastolic, pulse, source)
-- **Sleep**: 10 params (user_id, sleep_start, sleep_end, duration_minutes, deep_sleep_minutes, rem_sleep_minutes, light_sleep_minutes, awake_minutes, efficiency, source)
-- **Activity**: 7 params (user_id, recorded_date, steps, distance_meters, calories_burned, active_minutes, flights_climbed, source)
-- **Workout**: 10 params (id, user_id, workout_type, started_at, ended_at, total_energy_kcal, distance_meters, avg_heart_rate, max_heart_rate, source)
+**Parameter Count per Metric Type (Simplified Schema):**
+- **Heart Rate**: 7 params (user_id, recorded_at, heart_rate, resting_heart_rate, heart_rate_variability, context, source_device)
+- **Blood Pressure**: 6 params (user_id, recorded_at, systolic, diastolic, pulse, source_device)
+- **Sleep**: 9 params (user_id, sleep_start, sleep_end, duration_minutes, deep_sleep_minutes, rem_sleep_minutes, light_sleep_minutes, awake_minutes, efficiency, source_device)
+- **Activity**: 7 params (user_id, recorded_at, step_count, distance_meters, flights_climbed, active_energy_burned_kcal, basal_energy_burned_kcal, source_device)
+- **Workout**: 10 params (user_id, workout_type, started_at, ended_at, total_energy_kcal, active_energy_kcal, distance_meters, avg_heart_rate, max_heart_rate, source_device)
 
 **Chunking Benefits:**
 - Prevents PostgreSQL parameter limit errors
@@ -418,8 +409,16 @@ let user = get_user(user_id).await?;
 
 ## 🔄 COMMON WORKFLOWS
 
+### Core Health Metric Types (Simplified Schema)
+The API supports 5 core health metric types only:
+1. **Heart Rate Metrics**: BPM, resting heart rate, heart rate variability, activity context
+2. **Blood Pressure Metrics**: Systolic, diastolic, pulse measurements
+3. **Sleep Metrics**: Sleep stages, duration, efficiency tracking
+4. **Activity Metrics**: Steps, distance, energy burned, flights climbed
+5. **Workout Metrics**: Exercise type, duration, heart rate, energy expenditure
+
 ### Adding a New Health Metric Type
-1. Create migration for new table
+1. Update schema.sql for new table
 2. Add model in `src/models/`
 3. Add validation rules
 4. Update ingest handler
@@ -427,12 +426,13 @@ let user = get_user(user_id).await?;
 6. Write integration tests
 7. Update API documentation
 
-### Debugging Failed Ingestion
-1. Check `raw_ingestions` table for payload
-2. Review `processing_errors` JSONB field
-3. Check application logs for user_id
-4. Verify rate limits aren't exceeded
-5. Validate payload against schema
+### Debugging Failed Ingestion (Simplified Schema)
+1. Check `raw_ingestions` table for payload using `payload_hash` and `raw_payload` fields
+2. Review `processing_errors` JSONB field for detailed error information
+3. Check `processing_status` field for current processing state
+4. Check application logs for user_id
+5. Verify rate limits aren't exceeded
+6. Validate payload against simplified 5-table schema
 
 ### Performance Optimization
 1. Run `EXPLAIN ANALYZE` on slow queries
@@ -459,8 +459,8 @@ brew services start redis
 # Create database
 createdb health_export_dev
 
-# Run migrations
-sqlx migrate run
+# Apply schema
+psql -d health_export_dev < schema.sql
 
 # Start development server
 cargo run
@@ -486,7 +486,7 @@ alias cw='cargo watch -x run'
 
 - [ ] All tests passing
 - [ ] No clippy warnings
-- [ ] Migrations reviewed and tested
+- [ ] Schema changes reviewed and tested
 - [ ] Environment variables documented
 - [ ] Kubernetes manifests updated
 - [ ] Monitoring alerts configured

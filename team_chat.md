@@ -599,6 +599,18 @@ CLAIMING: Field Updates - Complete field name alignment and user_id additions
 - Updating merge logic for simplified field set
 - Target: Database model structs aligned with simplified schema
 
+**02:45 PM - Claude Code Agent**: ✅ COMPLETED SCHEMA-011: Fix Database Model Structs
+- ✅ Updated ActivityRecord struct to match simplified schema (recorded_date → recorded_at, added id/basal_energy_burned_kcal)
+- ✅ Fixed WorkoutRecord struct field mappings (average_heart_rate → avg_heart_rate, removed deprecated fields)
+- ✅ Fixed RawIngestion struct with simplified schema fields (payload_hash, payload_size_bytes, processing_status)
+- ✅ Updated User/ApiKey structs (removed full_name/scopes, added apple_health_id/permissions)
+- ✅ Updated HeartRateRecord, BloodPressureRecord, SleepRecord with missing id fields and correct types
+- ✅ Fixed all conversion functions with proper enum-to-string conversions (ActivityContext, WorkoutType)
+- ✅ Updated aggregate functions for renamed fields (step_count, active_energy_burned_kcal)
+- ✅ Removed deprecated structs (AuditLog, WorkoutRoutePoint)
+- ✅ All acceptance criteria met, committed (62f6deb), moved to DONE.md
+- 🎯 **Impact**: Database model structs 100% aligned with simplified schema (-210 lines, +109 lines)
+
 **02:45 PM - Claude Code Agent**: 🎯 CLAIMING SCHEMA-015: Update Integration Tests
 - Updating integration tests for simplified schema
 - Removing tests for deprecated models (nutrition, symptoms, environmental, mental health, mobility, reproductive health)
@@ -628,6 +640,19 @@ CLAIMING: Field Updates - Complete field name alignment and user_id additions
 - Updating all query responses to match simplified schema fields
 - Testing query compilation and database compatibility
 - Target: All handler SQL queries use correct field names from simplified schema
+
+**02:15 PM - Claude Code Agent**: ✅ COMPLETED SCHEMA-009: Fix Handler Query Field Names
+- ✅ Updated query.rs SELECT statements to use step_count, active_energy_burned_kcal instead of deprecated field names
+- ✅ Fixed export.rs field references for activity metrics (step_count vs steps, active_energy_burned_kcal vs calories_burned)  
+- ✅ Updated workout queries to use avg_heart_rate instead of average_heart_rate for schema alignment
+- ✅ Updated all query responses to match simplified schema fields (recorded_at vs recorded_date)
+- ✅ Fixed activity summary and count queries to use correct timestamp fields
+- ✅ Added proper enum casting (workout_type::text) for database compatibility
+- ✅ Added NULL handling for non-existent metadata fields in simplified schema
+- ✅ Committed changes with comprehensive message (commit 3234d02)
+- ✅ Story moved from BACKLOG.md to DONE.md with completion timestamp
+- 🎯 **Impact**: All handler SQL queries now correctly reference simplified database schema
+- 🚀 **Ready for**: Next schema alignment stories (SCHEMA-010, SCHEMA-011, etc.)
 
 **02:15 PM - Claude Code Agent**: 🎯 CLAIMING SCHEMA-007: Fix Source Field Mapping
 - Fixing all 'source' field references to 'source_device' across all health metric models
