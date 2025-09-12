@@ -35,22 +35,24 @@ pub enum AuthError {
 pub struct User {
     pub id: Uuid,
     pub email: String,
-    pub full_name: Option<String>,
+    pub apple_health_id: Option<String>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
     pub is_active: Option<bool>,
+    pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiKey {
     pub id: Uuid,
     pub user_id: Uuid,
-    pub name: String,
+    pub name: Option<String>,
     pub created_at: Option<DateTime<Utc>>,
     pub last_used_at: Option<DateTime<Utc>>,
     pub expires_at: Option<DateTime<Utc>>,
     pub is_active: Option<bool>,
-    pub scopes: Option<Vec<String>>,
+    pub permissions: Option<serde_json::Value>,
+    pub rate_limit_per_hour: Option<i32>,
 }
 
 #[derive(Debug, Clone)]
@@ -135,9 +137,10 @@ impl AuthService {
     pub async fn create_api_key(
         &self,
         user_id: Uuid,
-        name: &str,
+        name: Option<&str>,
         expires_at: Option<DateTime<Utc>>,
-        scopes: Vec<String>,
+        permissions: Option<serde_json::Value>,
+        rate_limit_per_hour: Option<i32>,
     ) -> Result<(String, ApiKey), AuthError> {
         // Generate the plain API key
         let plain_key = Self::generate_api_key();
@@ -148,8 +151,8 @@ impl AuthService {
         // Insert into database
         let row = sqlx::query!(
             r#"
-            INSERT INTO api_keys (user_id, name, key_hash, expires_at, scopes)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO api_keys (user_id, name, key_hash, expires_at, permissions, rate_limit_per_hour)
+            VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING 
                 id,
                 user_id,
@@ -158,13 +161,15 @@ impl AuthService {
                 last_used_at,
                 expires_at,
                 is_active,
-                scopes
+                permissions,
+                rate_limit_per_hour
             "#,
             user_id,
             name,
             key_hash,
             expires_at,
-            &scopes
+            permissions,
+            rate_limit_per_hour
         )
         .fetch_one(&self.pool)
         .await?;
@@ -177,7 +182,8 @@ impl AuthService {
             last_used_at: row.last_used_at,
             expires_at: row.expires_at,
             is_active: row.is_active,
-            scopes: row.scopes,
+            permissions: row.permissions,
+            rate_limit_per_hour: row.rate_limit_per_hour,
         };
 
         Ok((plain_key, api_key))
@@ -216,13 +222,15 @@ impl AuthService {
                     ak.last_used_at,
                     ak.expires_at,
                     ak.is_active,
-                    ak.scopes,
+                    ak.permissions,
+                    ak.rate_limit_per_hour,
                     u.id as user_id_check,
                     u.email,
-                    u.full_name,
+                    u.apple_health_id,
                     u.created_at as user_created_at,
                     u.updated_at as user_updated_at,
-                    u.is_active as user_is_active
+                    u.is_active as user_is_active,
+                    u.metadata
                 FROM api_keys ak
                 JOIN users u ON ak.user_id = u.id
                 WHERE ak.id = $1
@@ -278,10 +286,11 @@ impl AuthService {
                 let user = User {
                     id: row.user_id,
                     email: row.email,
-                    full_name: row.full_name,
+                    apple_health_id: row.apple_health_id,
                     created_at: row.user_created_at,
                     updated_at: row.user_updated_at,
                     is_active: row.user_is_active,
+                    metadata: row.metadata,
                 };
 
                 let api_key = ApiKey {
@@ -292,7 +301,8 @@ impl AuthService {
                     last_used_at: row.last_used_at,
                     expires_at: row.expires_at,
                     is_active: row.is_active,
-                    scopes: row.scopes,
+                    permissions: row.permissions,
+                    rate_limit_per_hour: row.rate_limit_per_hour,
                 };
 
                 // Log successful authentication
@@ -306,7 +316,7 @@ impl AuthService {
                     Some(serde_json::json!({
                         "key_type": "uuid",
                         "key_name": api_key.name,
-                        "scopes": api_key.scopes
+                        "permissions": api_key.permissions
                     })),
                 )
                 .await
@@ -342,13 +352,15 @@ impl AuthService {
                     ak.last_used_at,
                     ak.expires_at,
                     ak.is_active,
-                    ak.scopes,
+                    ak.permissions,
+                    ak.rate_limit_per_hour,
                     u.id as user_id_check,
                     u.email,
-                    u.full_name,
+                    u.apple_health_id,
                     u.created_at as user_created_at,
                     u.updated_at as user_updated_at,
-                    u.is_active as user_is_active
+                    u.is_active as user_is_active,
+                    u.metadata
                 FROM api_keys ak
                 JOIN users u ON ak.user_id = u.id
                 WHERE (ak.is_active IS NULL OR ak.is_active = true) 
@@ -416,10 +428,11 @@ impl AuthService {
                         let user = User {
                             id: row.user_id,
                             email: row.email,
-                            full_name: row.full_name,
+                            apple_health_id: row.apple_health_id,
                             created_at: row.user_created_at,
                             updated_at: row.user_updated_at,
                             is_active: row.user_is_active,
+                            metadata: row.metadata,
                         };
 
                         let api_key = ApiKey {
@@ -430,7 +443,8 @@ impl AuthService {
                             last_used_at: row.last_used_at,
                             expires_at: row.expires_at,
                             is_active: row.is_active,
-                            scopes: row.scopes,
+                            permissions: row.permissions,
+                            rate_limit_per_hour: row.rate_limit_per_hour,
                         };
 
                         // Log successful authentication
@@ -444,7 +458,7 @@ impl AuthService {
                             Some(serde_json::json!({
                                 "key_type": "hashed",
                                 "key_name": api_key.name,
-                                "scopes": api_key.scopes
+                                "permissions": api_key.permissions
                             })),
                         )
                         .await
@@ -529,7 +543,7 @@ impl AuthService {
     pub async fn get_user_by_email(&self, email: &str) -> Result<Option<User>, AuthError> {
         let row = sqlx::query!(
             r#"
-            SELECT id, email, full_name, created_at, updated_at, is_active
+            SELECT id, email, apple_health_id, created_at, updated_at, is_active, metadata
             FROM users
             WHERE email = $1
             "#,
@@ -541,10 +555,11 @@ impl AuthService {
         Ok(row.map(|r| User {
             id: r.id,
             email: r.email,
-            full_name: r.full_name,
+            apple_health_id: r.apple_health_id,
             created_at: r.created_at,
             updated_at: r.updated_at,
             is_active: r.is_active,
+            metadata: r.metadata,
         }))
     }
 
@@ -552,16 +567,18 @@ impl AuthService {
     pub async fn create_user(
         &self,
         email: &str,
-        full_name: Option<&str>,
+        apple_health_id: Option<&str>,
+        metadata: Option<serde_json::Value>,
     ) -> Result<User, AuthError> {
         let row = sqlx::query!(
             r#"
-            INSERT INTO users (email, full_name)
-            VALUES ($1, $2)
-            RETURNING id, email, full_name, created_at, updated_at, is_active
+            INSERT INTO users (email, apple_health_id, metadata)
+            VALUES ($1, $2, $3)
+            RETURNING id, email, apple_health_id, created_at, updated_at, is_active, metadata
             "#,
             email,
-            full_name
+            apple_health_id,
+            metadata
         )
         .fetch_one(&self.pool)
         .await?;
@@ -569,10 +586,11 @@ impl AuthService {
         Ok(User {
             id: row.id,
             email: row.email,
-            full_name: row.full_name,
+            apple_health_id: row.apple_health_id,
             created_at: row.created_at,
             updated_at: row.updated_at,
             is_active: row.is_active,
+            metadata: row.metadata,
         })
     }
 
@@ -588,7 +606,8 @@ impl AuthService {
                 last_used_at,
                 expires_at,
                 is_active,
-                scopes
+                permissions,
+                rate_limit_per_hour
             FROM api_keys
             WHERE user_id = $1
             ORDER BY created_at DESC
@@ -608,7 +627,8 @@ impl AuthService {
                 last_used_at: row.last_used_at,
                 expires_at: row.expires_at,
                 is_active: row.is_active,
-                scopes: row.scopes,
+                permissions: row.permissions,
+                rate_limit_per_hour: row.rate_limit_per_hour,
             })
             .collect();
 
@@ -628,7 +648,7 @@ impl AuthService {
         Ok(result.rows_affected() > 0)
     }
 
-    /// Log an audit event
+    /// Log an audit event (using tracing since audit_log table doesn't exist in schema)
     #[allow(clippy::too_many_arguments)]
     pub async fn log_audit_event(
         &self,
@@ -640,26 +660,18 @@ impl AuthService {
         user_agent: Option<&str>,
         metadata: Option<serde_json::Value>,
     ) -> Result<(), AuthError> {
-        let ip_network = ip_address.map(|ip| match ip {
-            std::net::IpAddr::V4(ipv4) => sqlx::types::ipnetwork::IpNetwork::V4(ipv4.into()),
-            std::net::IpAddr::V6(ipv6) => sqlx::types::ipnetwork::IpNetwork::V6(ipv6.into()),
-        });
-
-        sqlx::query!(
-            r#"
-            INSERT INTO audit_log (user_id, api_key_id, action, resource, ip_address, user_agent, metadata)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-            "#,
-            user_id,
-            api_key_id,
-            action,
-            resource,
-            ip_network,
-            user_agent,
-            metadata
-        )
-        .execute(&self.pool)
-        .await?;
+        // Since audit_log table doesn't exist in the simplified schema,
+        // we'll log to structured logs instead
+        tracing::info!(
+            user_id = ?user_id,
+            api_key_id = ?api_key_id,
+            action = action,
+            resource = ?resource,
+            ip_address = ?ip_address,
+            user_agent = ?user_agent,
+            metadata = ?metadata,
+            "Audit event logged"
+        );
 
         Ok(())
     }
