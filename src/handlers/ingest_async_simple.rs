@@ -208,7 +208,8 @@ pub async fn ingest_async_optimized_handler(
 
             // Update raw ingestion status
             let _ = sqlx::query!(
-                "UPDATE raw_ingestions SET status = 'error', error_message = 'Processing timeout - requires background processing' WHERE id = $1",
+                "UPDATE raw_ingestions SET processing_status = 'error', processing_errors = $1 WHERE id = $2",
+                serde_json::json!([{"error_type": "timeout", "message": "Processing timeout - requires background processing"}]),
                 raw_id
             )
             .execute(pool.get_ref())
@@ -302,28 +303,32 @@ async fn update_processing_status(
     } else {
         "error"
     };
-    let error_message = if result.errors.is_empty() {
+    let processing_errors = if result.errors.is_empty() {
         None
     } else {
         Some(
-            result
-                .errors
-                .iter()
-                .map(|e| format!("{}: {}", e.metric_type, e.error_message))
-                .collect::<Vec<_>>()
-                .join("; "),
+            serde_json::to_value(
+                result
+                    .errors
+                    .iter()
+                    .map(|e| serde_json::json!({
+                        "metric_type": e.metric_type,
+                        "error_message": e.error_message
+                    }))
+                    .collect::<Vec<_>>()
+            ).unwrap()
         )
     };
 
     sqlx::query!(
         r#"
         UPDATE raw_ingestions 
-        SET processed_at = NOW(), status = $2, error_message = $3
+        SET processed_at = NOW(), processing_status = $2, processing_errors = $3
         WHERE id = $1
         "#,
         raw_id,
         status,
-        error_message
+        processing_errors
     )
     .execute(pool)
     .await?;

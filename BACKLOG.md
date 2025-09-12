@@ -12,16 +12,6 @@
 
 ## Component 2: Field Mapping Fixes (High Priority)
 
-**[SCHEMA-005] Fix Blood Pressure Model Context Field**
-Priority: High
-Points: 1
-AC:
-- Remove context field (BloodPressureContext enum) from BloodPressureMetric
-- Remove BloodPressureContext enum from imports
-- Update validation logic to not check context
-- Ensure only systolic, diastolic, pulse, source_device remain
-Dependencies: SCHEMA-001
-Files: src/models/health_metrics.rs
 
 **[SCHEMA-006] Fix Activity Metrics Field Name Mapping**
 Priority: High
@@ -34,16 +24,6 @@ AC:
 Dependencies: SCHEMA-002
 Files: src/models/health_metrics.rs, src/models/db.rs
 
-**[SCHEMA-007] Fix Source Field Mapping**
-Priority: High
-Points: 2
-AC:
-- Change all 'source' fields to 'source_device' in all metric models
-- Update validation logic for source_device field
-- Update conversion logic in iOS models
-- Update database struct mappings
-Dependencies: SCHEMA-001, SCHEMA-002, SCHEMA-003
-Files: src/models/health_metrics.rs, src/models/ios_models.rs, src/models/db.rs
 
 ## Component 3: Database Query Updates (High Priority)
 
@@ -96,40 +76,9 @@ AC:
 Dependencies: SCHEMA-002, SCHEMA-003
 Files: src/models/db.rs
 
-**[SCHEMA-012] Fix Authentication and User Table Queries**
-Priority: Medium
-Points: 2
-AC:
-- Remove references to full_name, scopes columns in users/api_keys queries
-- Remove audit_log table references
-- Update user creation and API key validation queries
-- Ensure queries match simplified users and api_keys schema
-Dependencies: None
-Files: src/services/auth.rs
-
 ## Component 5: Validation and Testing (Medium Priority)
 
-**[SCHEMA-013] Update Validation Configuration**
-Priority: Medium
-Points: 2
-AC:
-- Remove validation configs for deprecated metric types
-- Update field name references in ValidationConfig
-- Remove deprecated enum validation logic
-- Update environment variable mappings for simplified schema
-Dependencies: SCHEMA-001, SCHEMA-002
-Files: src/config/validation_config.rs
 
-**[SCHEMA-014] Fix iOS Model Conversion Logic**
-Priority: Medium
-Points: 3
-AC:
-- Update iOS health metric parsing for simplified schema
-- Remove conversion logic for deprecated metric types
-- Fix field name mappings in iOS model conversions
-- Update metric type routing to only support 5 core types
-Dependencies: SCHEMA-001, SCHEMA-002, SCHEMA-003
-Files: src/models/ios_models.rs
 
 **[SCHEMA-015] Update Integration Tests**
 Priority: Medium

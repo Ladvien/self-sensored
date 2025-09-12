@@ -509,3 +509,153 @@ CLAIMING: Field Updates - Complete field name alignment and user_id additions
 - ✅ All models implement FromRow for database queries and have proper validation functions
 - ✅ Story requirements already met by previous schema alignment work
 - ✅ Ready for database foreign key relationships
+
+**01:00 PM - Claude Code Agent**: 🎯 CLAIMING SCHEMA-005: Fix Blood Pressure Model Context Field
+- Removing BloodPressureContext field from BloodPressureMetric model
+- Removing any BloodPressureContext enum imports/references  
+- Updating validation functions to not check context field
+- Ensuring only systolic, diastolic, pulse, source_device remain in model
+- Target: BloodPressureMetric aligned with simplified schema (no context field)
+
+**01:15 PM - Claude Code Agent**: ✅ COMPLETED SCHEMA-005: Fix Blood Pressure Model Context Field
+- ✅ Verified BloodPressureMetric struct has no context field (already correct)
+- ✅ Confirmed no BloodPressureContext enum exists in src/models/enums.rs
+- ✅ Verified validation functions don't check context field (already correct)
+- ✅ BloodPressureMetric model perfectly matches database schema:
+  * id (UUID, primary key), user_id (UUID, foreign key)
+  * recorded_at (TIMESTAMPTZ), systolic (INTEGER), diastolic (INTEGER)
+  * pulse (Option<i16>), source_device (Option<String>)
+  * created_at (TIMESTAMPTZ)
+- ✅ Model already aligned with simplified schema requirements
+- ✅ No code changes required - story requirements already met
+- 🎯 **Impact**: BloodPressureMetric model confirmed correct and schema-aligned
+- 🚀 **Ready for**: Next schema alignment stories (SCHEMA-006, SCHEMA-007, etc.)
+
+**01:30 PM - Claude Code Agent**: 🎯 CLAIMING SCHEMA-006: Fix Activity Metrics Field Name Mapping
+- Fixing activity metrics field name mapping throughout the codebase
+- Updating all references from 'steps' to 'step_count' in batch_processor.rs
+- Updating all references from 'calories_burned' to 'active_energy_burned_kcal' in batch_processor.rs
+- Checking and fixing SQL queries using wrong field names in query.rs, export.rs, db.rs
+- Testing compilation and fixing any compilation errors
+- Target: Activity metrics field names correctly mapped across entire codebase
+
+**02:00 PM - Claude Code Agent**: 🎯 CLAIMING SCHEMA-012: Fix Authentication and User Table Queries
+- Fixing auth queries in src/services/auth.rs to match simplified schema
+- Removing references to non-existent full_name, scopes columns in users/api_keys queries
+- Removing audit_log table references
+- Updating user creation and API key validation queries
+- Target: Authentication system aligned with simplified users and api_keys schema
+
+**02:45 PM - Claude Code Agent**: ✅ COMPLETED SCHEMA-012: Fix Authentication and User Table Queries
+- ✅ Updated User struct to match simplified schema (removed full_name, added apple_health_id and metadata)
+- ✅ Updated ApiKey struct to match simplified schema (replaced scopes with permissions, added rate_limit_per_hour)
+- ✅ Fixed all authentication queries to use correct column names from schema
+- ✅ Removed references to non-existent audit_log table, using structured logging instead
+- ✅ Updated create_user, get_user_by_email, create_api_key, and list_api_keys methods
+- ✅ All authentication queries now align with simplified users and api_keys schema
+- ✅ Committed changes with comprehensive message (commit 38d2c33)
+- 🎯 **Impact**: Authentication system now 100% compatible with simplified database schema
+- 🚀 **Ready for**: Authentication operations with correct column mappings
+
+**02:00 PM - Claude Code Agent**: 🎯 CLAIMING SCHEMA-014: Fix iOS Model Conversion Logic
+- Updating iOS health metric parsing for simplified schema compatibility
+- Removing conversion logic for deprecated metric types (Nutrition, Symptoms, etc.)
+- Fixing field name mappings in iOS model conversions to match simplified schema
+- Updating metric type routing to only support 5 core types (HeartRate, BloodPressure, Sleep, Activity, Workout)
+- Testing iOS payload conversion and ensuring proper field mapping
+- Target: iOS model conversion logic aligned with simplified 5-table schema
+
+**02:15 PM - Claude Code Agent**: 🎯 CLAIMING SCHEMA-013: Update Validation Configuration
+- Removing validation configs for deprecated metric types from ValidationConfig
+- Updating field name references in validation configuration  
+- Removing deprecated enum validation logic for deleted metric types
+- Updating environment variable mappings for simplified schema
+- Target: Clean validation configuration with only 5 core metric types (HeartRate, BloodPressure, Sleep, Activity, Workout)
+
+**02:45 PM - Claude Code Agent**: ✅ COMPLETED SCHEMA-013: Update Validation Configuration
+- ✅ Removed deprecated NutritionMetric validation implementation from optimized_validation.rs
+- ✅ Updated ValidationConfig field names from steps_min/steps_max to step_count_min/step_count_max for clarity
+- ✅ Updated environment variable names to VALIDATION_STEP_COUNT_MIN/MAX for consistency
+- ✅ Updated activity metric validation function to use new field names
+- ✅ Tested validation configuration works correctly with environment variables and defaults
+- ✅ All validation logic aligned with simplified schema (5 core metric types only)
+- ✅ Committed changes (cd0e2c9) and moved story from BACKLOG.md to DONE.md
+- 🎯 **Impact**: ValidationConfig now properly reflects simplified schema field names and removes deprecated metric type references
+- 🚀 **Ready for**: Next schema alignment stories in the validation and testing component
+
+**02:15 PM - Claude Code Agent**: 🎯 CLAIMING SCHEMA-010: Fix Raw Ingestions Table Queries
+- Updating INSERT queries to use payload_hash, payload_size_bytes, raw_payload instead of data_hash, raw_data
+- Removing references to api_key_id, ingested_at columns (don't exist in schema)
+- Updating status handling to use processing_status instead of status
+- Updating error handling to use processing_errors instead of error_message
+- Fixing all conflict resolution queries
+- Target: All raw_ingestions table queries aligned with actual schema
+
+**02:15 PM - Claude Code Agent**: 🎯 CLAIMING SCHEMA-011: Fix Database Model Structs
+- Fixing database model structs in src/models/db.rs
+- Updating ActivityRecord struct to match simplified schema fields
+- Updating WorkoutRecord struct field mappings
+- Fixing database conversion logic for all metric types
+- Updating merge logic for simplified field set
+- Target: Database model structs aligned with simplified schema
+
+**02:45 PM - Claude Code Agent**: 🎯 CLAIMING SCHEMA-015: Update Integration Tests
+- Updating integration tests for simplified schema
+- Removing tests for deprecated models (nutrition, symptoms, environmental, mental health, mobility, reproductive health)
+- Fixing field name assertions in existing tests (step_count, active_energy_burned_kcal, source_device)
+- Updating test database setup for simplified schema
+- Verifying all tests pass with schema changes
+- Target: Clean integration test suite aligned with 5 core metric types
+
+**01:45 PM - Claude Code Agent**: 🔧 CONTINUING SCHEMA-006: Fix Activity Metrics Field Name Mapping
+- Implementing field name fixes: steps→step_count, calories_burned→active_energy_burned_kcal
+- Updating batch_processor.rs, query.rs, export.rs, db.rs
+- Fixing SQL queries for activity metrics
+- Running tests and committing: "feat: fix activity metrics field name mapping"
+
+**02:00 PM - Claude Code Agent**: 🎯 CLAIMING SCHEMA-008: Fix Batch Processor SQL Queries
+- Fixing INSERT INTO activity_metrics queries to use step_count, active_energy_burned_kcal
+- Updating INSERT INTO blood_pressure_metrics to use source_device instead of source
+- Updating INSERT INTO workouts to use avg_heart_rate instead of average_heart_rate
+- Removing all references to activity_metrics_v2 table
+- Removing all INSERT queries for deleted metric tables (nutrition_metrics, symptoms, etc.)
+- Target: All batch processor SQL queries aligned with simplified schema
+
+**01:45 PM - Claude Code Agent**: 🎯 CLAIMING SCHEMA-009: Fix Handler Query Field Names
+- Fixing SQL queries in src/handlers/query.rs with step_count, active_energy_burned_kcal field names
+- Updating export.rs field references for activity metrics
+- Fixing workout queries to use started_at/ended_at field names  
+- Updating all query responses to match simplified schema fields
+- Testing query compilation and database compatibility
+- Target: All handler SQL queries use correct field names from simplified schema
+
+**02:15 PM - Claude Code Agent**: 🎯 CLAIMING SCHEMA-007: Fix Source Field Mapping
+- Fixing all 'source' field references to 'source_device' across all health metric models
+- Updating batch processor SQL queries to use source_device instead of source
+- Updating validation logic and iOS model conversion for source_device field
+- Checking and fixing database struct mappings in db.rs and health_metrics.rs
+- Testing compilation and ensuring all references are updated
+- Target: Complete source→source_device field mapping alignment across codebase
+
+**03:00 PM - Claude Code Agent**: ✅ COMPLETED SCHEMA-007: Fix Source Field Mapping
+- ✅ Updated iOS models (IosMetricData, IosWorkout) to use source_device field instead of source
+- ✅ Fixed iOS to internal format conversion logic to use data_point.source_device
+- ✅ Updated iOS workout conversion to use ios_workout.source_device
+- ✅ Verified core health metric models already used source_device correctly
+- ✅ Committed changes with comprehensive message (commit 1f22085)
+- ✅ Story moved from BACKLOG.md to DONE.md with completion timestamp
+- 🎯 **Impact**: Complete alignment of source field naming across iOS models and internal health metrics
+- 🚀 **Note**: Core models were already correct from previous schema work - focused on iOS conversion layer
+
+**03:15 PM - Claude Code Agent**: 🎯 CLAIMING SCHEMA-016: Clean Up Migration References
+- Removing migration file references for deleted health metric tables
+- Cleaning up migration test files for non-existent tables
+- Updating migration documentation
+- Target: Clean codebase with no references to deleted migration files or tables
+
+**03:30 PM - Claude Code Agent**: 🎯 CLAIMING SCHEMA-017: Update Configuration Documentation
+- Updating CLAUDE.md with simplified schema information
+- Removing references to deprecated metric types in documentation
+- Updating field name examples in documentation
+- Updating environment variable documentation in .env.example
+- Target: Complete documentation alignment with simplified 5-table schema

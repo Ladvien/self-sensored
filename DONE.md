@@ -98,6 +98,83 @@ Fix WorkoutData model structure to match workouts table schema exactly, ensuring
 
 ---
 
+#### [SCHEMA-013] Update Validation Configuration ✅ COMPLETED
+
+**Status:** ✅ COMPLETED 2025-09-12  
+**Story Points:** 2  
+**Assigned to:** Claude Code Agent  
+**Priority:** Medium  
+
+**Description:**  
+Update the validation configuration to remove deprecated metric type references and align field names with the simplified schema.
+
+**Acceptance Criteria Completed:**
+- ✅ Removed deprecated NutritionMetric validation implementation from optimized_validation.rs
+- ✅ Updated ValidationConfig field names from steps_min/steps_max to step_count_min/step_count_max
+- ✅ Updated environment variable names from VALIDATION_STEPS_MIN/MAX to VALIDATION_STEP_COUNT_MIN/MAX
+- ✅ Updated activity metric validation function to use new field names (step_count_min/step_count_max)
+- ✅ Validated configuration works correctly with environment variables and defaults
+- ✅ All validation logic aligned with simplified schema (5 core metric types only)
+
+**Files Modified:**
+- `src/config/validation_config.rs` - Updated field names and environment variable mappings
+- `src/models/health_metrics.rs` - Updated validation function to use new field names  
+- `src/models/optimized_validation.rs` - Removed deprecated NutritionMetric implementation
+
+**Definition of Done:**
+✅ Deprecated metric validation logic removed  
+✅ Field names match simplified schema  
+✅ Environment variables updated for consistency  
+✅ Validation functions use correct field references  
+✅ Configuration tested and working correctly  
+✅ Code compiles without validation errors  
+✅ Commit message follows convention  
+✅ Story moved from BACKLOG.md to DONE.md  
+
+**Commit:** cd0e2c9 - "feat: update validation configuration"
+
+---
+
+#### [SCHEMA-005] Fix Blood Pressure Model Context Field ✅ COMPLETED
+
+**Status:** ✅ COMPLETED 2025-09-12  
+**Story Points:** 1  
+**Assigned to:** Claude Code Agent  
+**Priority:** High  
+
+**Description:**  
+Remove the BloodPressureContext field from BloodPressureMetric model to align with the simplified database schema.
+
+**Acceptance Criteria Completed:**
+- ✅ Verified BloodPressureMetric struct has no context field (already correctly implemented)
+- ✅ Confirmed no BloodPressureContext enum exists in src/models/enums.rs
+- ✅ Verified validation functions don't check context field (already correct implementation)
+- ✅ Confirmed BloodPressureMetric model perfectly matches database schema fields:
+  * id (UUID, primary key), user_id (UUID, foreign key)
+  * recorded_at (TIMESTAMPTZ), systolic (INTEGER), diastolic (INTEGER) 
+  * pulse (Option<i16>), source_device (Option<String>)
+  * created_at (TIMESTAMPTZ)
+
+**Files Verified:**
+- `src/models/health_metrics.rs` - BloodPressureMetric struct confirmed correct
+- `src/models/enums.rs` - No BloodPressureContext enum (correct)
+- `/mnt/datadrive_m2/self-sensored/schema.sql` - Database schema confirmed matches model
+
+**Impact:** BloodPressureMetric model already aligned with simplified schema requirements. No code changes were required as the model was already correctly implemented without context field.
+
+**Dependencies:** SCHEMA-001 ✅
+
+**Definition of Done:**
+✅ Context field confirmed absent from BloodPressureMetric  
+✅ BloodPressureContext enum confirmed not exists  
+✅ Validation functions confirmed not checking context  
+✅ Model matches database schema exactly  
+✅ Story moved from BACKLOG.md to DONE.md  
+
+**Result:** No code changes required - requirements already met by previous schema alignment work.
+
+---
+
 ## Epic: Health Metrics Database Redesign
 
 ### Stream 1: Core Activity Metrics Redesign
@@ -3082,6 +3159,87 @@ Add user_id: UUID field to core health metric models for proper database foreign
 - `src/models/health_metrics.rs` - Confirmed all user_id fields present
 
 **Impact:** All core health metric models now have required user_id fields for database foreign key relationships. Story requirements were already met by previous schema alignment work.
+
+---
+
+#### [SCHEMA-007] Fix Source Field Mapping ✅ COMPLETED
+
+**Status:** ✅ COMPLETED 2025-09-12  
+**Story Points:** 2  
+**Assigned to:** Claude Code Agent  
+**Priority:** High  
+
+**Description:**  
+Fix all 'source' field references to 'source_device' across all health metric models, iOS conversion logic, and database struct mappings to align with the simplified schema.
+
+**Acceptance Criteria Completed:**
+- ✅ Updated iOS models (IosMetricData, IosWorkout) to use source_device field instead of source
+- ✅ Fixed iOS to internal format conversion logic to use data_point.source_device
+- ✅ Updated iOS workout conversion to use ios_workout.source_device 
+- ✅ All health metric models already used source_device correctly (HeartRateMetric, BloodPressureMetric, SleepMetric, ActivityMetric, WorkoutData)
+- ✅ Database struct mappings already aligned with source_device field naming
+
+**Files Modified:**
+- `src/models/ios_models.rs` - Updated struct fields and conversion logic to use source_device
+
+**Technical Details:**
+- Changed IosMetricData.source → source_device field name
+- Changed IosWorkout.source → source_device field name  
+- Updated all data_point.source references to data_point.source_device
+- Updated ios_workout.source references to ios_workout.source_device
+- Maintained backward compatibility for JSON deserialization
+
+**Impact:** Complete alignment of source field naming across iOS models and internal health metrics. All metric models now consistently use source_device field, eliminating schema mapping inconsistencies.
+
+**Note:** Core health metric models (HeartRateMetric, BloodPressureMetric, SleepMetric, ActivityMetric, WorkoutData) already used source_device correctly from previous schema alignment work. This story focused specifically on the iOS conversion layer.
+
+---
+
+#### [SCHEMA-012] Fix Authentication and User Table Queries ✅ COMPLETED
+
+**Status:** ✅ COMPLETED 2025-09-12  
+**Story Points:** 2  
+**Assigned to:** Claude Code Agent  
+**Priority:** Medium  
+
+**Description:**  
+Fix authentication queries in src/services/auth.rs to align with simplified database schema by removing non-existent column references and updating struct definitions.
+
+**Acceptance Criteria Completed:**
+- ✅ Updated User struct to match simplified schema:
+  - Removed full_name field (doesn't exist in schema)
+  - Added apple_health_id: Option<String> field
+  - Added metadata: Option<serde_json::Value> field
+- ✅ Updated ApiKey struct to match simplified schema:
+  - Replaced scopes with permissions: Option<serde_json::Value>
+  - Added rate_limit_per_hour: Option<i32> field
+  - Changed name field to Option<String> to match schema
+- ✅ Fixed all authentication queries to use correct column names:
+  - UUID authentication query updated with permissions, apple_health_id, metadata
+  - Hashed API key authentication query updated with correct field mappings
+  - All User and ApiKey struct instantiations fixed to match new schema
+- ✅ Removed audit_log table references:
+  - Updated log_audit_event method to use structured logging instead
+  - Maintains audit functionality through tracing logs
+- ✅ Updated all CRUD methods:
+  - get_user_by_email: Uses apple_health_id and metadata instead of full_name
+  - create_user: Updated parameters and INSERT query for new schema
+  - create_api_key: Uses permissions and rate_limit_per_hour fields
+  - list_api_keys: Returns correct ApiKey fields
+
+**Files Modified:**
+- `src/services/auth.rs` - Complete authentication service alignment with simplified schema
+
+**Technical Details:**
+- **User Schema Alignment**: User struct now matches users table exactly (id, email, apple_health_id, created_at, updated_at, is_active, metadata)
+- **ApiKey Schema Alignment**: ApiKey struct matches api_keys table exactly (id, user_id, name, created_at, expires_at, last_used_at, is_active, permissions, rate_limit_per_hour)
+- **Query Compatibility**: All SQL queries now reference only columns that exist in the simplified schema
+- **Audit Logging**: Converted to structured logging approach since audit_log table doesn't exist
+- **Type Safety**: All struct field types match database column types for proper SQLx mapping
+
+**Impact:** Authentication system now fully compatible with simplified database schema. All authentication operations (login, API key management, user creation) will work correctly with the updated schema structure. Eliminates runtime database errors from referencing non-existent columns.
+
+**Quality Assurance:** Changes maintain backward compatibility for authentication flows while aligning with current database structure. Structured logging preserves audit capability without requiring additional database tables.
 
 ---
 

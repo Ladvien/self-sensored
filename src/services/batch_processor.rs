@@ -44,12 +44,6 @@ pub struct DeduplicationStats {
     pub sleep_duplicates: usize,
     pub activity_duplicates: usize,
     pub workout_duplicates: usize,
-    pub nutrition_duplicates: usize,
-    pub symptom_duplicates: usize,
-    pub reproductive_health_duplicates: usize,
-    pub environmental_duplicates: usize,
-    pub mental_health_duplicates: usize,
-    pub mobility_duplicates: usize,
     pub total_duplicates: usize,
     pub deduplication_time_ms: u64,
 }
@@ -159,13 +153,7 @@ impl BatchProcessor {
 
         // Record batch processing start
         let total_metrics = payload.data.metrics.len() 
-            + payload.data.workouts.len()
-            + payload.data.nutrition_metrics.len()
-            + payload.data.symptom_metrics.len()
-            + payload.data.reproductive_health_metrics.len()
-            + payload.data.environmental_metrics.len()
-            + payload.data.mental_health_metrics.len()
-            + payload.data.mobility_metrics.len();
+            + payload.data.workouts.len();
 
         self.reset_counters();
 
@@ -183,14 +171,6 @@ impl BatchProcessor {
 
         // Put workouts back into grouped for deduplication
         grouped.workouts = all_workouts;
-        
-        // Add individual metric collections to the grouped data
-        grouped.nutrition_metrics.extend(payload.data.nutrition_metrics);
-        grouped.symptom_metrics.extend(payload.data.symptom_metrics);
-        grouped.reproductive_health_metrics.extend(payload.data.reproductive_health_metrics);
-        grouped.environmental_metrics.extend(payload.data.environmental_metrics);
-        grouped.mental_health_metrics.extend(payload.data.mental_health_metrics);
-        grouped.mobility_metrics.extend(payload.data.mobility_metrics);
 
         // Deduplicate metrics within the batch before database operations
         let (deduplicated_grouped, dedup_stats) =
@@ -368,12 +348,11 @@ impl BatchProcessor {
                 Self::process_with_retry(
                     "Activity",
                     || {
-                        Self::insert_activities_dual_write_static(
+                        Self::insert_activities_chunked(
                             &pool,
                             user_id,
                             activities.clone(),
                             chunk_size,
-                            config.enable_dual_write_activity_metrics,
                         )
                     },
                     &config,
@@ -501,7 +480,7 @@ impl BatchProcessor {
             let activities = std::mem::take(&mut grouped.activities);
             let (processed, failed, errors, retries) = Self::process_with_retry(
                 "Activity",
-                || self.insert_activities_dual_write(user_id, activities.clone()),
+                || self.insert_activities(user_id, activities.clone()),
                 &self.config,
             )
             .await;
@@ -663,12 +642,6 @@ impl BatchProcessor {
                 HealthMetric::Sleep(sleep) => grouped.sleep_metrics.push(sleep),
                 HealthMetric::Activity(activity) => grouped.activities.push(activity),
                 HealthMetric::Workout(workout) => grouped.workouts.push(workout),
-                HealthMetric::Nutrition(nutrition) => grouped.nutrition_metrics.push(nutrition),
-                HealthMetric::Symptom(symptom) => grouped.symptom_metrics.push(symptom),
-                HealthMetric::ReproductiveHealth(reproductive_health) => grouped.reproductive_health_metrics.push(reproductive_health),
-                HealthMetric::Environmental(environmental) => grouped.environmental_metrics.push(environmental),
-                HealthMetric::MentalHealth(mental_health) => grouped.mental_health_metrics.push(mental_health),
-                HealthMetric::Mobility(mobility) => grouped.mobility_metrics.push(mobility),
             }
         }
 
@@ -691,12 +664,6 @@ impl BatchProcessor {
                     sleep_duplicates: 0,
                     activity_duplicates: 0,
                     workout_duplicates: 0,
-                    nutrition_duplicates: 0,
-                    symptom_duplicates: 0,
-                    reproductive_health_duplicates: 0,
-                    environmental_duplicates: 0,
-                    mental_health_duplicates: 0,
-                    mobility_duplicates: 0,
                     total_duplicates: 0,
                     deduplication_time_ms: 0,
                 },
@@ -710,12 +677,6 @@ impl BatchProcessor {
             sleep_duplicates: 0,
             activity_duplicates: 0,
             workout_duplicates: 0,
-            nutrition_duplicates: 0,
-            symptom_duplicates: 0,
-            reproductive_health_duplicates: 0,
-            environmental_duplicates: 0,
-            mental_health_duplicates: 0,
-            mobility_duplicates: 0,
             total_duplicates: 0,
             deduplication_time_ms: 0,
         };
@@ -1145,7 +1106,7 @@ impl BatchProcessor {
 
         for (chunk_idx, chunk) in chunks.iter().enumerate() {
             let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
-                "INSERT INTO blood_pressure_metrics (user_id, recorded_at, systolic, diastolic, pulse, source) "
+                "INSERT INTO blood_pressure_metrics (user_id, recorded_at, systolic, diastolic, pulse, source_device) "
             );
 
             query_builder.push_values(chunk.iter(), |mut b, metric| {
@@ -1343,21 +1304,21 @@ impl BatchProcessor {
 
         for (chunk_idx, chunk) in chunks.iter().enumerate() {
             let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
-                "INSERT INTO activity_metrics (user_id, recorded_date, steps, distance_meters, calories_burned, active_minutes, flights_climbed, source_device) "
+                "INSERT INTO activity_metrics (user_id, recorded_at, step_count, distance_meters, flights_climbed, active_energy_burned_kcal, basal_energy_burned_kcal, source_device) "
             );
 
             query_builder.push_values(chunk.iter(), |mut b, metric| {
                 b.push_bind(user_id)
-                    .push_bind(metric.date)
+                    .push_bind(metric.recorded_at)
                     .push_bind(metric.step_count)
                     .push_bind(metric.distance_meters)
-                    .push_bind(metric.active_energy_burned_kcal)
-                    .push_bind(metric.active_minutes)
                     .push_bind(metric.flights_climbed)
+                    .push_bind(metric.active_energy_burned_kcal)
+                    .push_bind(metric.basal_energy_burned_kcal)
                     .push_bind(&metric.source_device);
             });
 
-            query_builder.push(" ON CONFLICT (user_id, recorded_date) DO NOTHING");
+            query_builder.push(" ON CONFLICT (user_id, recorded_at) DO NOTHING");
 
             let result = query_builder.build().execute(pool).await?;
             let chunk_inserted = result.rows_affected() as usize;
@@ -1432,7 +1393,7 @@ impl BatchProcessor {
 
         for (chunk_idx, chunk) in chunks.iter().enumerate() {
             let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
-                "INSERT INTO workouts (id, user_id, workout_type, started_at, ended_at, total_energy_kcal, distance_meters, average_heart_rate, max_heart_rate, source_device) "
+                "INSERT INTO workouts (id, user_id, workout_type, started_at, ended_at, total_energy_kcal, distance_meters, avg_heart_rate, max_heart_rate, source_device) "
             );
 
             query_builder.push_values(chunk.iter(), |mut b, workout| {
@@ -1445,14 +1406,14 @@ impl BatchProcessor {
                     .push_bind(workout.distance_meters)
                     .push_bind(workout.avg_heart_rate)
                     .push_bind(workout.max_heart_rate)
-                    .push_bind(&workout.source);
+                    .push_bind(&workout.source_device);
             });
 
             query_builder.push(" ON CONFLICT (user_id, started_at) DO UPDATE SET
                 ended_at = CASE WHEN EXCLUDED.ended_at > workouts.ended_at THEN EXCLUDED.ended_at ELSE workouts.ended_at END,
                 total_energy_kcal = COALESCE(EXCLUDED.total_energy_kcal, workouts.total_energy_kcal),
                 distance_meters = COALESCE(EXCLUDED.distance_meters, workouts.distance_meters),
-                average_heart_rate = COALESCE(EXCLUDED.average_heart_rate, workouts.average_heart_rate),
+                avg_heart_rate = COALESCE(EXCLUDED.avg_heart_rate, workouts.avg_heart_rate),
                 max_heart_rate = COALESCE(EXCLUDED.max_heart_rate, workouts.max_heart_rate),
                 updated_at = NOW()");
 
@@ -1472,283 +1433,7 @@ impl BatchProcessor {
         Ok(total_inserted)
     }
 
-    /// Dual-write insert for activity metrics - writes to both old and new tables with transaction rollback
-    /// 
-    /// ## PERFORMANCE IMPACT ANALYSIS
-    /// 
-    /// **Overhead Characteristics:**
-    /// - **Latency**: 1.8-2.3x increase in write latency compared to single-table writes
-    /// - **Throughput**: ~45% reduction in max throughput due to transaction coordination
-    /// - **Memory**: Additional 30-40% memory usage for duplicate metric storage during conversion
-    /// - **Database Load**: 2x write operations, 1.4x transaction coordinator overhead
-    /// 
-    /// **Benchmarks (10,000 records):**
-    /// ```
-    /// Single Table:    ~850ms  (11,764 records/sec)
-    /// Dual-Write:      ~1,850ms (5,405 records/sec)  
-    /// Overhead Ratio:  2.18x latency increase
-    /// ```
-    /// 
-    /// **Resource Consumption:**
-    /// - **CPU**: +60% due to data transformation and dual validation
-    /// - **Memory**: Peak +35% for metric conversion and buffering
-    /// - **I/O**: +95% disk writes, +40% WAL generation
-    /// - **Network**: Minimal impact (internal database operations)
-    /// 
-    /// **Failure Modes & Recovery:**
-    /// - **Consistency**: Transaction rollback ensures atomic operations
-    /// - **Partial Failure**: Detailed error logging with context for debugging
-    /// - **Recovery Time**: Automatic retry with exponential backoff
-    /// - **Data Loss**: Zero risk due to transaction atomicity
-    /// 
-    /// **Monitoring Metrics:**
-    /// - `dual_write_success_total`: Successful dual-write operations
-    /// - `dual_write_failure_total`: Failed operations with rollback
-    /// - `dual_write_consistency_errors`: Count mismatch between tables
-    /// - `dual_write_duration_seconds`: End-to-end operation timing
-    /// 
-    /// **Production Considerations:**
-    /// - Monitor transaction pool saturation during high-volume periods
-    /// - Alert on >5% consistency failures (indicates data quality issues)
-    /// - Scale database connections proportionally to dual-write load
-    /// - Consider read replicas for dashboard queries during migration
-    /// 
-    /// **Migration Strategy:**
-    /// 1. **Phase 1**: Dual-write enabled, new table not queried (current)
-    /// 2. **Phase 2**: Gradual read migration to new table for analytics
-    /// 3. **Phase 3**: All reads from new table, old table write-only
-    /// 4. **Phase 4**: Disable dual-write, remove old table (ETA: Q2 2025)
-    async fn insert_activities_dual_write(
-        &self,
-        user_id: Uuid,
-        metrics: Vec<crate::models::ActivityMetric>,
-    ) -> Result<usize, sqlx::Error> {
-        if metrics.is_empty() {
-            return Ok(0);
-        }
 
-        if !self.config.enable_dual_write_activity_metrics {
-            // If dual-write is disabled, just write to the old table
-            return self.insert_activities(user_id, metrics).await;
-        }
-
-        let start_time = std::time::Instant::now();
-
-        // Begin transaction for dual-write atomicity
-        let mut tx = self.pool.begin().await?;
-
-        info!(
-            user_id = %user_id,
-            metric_count = metrics.len(),
-            "Starting dual-write activity metrics transaction"
-        );
-
-        // Record dual-write metrics start
-        Metrics::record_dual_write_start("activity_metrics", metrics.len() as u64);
-
-        // Convert old metrics to new format for the v2 table
-        let v2_metrics: Vec<crate::models::ActivityMetricV2> = metrics
-            .iter()
-            .map(|metric| crate::models::ActivityMetricV2::from_activity_metric(metric))
-            .collect();
-
-        // Attempt to insert into both tables
-        let old_table_result = Self::insert_activities_chunked_tx(
-            &mut tx,
-            user_id,
-            metrics.clone(),
-            self.config.activity_chunk_size,
-        )
-        .await;
-
-        let new_table_result = Self::insert_activities_v2_chunked_tx(
-            &mut tx,
-            user_id,
-            v2_metrics,
-            self.config.activity_chunk_size,
-        )
-        .await;
-
-        match (old_table_result, new_table_result) {
-            (Ok(old_count), Ok(new_count)) => {
-                // Both insertions succeeded - validate consistency before committing
-                if old_count != new_count {
-                    // Data consistency violation: record count mismatch
-                    error!(
-                        user_id = %user_id,
-                        old_table_count = old_count,
-                        new_table_count = new_count,
-                        expected_count = metrics.len(),
-                        "Dual-write consistency failure: record count mismatch between tables"
-                    );
-                    
-                    // Rollback transaction due to consistency violation
-                    tx.rollback().await?;
-                    
-                    let duration = start_time.elapsed();
-                    Metrics::record_dual_write_failure(
-                        "activity_metrics",
-                        metrics.len() as u64,
-                        duration,
-                    );
-                    
-                    return Err(sqlx::Error::Database(Box::new(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!(
-                            "Dual-write consistency failure: old table inserted {} records, new table inserted {} records for {} input metrics",
-                            old_count, new_count, metrics.len()
-                        )
-                    ))));
-                }
-
-                // Commit transaction only after consistency validation
-                if let Err(commit_error) = tx.commit().await {
-                    error!(
-                        user_id = %user_id,
-                        error = ?commit_error,
-                        "Transaction commit failed after successful dual-write"
-                    );
-                    
-                    let duration = start_time.elapsed();
-                    Metrics::record_dual_write_failure(
-                        "activity_metrics",
-                        metrics.len() as u64,
-                        duration,
-                    );
-                    
-                    return Err(commit_error);
-                }
-
-                let duration = start_time.elapsed();
-                info!(
-                    user_id = %user_id,
-                    record_count = old_count,
-                    duration_ms = duration.as_millis(),
-                    "Dual-write activity metrics completed successfully with consistency validation"
-                );
-
-                // Record successful dual-write metrics
-                Metrics::record_dual_write_success("activity_metrics", old_count as u64, duration);
-
-                Ok(old_count) // Return count from primary table
-            }
-            (old_result, new_result) => {
-                // At least one insertion failed, rollback transaction with detailed error context
-                if let Err(rollback_error) = tx.rollback().await {
-                    error!(
-                        user_id = %user_id,
-                        rollback_error = ?rollback_error,
-                        old_table_error = ?old_result.as_ref().err(),
-                        new_table_error = ?new_result.as_ref().err(),
-                        "Failed to rollback transaction after dual-write failure"
-                    );
-                }
-
-                let duration = start_time.elapsed();
-                error!(
-                    user_id = %user_id,
-                    old_table_error = ?old_result.as_ref().err(),
-                    new_table_error = ?new_result.as_ref().err(),
-                    duration_ms = duration.as_millis(),
-                    metric_count = metrics.len(),
-                    "Dual-write activity metrics failed, transaction rolled back"
-                );
-
-                // Record failed dual-write metrics with detailed context
-                Metrics::record_dual_write_failure(
-                    "activity_metrics",
-                    metrics.len() as u64,
-                    duration,
-                );
-
-                // Return the most informative error with dual-write context
-                match (old_result, new_result) {
-                    (Err(old_error), Err(new_error)) => {
-                        // Both failed - return error with context about both
-                        let combined_message = format!(
-                            "Dual-write failure - Old table error: {}; New table error: {}",
-                            old_error, new_error
-                        );
-                        Err(sqlx::Error::Database(Box::new(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            combined_message,
-                        ))))
-                    }
-                    (Err(old_error), Ok(new_count)) => {
-                        // Old table failed, new succeeded
-                        let partial_message = format!(
-                            "Dual-write partial failure - Old table failed: {}; New table succeeded with {} records",
-                            old_error, new_count
-                        );
-                        Err(sqlx::Error::Database(Box::new(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            partial_message,
-                        ))))
-                    }
-                    (Ok(old_count), Err(new_error)) => {
-                        // New table failed, old succeeded
-                        let partial_message = format!(
-                            "Dual-write partial failure - Old table succeeded with {} records; New table failed: {}",
-                            old_count, new_error
-                        );
-                        Err(sqlx::Error::Database(Box::new(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            partial_message,
-                        ))))
-                    }
-                    _ => unreachable!("This case is handled above"),
-                }
-            }
-        }
-    }
-
-    /// Insert activity metrics into old table within transaction
-    async fn insert_activities_chunked_tx(
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        user_id: Uuid,
-        metrics: Vec<crate::models::ActivityMetric>,
-        chunk_size: usize,
-    ) -> Result<usize, sqlx::Error> {
-        if metrics.is_empty() {
-            return Ok(0);
-        }
-
-        let mut total_inserted = 0;
-        let chunks: Vec<_> = metrics.chunks(chunk_size).collect();
-
-        for (chunk_idx, chunk) in chunks.iter().enumerate() {
-            let mut query_builder: QueryBuilder<sqlx::Postgres> = QueryBuilder::new(
-                "INSERT INTO activity_metrics (user_id, recorded_date, steps, distance_meters, calories_burned, active_minutes, flights_climbed, source_device) "
-            );
-
-            query_builder.push_values(chunk.iter(), |mut b, metric| {
-                b.push_bind(user_id)
-                    .push_bind(metric.date)
-                    .push_bind(metric.step_count)
-                    .push_bind(metric.distance_meters)
-                    .push_bind(metric.active_energy_burned_kcal)
-                    .push_bind(metric.active_minutes)
-                    .push_bind(metric.flights_climbed)
-                    .push_bind(&metric.source_device);
-            });
-
-            query_builder.push(" ON CONFLICT (user_id, recorded_date) DO NOTHING");
-
-            let result = query_builder.build().execute(&mut **tx).await?;
-            let chunk_inserted = result.rows_affected() as usize;
-            total_inserted += chunk_inserted;
-
-            debug!(
-                chunk_index = chunk_idx + 1,
-                chunk_records = chunk.len(),
-                chunk_inserted = chunk_inserted,
-                total_inserted = total_inserted,
-                "Activity old table chunk processed in transaction"
-            );
-        }
-
-        Ok(total_inserted)
-    }
 
     /// Insert activity metrics into new v2 table within transaction
     async fn insert_activities_v2_chunked_tx(
@@ -2035,10 +1720,4 @@ struct GroupedMetrics {
     sleep_metrics: Vec<crate::models::SleepMetric>,
     activities: Vec<crate::models::ActivityMetric>,
     workouts: Vec<crate::models::WorkoutData>,
-    nutrition_metrics: Vec<crate::models::NutritionMetric>,
-    symptom_metrics: Vec<crate::models::SymptomMetric>,
-    reproductive_health_metrics: Vec<crate::models::ReproductiveHealthMetric>,
-    environmental_metrics: Vec<crate::models::EnvironmentalMetric>,
-    mental_health_metrics: Vec<crate::models::MentalHealthMetric>,
-    mobility_metrics: Vec<crate::models::MobilityMetric>,
 }

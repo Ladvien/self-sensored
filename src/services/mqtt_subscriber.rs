@@ -113,44 +113,37 @@ impl MqttSubscriber {
         // Calculate data hash for deduplication
         let mut hasher = Sha256::new();
         hasher.update(payload.as_bytes());
-        let data_hash = format!("{:x}", hasher.finalize());
-
-        // Use a dedicated MQTT API key ID (you should create this in your database)
-        let api_key_id = Uuid::parse_str("2d56f485-85bc-4337-839d-9b08a6626baf")?; // Your existing test API key
+        let payload_hash = format!("{:x}", hasher.finalize());
+        let payload_size = payload.len() as i32;
 
         // Store raw payload in database
         let result = sqlx::query!(
             r#"
-            INSERT INTO raw_ingestions (id, user_id, api_key_id, raw_data, data_hash, ingested_at, status) 
-            VALUES ($1, $2, $3, $4, $5, NOW(), 'pending')
-            ON CONFLICT (user_id, data_hash, ingested_at) DO NOTHING
+            INSERT INTO raw_ingestions (id, user_id, payload_hash, payload_size_bytes, raw_payload, processing_status) 
+            VALUES ($1, $2, $3, $4, $5, 'pending')
             RETURNING id
             "#,
             Uuid::new_v4(),
             user_id,
-            api_key_id,
-            data,
-            data_hash
+            payload_hash,
+            payload_size,
+            data
         )
-        .fetch_optional(&self.pool)
+        .fetch_one(&self.pool)
         .await?;
 
-        if let Some(record) = result {
-            info!(
-                "Stored MQTT health data with ID: {} for user: {}",
-                record.id, user_id
-            );
+        info!(
+            "Stored MQTT health data with ID: {} for user: {}",
+            result.id, user_id
+        );
 
-            // Mark as ready for processing
-            sqlx::query!(
-                "UPDATE raw_ingestions SET status = 'ready' WHERE id = $1",
-                record.id
-            )
-            .execute(&self.pool)
-            .await?;
-        } else {
-            warn!("Duplicate MQTT data received (already processed)");
-        }
+        // Mark as ready for processing
+        sqlx::query!(
+            "UPDATE raw_ingestions SET processing_status = 'ready' WHERE id = $1",
+            result.id
+        )
+        .execute(&self.pool)
+        .await?;
 
         Ok(())
     }

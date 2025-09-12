@@ -282,32 +282,21 @@ pub async fn store_raw_payload(
 
     let payload_json = serde_json::to_string(payload).map_err(sqlx::Error::decode)?;
     let payload_hash = format!("{:x}", Sha256::digest(payload_json.as_bytes()));
+    let payload_size = payload_json.len() as i32;
 
     let result = sqlx::query!(
         r#"
-        INSERT INTO raw_ingestions (user_id, api_key_id, raw_data, data_hash) 
+        INSERT INTO raw_ingestions (user_id, payload_hash, payload_size_bytes, raw_payload) 
         VALUES ($1, $2, $3, $4) 
-        ON CONFLICT (user_id, data_hash, ingested_at) DO NOTHING
         RETURNING id
         "#,
         auth.user.id,
-        auth.api_key.id,
-        serde_json::to_value(payload).map_err(|e| sqlx::Error::decode(e))?,
-        payload_hash
+        payload_hash,
+        payload_size,
+        serde_json::to_value(payload).map_err(|e| sqlx::Error::decode(e))?
     )
-    .fetch_optional(pool)
+    .fetch_one(pool)
     .await?;
 
-    match result {
-        Some(record) => Ok(record.id),
-        None => {
-            let existing = sqlx::query!(
-                "SELECT id FROM raw_ingestions WHERE data_hash = $1 LIMIT 1",
-                payload_hash
-            )
-            .fetch_one(pool)
-            .await?;
-            Ok(existing.id)
-        }
-    }
+    Ok(result.id)
 }
