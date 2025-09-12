@@ -45,6 +45,7 @@ pub struct SleepMetric {
 /// Activity metrics (simplified schema matching database)
 #[derive(Debug, Deserialize, Serialize, Clone, FromRow)]
 pub struct ActivityMetric {
+    pub id: uuid::Uuid,
     pub user_id: uuid::Uuid,
     pub recorded_at: DateTime<Utc>,
     pub step_count: Option<i32>,
@@ -53,6 +54,7 @@ pub struct ActivityMetric {
     pub active_energy_burned_kcal: Option<f64>,
     pub basal_energy_burned_kcal: Option<f64>,
     pub source_device: Option<String>,
+    pub created_at: DateTime<Utc>,
 }
 
 
