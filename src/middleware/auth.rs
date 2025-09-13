@@ -1,6 +1,6 @@
 use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
-    Error, HttpMessage, Result,
+    Error, HttpMessage, HttpResponse, Result,
 };
 use futures_util::future::LocalBoxFuture;
 use std::{
@@ -19,7 +19,7 @@ where
     S::Future: 'static,
     B: 'static,
 {
-    type Response = ServiceResponse<B>;
+    type Response = ServiceResponse<actix_web::body::EitherBody<B>>;
     type Error = Error;
     type Transform = AuthMiddlewareService<S>;
     type InitError = ();
@@ -42,7 +42,7 @@ where
     S::Future: 'static,
     B: 'static,
 {
-    type Response = ServiceResponse<B>;
+    type Response = ServiceResponse<actix_web::body::EitherBody<B>>;
     type Error = Error;
     type Future = LocalBoxFuture<'static, Result<Self::Response, Self::Error>>;
 
@@ -54,7 +54,9 @@ where
         Box::pin(async move {
             // Skip auth for health check endpoints
             if req.path() == "/health" || req.path() == "/api/v1/status" {
-                return service.call(req).await;
+                return service.call(req).await.map(|res| {
+                    res.map_into_left_body()
+                });
             }
 
             // Extract client IP and user agent for audit logging
@@ -115,7 +117,9 @@ where
                                     );
                                     // Store auth context in request extensions for use by handlers
                                     req.extensions_mut().insert(auth_context);
-                                    return service.call(req).await;
+                                    return service.call(req).await.map(|res| {
+                                        res.map_into_left_body()
+                                    });
                                 }
                                 Err(e) => {
                                     tracing::warn!(
@@ -124,16 +128,20 @@ where
                                         client_ip_str,
                                         &token[..token.len().min(10)]
                                     );
-                                    return Err(actix_web::error::ErrorUnauthorized(
-                                        "Invalid API key",
-                                    ));
+                                    let (req, _) = req.into_parts();
+                                    let response = HttpResponse::Unauthorized()
+                                        .insert_header(("content-type", "text/plain"))
+                                        .body("Invalid API key");
+                                    return Ok(ServiceResponse::new(req, response.map_into_right_body()));
                                 }
                             }
                         } else {
                             tracing::error!("AuthService not found in app data");
-                            return Err(actix_web::error::ErrorInternalServerError(
-                                "Authentication service unavailable",
-                            ));
+                            let (req, _) = req.into_parts();
+                            let response = HttpResponse::InternalServerError()
+                                .insert_header(("content-type", "text/plain"))
+                                .body("Authentication service unavailable");
+                            return Ok(ServiceResponse::new(req, response.map_into_right_body()));
                         }
                     } else {
                         tracing::warn!(
@@ -152,9 +160,11 @@ where
             }
 
             // No valid Bearer token found
-            Err(actix_web::error::ErrorUnauthorized(
-                "Missing or invalid authorization header",
-            ))
+            let (req, _) = req.into_parts();
+            let response = HttpResponse::Unauthorized()
+                .insert_header(("content-type", "text/plain"))
+                .body("Missing or invalid authorization header");
+            Ok(ServiceResponse::new(req, response.map_into_right_body()))
         })
     }
 }

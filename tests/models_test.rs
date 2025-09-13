@@ -5,7 +5,7 @@ use uuid::Uuid;
 use self_sensored::models::{
     ActivityMetric, BloodPressureMetric, HealthMetric, HeartRateMetric, IngestData, IngestPayload,
     IosIngestData, IosIngestPayload, IosMetric, IosMetricData, SleepMetric,
-    WorkoutData, enums::ActivityContext,
+    WorkoutData, enums::{ActivityContext, WorkoutType},
 };
 
 #[test]
@@ -52,10 +52,9 @@ fn test_standard_payload_serialization() {
                 HealthMetric::Sleep(SleepMetric {
                     id: Uuid::new_v4(),
                     user_id,
-                    recorded_at: now,
                     sleep_start: now - chrono::Duration::hours(8),
                     sleep_end: now,
-                    duration_minutes: 480,
+                    duration_minutes: Some(480),
                     deep_sleep_minutes: Some(120),
                     rem_sleep_minutes: Some(90),
                     light_sleep_minutes: Some(240),
@@ -68,7 +67,7 @@ fn test_standard_payload_serialization() {
             workouts: vec![WorkoutData {
                 id: Uuid::new_v4(),
                 user_id,
-                workout_type: "Running".to_string(),
+                workout_type: WorkoutType::Running,
                 started_at: now - chrono::Duration::hours(1),
                 ended_at: now,
                 total_energy_kcal: Some(300.0),
@@ -162,7 +161,7 @@ fn test_ios_payload_conversion() {
     assert_eq!(hr_metrics.len(), 1, "Should have heart rate metric");
 
     if let HealthMetric::HeartRate(hr) = &hr_metrics[0] {
-        assert_eq!(hr.heart_rate, 75);
+        assert_eq!(hr.heart_rate, Some(75));
     }
 }
 
@@ -176,8 +175,9 @@ fn test_metric_validation() {
         id: Uuid::new_v4(),
         user_id,
         recorded_at: now,
-        heart_rate: 75,
+        heart_rate: Some(75),
         resting_heart_rate: Some(65),
+        heart_rate_variability: None,
         context: None,
         source_device: Some("Test".to_string()),
         created_at: now,
@@ -189,8 +189,9 @@ fn test_metric_validation() {
         id: Uuid::new_v4(),
         user_id,
         recorded_at: now,
-        heart_rate: 400, // Invalid
+        heart_rate: Some(400), // Invalid
         resting_heart_rate: Some(75),
+        heart_rate_variability: None,
         context: None,
         source_device: Some("Test".to_string()),
         created_at: now,
@@ -227,10 +228,9 @@ fn test_metric_validation() {
     let valid_sleep = HealthMetric::Sleep(SleepMetric {
         id: Uuid::new_v4(),
         user_id,
-        recorded_at: now,
         sleep_start: now - chrono::Duration::hours(8),
         sleep_end: now,
-        duration_minutes: 480,
+        duration_minutes: Some(480),
         deep_sleep_minutes: Some(120),
         rem_sleep_minutes: Some(90),
         light_sleep_minutes: Some(240),
@@ -245,10 +245,9 @@ fn test_metric_validation() {
     let invalid_sleep = HealthMetric::Sleep(SleepMetric {
         id: Uuid::new_v4(),
         user_id,
-        recorded_at: now,
         sleep_start: now,
         sleep_end: now - chrono::Duration::hours(1), // Invalid
-        duration_minutes: 60,
+        duration_minutes: Some(60),
         deep_sleep_minutes: None,
         rem_sleep_minutes: None,
         light_sleep_minutes: None,
@@ -310,9 +309,10 @@ fn test_large_payload_performance() {
                     id: Uuid::new_v4(),
                     user_id,
                     recorded_at: timestamp,
-                    heart_rate: 70 + (i % 50) as i32,
+                    heart_rate: Some((70 + (i % 50)) as i16),
                     resting_heart_rate: Some(65),
-                    context: Some("resting".to_string()),
+                    heart_rate_variability: None,
+                    context: Some(ActivityContext::Resting),
                     source_device: Some("Performance Test".to_string()),
                     created_at: now,
                 }));
@@ -322,8 +322,8 @@ fn test_large_payload_performance() {
                     id: Uuid::new_v4(),
                     user_id,
                     recorded_at: timestamp,
-                    systolic: 110 + (i % 30) as i32,
-                    diastolic: 70 + (i % 20) as i32,
+                    systolic: (110 + (i % 30)) as i16,
+                    diastolic: (70 + (i % 20)) as i16,
                     pulse: Some(65 + (i % 40) as i16),
                     source_device: Some("Performance Test".to_string()),
                     created_at: now,
@@ -349,15 +349,14 @@ fn test_large_payload_performance() {
                     metrics.push(HealthMetric::Sleep(SleepMetric {
                         id: Uuid::new_v4(),
                         user_id,
-                        recorded_at: timestamp,
                         sleep_start: timestamp - chrono::Duration::hours(8),
                         sleep_end: timestamp,
-                        duration_minutes: 420 + (i % 120) as i32,
+                        duration_minutes: Some(420 + (i % 120) as i32),
                         deep_sleep_minutes: Some(90 + (i % 60) as i32),
                         rem_sleep_minutes: Some(60 + (i % 40) as i32),
                         light_sleep_minutes: Some(240 + (i % 60) as i32),
                         awake_minutes: Some(i % 30 as i32),
-                        efficiency: Some(80.0 + (i % 20) as f32),
+                        efficiency: Some(80.0 + (i % 20) as f64),
                         source_device: Some("Performance Test".to_string()),
                         created_at: now,
                     }));
@@ -438,9 +437,10 @@ fn test_metric_type_identification() {
         id: Uuid::new_v4(),
         user_id,
         recorded_at: now,
-        heart_rate: 75,
+        heart_rate: Some(75),
         resting_heart_rate: Some(65),
-        context: Some("resting".to_string()),
+        heart_rate_variability: None,
+        context: Some(ActivityContext::Resting),
         source_device: Some("Test".to_string()),
         created_at: now,
     });
@@ -459,10 +459,9 @@ fn test_metric_type_identification() {
     let sleep_metric = HealthMetric::Sleep(SleepMetric {
         id: Uuid::new_v4(),
         user_id,
-        recorded_at: now,
         sleep_start: now - chrono::Duration::hours(8),
         sleep_end: now,
-        duration_minutes: 480,
+        duration_minutes: Some(480),
         deep_sleep_minutes: Some(120),
         rem_sleep_minutes: Some(90),
         light_sleep_minutes: Some(240),

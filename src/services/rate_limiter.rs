@@ -310,24 +310,30 @@ impl RateLimiter {
             entry.reset_time = Utc::now() + chrono::Duration::hours(1);
         }
 
-        // Check if limit exceeded
-        if entry.count >= limit {
+        // Increment counter first
+        entry.count += 1;
+        
+        let remaining = limit - entry.count;
+        
+        // Check if limit exceeded after incrementing
+        if remaining < 0 {
             return Ok(RateLimitInfo {
-                requests_remaining: 0,
+                requests_remaining: 0, // Don't return negative values
                 requests_limit: limit,
                 reset_time: entry.reset_time,
-                retry_after: Some((entry.reset_time - Utc::now()).num_seconds() as i32),
+                retry_after: Some((entry.reset_time - Utc::now()).num_seconds().max(0) as i32),
             });
         }
 
-        // Increment counter
-        entry.count += 1;
-
         Ok(RateLimitInfo {
-            requests_remaining: limit - entry.count,
+            requests_remaining: remaining,
             requests_limit: limit,
             reset_time: entry.reset_time,
-            retry_after: None,
+            retry_after: if remaining < 0 {
+                Some((entry.reset_time - Utc::now()).num_seconds().max(0) as i32)
+            } else {
+                None
+            },
         })
     }
 
@@ -366,24 +372,30 @@ impl RateLimiter {
             entry.reset_time = Utc::now() + chrono::Duration::hours(1);
         }
 
-        // Check if limit exceeded
-        if entry.count >= self.requests_per_hour {
+        // Increment counter first
+        entry.count += 1;
+        
+        let remaining = self.requests_per_hour - entry.count;
+        
+        // Check if limit exceeded after incrementing
+        if remaining < 0 {
             return Ok(RateLimitInfo {
-                requests_remaining: 0,
+                requests_remaining: 0, // Don't return negative values
                 requests_limit: self.requests_per_hour,
                 reset_time: entry.reset_time,
-                retry_after: Some((entry.reset_time - Utc::now()).num_seconds() as i32),
+                retry_after: Some((entry.reset_time - Utc::now()).num_seconds().max(0) as i32),
             });
         }
 
-        // Increment counter
-        entry.count += 1;
-
         Ok(RateLimitInfo {
-            requests_remaining: self.requests_per_hour - entry.count,
+            requests_remaining: remaining,
             requests_limit: self.requests_per_hour,
             reset_time: entry.reset_time,
-            retry_after: None,
+            retry_after: if remaining < 0 {
+                Some((entry.reset_time - Utc::now()).num_seconds().max(0) as i32)
+            } else {
+                None
+            },
         })
     }
 

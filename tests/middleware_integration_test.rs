@@ -29,8 +29,9 @@ async fn test_full_auth_flow() {
     // Create a test user and API key
     let user = auth_service
         .create_user(
-            "integration-test@example.com",
-            Some("Integration Test User"),
+            &format!("integration-test-{}@example.com", uuid::Uuid::new_v4()),
+            Some(&format!("integration_test_user_{}", uuid::Uuid::new_v4())),
+            Some(serde_json::json!({"name": "Integration Test User"}))
         )
         .await
         .unwrap();
@@ -38,9 +39,10 @@ async fn test_full_auth_flow() {
     let (api_key, _) = auth_service
         .create_api_key(
             user.id,
-            "Integration Test Key",
+            Some("Integration Test Key"),
             None,
-            vec!["read".to_string(), "write".to_string()],
+            Some(serde_json::json!(["read", "write"])),
+            None
         )
         .await
         .unwrap();
@@ -125,16 +127,17 @@ async fn test_rate_limiting() {
 
     // Create a test user and API key
     let user = auth_service
-        .create_user("rate-limit-test@example.com", Some("Rate Limit Test User"))
+        .create_user(&format!("rate-limit-test-{}@example.com", uuid::Uuid::new_v4()), Some(&format!("rate_limit_test_{}", uuid::Uuid::new_v4())), Some(serde_json::json!({"name": "Rate Limit Test User"})))
         .await
         .unwrap();
 
     let (api_key, _) = auth_service
         .create_api_key(
             user.id,
-            "Rate Limit Test Key",
+            Some("Rate Limit Test Key"),
             None,
-            vec!["read".to_string()],
+            Some(serde_json::json!(["read"])),
+            None
         )
         .await
         .unwrap();
@@ -197,7 +200,7 @@ async fn test_api_key_expiration() {
 
     // Create a test user and expired API key
     let user = auth_service
-        .create_user("expiry-test@example.com", Some("Expiry Test User"))
+        .create_user(&format!("expiry-test-{}@example.com", uuid::Uuid::new_v4()), Some(&format!("expiry_test_{}", uuid::Uuid::new_v4())), Some(serde_json::json!({"name": "Expiry Test User"})))
         .await
         .unwrap();
 
@@ -205,9 +208,10 @@ async fn test_api_key_expiration() {
     let (expired_api_key, _) = auth_service
         .create_api_key(
             user.id,
-            "Expired Test Key",
+            Some("Expired Test Key"),
             Some(expired_time),
-            vec!["read".to_string()],
+            Some(serde_json::json!(["read"])),
+            None
         )
         .await
         .unwrap();
@@ -246,12 +250,12 @@ async fn test_inactive_user() {
 
     // Create a test user and API key
     let user = auth_service
-        .create_user("inactive-test@example.com", Some("Inactive Test User"))
+        .create_user(&format!("inactive-test-{}@example.com", uuid::Uuid::new_v4()), Some(&format!("inactive_test_{}", uuid::Uuid::new_v4())), Some(serde_json::json!({"name": "Inactive Test User"})))
         .await
         .unwrap();
 
     let (api_key, _) = auth_service
-        .create_api_key(user.id, "Inactive Test Key", None, vec!["read".to_string()])
+        .create_api_key(user.id, Some("Inactive Test Key"), None, Some(serde_json::json!(["read"])), None)
         .await
         .unwrap();
 

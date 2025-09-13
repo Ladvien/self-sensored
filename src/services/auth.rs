@@ -370,6 +370,7 @@ impl AuthService {
             .fetch_all(&self.pool)
             .await?;
 
+
             // Find the matching API key by verifying hashes
             // Only process keys with valid Argon2 hash format (robust replacement for LIKE '$argon2%')
             for row in api_keys {

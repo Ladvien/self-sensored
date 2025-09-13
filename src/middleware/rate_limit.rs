@@ -1,4 +1,5 @@
 use actix_web::{
+    body::{EitherBody, MessageBody},
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
     http::header::{HeaderName, HeaderValue},
     Error, HttpMessage, HttpResponse,
@@ -82,9 +83,9 @@ impl<S, B> Transform<S, ServiceRequest> for RateLimitMiddleware
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
     S::Future: 'static,
-    B: 'static,
+    B: MessageBody + 'static,
 {
-    type Response = ServiceResponse<B>;
+    type Response = ServiceResponse<EitherBody<B>>;
     type Error = Error;
     type Transform = RateLimitMiddlewareService<S>;
     type InitError = ();
@@ -105,9 +106,9 @@ impl<S, B> Service<ServiceRequest> for RateLimitMiddlewareService<S>
 where
     S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
     S::Future: 'static,
-    B: 'static,
+    B: MessageBody + 'static,
 {
-    type Response = ServiceResponse<B>;
+    type Response = ServiceResponse<EitherBody<B>>;
     type Error = Error;
     type Future = LocalBoxFuture<'static, Result<Self::Response, Self::Error>>;
 
@@ -120,7 +121,8 @@ where
             // Skip rate limiting for health check and metrics endpoints
             let path = req.path();
             if path == "/health" || path == "/metrics" {
-                return service.call(req).await;
+                let res = service.call(req).await?;
+                return Ok(res.map_into_left_body());
             }
 
             // Get the RateLimiter from app data
@@ -190,7 +192,7 @@ where
                             Metrics::record_rate_limit_exhaustion(limit_type, path, "90_percent");
                         }
 
-                        if rate_limit_info.requests_remaining <= 0
+                        if rate_limit_info.requests_remaining < 0
                             || rate_limit_info.retry_after.is_some()
                         {
                             // Rate limit exceeded
@@ -219,21 +221,21 @@ where
                                 builder.insert_header(("retry-after", retry_seconds.to_string()));
                             }
 
-                            // Return error response which will be handled by Actix-web
-                            Err(actix_web::error::ErrorTooManyRequests(
-                                serde_json::json!({
-                                    "error": "rate_limit_exceeded",
-                                    "message": "Too many requests. Please try again later.",
-                                    "retry_after": rate_limit_info.retry_after,
-                                    "rate_limit": {
-                                        "limit": rate_limit_info.requests_limit,
-                                        "remaining": rate_limit_info.requests_remaining.max(0),
-                                        "reset": rate_limit_info.reset_time.timestamp()
-                                    }
-                                })
-                                .to_string(),
-                            )
-                            .into())
+                            // Return 429 response properly with correct body type
+                            let response = builder.json(serde_json::json!({
+                                "error": "rate_limit_exceeded",
+                                "message": "Too many requests. Please try again later.",
+                                "retry_after": rate_limit_info.retry_after,
+                                "rate_limit": {
+                                    "limit": rate_limit_info.requests_limit,
+                                    "remaining": rate_limit_info.requests_remaining.max(0),
+                                    "reset": rate_limit_info.reset_time.timestamp()
+                                }
+                            }));
+                            
+                            // Convert to ServiceResponse with EitherBody
+                            let (request, _) = req.into_parts();
+                            Ok(ServiceResponse::new(request, response).map_into_right_body())
                         } else {
                             // Request allowed, proceed with service call
                             debug!(
@@ -272,20 +274,22 @@ where
                                 );
                             }
 
-                            Ok(response)
+                            Ok(response.map_into_left_body())
                         }
                     }
                     Err(e) => {
                         warn!("Rate limiting service error: {}", e);
                         // On rate limiting service error, allow request to proceed but log the issue
                         // This ensures the API remains available even if Redis is down
-                        service.call(req).await
+                        let res = service.call(req).await?;
+                        Ok(res.map_into_left_body())
                     }
                 }
             } else {
                 warn!("RateLimiter not found in app data");
                 // If rate limiter is not available, allow the request to proceed
-                service.call(req).await
+                let res = service.call(req).await?;
+                Ok(res.map_into_left_body())
             }
         })
     }

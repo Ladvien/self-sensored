@@ -59,21 +59,21 @@ async fn test_create_and_authenticate_user() {
 
     // Create user
     let user = auth_service
-        .create_user("test@example.com", Some("Test User"))
+        .create_user("test@example.com", Some("test_user_123"), Some(serde_json::json!({"name": "Test User"})))
         .await
         .unwrap();
 
     assert_eq!(user.email, "test@example.com");
-    assert_eq!(user.full_name, Some("Test User".to_string()));
+    assert_eq!(user.apple_health_id, Some("test_user_123".to_string()));
     assert_eq!(user.is_active, Some(true));
 
     // Create API key for user
     let (plain_key, api_key) = auth_service
-        .create_api_key(user.id, "Test Key", None, vec!["read".to_string()])
+        .create_api_key(user.id, Some("Test Key"), None, Some(serde_json::json!(["read"])), None)
         .await
         .unwrap();
 
-    assert_eq!(api_key.name, "Test Key");
+    assert_eq!(api_key.name, Some("Test Key".to_string()));
     assert_eq!(api_key.user_id, user.id);
     assert_eq!(api_key.is_active, Some(true));
 
@@ -84,8 +84,8 @@ async fn test_create_and_authenticate_user() {
         .unwrap();
 
     assert_eq!(auth_context.user.email, "test@example.com");
-    assert_eq!(auth_context.api_key.name, "Test Key");
-    assert_eq!(auth_context.api_key.scopes, Some(vec!["read".to_string()]));
+    assert_eq!(auth_context.api_key.name, Some("Test Key".to_string()));
+    assert_eq!(auth_context.api_key.permissions, Some(serde_json::json!(["read"])));
 
     // Clean up
     sqlx::query!("DELETE FROM users WHERE id = $1", user.id)

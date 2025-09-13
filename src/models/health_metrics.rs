@@ -228,7 +228,7 @@ pub struct IngestData {
 }
 
 /// Response from ingest endpoint
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct IngestResponse {
     pub success: bool,
     pub processed_count: usize,
@@ -238,7 +238,7 @@ pub struct IngestResponse {
 }
 
 /// Individual processing error
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ProcessingError {
     pub metric_type: String,
     pub error_message: String,

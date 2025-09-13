@@ -7,7 +7,7 @@ pub mod health_metrics;
 pub mod ios_models;
 
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 // Re-export commonly used types
 pub use background_jobs::*;
@@ -16,7 +16,7 @@ pub use health_metrics::*;
 pub use ios_models::*;
 
 /// API response wrapper
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ApiResponse<T> {
     pub success: bool,
     pub data: Option<T>,

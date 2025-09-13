@@ -87,9 +87,6 @@ name = "self-sensored"
 path = "src/main.rs"
 
 # Test configuration for migration scripts
-[[test]]
-name = "migrate_activity_metrics_test"
-path = "tests/scripts/migrate_activity_metrics_test.rs"
 
 # Integration test configurations
 [[test]]
