@@ -54,9 +54,7 @@ where
         Box::pin(async move {
             // Skip auth for health check endpoints
             if req.path() == "/health" || req.path() == "/api/v1/status" {
-                return service.call(req).await.map(|res| {
-                    res.map_into_left_body()
-                });
+                return service.call(req).await.map(|res| res.map_into_left_body());
             }
 
             // Extract client IP and user agent for audit logging
@@ -117,9 +115,10 @@ where
                                     );
                                     // Store auth context in request extensions for use by handlers
                                     req.extensions_mut().insert(auth_context);
-                                    return service.call(req).await.map(|res| {
-                                        res.map_into_left_body()
-                                    });
+                                    return service
+                                        .call(req)
+                                        .await
+                                        .map(|res| res.map_into_left_body());
                                 }
                                 Err(e) => {
                                     tracing::warn!(
@@ -132,7 +131,10 @@ where
                                     let response = HttpResponse::Unauthorized()
                                         .insert_header(("content-type", "text/plain"))
                                         .body("Invalid API key");
-                                    return Ok(ServiceResponse::new(req, response.map_into_right_body()));
+                                    return Ok(ServiceResponse::new(
+                                        req,
+                                        response.map_into_right_body(),
+                                    ));
                                 }
                             }
                         } else {

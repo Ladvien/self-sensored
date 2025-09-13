@@ -26,8 +26,8 @@ impl Default for StreamingConfig {
     fn default() -> Self {
         Self {
             max_streaming_size: 200 * 1024 * 1024, // 200MB
-            read_chunk_size: 64 * 1024,           // 64KB chunks
-            max_memory_usage: 50 * 1024 * 1024,   // 50MB max memory
+            read_chunk_size: 64 * 1024,            // 64KB chunks
+            max_memory_usage: 50 * 1024 * 1024,    // 50MB max memory
             temp_file_threshold: 20 * 1024 * 1024, // 20MB temp file threshold
             max_concurrent_operations: 4,          // Limit concurrent operations
         }
@@ -49,12 +49,9 @@ impl StreamingProcessor {
     }
 
     /// Process large payload with streaming to avoid memory pressure
-    pub async fn process_large_payload(
-        &self,
-        raw_payload: &web::Bytes,
-    ) -> Result<IngestPayload> {
+    pub async fn process_large_payload(&self, raw_payload: &web::Bytes) -> Result<IngestPayload> {
         let payload_size = raw_payload.len();
-        
+
         info!(
             payload_size = payload_size,
             threshold = self.config.temp_file_threshold,
@@ -71,15 +68,14 @@ impl StreamingProcessor {
     }
 
     /// Process payload using temporary file to minimize memory usage
-    async fn process_with_temp_file(
-        &self,
-        raw_payload: &web::Bytes,
-    ) -> Result<IngestPayload> {
+    async fn process_with_temp_file(&self, raw_payload: &web::Bytes) -> Result<IngestPayload> {
         // Create temporary file
-        let mut temp_file = NamedTempFile::new()
-            .map_err(|e| actix_web::error::ErrorInternalServerError(
-                format!("Failed to create temporary file: {}", e)
-            ))?;
+        let mut temp_file = NamedTempFile::new().map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to create temporary file: {}",
+                e
+            ))
+        })?;
 
         info!("Writing large payload to temporary file for processing");
 
@@ -88,28 +84,34 @@ impl StreamingProcessor {
         while !remaining.is_empty() {
             let chunk_size = remaining.len().min(self.config.read_chunk_size);
             let chunk = &remaining[..chunk_size];
-            
-            temp_file.write_all(chunk)
-                .map_err(|e| actix_web::error::ErrorInternalServerError(
-                    format!("Failed to write to temporary file: {}", e)
-                ))?;
-            
+
+            temp_file.write_all(chunk).map_err(|e| {
+                actix_web::error::ErrorInternalServerError(format!(
+                    "Failed to write to temporary file: {}",
+                    e
+                ))
+            })?;
+
             remaining = &remaining[chunk_size..];
         }
 
         // Flush and reopen for reading
-        temp_file.flush()
-            .map_err(|e| actix_web::error::ErrorInternalServerError(
-                format!("Failed to flush temporary file: {}", e)
-            ))?;
+        temp_file.flush().map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to flush temporary file: {}",
+                e
+            ))
+        })?;
 
         let temp_path = temp_file.path().to_path_buf();
-        
+
         // Read and parse from temporary file
-        let file = tokio::fs::File::open(&temp_path).await
-            .map_err(|e| actix_web::error::ErrorInternalServerError(
-                format!("Failed to reopen temporary file: {}", e)
-            ))?;
+        let file = tokio::fs::File::open(&temp_path).await.map_err(|e| {
+            actix_web::error::ErrorInternalServerError(format!(
+                "Failed to reopen temporary file: {}",
+                e
+            ))
+        })?;
 
         let mut reader = BufReader::new(file);
         let mut contents = Vec::new();
@@ -117,21 +119,23 @@ impl StreamingProcessor {
         // Read file in chunks to control memory usage
         let mut buffer = vec![0; self.config.read_chunk_size];
         loop {
-            let bytes_read = reader.read(&mut buffer).await
-                .map_err(|e| actix_web::error::ErrorInternalServerError(
-                    format!("Failed to read from temporary file: {}", e)
-                ))?;
-            
+            let bytes_read = reader.read(&mut buffer).await.map_err(|e| {
+                actix_web::error::ErrorInternalServerError(format!(
+                    "Failed to read from temporary file: {}",
+                    e
+                ))
+            })?;
+
             if bytes_read == 0 {
                 break;
             }
-            
+
             contents.extend_from_slice(&buffer[..bytes_read]);
-            
+
             // Check memory usage
             if contents.len() > self.config.max_memory_usage {
                 return Err(actix_web::error::ErrorInternalServerError(
-                    "Payload too large for streaming processing"
+                    "Payload too large for streaming processing",
                 ));
             }
         }
@@ -146,21 +150,15 @@ impl StreamingProcessor {
     }
 
     /// Process payload in memory with chunked reading
-    async fn process_in_memory(
-        &self,
-        raw_payload: &web::Bytes,
-    ) -> Result<IngestPayload> {
+    async fn process_in_memory(&self, raw_payload: &web::Bytes) -> Result<IngestPayload> {
         info!("Processing payload in memory with streaming");
-        
+
         // For in-memory processing, we can parse directly
         self.parse_json_content(raw_payload.as_ref()).await
     }
 
     /// Parse JSON content with proper error handling
-    async fn parse_json_content(
-        &self,
-        content: &[u8],
-    ) -> Result<IngestPayload> {
+    async fn parse_json_content(&self, content: &[u8]) -> Result<IngestPayload> {
         // Try iOS format first
         match self.try_parse_ios_format(content).await {
             Ok(payload) => {
@@ -169,7 +167,7 @@ impl StreamingProcessor {
             }
             Err(ios_error) => {
                 warn!("iOS format parsing failed: {}", ios_error);
-                
+
                 // Try standard format
                 match self.try_parse_standard_format(content).await {
                     Ok(payload) => {
@@ -180,7 +178,7 @@ impl StreamingProcessor {
                         error!("Both format parsing attempts failed");
                         error!("iOS error: {}", ios_error);
                         error!("Standard error: {}", standard_error);
-                        
+
                         Err(actix_web::error::ErrorBadRequest(format!(
                             "Streaming JSON parsing failed. iOS error: {}. Standard error: {}",
                             ios_error, standard_error
@@ -248,24 +246,24 @@ impl StreamingRecommendations {
         match payload_size {
             // Small payloads (< 1MB) - minimal overhead
             size if size < 1024 * 1024 => StreamingConfig {
-                max_memory_usage: 10 * 1024 * 1024, // 10MB
+                max_memory_usage: 10 * 1024 * 1024,   // 10MB
                 temp_file_threshold: 5 * 1024 * 1024, // 5MB
-                read_chunk_size: 8 * 1024, // 8KB
+                read_chunk_size: 8 * 1024,            // 8KB
                 ..Default::default()
             },
             // Medium payloads (1MB - 50MB) - balanced approach
             size if size < 50 * 1024 * 1024 => StreamingConfig {
-                max_memory_usage: 25 * 1024 * 1024, // 25MB
+                max_memory_usage: 25 * 1024 * 1024,    // 25MB
                 temp_file_threshold: 10 * 1024 * 1024, // 10MB
-                read_chunk_size: 32 * 1024, // 32KB
+                read_chunk_size: 32 * 1024,            // 32KB
                 ..Default::default()
             },
             // Large payloads (50MB+) - aggressive streaming
             _ => StreamingConfig {
-                max_memory_usage: 50 * 1024 * 1024, // 50MB
+                max_memory_usage: 50 * 1024 * 1024,    // 50MB
                 temp_file_threshold: 20 * 1024 * 1024, // 20MB
-                read_chunk_size: 64 * 1024, // 64KB
-                max_concurrent_operations: 2, // Reduce concurrency
+                read_chunk_size: 64 * 1024,            // 64KB
+                max_concurrent_operations: 2,          // Reduce concurrency
                 ..Default::default()
             },
         }

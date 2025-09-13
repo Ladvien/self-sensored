@@ -1,6 +1,6 @@
+use crate::models::enums::WorkoutType;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use crate::models::enums::WorkoutType;
 
 /// Models that match the iOS Auto Health Export app JSON structure
 /// Root payload structure from iOS app
@@ -91,12 +91,9 @@ impl IosIngestPayload {
                                 let context_str = match ios_metric.name.to_lowercase().as_str() {
                                     "resting_heart_rate" => Some("resting"),
                                     "walking_heart_rate" => Some("walking"),
-                                    _ => data_point
-                                        .extra
-                                        .get("context")
-                                        .and_then(|v| v.as_str()),
+                                    _ => data_point.extra.get("context").and_then(|v| v.as_str()),
                                 };
-                                
+
                                 let context = context_str.and_then(|s| {
                                     crate::models::ActivityContext::from_ios_string(s)
                                 });
@@ -106,7 +103,11 @@ impl IosIngestPayload {
                                     user_id: uuid::Uuid::new_v4(), // This will need to be provided by auth context
                                     recorded_at,
                                     heart_rate: Some(qty as i16),
-                                    resting_heart_rate: if context_str == Some("resting") { Some(qty as i16) } else { None },
+                                    resting_heart_rate: if context_str == Some("resting") {
+                                        Some(qty as i16)
+                                    } else {
+                                        None
+                                    },
                                     heart_rate_variability: None,
                                     source_device: data_point.source.clone(),
                                     context,
@@ -185,7 +186,7 @@ impl IosIngestPayload {
                                 // Generate UUIDs for the activity metric
                                 let id = uuid::Uuid::new_v4();
                                 let user_id = uuid::Uuid::new_v4(); // This will need to be provided by auth context
-                                
+
                                 // Basic validation - no negative values
                                 let metric = crate::models::ActivityMetric {
                                     id,
@@ -215,7 +216,10 @@ impl IosIngestPayload {
                                     } else {
                                         None
                                     },
-                                    basal_energy_burned_kcal: if ios_metric.name.to_lowercase().as_str()
+                                    basal_energy_burned_kcal: if ios_metric
+                                        .name
+                                        .to_lowercase()
+                                        .as_str()
                                         == "basal_energy_burned"
                                     {
                                         Some(qty)
@@ -316,7 +320,10 @@ impl IosIngestPayload {
             if start_time < end_time {
                 // Basic validation
                 let workout_type = WorkoutType::from_ios_string(
-                    &ios_workout.name.clone().unwrap_or_else(|| "Unknown".to_string())
+                    &ios_workout
+                        .name
+                        .clone()
+                        .unwrap_or_else(|| "Unknown".to_string()),
                 );
 
                 let workout = WorkoutData {
@@ -348,21 +355,37 @@ impl IosIngestPayload {
 
 /// Parse iOS date string to UTC DateTime
 fn parse_ios_date(date_str: &Option<String>) -> Option<DateTime<Utc>> {
+    use chrono::NaiveDateTime;
+
     let date_str = date_str.as_ref()?;
 
-    // iOS typically sends dates like "2025-09-08 00:48:21 -0500"
-    // Try multiple formats
-    let formats = [
+    // Try formats with timezone first
+    let tz_formats = [
         "%Y-%m-%d %H:%M:%S %z", // 2025-09-08 00:48:21 -0500
-        "%Y-%m-%d %H:%M:%S",    // 2025-09-08 00:48:21
         "%Y-%m-%dT%H:%M:%S%z",  // 2025-09-08T00:48:21-0500
         "%Y-%m-%dT%H:%M:%SZ",   // 2025-09-08T00:48:21Z
-        "%Y-%m-%d",             // 2025-09-08
     ];
 
-    for format in &formats {
+    for format in &tz_formats {
         if let Ok(dt) = DateTime::parse_from_str(date_str, format) {
             return Some(dt.with_timezone(&Utc));
+        }
+    }
+
+    // Try formats without timezone (assume UTC)
+    let naive_formats = [
+        "%Y-%m-%d %H:%M:%S", // 2025-09-08 00:48:21
+        "%Y-%m-%d",          // 2025-09-08
+    ];
+
+    for format in &naive_formats {
+        if let Ok(naive_dt) = NaiveDateTime::parse_from_str(date_str, format) {
+            return Some(DateTime::from_naive_utc_and_offset(naive_dt, Utc));
+        }
+        // Try parsing as date only
+        if let Ok(naive_date) = chrono::NaiveDate::parse_from_str(date_str, format) {
+            let naive_dt = naive_date.and_hms_opt(0, 0, 0)?;
+            return Some(DateTime::from_naive_utc_and_offset(naive_dt, Utc));
         }
     }
 

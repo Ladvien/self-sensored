@@ -269,7 +269,7 @@ mod tests {
     #[tokio::test]
     async fn test_streaming_parser_basic() {
         let json_data = r#"{"name": "test", "value": 42}"#;
-        let mut parser = StreamingJsonParser::new();
+        let parser = StreamingJsonParser::new();
 
         // Simulate stream by chunking the data
         let chunks = vec![

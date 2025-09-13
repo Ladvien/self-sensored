@@ -71,7 +71,7 @@ impl TimeoutManager {
     pub fn is_approaching_timeout(&self, threshold_percentage: f64) -> bool {
         let elapsed = self.start_time.elapsed();
         let timeout_threshold = Duration::from_secs(
-            (self.config.max_processing_seconds as f64 * threshold_percentage) as u64
+            (self.config.max_processing_seconds as f64 * threshold_percentage) as u64,
         );
         elapsed >= timeout_threshold
     }
@@ -80,7 +80,7 @@ impl TimeoutManager {
     pub fn remaining_time(&self) -> Duration {
         let elapsed = self.start_time.elapsed();
         let max_duration = Duration::from_secs(self.config.max_processing_seconds);
-        
+
         if elapsed >= max_duration {
             Duration::from_secs(0)
         } else {
@@ -100,7 +100,8 @@ impl TimeoutManager {
 
     /// Log timeout warning if approaching limit
     pub fn warn_if_approaching_timeout(&self, user_id: Uuid, metric_count: usize) {
-        if self.is_approaching_timeout(0.8) { // 80% of timeout
+        if self.is_approaching_timeout(0.8) {
+            // 80% of timeout
             warn!(
                 user_id = %user_id,
                 elapsed_ms = self.elapsed_time().as_millis(),
@@ -129,17 +130,17 @@ impl TimeoutManager {
     pub fn get_optimal_chunk_size(&self, _total_metrics: usize, base_chunk_size: usize) -> usize {
         let remaining = self.remaining_time();
         let elapsed = self.elapsed_time();
-        
+
         // If we've used less than 20% of time, we can afford larger chunks
         if elapsed.as_secs() < self.config.max_processing_seconds / 5 {
             return base_chunk_size * 2;
         }
-        
+
         // If we're running out of time, reduce chunk size
         if remaining.as_secs() < self.config.max_processing_seconds / 4 {
             return base_chunk_size / 2;
         }
-        
+
         base_chunk_size
     }
 
@@ -177,7 +178,10 @@ pub enum ProcessingStatus {
 
 impl ProcessingStatus {
     pub fn should_return_accepted(&self) -> bool {
-        matches!(self, ProcessingStatus::PartialSuccess { .. } | ProcessingStatus::Timeout { .. })
+        matches!(
+            self,
+            ProcessingStatus::PartialSuccess { .. } | ProcessingStatus::Timeout { .. }
+        )
     }
 
     pub fn get_message(&self) -> String {
@@ -187,7 +191,10 @@ impl ProcessingStatus {
                 format!("Partial processing completed: {}", reason)
             }
             ProcessingStatus::Timeout { processed, total } => {
-                format!("Processing timed out. Processed {}/{} metrics", processed, total)
+                format!(
+                    "Processing timed out. Processed {}/{} metrics",
+                    processed, total
+                )
             }
             ProcessingStatus::BackgroundRecommended { reason } => {
                 format!("Background processing recommended: {}", reason)
@@ -209,9 +216,12 @@ impl<T> TimeoutAwareResult<T> {
     pub fn new(result: T, manager: &TimeoutManager) -> Self {
         let elapsed_time = manager.elapsed_time();
         let timeout_reached = manager.is_approaching_timeout(1.0);
-        
+
         let status = if timeout_reached {
-            ProcessingStatus::Timeout { processed: 0, total: 0 } // Will be updated by caller
+            ProcessingStatus::Timeout {
+                processed: 0,
+                total: 0,
+            } // Will be updated by caller
         } else {
             ProcessingStatus::Success
         };

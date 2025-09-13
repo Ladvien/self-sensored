@@ -1,5 +1,8 @@
 use chrono::Utc;
-use self_sensored::models::{HeartRateMetric, WorkoutData, enums::{ActivityContext, WorkoutType}};
+use self_sensored::models::{
+    enums::{ActivityContext, WorkoutType},
+    HeartRateMetric, WorkoutData,
+};
 use uuid::Uuid;
 
 /// Test heart rate validation edge cases to ensure 15 BPM minimum is working

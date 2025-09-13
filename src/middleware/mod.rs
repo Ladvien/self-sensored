@@ -13,4 +13,3 @@ pub use compression::*;
 pub use logging::*;
 pub use metrics::*;
 pub use rate_limit::*;
-pub use request_logger::*;

@@ -1,0 +1,27 @@
+[Unit]
+Description=Self-Sensored Health Export API
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=ladvien
+Group=ladvien
+WorkingDirectory=/mnt/datadrive_m2/self-sensored
+Environment="RUST_ENV=production"
+Environment="RUST_LOG=info"
+ExecStart=/mnt/datadrive_m2/self-sensored/target/release/self-sensored
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/mnt/datadrive_m2/self-sensored /tmp /var/log
+
+[Install]
+WantedBy=multi-user.target

@@ -126,11 +126,11 @@ impl AuthService {
     fn is_argon2_hash(hash: &str) -> bool {
         // Argon2 hashes follow the format: $argon2{variant}${parameters}${salt}${hash}
         // Variants include: argon2i, argon2d, argon2id
-        hash.starts_with("$argon2") && 
-        (hash.starts_with("$argon2i$") || 
-         hash.starts_with("$argon2d$") || 
-         hash.starts_with("$argon2id$")) &&
-        hash.matches('$').count() >= 5  // Minimum structure validation
+        hash.starts_with("$argon2")
+            && (hash.starts_with("$argon2i$")
+                || hash.starts_with("$argon2d$")
+                || hash.starts_with("$argon2id$"))
+            && hash.matches('$').count() >= 5 // Minimum structure validation
     }
 
     /// Create a new API key for a user
@@ -266,7 +266,9 @@ impl AuthService {
                         // Track failed authentication attempt for this IP
                         if let Some(ref rate_limiter) = self.rate_limiter {
                             if let Some(ip) = ip_address {
-                                let _ = rate_limiter.check_ip_rate_limit(&format!("failed_auth:{}", ip)).await;
+                                let _ = rate_limiter
+                                    .check_ip_rate_limit(&format!("failed_auth:{}", ip))
+                                    .await;
                             }
                         }
 
@@ -332,7 +334,9 @@ impl AuthService {
                 // UUID not found in database - track failed attempt
                 if let Some(ref rate_limiter) = self.rate_limiter {
                     if let Some(ip) = ip_address {
-                        let _ = rate_limiter.check_ip_rate_limit(&format!("failed_auth:{}", ip)).await;
+                        let _ = rate_limiter
+                            .check_ip_rate_limit(&format!("failed_auth:{}", ip))
+                            .await;
                     }
                 }
             }
@@ -369,7 +373,6 @@ impl AuthService {
             )
             .fetch_all(&self.pool)
             .await?;
-
 
             // Find the matching API key by verifying hashes
             // Only process keys with valid Argon2 hash format (robust replacement for LIKE '$argon2%')
@@ -409,7 +412,9 @@ impl AuthService {
                                 // Track failed authentication attempt for this IP
                                 if let Some(ref rate_limiter) = self.rate_limiter {
                                     if let Some(ip) = ip_address {
-                                        let _ = rate_limiter.check_ip_rate_limit(&format!("failed_auth:{}", ip)).await;
+                                        let _ = rate_limiter
+                                            .check_ip_rate_limit(&format!("failed_auth:{}", ip))
+                                            .await;
                                     }
                                 }
 
@@ -510,7 +515,9 @@ impl AuthService {
         // Track failed authentication attempt for this IP to prevent brute force attacks
         if let Some(ref rate_limiter) = self.rate_limiter {
             if let Some(ip) = ip_address {
-                let _ = rate_limiter.check_ip_rate_limit(&format!("failed_auth:{}", ip)).await;
+                let _ = rate_limiter
+                    .check_ip_rate_limit(&format!("failed_auth:{}", ip))
+                    .await;
             }
         }
 
@@ -700,14 +707,13 @@ impl AuthService {
         if let Some(permissions) = &auth_context.api_key.permissions {
             // Support both array format ["read", "write", "admin"] and object format {"admin": true}
             match permissions {
-                serde_json::Value::Array(perms) => {
-                    perms.iter().any(|p| {
-                        p.as_str().map_or(false, |s| s == "admin")
-                    })
-                }
-                serde_json::Value::Object(perms) => {
-                    perms.get("admin").and_then(|v| v.as_bool()).unwrap_or(false)
-                }
+                serde_json::Value::Array(perms) => perms
+                    .iter()
+                    .any(|p| p.as_str().map_or(false, |s| s == "admin")),
+                serde_json::Value::Object(perms) => perms
+                    .get("admin")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false),
                 _ => false,
             }
         } else {
@@ -724,19 +730,17 @@ impl AuthService {
 
         if let Some(permissions) = &auth_context.api_key.permissions {
             match permissions {
-                serde_json::Value::Array(perms) => {
-                    perms.iter().any(|p| {
-                        p.as_str().map_or(false, |s| s == permission)
-                    })
-                }
-                serde_json::Value::Object(perms) => {
-                    perms.get(permission).and_then(|v| v.as_bool()).unwrap_or(false)
-                }
+                serde_json::Value::Array(perms) => perms
+                    .iter()
+                    .any(|p| p.as_str().map_or(false, |s| s == permission)),
+                serde_json::Value::Object(perms) => perms
+                    .get(permission)
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false),
                 _ => false,
             }
         } else {
             false
         }
     }
-
 }

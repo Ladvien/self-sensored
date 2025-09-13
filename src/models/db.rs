@@ -121,7 +121,6 @@ pub struct WorkoutRecord {
     pub created_at: DateTime<Utc>,
 }
 
-
 /// Enhanced conversion functions with raw JSON preservation
 impl HeartRateRecord {
     pub fn from_metric_with_raw(
@@ -249,14 +248,20 @@ impl ActivityRecord {
             (None, None) => None,
         };
 
-        self.active_energy_burned_kcal = match (self.active_energy_burned_kcal, other.active_energy_burned_kcal) {
+        self.active_energy_burned_kcal = match (
+            self.active_energy_burned_kcal,
+            other.active_energy_burned_kcal,
+        ) {
             (Some(a), Some(b)) => Some(a + b),
             (Some(a), None) => Some(a),
             (None, Some(b)) => Some(b),
             (None, None) => None,
         };
 
-        self.basal_energy_burned_kcal = match (self.basal_energy_burned_kcal, other.basal_energy_burned_kcal) {
+        self.basal_energy_burned_kcal = match (
+            self.basal_energy_burned_kcal,
+            other.basal_energy_burned_kcal,
+        ) {
             (Some(a), Some(b)) => Some(a + b),
             (Some(a), None) => Some(a),
             (None, Some(b)) => Some(b),
@@ -314,7 +319,6 @@ impl WorkoutRecord {
             created_at: workout.created_at,
         }
     }
-
 }
 
 impl From<crate::models::health_metrics::WorkoutData> for WorkoutRecord {

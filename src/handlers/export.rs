@@ -191,9 +191,11 @@ async fn export_as_json(
                         }
                         Err(e) => {
                             error!(user_id = %auth.user.id, error = %e, "Failed to serialize heart rate data");
-                            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                                "Failed to process heart rate data".to_string(),
-                            )));
+                            return Ok(HttpResponse::InternalServerError().json(
+                                ApiResponse::<()>::error(
+                                    "Failed to process heart rate data".to_string(),
+                                ),
+                            ));
                         }
                     }
                 }
@@ -210,9 +212,11 @@ async fn export_as_json(
                         }
                         Err(e) => {
                             error!(user_id = %auth.user.id, error = %e, "Failed to serialize blood pressure data");
-                            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                                "Failed to process blood pressure data".to_string(),
-                            )));
+                            return Ok(HttpResponse::InternalServerError().json(
+                                ApiResponse::<()>::error(
+                                    "Failed to process blood pressure data".to_string(),
+                                ),
+                            ));
                         }
                     }
                 }
@@ -228,9 +232,11 @@ async fn export_as_json(
                         }
                         Err(e) => {
                             error!(user_id = %auth.user.id, error = %e, "Failed to serialize sleep data");
-                            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                                "Failed to process sleep data".to_string(),
-                            )));
+                            return Ok(HttpResponse::InternalServerError().json(
+                                ApiResponse::<()>::error(
+                                    "Failed to process sleep data".to_string(),
+                                ),
+                            ));
                         }
                     }
                 }
@@ -246,9 +252,11 @@ async fn export_as_json(
                         }
                         Err(e) => {
                             error!(user_id = %auth.user.id, error = %e, "Failed to serialize activity data");
-                            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                                "Failed to process activity data".to_string(),
-                            )));
+                            return Ok(HttpResponse::InternalServerError().json(
+                                ApiResponse::<()>::error(
+                                    "Failed to process activity data".to_string(),
+                                ),
+                            ));
                         }
                     }
                 }
@@ -264,9 +272,11 @@ async fn export_as_json(
                         }
                         Err(e) => {
                             error!(user_id = %auth.user.id, error = %e, "Failed to serialize workouts data");
-                            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                                "Failed to process workouts data".to_string(),
-                            )));
+                            return Ok(HttpResponse::InternalServerError().json(
+                                ApiResponse::<()>::error(
+                                    "Failed to process workouts data".to_string(),
+                                ),
+                            ));
                         }
                     }
                 }
@@ -290,9 +300,11 @@ async fn export_as_json(
             Ok(json_string) => json_string,
             Err(e) => {
                 error!(user_id = %auth.user.id, error = %e, "Failed to serialize export data");
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    "Failed to serialize export data".to_string(),
-                )));
+                return Ok(
+                    HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                        "Failed to serialize export data".to_string(),
+                    )),
+                );
             }
         },
     };
@@ -326,9 +338,11 @@ async fn export_as_csv(
         "metric_type,timestamp,value1,value2,value3,value4,value5,source,context"
     ) {
         error!(user_id = %auth.user.id, error = %e, "Failed to write CSV header");
-        return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-            "Failed to generate CSV export".to_string(),
-        )));
+        return Ok(
+            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                "Failed to generate CSV export".to_string(),
+            )),
+        );
     }
 
     for metric_type in metric_types {
@@ -351,9 +365,11 @@ async fn export_as_csv(
                             record.context.as_deref().unwrap_or("")
                         ) {
                             error!(user_id = %auth.user.id, error = %e, "Failed to write heart rate CSV data");
-                            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                                "Failed to generate CSV export".to_string(),
-                            )));
+                            return Ok(HttpResponse::InternalServerError().json(
+                                ApiResponse::<()>::error(
+                                    "Failed to generate CSV export".to_string(),
+                                ),
+                            ));
                         }
                     }
                     total_records += data.len();
@@ -375,9 +391,11 @@ async fn export_as_csv(
                             record.source_device.as_deref().unwrap_or("")
                         ) {
                             error!(user_id = %auth.user.id, error = %e, "Failed to write blood pressure CSV data");
-                            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                                "Failed to generate CSV export".to_string(),
-                            )));
+                            return Ok(HttpResponse::InternalServerError().json(
+                                ApiResponse::<()>::error(
+                                    "Failed to generate CSV export".to_string(),
+                                ),
+                            ));
                         }
                     }
                     total_records += data.len();
@@ -392,7 +410,9 @@ async fn export_as_csv(
                             csv_content,
                             "sleep,{},{},{},{},{},{},{},",
                             record.sleep_start.format("%Y-%m-%d %H:%M:%S"),
-                            record.duration_minutes.map_or("".to_string(), |v| v.to_string()),
+                            record
+                                .duration_minutes
+                                .map_or("".to_string(), |v| v.to_string()),
                             record
                                 .deep_sleep_minutes
                                 .map_or("".to_string(), |v| v.to_string()),
@@ -402,15 +422,15 @@ async fn export_as_csv(
                             record
                                 .awake_minutes
                                 .map_or("".to_string(), |v| v.to_string()),
-                            record
-                                .efficiency
-                                .map_or("".to_string(), |v| v.to_string()),
+                            record.efficiency.map_or("".to_string(), |v| v.to_string()),
                             record.source_device.as_deref().unwrap_or("")
                         ) {
                             error!(user_id = %auth.user.id, error = %e, "Failed to write sleep CSV data");
-                            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                                "Failed to generate CSV export".to_string(),
-                            )));
+                            return Ok(HttpResponse::InternalServerError().json(
+                                ApiResponse::<()>::error(
+                                    "Failed to generate CSV export".to_string(),
+                                ),
+                            ));
                         }
                     }
                     total_records += data.len();
@@ -426,15 +446,23 @@ async fn export_as_csv(
                             "activity,{},{},{},{},{},{},",
                             record.recorded_at.format("%Y-%m-%d"),
                             record.step_count.map_or("".to_string(), |v| v.to_string()),
-                            record.distance_meters.map_or("".to_string(), |v| v.to_string()),
-                            record.active_energy_burned_kcal.map_or("".to_string(), |v| v.to_string()),
-                            record.flights_climbed.map_or("".to_string(), |v| v.to_string()),
+                            record
+                                .distance_meters
+                                .map_or("".to_string(), |v| v.to_string()),
+                            record
+                                .active_energy_burned_kcal
+                                .map_or("".to_string(), |v| v.to_string()),
+                            record
+                                .flights_climbed
+                                .map_or("".to_string(), |v| v.to_string()),
                             record.source_device.as_deref().unwrap_or("")
                         ) {
                             error!(user_id = %auth.user.id, error = %e, "Failed to write activity CSV data");
-                            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                                "Failed to generate CSV export".to_string(),
-                            )));
+                            return Ok(HttpResponse::InternalServerError().json(
+                                ApiResponse::<()>::error(
+                                    "Failed to generate CSV export".to_string(),
+                                ),
+                            ));
                         }
                     }
                     total_records += data.len();
@@ -466,9 +494,11 @@ async fn export_as_csv(
                             record.workout_type
                         ) {
                             error!(user_id = %auth.user.id, error = %e, "Failed to write workout CSV data");
-                            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                                "Failed to generate CSV export".to_string(),
-                            )));
+                            return Ok(HttpResponse::InternalServerError().json(
+                                ApiResponse::<()>::error(
+                                    "Failed to generate CSV export".to_string(),
+                                ),
+                            ));
                         }
                     }
                     total_records += data.len();
@@ -528,9 +558,11 @@ async fn export_heart_rate_json(
                     Ok(json_string) => json_string,
                     Err(e) => {
                         error!(user_id = %auth.user.id, error = %e, "Failed to serialize heart rate data");
-                        return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                            "Failed to serialize heart rate data".to_string(),
-                        )));
+                        return Ok(HttpResponse::InternalServerError().json(
+                            ApiResponse::<()>::error(
+                                "Failed to serialize heart rate data".to_string(),
+                            ),
+                        ));
                     }
                 },
             };
@@ -576,9 +608,11 @@ async fn export_heart_rate_csv(
                 "recorded_at,heart_rate,resting_heart_rate,context,source"
             ) {
                 error!(user_id = %auth.user.id, error = %e, "Failed to write heart rate CSV header");
-                return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                    "Failed to generate heart rate CSV".to_string(),
-                )));
+                return Ok(
+                    HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                        "Failed to generate heart rate CSV".to_string(),
+                    )),
+                );
             }
 
             for record in &data {
@@ -594,9 +628,11 @@ async fn export_heart_rate_csv(
                     record.source_device.as_deref().unwrap_or("")
                 ) {
                     error!(user_id = %auth.user.id, error = %e, "Failed to write heart rate CSV record");
-                    return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                        "Failed to generate heart rate CSV".to_string(),
-                    )));
+                    return Ok(
+                        HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                            "Failed to generate heart rate CSV".to_string(),
+                        )),
+                    );
                 }
             }
 

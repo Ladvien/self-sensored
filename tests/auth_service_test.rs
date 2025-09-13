@@ -59,7 +59,11 @@ async fn test_create_and_authenticate_user() {
 
     // Create user
     let user = auth_service
-        .create_user("test@example.com", Some("test_user_123"), Some(serde_json::json!({"name": "Test User"})))
+        .create_user(
+            "test@example.com",
+            Some("test_user_123"),
+            Some(serde_json::json!({"name": "Test User"})),
+        )
         .await
         .unwrap();
 
@@ -69,7 +73,13 @@ async fn test_create_and_authenticate_user() {
 
     // Create API key for user
     let (plain_key, api_key) = auth_service
-        .create_api_key(user.id, Some("Test Key"), None, Some(serde_json::json!(["read"])), None)
+        .create_api_key(
+            user.id,
+            Some("Test Key"),
+            None,
+            Some(serde_json::json!(["read"])),
+            None,
+        )
         .await
         .unwrap();
 
@@ -85,7 +95,10 @@ async fn test_create_and_authenticate_user() {
 
     assert_eq!(auth_context.user.email, "test@example.com");
     assert_eq!(auth_context.api_key.name, Some("Test Key".to_string()));
-    assert_eq!(auth_context.api_key.permissions, Some(serde_json::json!(["read"])));
+    assert_eq!(
+        auth_context.api_key.permissions,
+        Some(serde_json::json!(["read"]))
+    );
 
     // Clean up
     sqlx::query!("DELETE FROM users WHERE id = $1", user.id)

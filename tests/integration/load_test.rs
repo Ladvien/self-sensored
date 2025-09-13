@@ -1,10 +1,13 @@
-use actix_web::{test, web, App, middleware::Logger};
-use chrono::{DateTime, Datelike, Utc, Duration};
+use actix_web::{middleware::Logger, test, web, App};
+use chrono::{DateTime, Datelike, Duration, Utc};
 use serde_json::{json, Value};
 use sqlx::PgPool;
 use std::env;
-use std::time::{Instant, Duration as StdDuration};
-use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
+use std::time::{Duration as StdDuration, Instant};
 use tokio::sync::Semaphore;
 use uuid::Uuid;
 
@@ -13,7 +16,6 @@ use self_sensored::{
     middleware::{auth::AuthMiddleware, rate_limit::RateLimitMiddleware},
     models::{ApiResponse, IngestResponse},
     services::{auth::AuthService, rate_limiter::RateLimiter},
-    config::BatchConfig,
 };
 
 /// Load testing suite for Health Export API
@@ -35,7 +37,7 @@ struct LoadTestMetrics {
 async fn get_test_pool() -> PgPool {
     dotenv::dotenv().ok();
     let database_url = env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL must be set");
-    
+
     // Create pool with higher connection limits for load testing
     sqlx::postgres::PgPoolOptions::new()
         .max_connections(50) // Increased for load testing
@@ -57,7 +59,7 @@ async fn setup_load_test_users(pool: &PgPool, count: usize) -> Vec<(Uuid, String
 
     for i in 0..count {
         let email = format!("load_test_user_{}@example.com", i);
-        
+
         // Clean up existing user
         sqlx::query!("DELETE FROM users WHERE email = $1", &email)
             .execute(pool)
@@ -66,12 +68,22 @@ async fn setup_load_test_users(pool: &PgPool, count: usize) -> Vec<(Uuid, String
 
         // Create user and API key
         let user = auth_service
-            .create_user(&email, Some(&format!("load_test_user_{}", i)), Some(serde_json::json!({"name": format!("Load Test User {}", i)})))
+            .create_user(
+                &email,
+                Some(&format!("load_test_user_{}", i)),
+                Some(serde_json::json!({"name": format!("Load Test User {}", i)})),
+            )
             .await
             .unwrap();
 
         let (plain_key, _api_key) = auth_service
-            .create_api_key(user.id, Some(&format!("Load Test Key {}", i)), None, Some(serde_json::json!(["write"])), None)
+            .create_api_key(
+                user.id,
+                Some(&format!("Load Test Key {}", i)),
+                None,
+                Some(serde_json::json!(["write"])),
+                None,
+            )
             .await
             .unwrap();
 
@@ -81,13 +93,16 @@ async fn setup_load_test_users(pool: &PgPool, count: usize) -> Vec<(Uuid, String
     users
 }
 
-
 /// Test processing 1M record payload in <5 minutes
 #[tokio::test]
 async fn test_1m_record_processing_performance() {
     let pool = get_test_pool().await;
     let redis_client = get_test_redis_client();
-    let (user_id, api_key) = setup_load_test_users(&pool, 1).await.into_iter().next().unwrap();
+    let (user_id, api_key) = setup_load_test_users(&pool, 1)
+        .await
+        .into_iter()
+        .next()
+        .unwrap();
 
     let rate_limiter = web::Data::new(RateLimiter::new_in_memory(1000));
     let auth_service = web::Data::new(AuthService::new(pool.clone()));
@@ -106,12 +121,15 @@ async fn test_1m_record_processing_performance() {
     .await;
 
     println!("🚀 Starting 1M record processing test...");
-    
+
     // Create massive payload (1M records distributed across metric types)
     let massive_payload = create_1m_record_payload();
-    
+
     let payload_size = serde_json::to_vec(&massive_payload).unwrap().len();
-    println!("📊 Payload size: {:.1} MB", payload_size as f64 / 1024.0 / 1024.0);
+    println!(
+        "📊 Payload size: {:.1} MB",
+        payload_size as f64 / 1024.0 / 1024.0
+    );
 
     let start_time = Instant::now();
 
@@ -124,33 +142,47 @@ async fn test_1m_record_processing_performance() {
 
     let resp = test::call_service(&app, req).await;
     let processing_time = start_time.elapsed();
-    
-    assert!(resp.status().is_success(), "1M record processing should succeed");
+
+    assert!(
+        resp.status().is_success(),
+        "1M record processing should succeed"
+    );
 
     let response_body: ApiResponse<IngestResponse> = test::read_body_json(resp).await;
     assert!(response_body.success, "Response should indicate success");
-    
+
     let data = response_body.data.expect("Should have response data");
     let records_per_second = data.processed_count as f64 / processing_time.as_secs_f64();
-    
+
     println!("✅ 1M Record Processing Results:");
     println!("   📈 Records processed: {}", data.processed_count);
-    println!("   ⏱️  Processing time: {:.2}s", processing_time.as_secs_f64());
+    println!(
+        "   ⏱️  Processing time: {:.2}s",
+        processing_time.as_secs_f64()
+    );
     println!("   🚀 Records per second: {:.0}", records_per_second);
     println!("   ❌ Failed records: {}", data.failed_count);
-    
+
     // Verify performance target: <5 minutes (300 seconds)
-    assert!(processing_time.as_secs() < 300, 
-           "1M records took {}s, should be <300s", processing_time.as_secs());
-    
+    assert!(
+        processing_time.as_secs() < 300,
+        "1M records took {}s, should be <300s",
+        processing_time.as_secs()
+    );
+
     // Verify minimum processing rate: >3,333 records/second for 5 minute target
-    assert!(records_per_second > 3333.0, 
-           "Processing rate {:.0}/s should be >3333/s", records_per_second);
+    assert!(
+        records_per_second > 3333.0,
+        "Processing rate {:.0}/s should be >3333/s",
+        records_per_second
+    );
 
     // Verify data integrity
     let total_stored = validate_1m_record_storage(&pool, user_id).await;
-    assert_eq!(total_stored, data.processed_count, 
-              "Stored records should match processed count");
+    assert_eq!(
+        total_stored, data.processed_count,
+        "Stored records should match processed count"
+    );
 
     cleanup_load_test_data(&pool, vec![user_id]).await;
 }
@@ -160,13 +192,13 @@ async fn test_1m_record_processing_performance() {
 async fn test_10k_concurrent_users() {
     let pool = get_test_pool().await;
     let redis_client = get_test_redis_client();
-    
+
     println!("🚀 Starting 10K concurrent users test...");
-    
+
     // Create 1000 test users (reduced for CI/test environment)
     let concurrent_users = if env::var("CI").is_ok() { 100 } else { 1000 };
     let users = setup_load_test_users(&pool, concurrent_users).await;
-    
+
     let rate_limiter = web::Data::new(RateLimiter::new_in_memory(1000));
     let auth_service = web::Data::new(AuthService::new(pool.clone()));
 
@@ -182,25 +214,25 @@ async fn test_10k_concurrent_users() {
             .route("/api/v1/ingest", web::post().to(ingest_handler)),
     )
     .await;
-    
+
     // Metrics tracking
     let successful_requests = Arc::new(AtomicUsize::new(0));
     let failed_requests = Arc::new(AtomicUsize::new(0));
     let total_records = Arc::new(AtomicUsize::new(0));
     let mut response_times = Vec::new();
-    
+
     // Semaphore to control concurrency
     let semaphore = Arc::new(Semaphore::new(concurrent_users));
-    
+
     let start_time = Instant::now();
-    
+
     // Process requests sequentially since test::call_service doesn't support concurrent calls
     for (i, (_user_id, api_key)) in users.into_iter().enumerate() {
         let _permit = semaphore.acquire().await.unwrap();
-        
+
         let payload = create_realistic_user_payload(i);
         let request_start = Instant::now();
-        
+
         let req = test::TestRequest::post()
             .uri("/api/v1/ingest")
             .insert_header(("Authorization", format!("Bearer {}", api_key)))
@@ -211,7 +243,7 @@ async fn test_10k_concurrent_users() {
         match test::call_service(&app, req).await {
             resp if resp.status().is_success() => {
                 let response_time = request_start.elapsed();
-                
+
                 let body = test::read_body_json::<ApiResponse<IngestResponse>, _>(resp).await;
                 if body.success {
                     successful_requests.fetch_add(1, Ordering::Relaxed);
@@ -221,7 +253,7 @@ async fn test_10k_concurrent_users() {
                 } else {
                     failed_requests.fetch_add(1, Ordering::Relaxed);
                 }
-                
+
                 response_times.push(response_time.as_millis() as u64);
             }
             _ => {
@@ -229,29 +261,33 @@ async fn test_10k_concurrent_users() {
             }
         }
     }
-    
+
     let total_time = start_time.elapsed();
-    
+
     // Calculate metrics
     let successful = successful_requests.load(Ordering::Relaxed);
     let failed = failed_requests.load(Ordering::Relaxed);
     let total_processed = total_records.load(Ordering::Relaxed);
-    
+
     response_times.sort_unstable();
     let avg_response_time = if !response_times.is_empty() {
         response_times.iter().sum::<u64>() / response_times.len() as u64
     } else {
         0
     };
-    
+
     let p95_index = (response_times.len() as f64 * 0.95) as usize;
     let p99_index = (response_times.len() as f64 * 0.99) as usize;
-    let p95_response_time = response_times.get(p95_index.min(response_times.len() - 1)).unwrap_or(&0);
-    let p99_response_time = response_times.get(p99_index.min(response_times.len() - 1)).unwrap_or(&0);
-    
+    let p95_response_time = response_times
+        .get(p95_index.min(response_times.len() - 1))
+        .unwrap_or(&0);
+    let p99_response_time = response_times
+        .get(p99_index.min(response_times.len() - 1))
+        .unwrap_or(&0);
+
     let requests_per_second = (successful + failed) as f64 / total_time.as_secs_f64();
     let records_per_second = total_processed as f64 / total_time.as_secs_f64();
-    
+
     let metrics = LoadTestMetrics {
         total_requests: successful + failed,
         successful_requests: successful,
@@ -263,27 +299,52 @@ async fn test_10k_concurrent_users() {
         requests_per_second,
         records_per_second,
     };
-    
+
     println!("✅ 10K Concurrent Users Results:");
     println!("   👥 Concurrent users: {}", concurrent_users);
     println!("   📊 Total requests: {}", metrics.total_requests);
-    println!("   ✅ Successful requests: {} ({:.1}%)", 
-             metrics.successful_requests,
-             (metrics.successful_requests as f64 / metrics.total_requests as f64) * 100.0);
+    println!(
+        "   ✅ Successful requests: {} ({:.1}%)",
+        metrics.successful_requests,
+        (metrics.successful_requests as f64 / metrics.total_requests as f64) * 100.0
+    );
     println!("   ❌ Failed requests: {}", metrics.failed_requests);
-    println!("   📈 Records processed: {}", metrics.total_records_processed);
-    println!("   ⏱️  Avg response time: {}ms", metrics.avg_response_time_ms);
-    println!("   📊 P95 response time: {}ms", metrics.p95_response_time_ms);
-    println!("   📊 P99 response time: {}ms", metrics.p99_response_time_ms);
+    println!(
+        "   📈 Records processed: {}",
+        metrics.total_records_processed
+    );
+    println!(
+        "   ⏱️  Avg response time: {}ms",
+        metrics.avg_response_time_ms
+    );
+    println!(
+        "   📊 P95 response time: {}ms",
+        metrics.p95_response_time_ms
+    );
+    println!(
+        "   📊 P99 response time: {}ms",
+        metrics.p99_response_time_ms
+    );
     println!("   🚀 Requests/second: {:.1}", metrics.requests_per_second);
     println!("   📊 Records/second: {:.1}", metrics.records_per_second);
-    
+
     // Performance assertions
     let success_rate = metrics.successful_requests as f64 / metrics.total_requests as f64;
-    assert!(success_rate >= 0.95, "Success rate {:.1}% should be ≥95%", success_rate * 100.0);
-    assert!(metrics.p95_response_time_ms < 5000, "P95 response time {}ms should be <5000ms", metrics.p95_response_time_ms);
-    assert!(metrics.requests_per_second > 100.0, "Should handle >100 requests/second");
-    
+    assert!(
+        success_rate >= 0.95,
+        "Success rate {:.1}% should be ≥95%",
+        success_rate * 100.0
+    );
+    assert!(
+        metrics.p95_response_time_ms < 5000,
+        "P95 response time {}ms should be <5000ms",
+        metrics.p95_response_time_ms
+    );
+    assert!(
+        metrics.requests_per_second > 100.0,
+        "Should handle >100 requests/second"
+    );
+
     // Cleanup
     let user_ids: Vec<Uuid> = (0..concurrent_users)
         .map(|i| {
@@ -291,7 +352,7 @@ async fn test_10k_concurrent_users() {
             Uuid::new_v4() // In real test, track actual user IDs
         })
         .collect();
-    
+
     // cleanup_load_test_data(&pool, user_ids).await; // Commented out for now
 }
 
@@ -300,7 +361,11 @@ async fn test_10k_concurrent_users() {
 async fn test_partition_management_under_load() {
     let pool = get_test_pool().await;
     let redis_client = get_test_redis_client();
-    let (user_id, api_key) = setup_load_test_users(&pool, 1).await.into_iter().next().unwrap();
+    let (user_id, api_key) = setup_load_test_users(&pool, 1)
+        .await
+        .into_iter()
+        .next()
+        .unwrap();
 
     let rate_limiter = web::Data::new(RateLimiter::new_in_memory(1000));
     let auth_service = web::Data::new(AuthService::new(pool.clone()));
@@ -323,8 +388,9 @@ async fn test_partition_management_under_load() {
     // Create payloads spanning multiple months to test partition creation
     let mut payloads = Vec::new();
     let base_date = Utc::now() - Duration::days(90); // 3 months back
-    
-    for day in 0..120 { // 4 months of data
+
+    for day in 0..120 {
+        // 4 months of data
         let date = base_date + Duration::days(day);
         let payload = create_date_specific_payload(date);
         payloads.push(payload);
@@ -344,7 +410,7 @@ async fn test_partition_management_under_load() {
 
         let resp = test::call_service(&app, req).await;
         assert!(resp.status().is_success(), "Request {} should succeed", i);
-        
+
         let body: ApiResponse<IngestResponse> = test::read_body_json(resp).await;
         let data = body.data.expect("Should have response data");
         total_processed += data.processed_count;
@@ -356,16 +422,19 @@ async fn test_partition_management_under_load() {
     }
 
     let processing_time = start_time.elapsed();
-    
+
     println!("✅ Partition Management Results:");
     println!("   📊 Total payloads: {}", payloads.len());
     println!("   📈 Records processed: {}", total_processed);
-    println!("   ⏱️  Processing time: {:.2}s", processing_time.as_secs_f64());
-    
+    println!(
+        "   ⏱️  Processing time: {:.2}s",
+        processing_time.as_secs_f64()
+    );
+
     // Verify partition management worked correctly
     let partition_count = count_active_partitions(&pool).await;
     assert!(partition_count >= 4, "Should have partitions for 4+ months");
-    
+
     println!("   📁 Active partitions: {}", partition_count);
 
     cleanup_load_test_data(&pool, vec![user_id]).await;
@@ -376,7 +445,11 @@ async fn test_partition_management_under_load() {
 async fn test_field_coverage_target() {
     let pool = get_test_pool().await;
     let redis_client = get_test_redis_client();
-    let (user_id, api_key) = setup_load_test_users(&pool, 1).await.into_iter().next().unwrap();
+    let (user_id, api_key) = setup_load_test_users(&pool, 1)
+        .await
+        .into_iter()
+        .next()
+        .unwrap();
 
     let rate_limiter = web::Data::new(RateLimiter::new_in_memory(1000));
     let auth_service = web::Data::new(AuthService::new(pool.clone()));
@@ -411,19 +484,34 @@ async fn test_field_coverage_target() {
 
     // Calculate field coverage across all metric types
     let field_coverage = calculate_comprehensive_field_coverage(&pool, user_id).await;
-    
+
     println!("✅ Field Coverage Results:");
-    println!("   📊 Overall field coverage: {:.1}%", field_coverage.overall);
+    println!(
+        "   📊 Overall field coverage: {:.1}%",
+        field_coverage.overall
+    );
     println!("   🥗 Nutrition coverage: {:.1}%", field_coverage.nutrition);
     println!("   🤒 Symptoms coverage: {:.1}%", field_coverage.symptoms);
-    println!("   🌍 Environmental coverage: {:.1}%", field_coverage.environmental);
-    println!("   🧠 Mental health coverage: {:.1}%", field_coverage.mental_health);
+    println!(
+        "   🌍 Environmental coverage: {:.1}%",
+        field_coverage.environmental
+    );
+    println!(
+        "   🧠 Mental health coverage: {:.1}%",
+        field_coverage.mental_health
+    );
     println!("   🚶 Mobility coverage: {:.1}%", field_coverage.mobility);
-    println!("   💝 Reproductive health coverage: {:.1}%", field_coverage.reproductive);
+    println!(
+        "   💝 Reproductive health coverage: {:.1}%",
+        field_coverage.reproductive
+    );
 
     // Verify 85% target is reached
-    assert!(field_coverage.overall >= 85.0, 
-           "Overall field coverage {:.1}% should reach 85% target", field_coverage.overall);
+    assert!(
+        field_coverage.overall >= 85.0,
+        "Overall field coverage {:.1}% should reach 85% target",
+        field_coverage.overall
+    );
 
     cleanup_load_test_data(&pool, vec![user_id]).await;
 }
@@ -433,7 +521,11 @@ async fn test_field_coverage_target() {
 async fn test_monitoring_alerting_triggers() {
     let pool = get_test_pool().await;
     let redis_client = get_test_redis_client();
-    let (user_id, api_key) = setup_load_test_users(&pool, 1).await.into_iter().next().unwrap();
+    let (user_id, api_key) = setup_load_test_users(&pool, 1)
+        .await
+        .into_iter()
+        .next()
+        .unwrap();
 
     let rate_limiter = web::Data::new(RateLimiter::new_in_memory(1000));
     let auth_service = web::Data::new(AuthService::new(pool.clone()));
@@ -467,18 +559,21 @@ async fn test_monitoring_alerting_triggers() {
 
     let resp = test::call_service(&app, req).await;
     let processing_time = start_time.elapsed();
-    
+
     assert!(resp.status().is_success());
 
     // Verify alerting system triggered appropriate responses
     let safety_events = validate_safety_event_logging(&pool, user_id).await;
-    
+
     println!("✅ Monitoring & Alerting Results:");
     println!("   ⏱️  Processing time: {}ms", processing_time.as_millis());
     println!("   🚨 Safety events triggered: {}", safety_events.len());
-    
+
     for event in &safety_events {
-        println!("   📊 Event: {} - Severity: {}", event.event_type, event.severity);
+        println!(
+            "   📊 Event: {} - Severity: {}",
+            event.event_type, event.severity
+        );
     }
 
     // Safety events table doesn't exist in simplified schema
@@ -491,12 +586,12 @@ async fn test_monitoring_alerting_triggers() {
 
 fn create_1m_record_payload() -> Value {
     let mut records = Vec::new();
-    
+
     // Distribute 1M records across different metric types
     // 200k nutrition metrics, 200k symptoms, 200k environmental, 200k mental health, 200k mobility
-    
+
     let base_date = Utc::now() - Duration::days(365);
-    
+
     // Nutrition metrics (200k)
     for i in 0..200_000 {
         let date = base_date + Duration::seconds(i * 180); // Every 3 minutes over the year
@@ -510,15 +605,15 @@ fn create_1m_record_payload() -> Value {
             "source": "Load Test"
         }));
     }
-    
+
     // Symptoms (200k)
     let symptom_types = vec!["headache", "fatigue", "nausea", "anxiety", "muscle_cramps"];
     let severities = vec!["mild", "moderate", "severe"];
-    
+
     for i in 0..200_000 {
         let date = base_date + Duration::seconds(i * 180 + 60);
         records.push(json!({
-            "type": "Symptom", 
+            "type": "Symptom",
             "recorded_at": date.to_rfc3339(),
             "symptom_type": symptom_types[(i as usize) % symptom_types.len()],
             "severity": severities[(i as usize) % severities.len()],
@@ -526,7 +621,7 @@ fn create_1m_record_payload() -> Value {
             "source": "Load Test"
         }));
     }
-    
+
     // Environmental metrics (200k)
     for i in 0..200_000 {
         let date = base_date + Duration::seconds(i * 180 + 120);
@@ -540,10 +635,10 @@ fn create_1m_record_payload() -> Value {
             "source": "Load Test"
         }));
     }
-    
+
     // Mental health metrics (200k)
     let stress_levels = vec!["low", "medium", "high"];
-    
+
     for i in 0..200_000 {
         let date = base_date + Duration::seconds(i * 180 + 140);
         records.push(json!({
@@ -556,7 +651,7 @@ fn create_1m_record_payload() -> Value {
             "source": "Load Test"
         }));
     }
-    
+
     // Mobility metrics (200k)
     for i in 0..200_000 {
         let date = base_date + Duration::seconds(i * 180 + 160);
@@ -569,7 +664,7 @@ fn create_1m_record_payload() -> Value {
             "source": "Load Test"
         }));
     }
-    
+
     json!({
         "data": {
             "metrics": records
@@ -579,7 +674,7 @@ fn create_1m_record_payload() -> Value {
 
 fn create_realistic_user_payload(user_index: usize) -> Value {
     let base_date = Utc::now() - Duration::hours(user_index as i64 % 24);
-    
+
     json!({
         "data": {
             "metrics": [
@@ -801,7 +896,7 @@ struct SafetyEvent {
 
 async fn validate_1m_record_storage(pool: &PgPool, user_id: Uuid) -> usize {
     let mut total = 0;
-    
+
     // Count records across all metric tables
     let counts = sqlx::query!(
         "SELECT 
@@ -815,19 +910,19 @@ async fn validate_1m_record_storage(pool: &PgPool, user_id: Uuid) -> usize {
     .fetch_one(pool)
     .await
     .unwrap();
-    
+
     total += counts.heart_rate_count.unwrap_or(0) as usize;
     total += counts.blood_pressure_count.unwrap_or(0) as usize;
     total += counts.sleep_count.unwrap_or(0) as usize;
     total += counts.activity_count.unwrap_or(0) as usize;
     total += counts.workout_count.unwrap_or(0) as usize;
-    
+
     total
 }
 
 async fn validate_partition_creation(pool: &PgPool, date: DateTime<Utc>) {
     let table_date = format!("{}_{:02}", date.year(), date.month());
-    
+
     // Check if partition exists for this date
     let partition_exists = sqlx::query!(
         "SELECT EXISTS (
@@ -841,8 +936,12 @@ async fn validate_partition_creation(pool: &PgPool, date: DateTime<Utc>) {
     .unwrap()
     .exists
     .unwrap_or(false);
-    
-    assert!(partition_exists, "Partition for {} should exist", table_date);
+
+    assert!(
+        partition_exists,
+        "Partition for {} should exist",
+        table_date
+    );
 }
 
 async fn count_active_partitions(pool: &PgPool) -> i64 {
@@ -859,20 +958,33 @@ async fn count_active_partitions(pool: &PgPool) -> i64 {
     .unwrap_or(0)
 }
 
-async fn calculate_comprehensive_field_coverage(pool: &PgPool, user_id: Uuid) -> FieldCoverageReport {
+async fn calculate_comprehensive_field_coverage(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> FieldCoverageReport {
     // Simplified field coverage calculation
     // In production, this would be more sophisticated
-    
-    let nutrition_coverage = calculate_table_field_coverage(pool, "nutrition_metrics", user_id, 37).await;
+
+    let nutrition_coverage =
+        calculate_table_field_coverage(pool, "nutrition_metrics", user_id, 37).await;
     let symptoms_coverage = calculate_table_field_coverage(pool, "symptoms", user_id, 8).await;
-    let environmental_coverage = calculate_table_field_coverage(pool, "environmental_metrics", user_id, 33).await;
-    let mental_health_coverage = calculate_table_field_coverage(pool, "mental_health_metrics", user_id, 10).await;
-    let mobility_coverage = calculate_table_field_coverage(pool, "mobility_metrics", user_id, 15).await;
-    let reproductive_coverage = calculate_table_field_coverage(pool, "reproductive_health", user_id, 20).await;
-    
-    let overall = (nutrition_coverage + symptoms_coverage + environmental_coverage + 
-                  mental_health_coverage + mobility_coverage + reproductive_coverage) / 6.0;
-    
+    let environmental_coverage =
+        calculate_table_field_coverage(pool, "environmental_metrics", user_id, 33).await;
+    let mental_health_coverage =
+        calculate_table_field_coverage(pool, "mental_health_metrics", user_id, 10).await;
+    let mobility_coverage =
+        calculate_table_field_coverage(pool, "mobility_metrics", user_id, 15).await;
+    let reproductive_coverage =
+        calculate_table_field_coverage(pool, "reproductive_health", user_id, 20).await;
+
+    let overall = (nutrition_coverage
+        + symptoms_coverage
+        + environmental_coverage
+        + mental_health_coverage
+        + mobility_coverage
+        + reproductive_coverage)
+        / 6.0;
+
     FieldCoverageReport {
         overall,
         nutrition: nutrition_coverage,
@@ -884,7 +996,12 @@ async fn calculate_comprehensive_field_coverage(pool: &PgPool, user_id: Uuid) ->
     }
 }
 
-async fn calculate_table_field_coverage(pool: &PgPool, table_name: &str, user_id: Uuid, total_fields: i32) -> f64 {
+async fn calculate_table_field_coverage(
+    pool: &PgPool,
+    table_name: &str,
+    user_id: Uuid,
+    total_fields: i32,
+) -> f64 {
     // This is a simplified implementation - would need to be more sophisticated in production
     // For now, return a realistic coverage percentage
     match table_name {

@@ -134,8 +134,7 @@ pub async fn ingest_handler(
     };
 
     // Validate payload constraints
-    let total_metrics = internal_payload.data.metrics.len() 
-        + internal_payload.data.workouts.len();
+    let total_metrics = internal_payload.data.metrics.len() + internal_payload.data.workouts.len();
     if total_metrics > MAX_METRICS_PER_REQUEST {
         error!(
             "Too many metrics: {} exceeds limit of {}",
@@ -152,7 +151,7 @@ pub async fn ingest_handler(
     // Validate individual metrics and workouts
     let mut all_validation_errors = validate_metrics(&internal_payload.data.metrics);
     all_validation_errors.extend(validate_workouts(&internal_payload.data.workouts));
-    
+
     // Validate new metric types
     // Removed deprecated metric validation calls
 
@@ -435,12 +434,15 @@ async fn update_processing_status(
                 result
                     .errors
                     .iter()
-                    .map(|e| serde_json::json!({
-                        "metric_type": e.metric_type,
-                        "error_message": e.error_message
-                    }))
-                    .collect::<Vec<_>>()
-            ).unwrap()
+                    .map(|e| {
+                        serde_json::json!({
+                            "metric_type": e.metric_type,
+                            "error_message": e.error_message
+                        })
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap(),
         )
     };
 
@@ -545,7 +547,7 @@ fn parse_with_error_context<T: serde::de::DeserializeOwned>(
 fn sanitize_payload_for_logging(payload: &str, max_length: usize) -> String {
     // Simple pattern replacements for sensitive fields without regex dependency
     let mut sanitized = payload.to_string();
-    
+
     // Replace specific sensitive field patterns
     if sanitized.contains("sexual_activity") {
         sanitized = sanitized.replace("sexual_activity", "[REDACTED_FIELD]");
@@ -562,7 +564,7 @@ fn sanitize_payload_for_logging(payload: &str, max_length: usize) -> String {
     if sanitized.contains("\"symptoms\"") {
         sanitized = sanitized.replace("\"symptoms\"", "\"[REDACTED_SYMPTOMS]\"");
     }
-    
+
     // Truncate to max length and add ellipsis if needed
     if sanitized.len() > max_length {
         format!("{}...[truncated]", &sanitized[..max_length])
@@ -628,4 +630,3 @@ fn validate_json_structure_basic(data: &[u8]) -> std::result::Result<(), String>
 }
 
 // Deprecated validation functions removed for simplified schema
-

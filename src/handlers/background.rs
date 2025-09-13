@@ -3,10 +3,8 @@ use sqlx::PgPool;
 use tracing::{error, info, instrument};
 use uuid::Uuid;
 
-use crate::models::{
-    ApiResponse, JobStatusResponse,
-};
 use crate::models::enums::{JobStatus, JobType};
+use crate::models::{ApiResponse, JobStatusResponse};
 use crate::services::auth::AuthContext;
 use crate::services::background_processor::BackgroundProcessor;
 
@@ -47,9 +45,11 @@ pub async fn get_job_status(
                 error = %e,
                 "Failed to get job status"
             );
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                "Failed to get job status".to_string(),
-            )))
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to get job status".to_string(),
+                )),
+            )
         }
     }
 }
@@ -124,10 +124,8 @@ pub async fn list_user_jobs(
 
     match jobs_result {
         Ok(jobs) => {
-            let job_responses: Vec<JobStatusResponse> = jobs
-                .into_iter()
-                .map(JobStatusResponse::from)
-                .collect();
+            let job_responses: Vec<JobStatusResponse> =
+                jobs.into_iter().map(JobStatusResponse::from).collect();
 
             Ok(HttpResponse::Ok().json(ApiResponse::success(job_responses)))
         }
@@ -137,9 +135,8 @@ pub async fn list_user_jobs(
                 error = %e,
                 "Failed to list user jobs"
             );
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                "Failed to list jobs".to_string(),
-            )))
+            Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error("Failed to list jobs".to_string())))
         }
     }
 }
@@ -190,11 +187,13 @@ pub async fn cancel_job(
             .execute(pool.get_ref())
             .await;
 
-            Ok(HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
-                "job_id": job_id,
-                "status": "cancelled",
-                "message": "Job cancelled successfully"
-            }))))
+            Ok(
+                HttpResponse::Ok().json(ApiResponse::success(serde_json::json!({
+                    "job_id": job_id,
+                    "status": "cancelled",
+                    "message": "Job cancelled successfully"
+                }))),
+            )
         }
         Ok(_) => {
             error!(
@@ -213,9 +212,8 @@ pub async fn cancel_job(
                 error = %e,
                 "Failed to cancel job"
             );
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                "Failed to cancel job".to_string(),
-            )))
+            Ok(HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error("Failed to cancel job".to_string())))
         }
     }
 }
@@ -272,9 +270,11 @@ pub async fn get_job_statistics(
                 error = %e,
                 "Failed to get job statistics"
             );
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                "Failed to get job statistics".to_string(),
-            )))
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to get job statistics".to_string(),
+                )),
+            )
         }
     }
 }

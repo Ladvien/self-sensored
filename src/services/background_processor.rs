@@ -1,9 +1,7 @@
-use crate::models::{
-    IngestBatchConfig, IngestPayload, JobResultSummary, ProcessingJob,
-};
-use crate::models::enums::{JobStatus, JobType};
-use crate::services::auth::AuthContext;
 use crate::config::BatchConfig;
+use crate::models::enums::{JobStatus, JobType};
+use crate::models::{IngestBatchConfig, IngestPayload, JobResultSummary, ProcessingJob};
+use crate::services::auth::AuthContext;
 use crate::services::batch_processor::BatchProcessor;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -26,7 +24,7 @@ impl BackgroundProcessor {
     pub fn new(pool: PgPool) -> Self {
         let batch_processor = BatchProcessor::new(pool.clone());
         let job_semaphore = Arc::new(Semaphore::new(5)); // Limit concurrent background jobs
-        
+
         Self {
             pool,
             batch_processor,
@@ -43,7 +41,8 @@ impl BackgroundProcessor {
             return Ok(());
         }
 
-        self.is_running.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.is_running
+            .store(true, std::sync::atomic::Ordering::Relaxed);
 
         let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
         self.shutdown_tx = Some(shutdown_tx);
@@ -74,7 +73,7 @@ impl BackgroundProcessor {
                 // Try to acquire a permit for job processing
                 if let Ok(_permit) = job_semaphore.clone().try_acquire_owned() {
                     let pool_clone = pool.clone();
-                    
+
                     // Spawn a task to process the next job
                     tokio::spawn(async move {
                         // The permit will be automatically released when the task completes
@@ -100,12 +99,13 @@ impl BackgroundProcessor {
         if let Some(shutdown_tx) = self.shutdown_tx.take() {
             let _ = shutdown_tx.send(()).await;
         }
-        self.is_running.store(false, std::sync::atomic::Ordering::Relaxed);
-        
+        self.is_running
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+
         // Wait for any running jobs to complete (with timeout)
         let start = Instant::now();
-        while self.is_running.load(std::sync::atomic::Ordering::Relaxed) 
-            && start.elapsed() < Duration::from_secs(30) 
+        while self.is_running.load(std::sync::atomic::Ordering::Relaxed)
+            && start.elapsed() < Duration::from_secs(30)
         {
             sleep(Duration::from_millis(100)).await;
         }
@@ -208,15 +208,21 @@ impl BackgroundProcessor {
 
         let Some(job_id) = job_row.job_id else {
             error!("Background job missing job_id");
-            return Err(sqlx::Error::Protocol("Invalid job data: missing job_id".into()));
+            return Err(sqlx::Error::Protocol(
+                "Invalid job data: missing job_id".into(),
+            ));
         };
         let Some(user_id) = job_row.user_id else {
             error!(job_id = %job_id, "Background job missing user_id");
-            return Err(sqlx::Error::Protocol("Invalid job data: missing user_id".into()));
+            return Err(sqlx::Error::Protocol(
+                "Invalid job data: missing user_id".into(),
+            ));
         };
         let Some(raw_ingestion_id) = job_row.raw_ingestion_id else {
             error!(job_id = %job_id, user_id = %user_id, "Background job missing raw_ingestion_id");
-            return Err(sqlx::Error::Protocol("Invalid job data: missing raw_ingestion_id".into()));
+            return Err(sqlx::Error::Protocol(
+                "Invalid job data: missing raw_ingestion_id".into(),
+            ));
         };
         let total_metrics = job_row.total_metrics.unwrap_or(0);
 
@@ -243,15 +249,9 @@ impl BackgroundProcessor {
             Err(e) => {
                 let error_msg = format!("Failed to deserialize payload: {}", e);
                 error!(job_id = %job_id, error = %error_msg, "Job failed");
-                
-                Self::complete_job(
-                    &pool,
-                    job_id,
-                    JobStatus::Failed,
-                    None,
-                    Some(error_msg),
-                ).await?;
-                
+
+                Self::complete_job(&pool, job_id, JobStatus::Failed, None, Some(error_msg)).await?;
+
                 return Ok(());
             }
         };
@@ -271,21 +271,22 @@ impl BackgroundProcessor {
 
         // Process the batch
         let processing_result = batch_processor.process_batch(user_id, payload).await;
-        
+
         let processing_time = start_time.elapsed();
 
         // Create result summary
         let mut metrics_by_type = std::collections::HashMap::new();
         // Note: This is a simplified summary - in practice you'd want more detailed metrics
         metrics_by_type.insert("total".to_string(), processing_result.processed_count);
-        
+
         let result_summary = JobResultSummary {
             total_metrics_processed: processing_result.processed_count,
             metrics_by_type,
             validation_errors: processing_result.failed_count,
             database_errors: 0, // Could be tracked separately
             processing_time_ms: processing_time.as_millis() as u64,
-            duplicates_removed: processing_result.deduplication_stats
+            duplicates_removed: processing_result
+                .deduplication_stats
                 .map(|s| s.total_duplicates)
                 .unwrap_or(0),
             final_status: if processing_result.errors.is_empty() {
@@ -323,7 +324,8 @@ impl BackgroundProcessor {
                 }
             },
             error_message,
-        ).await?;
+        )
+        .await?;
 
         info!(
             job_id = %job_id,
@@ -385,9 +387,12 @@ impl BackgroundProcessor {
             .await?;
 
         let deleted_count = result.deleted_count.unwrap_or(0);
-        
+
         if deleted_count > 0 {
-            info!(deleted_count = deleted_count, "Cleaned up old background jobs");
+            info!(
+                deleted_count = deleted_count,
+                "Cleaned up old background jobs"
+            );
         }
 
         Ok(deleted_count)

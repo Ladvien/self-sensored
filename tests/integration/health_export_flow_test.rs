@@ -1,16 +1,13 @@
-use actix_web::{test, web, App, middleware::Logger};
-use chrono::{DateTime, Utc, Duration};
-use serde_json::{json, Value};
+use actix_web::{middleware::Logger, test, web, App};
+use serde_json::json;
 use sqlx::PgPool;
 use std::env;
 use std::time::Instant;
-use std::collections::HashMap;
 use uuid::Uuid;
 
 use self_sensored::{
     handlers::{health::health_check, ingest::ingest_handler},
     middleware::{auth::AuthMiddleware, rate_limit::RateLimitMiddleware},
-    models::{ApiResponse, IngestResponse},
     services::{auth::AuthService, rate_limiter::RateLimiter},
 };
 
@@ -42,18 +39,27 @@ async fn setup_test_user_and_key(pool: &PgPool, email: &str) -> (Uuid, String) {
 
     // Create test user and API key
     let user = auth_service
-        .create_user(email, Some("integration_test_user"), Some(serde_json::json!({"name": "Integration Test User"})))
+        .create_user(
+            email,
+            Some("integration_test_user"),
+            Some(serde_json::json!({"name": "Integration Test User"})),
+        )
         .await
         .unwrap();
 
     let (plain_key, _api_key) = auth_service
-        .create_api_key(user.id, Some("Integration Test Key"), None, Some(serde_json::json!(["write"])), None)
+        .create_api_key(
+            user.id,
+            Some("Integration Test Key"),
+            None,
+            Some(serde_json::json!(["write"])),
+            None,
+        )
         .await
         .unwrap();
 
     (user.id, plain_key)
 }
-
 
 /// Test comprehensive Health Export payload processing for nutrition metrics
 #[tokio::test]
@@ -107,7 +113,7 @@ async fn test_nutrition_metrics_flow() {
     });
 
     let start_time = Instant::now();
-    
+
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
         .insert_header(("Authorization", format!("Bearer {}", api_key)))
@@ -117,13 +123,19 @@ async fn test_nutrition_metrics_flow() {
 
     let resp = test::call_service(&app, req).await;
     let processing_time = start_time.elapsed();
-    
-    assert!(resp.status().is_success(), "Nutrition ingest should succeed");
+
+    assert!(
+        resp.status().is_success(),
+        "Nutrition ingest should succeed"
+    );
 
     // For now, just verify the request was processed
     // In production, would verify database storage and field coverage
-    
-    println!("✅ Nutrition metrics processed in {}ms", processing_time.as_millis());
+
+    println!(
+        "✅ Nutrition metrics processed in {}ms",
+        processing_time.as_millis()
+    );
 
     cleanup_test_data(&pool, user_id).await;
 }
@@ -185,7 +197,7 @@ async fn test_symptoms_tracking_flow() {
     assert!(resp.status().is_success(), "Symptoms ingest should succeed");
 
     println!("✅ Symptoms tracking flow completed successfully");
-    
+
     cleanup_test_data(&pool, user_id).await;
 }
 
@@ -238,10 +250,13 @@ async fn test_environmental_metrics_flow() {
         .to_request();
 
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "Environmental ingest should succeed");
+    assert!(
+        resp.status().is_success(),
+        "Environmental ingest should succeed"
+    );
 
     println!("✅ Environmental metrics flow completed successfully");
-    
+
     cleanup_test_data(&pool, user_id).await;
 }
 
@@ -295,10 +310,13 @@ async fn test_mental_health_metrics_flow() {
         .to_request();
 
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "Mental health ingest should succeed");
+    assert!(
+        resp.status().is_success(),
+        "Mental health ingest should succeed"
+    );
 
     println!("✅ Mental health metrics flow completed successfully");
-    
+
     cleanup_test_data(&pool, user_id).await;
 }
 
@@ -354,7 +372,7 @@ async fn test_mobility_metrics_flow() {
     assert!(resp.status().is_success(), "Mobility ingest should succeed");
 
     println!("✅ Mobility metrics flow completed successfully");
-    
+
     cleanup_test_data(&pool, user_id).await;
 }
 
@@ -409,10 +427,13 @@ async fn test_reproductive_health_metrics_flow() {
         .to_request();
 
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "Reproductive health ingest should succeed");
+    assert!(
+        resp.status().is_success(),
+        "Reproductive health ingest should succeed"
+    );
 
     println!("✅ Reproductive health metrics flow completed successfully");
-    
+
     cleanup_test_data(&pool, user_id).await;
 }
 
@@ -494,15 +515,21 @@ async fn test_mixed_metric_types_flow() {
     let resp = test::call_service(&app, req).await;
     let processing_time = start_time.elapsed();
 
-    assert!(resp.status().is_success(), "Mixed payload ingest should succeed");
+    assert!(
+        resp.status().is_success(),
+        "Mixed payload ingest should succeed"
+    );
 
-    println!("✅ Mixed metric types processed in {}ms", processing_time.as_millis());
-    
+    println!(
+        "✅ Mixed metric types processed in {}ms",
+        processing_time.as_millis()
+    );
+
     cleanup_test_data(&pool, user_id).await;
 }
 
 /// Test field coverage validation
-#[tokio::test] 
+#[tokio::test]
 async fn test_field_coverage_validation() {
     let pool = get_test_pool().await;
     let redis_client = get_test_redis_client();
@@ -571,17 +598,23 @@ async fn test_field_coverage_validation() {
         .to_request();
 
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "Comprehensive payload should succeed");
+    assert!(
+        resp.status().is_success(),
+        "Comprehensive payload should succeed"
+    );
 
     // Simulate field coverage calculation
     let field_coverage = calculate_simulated_field_coverage();
-    
+
     println!("✅ Field Coverage Results:");
     println!("   📊 Overall field coverage: {:.1}%", field_coverage);
 
     // Verify 85% target is simulated as reached
-    assert!(field_coverage >= 85.0, 
-           "Field coverage {:.1}% should reach 85% target", field_coverage);
+    assert!(
+        field_coverage >= 85.0,
+        "Field coverage {:.1}% should reach 85% target",
+        field_coverage
+    );
 
     cleanup_test_data(&pool, user_id).await;
 }
@@ -618,7 +651,11 @@ async fn test_api_error_handling() {
         .to_request();
 
     let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), 400, "Should return bad request for invalid JSON");
+    assert_eq!(
+        resp.status(),
+        400,
+        "Should return bad request for invalid JSON"
+    );
 
     // Test unauthorized request
     let req = test::TestRequest::post()
@@ -632,7 +669,7 @@ async fn test_api_error_handling() {
     assert_eq!(resp.status(), 401, "Should return unauthorized");
 
     println!("✅ API error handling tests completed successfully");
-    
+
     cleanup_test_data(&pool, user_id).await;
 }
 
@@ -678,7 +715,7 @@ async fn test_concurrent_performance() {
                 ]
             }
         });
-        
+
         let req = test::TestRequest::post()
             .uri("/api/v1/ingest")
             .insert_header(("Authorization", format!("Bearer {}", api_key)))

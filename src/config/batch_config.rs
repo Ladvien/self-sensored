@@ -2,13 +2,13 @@ use std::env;
 
 /// PostgreSQL parameter limit constants for batch processing optimization
 pub const POSTGRESQL_MAX_PARAMS: usize = 65535; // PostgreSQL absolute maximum
-pub const SAFE_PARAM_LIMIT: usize = 52428;      // 80% of max for safety margin
+pub const SAFE_PARAM_LIMIT: usize = 52428; // 80% of max for safety margin
 
 /// Parameter counts per metric type for chunk size calculations
 pub const HEART_RATE_PARAMS_PER_RECORD: usize = 6; // user_id, recorded_at, heart_rate, resting_heart_rate, context, source_device
-pub const BLOOD_PRESSURE_PARAMS_PER_RECORD: usize = 6; // user_id, recorded_at, systolic, diastolic, pulse, source_device  
+pub const BLOOD_PRESSURE_PARAMS_PER_RECORD: usize = 6; // user_id, recorded_at, systolic, diastolic, pulse, source_device
 pub const SLEEP_PARAMS_PER_RECORD: usize = 10; // user_id, sleep_start, sleep_end, duration_minutes, deep_sleep_minutes, rem_sleep_minutes, light_sleep_minutes, awake_minutes, efficiency, source_device
-pub const ACTIVITY_PARAMS_PER_RECORD: usize = 8; // user_id, recorded_at, step_count, distance_meters, active_energy_burned_kcal, basal_energy_burned_kcal, flights_climbed, source_device 
+pub const ACTIVITY_PARAMS_PER_RECORD: usize = 8; // user_id, recorded_at, step_count, distance_meters, active_energy_burned_kcal, basal_energy_burned_kcal, flights_climbed, source_device
 pub const WORKOUT_PARAMS_PER_RECORD: usize = 10; // id, user_id, workout_type, started_at, ended_at, total_energy_kcal, distance_meters, avg_heart_rate, max_heart_rate, source_device
 
 /// Configuration for batch processing operations
@@ -121,11 +121,27 @@ impl BatchConfig {
     /// Validate chunk sizes against PostgreSQL parameter limits
     pub fn validate(&self) -> Result<(), String> {
         let validations = vec![
-            ("heart_rate", self.heart_rate_chunk_size, HEART_RATE_PARAMS_PER_RECORD),
-            ("blood_pressure", self.blood_pressure_chunk_size, BLOOD_PRESSURE_PARAMS_PER_RECORD),
+            (
+                "heart_rate",
+                self.heart_rate_chunk_size,
+                HEART_RATE_PARAMS_PER_RECORD,
+            ),
+            (
+                "blood_pressure",
+                self.blood_pressure_chunk_size,
+                BLOOD_PRESSURE_PARAMS_PER_RECORD,
+            ),
             ("sleep", self.sleep_chunk_size, SLEEP_PARAMS_PER_RECORD),
-            ("activity", self.activity_chunk_size, ACTIVITY_PARAMS_PER_RECORD),
-            ("workout", self.workout_chunk_size, WORKOUT_PARAMS_PER_RECORD),
+            (
+                "activity",
+                self.activity_chunk_size,
+                ACTIVITY_PARAMS_PER_RECORD,
+            ),
+            (
+                "workout",
+                self.workout_chunk_size,
+                WORKOUT_PARAMS_PER_RECORD,
+            ),
         ];
 
         for (metric_type, chunk_size, params_per_record) in validations {

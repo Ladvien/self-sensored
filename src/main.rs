@@ -15,7 +15,8 @@ mod services;
 use config::LoggingConfig;
 use db::database::{create_connection_pool, update_db_pool_metrics};
 use middleware::{
-    AdminMiddleware, AuthMiddleware, CompressionAndCaching, MetricsMiddleware, RateLimitMiddleware, StructuredLogger,
+    AdminMiddleware, AuthMiddleware, CompressionAndCaching, MetricsMiddleware, RateLimitMiddleware,
+    StructuredLogger,
 };
 use services::{auth::AuthService, rate_limiter::RateLimiter};
 

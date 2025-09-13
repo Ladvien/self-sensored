@@ -56,9 +56,9 @@ impl Default for ValidationConfig {
 
             // Activity limits: reasonable daily maximums
             step_count_min: 0,
-            step_count_max: 200_000,     // Extreme but possible
-            distance_max_km: 500.0, // ~310 miles - marathon+ distance
-            calories_max: 20_000.0, // Extreme athletic events
+            step_count_max: 200_000, // Extreme but possible
+            distance_max_km: 500.0,  // ~310 miles - marathon+ distance
+            calories_max: 20_000.0,  // Extreme athletic events
 
             // GPS coordinates: global valid ranges
             latitude_min: -90.0,

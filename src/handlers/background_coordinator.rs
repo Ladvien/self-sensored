@@ -21,7 +21,7 @@ impl BackgroundJobType {
     pub fn as_str(&self) -> &'static str {
         match self {
             BackgroundJobType::IngestBatch => "ingest_batch",
-            BackgroundJobType::DataExport => "data_export", 
+            BackgroundJobType::DataExport => "data_export",
             BackgroundJobType::DataMigration => "data_migration",
             BackgroundJobType::HealthCheck => "health_check",
         }
@@ -148,7 +148,10 @@ impl BackgroundJobCoordinator {
     }
 
     /// Check if a similar job already exists for this raw ingestion
-    pub async fn check_existing_job(&self, raw_ingestion_id: Uuid) -> Result<Option<Uuid>, sqlx::Error> {
+    pub async fn check_existing_job(
+        &self,
+        raw_ingestion_id: Uuid,
+    ) -> Result<Option<Uuid>, sqlx::Error> {
         let existing = sqlx::query!(
             r#"
             SELECT id FROM processing_jobs 
@@ -185,7 +188,8 @@ impl BackgroundJobCoordinator {
             Ok(Some(JobStatusInfo {
                 id: job_id,
                 status: job.status.as_str().to_string(),
-                job_type: BackgroundJobType::from_str(&job.job_type.as_str()).unwrap_or(BackgroundJobType::IngestBatch),
+                job_type: BackgroundJobType::from_str(&job.job_type.as_str())
+                    .unwrap_or(BackgroundJobType::IngestBatch),
                 priority: match job.priority {
                     1 => JobPriority::Low,
                     10 => JobPriority::High,
@@ -194,7 +198,12 @@ impl BackgroundJobCoordinator {
                 total_metrics: job.total_metrics.unwrap_or(0) as usize,
                 processed_metrics: job.processed_metrics.unwrap_or(0) as usize,
                 failed_metrics: job.failed_metrics.unwrap_or(0) as usize,
-                progress_percentage: job.progress_percentage.unwrap_or(sqlx::types::BigDecimal::from(0)).to_string().parse::<f64>().unwrap_or(0.0),
+                progress_percentage: job
+                    .progress_percentage
+                    .unwrap_or(sqlx::types::BigDecimal::from(0))
+                    .to_string()
+                    .parse::<f64>()
+                    .unwrap_or(0.0),
                 created_at: job.created_at,
                 started_at: job.started_at,
                 completed_at: job.completed_at,
@@ -217,7 +226,7 @@ impl BackgroundJobCoordinator {
     ) -> Result<(), sqlx::Error> {
         let processed = processed_metrics as i32;
         let failed = failed_metrics as i32;
-        
+
         // Update metrics first
         sqlx::query!(
             r#"
@@ -273,7 +282,11 @@ impl BackgroundJobCoordinator {
             WHERE id = $1
             "#,
             job_id,
-            if success { JobStatus::Completed } else { JobStatus::Failed } as JobStatus,
+            if success {
+                JobStatus::Completed
+            } else {
+                JobStatus::Failed
+            } as JobStatus,
             result_summary,
             error_message
         )
@@ -301,7 +314,8 @@ impl BackgroundJobCoordinator {
         .await?;
 
         if let Some(job) = job {
-            let config: HashMap<String, Value> = job.config
+            let config: HashMap<String, Value> = job
+                .config
                 .and_then(|v| serde_json::from_value(v).ok())
                 .unwrap_or_default();
 
@@ -322,11 +336,9 @@ impl BackgroundJobCoordinator {
 
     /// Clean up old completed jobs
     pub async fn cleanup_old_jobs(&self) -> Result<usize, sqlx::Error> {
-        let result = sqlx::query!(
-            "SELECT cleanup_old_jobs() as deleted_count"
-        )
-        .fetch_one(&self.pool)
-        .await?;
+        let result = sqlx::query!("SELECT cleanup_old_jobs() as deleted_count")
+            .fetch_one(&self.pool)
+            .await?;
 
         let deleted_count = result.deleted_count.unwrap_or(0) as usize;
         if deleted_count > 0 {
@@ -358,7 +370,12 @@ impl BackgroundJobCoordinator {
             processing_jobs: stats.processing_count.unwrap_or(0) as usize,
             completed_jobs_24h: stats.completed_count.unwrap_or(0) as usize,
             failed_jobs_24h: stats.failed_count.unwrap_or(0) as usize,
-            avg_processing_time_secs: stats.avg_processing_time_secs.unwrap_or(sqlx::types::BigDecimal::from(0)).to_string().parse::<f64>().unwrap_or(0.0),
+            avg_processing_time_secs: stats
+                .avg_processing_time_secs
+                .unwrap_or(sqlx::types::BigDecimal::from(0))
+                .to_string()
+                .parse::<f64>()
+                .unwrap_or(0.0),
         })
     }
 }
@@ -408,7 +425,7 @@ pub struct QueueStats {
 pub fn should_use_background_processing(total_metrics: usize, payload_size_mb: f64) -> bool {
     const BACKGROUND_METRICS_THRESHOLD: usize = 25_000;
     const BACKGROUND_SIZE_THRESHOLD_MB: f64 = 50.0;
-    
+
     total_metrics > BACKGROUND_METRICS_THRESHOLD || payload_size_mb > BACKGROUND_SIZE_THRESHOLD_MB
 }
 
@@ -424,16 +441,22 @@ impl Default for JobQueueMigrationPath {
     fn default() -> Self {
         Self {
             current_system: "Custom PostgreSQL-based job queue",
-            recommended_systems: vec!["Sidekiq (Ruby)", "Celery (Python)", "RQ (Python)", "DelayedJob (Ruby)", "Faktory (Language-agnostic)"],
+            recommended_systems: vec![
+                "Sidekiq (Ruby)",
+                "Celery (Python)",
+                "RQ (Python)",
+                "DelayedJob (Ruby)",
+                "Faktory (Language-agnostic)",
+            ],
             migration_steps: vec![
                 "1. Implement adapter pattern for job queue interface",
-                "2. Create parallel implementation with dedicated queue system", 
+                "2. Create parallel implementation with dedicated queue system",
                 "3. Migrate job creation to use new system",
                 "4. Update background workers to poll new queue",
                 "5. Implement job result reconciliation",
                 "6. Monitor both systems during transition period",
                 "7. Deprecate PostgreSQL-based queue gradually",
-                "8. Clean up database schema and functions"
+                "8. Clean up database schema and functions",
             ],
             estimated_effort_days: 21, // 3 weeks for a proper migration
         }

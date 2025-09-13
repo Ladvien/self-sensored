@@ -36,7 +36,6 @@ pub struct ProcessingJob {
     pub result_summary: Option<serde_json::Value>,
 }
 
-
 /// Priority levels for job processing
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum JobPriority {
@@ -90,7 +89,8 @@ impl From<ProcessingJob> for JobStatusResponse {
             job_id: job.id,
             user_id: job.user_id,
             status: job.status,
-            progress_percentage: job.progress_percentage
+            progress_percentage: job
+                .progress_percentage
                 .map(|p| p.to_string().parse::<f64>().unwrap_or(0.0))
                 .unwrap_or(0.0),
             total_metrics: job.total_metrics.unwrap_or(0),

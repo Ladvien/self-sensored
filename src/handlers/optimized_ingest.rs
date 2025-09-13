@@ -6,7 +6,9 @@ use std::time::Instant;
 use tracing::{error, info, instrument};
 use uuid::Uuid;
 
-use crate::models::{ApiResponse, IngestPayload, IngestResponse, IosIngestPayload, HealthMetric, IngestData};
+use crate::models::{
+    ApiResponse, HealthMetric, IngestData, IngestPayload, IngestResponse, IosIngestPayload,
+};
 use crate::services::auth::AuthContext;
 use crate::services::batch_processor::{BatchProcessingResult, BatchProcessor};
 
@@ -25,7 +27,7 @@ const MAX_METRICS_PER_REQUEST: usize = 10_000;
 #[instrument(skip(pool, payload))]
 pub async fn optimized_ingest_handler(
     pool: web::Data<PgPool>,
-    auth: AuthContext, 
+    auth: AuthContext,
     payload: web::Bytes,
 ) -> Result<HttpResponse> {
     let start_time = Instant::now();
@@ -33,10 +35,13 @@ pub async fn optimized_ingest_handler(
     // Early size validation to avoid processing oversized payloads
     if payload.len() > MAX_PAYLOAD_SIZE {
         error!("Payload size {} exceeds limit", payload.len());
-        return Ok(HttpResponse::PayloadTooLarge().json(ApiResponse::<()>::error(
-            format!("Payload size {} bytes exceeds maximum of {} MB", 
-                payload.len(), MAX_PAYLOAD_SIZE / (1024 * 1024))
-        )));
+        return Ok(
+            HttpResponse::PayloadTooLarge().json(ApiResponse::<()>::error(format!(
+                "Payload size {} bytes exceeds maximum of {} MB",
+                payload.len(),
+                MAX_PAYLOAD_SIZE / (1024 * 1024)
+            ))),
+        );
     }
 
     info!(
@@ -51,39 +56,49 @@ pub async fn optimized_ingest_handler(
         Ok(payload) => payload,
         Err(e) => {
             error!("JSON parsing failed: {}", e);
-            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-                format!("Invalid JSON format: {e}"),
-            )));
+            return Ok(
+                HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
+                    "Invalid JSON format: {e}"
+                ))),
+            );
         }
     };
 
     // Optimization 2: Validate payload constraints early
     let total_metrics = internal_payload.data.metrics.len() + internal_payload.data.workouts.len();
     if total_metrics > MAX_METRICS_PER_REQUEST {
-        error!("Too many metrics: {} exceeds limit of {}", total_metrics, MAX_METRICS_PER_REQUEST);
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-            format!("Too many metrics: {} exceeds limit of {}", total_metrics, MAX_METRICS_PER_REQUEST)
-        )));
+        error!(
+            "Too many metrics: {} exceeds limit of {}",
+            total_metrics, MAX_METRICS_PER_REQUEST
+        );
+        return Ok(
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
+                "Too many metrics: {} exceeds limit of {}",
+                total_metrics, MAX_METRICS_PER_REQUEST
+            ))),
+        );
     }
 
     // Optimization 3: Parallel validation using task-based parallelism
     let validation_result = validate_payload_parallel(&internal_payload).await;
-    
+
     let processed_payload = match validation_result {
         Ok(payload) => payload,
         Err(errors) => {
             if errors.is_empty() {
                 error!("No valid metrics remaining after validation");
-                return Ok(HttpResponse::BadRequest().json(ApiResponse::<IngestResponse>::error_with_data(
-                    "All metrics failed validation".to_string(),
-                    IngestResponse {
-                        success: false,
-                        processed_count: 0,
-                        failed_count: errors.len(),
-                        processing_time_ms: start_time.elapsed().as_millis() as u64,
-                        errors,
-                    }
-                )));
+                return Ok(HttpResponse::BadRequest().json(
+                    ApiResponse::<IngestResponse>::error_with_data(
+                        "All metrics failed validation".to_string(),
+                        IngestResponse {
+                            success: false,
+                            processed_count: 0,
+                            failed_count: errors.len(),
+                            processing_time_ms: start_time.elapsed().as_millis() as u64,
+                            errors,
+                        },
+                    ),
+                ));
             }
             // Continue with valid data
             internal_payload
@@ -98,7 +113,7 @@ pub async fn optimized_ingest_handler(
         let pool_clone = pool.get_ref().clone();
         let auth_clone = auth.clone();
         let payload_clone = payload_arc.clone();
-        
+
         tokio::spawn(async move {
             store_raw_payload_optimized(&pool_clone, &auth_clone, &payload_clone).await
         })
@@ -106,24 +121,25 @@ pub async fn optimized_ingest_handler(
 
     // Optimization 5: Process batch with optimized processor
     let processor = BatchProcessor::new(pool.get_ref().clone());
-    let mut result = processor
+    let result = processor
         .process_batch(auth.user.id, (*payload_arc).clone())
         .await;
 
     let processing_time = start_time.elapsed().as_millis() as u64;
 
     // Wait for raw storage (but don't block response on it)
-    if let Ok(join_result) = tokio::time::timeout(
-        std::time::Duration::from_millis(100), 
-        raw_storage_task
-    ).await {
+    if let Ok(join_result) =
+        tokio::time::timeout(std::time::Duration::from_millis(100), raw_storage_task).await
+    {
         if let Ok(storage_result) = join_result {
             if let Ok(raw_uuid) = storage_result {
                 // Update processing status asynchronously
                 let pool_clone = pool.get_ref().clone();
                 let result_clone = result.clone();
                 tokio::spawn(async move {
-                    if let Err(e) = update_processing_status(&pool_clone, raw_uuid, &result_clone).await {
+                    if let Err(e) =
+                        update_processing_status(&pool_clone, raw_uuid, &result_clone).await
+                    {
                         error!("Failed to update processing status: {}", e);
                     }
                 });
@@ -155,7 +171,7 @@ pub async fn optimized_ingest_handler(
 async fn parse_payload_optimized(payload: &[u8]) -> Result<IngestPayload, String> {
     // Use spawn_blocking for CPU-intensive JSON parsing to avoid blocking the async runtime
     let payload_vec = payload.to_vec();
-    
+
     tokio::task::spawn_blocking(move || {
         // Try iOS format first (more common based on usage patterns)
         match simd_json::from_slice::<IosIngestPayload>(&mut payload_vec.clone()) {
@@ -164,7 +180,10 @@ async fn parse_payload_optimized(payload: &[u8]) -> Result<IngestPayload, String
                 // Try standard format
                 match simd_json::from_slice::<IngestPayload>(&mut payload_vec.clone()) {
                     Ok(standard_payload) => Ok(standard_payload),
-                    Err(e) => Err(format!("Failed to parse both iOS and standard formats: {}", e)),
+                    Err(e) => Err(format!(
+                        "Failed to parse both iOS and standard formats: {}",
+                        e
+                    )),
                 }
             }
         }
@@ -181,28 +200,29 @@ async fn validate_payload_parallel(
     let workouts = payload.data.workouts.clone();
 
     // Spawn validation tasks in parallel
-    let metrics_validation = tokio::task::spawn_blocking(move || {
-        validate_metrics_batch(&metrics)
-    });
+    let metrics_validation = tokio::task::spawn_blocking(move || validate_metrics_batch(&metrics));
 
-    let workouts_validation = tokio::task::spawn_blocking(move || {
-        validate_workouts_batch(&workouts)
-    });
+    let workouts_validation =
+        tokio::task::spawn_blocking(move || validate_workouts_batch(&workouts));
 
     // Await both validation tasks
     let (metrics_result, workouts_result) = tokio::join!(metrics_validation, workouts_validation);
 
-    let metrics_errors = metrics_result.map_err(|e| vec![crate::models::ProcessingError {
-        metric_type: "ValidationTask".to_string(),
-        error_message: format!("Metrics validation task failed: {}", e),
-        index: None,
-    }])?;
+    let metrics_errors = metrics_result.map_err(|e| {
+        vec![crate::models::ProcessingError {
+            metric_type: "ValidationTask".to_string(),
+            error_message: format!("Metrics validation task failed: {}", e),
+            index: None,
+        }]
+    })?;
 
-    let workouts_errors = workouts_result.map_err(|e| vec![crate::models::ProcessingError {
-        metric_type: "ValidationTask".to_string(), 
-        error_message: format!("Workouts validation task failed: {}", e),
-        index: None,
-    }])?;
+    let workouts_errors = workouts_result.map_err(|e| {
+        vec![crate::models::ProcessingError {
+            metric_type: "ValidationTask".to_string(),
+            error_message: format!("Workouts validation task failed: {}", e),
+            index: None,
+        }]
+    })?;
 
     let mut all_errors = metrics_errors;
     all_errors.extend(workouts_errors);
@@ -211,21 +231,27 @@ async fn validate_payload_parallel(
         Ok(payload.clone())
     } else {
         // Filter out invalid metrics and return both valid payload and errors
-        let valid_metrics: Vec<HealthMetric> = payload.data.metrics.iter()
+        let valid_metrics: Vec<HealthMetric> = payload
+            .data
+            .metrics
+            .iter()
             .filter(|metric| metric.validate().is_ok())
             .cloned()
             .collect();
-            
-        let valid_workouts: Vec<crate::models::WorkoutData> = payload.data.workouts.iter()
+
+        let valid_workouts: Vec<crate::models::WorkoutData> = payload
+            .data
+            .workouts
+            .iter()
             .filter(|workout| validate_single_workout_optimized(workout).is_ok())
-            .cloned() 
+            .cloned()
             .collect();
 
         let filtered_payload = IngestPayload {
             data: IngestData {
                 metrics: valid_metrics,
                 workouts: valid_workouts,
-            }
+            },
         };
 
         if filtered_payload.data.metrics.is_empty() && filtered_payload.data.workouts.is_empty() {
@@ -241,34 +267,34 @@ fn validate_metrics_batch(metrics: &[HealthMetric]) -> Vec<crate::models::Proces
     metrics
         .iter() // Sequential processing to avoid rayon dependency
         .enumerate()
-        .filter_map(|(index, metric)| {
-            match metric.validate() {
-                Ok(()) => None,
-                Err(validation_error) => Some(crate::models::ProcessingError {
-                    metric_type: metric.metric_type().to_string(),
-                    error_message: validation_error,
-                    index: Some(index),
-                }),
-            }
+        .filter_map(|(index, metric)| match metric.validate() {
+            Ok(()) => None,
+            Err(validation_error) => Some(crate::models::ProcessingError {
+                metric_type: metric.metric_type().to_string(),
+                error_message: validation_error,
+                index: Some(index),
+            }),
         })
         .collect()
 }
 
 /// Batch validation for workouts (CPU intensive)
-fn validate_workouts_batch(workouts: &[crate::models::WorkoutData]) -> Vec<crate::models::ProcessingError> {
+fn validate_workouts_batch(
+    workouts: &[crate::models::WorkoutData],
+) -> Vec<crate::models::ProcessingError> {
     workouts
         .iter() // Sequential processing to avoid rayon dependency
         .enumerate()
-        .filter_map(|(index, workout)| {
-            match validate_single_workout_optimized(workout) {
+        .filter_map(
+            |(index, workout)| match validate_single_workout_optimized(workout) {
                 Ok(()) => None,
                 Err(validation_error) => Some(crate::models::ProcessingError {
                     metric_type: "Workout".to_string(),
                     error_message: validation_error,
                     index: Some(index),
                 }),
-            }
-        })
+            },
+        )
         .collect()
 }
 
@@ -278,41 +304,47 @@ fn validate_single_workout_optimized(workout: &crate::models::WorkoutData) -> Re
     if workout.started_at >= workout.ended_at {
         return Err("Workout ended_at must be after started_at".to_string());
     }
-    
+
     let duration = workout.ended_at - workout.started_at;
     if duration.num_hours() > 24 {
         return Err("Workout duration cannot exceed 24 hours".to_string());
     }
-    
+
     // Use match for better performance than if-let chains
     match workout.total_energy_kcal {
         Some(calories) if calories < 0.0 || calories > 10000.0 => {
-            return Err(format!("total_energy_kcal {} is out of reasonable range (0-10000)", calories));
+            return Err(format!(
+                "total_energy_kcal {} is out of reasonable range (0-10000)",
+                calories
+            ));
         }
         _ => {}
     }
-    
+
     match workout.distance_meters {
         Some(distance) if distance < 0.0 || distance > 1000000.0 => {
-            return Err(format!("distance_meters {} is out of reasonable range (0-1000000)", distance));
+            return Err(format!(
+                "distance_meters {} is out of reasonable range (0-1000000)",
+                distance
+            ));
         }
         _ => {}
     }
-    
+
     if let Some(hr) = workout.avg_heart_rate {
         if !(15..=300).contains(&hr) {
             return Err(format!("avg_heart_rate {} is out of range (15-300)", hr));
         }
     }
-    
+
     if let Some(hr) = workout.max_heart_rate {
         if !(15..=300).contains(&hr) {
             return Err(format!("max_heart_rate {} is out of range (15-300)", hr));
         }
     }
-    
+
     // WorkoutType is an enum, so it's always valid
-    
+
     Ok(())
 }
 
@@ -356,7 +388,7 @@ async fn update_processing_status(
     } else {
         "error"
     };
-    
+
     let processing_errors = if result.errors.is_empty() {
         None
     } else {
@@ -365,12 +397,15 @@ async fn update_processing_status(
                 result
                     .errors
                     .iter()
-                    .map(|e| serde_json::json!({
-                        "metric_type": e.metric_type,
-                        "error_message": e.error_message
-                    }))
-                    .collect::<Vec<_>>()
-            ).unwrap()
+                    .map(|e| {
+                        serde_json::json!({
+                            "metric_type": e.metric_type,
+                            "error_message": e.error_message
+                        })
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap(),
         )
     };
 
@@ -416,17 +451,17 @@ impl MetricsArena {
             position: 0,
         }
     }
-    
+
     pub fn allocate(&mut self, size: usize) -> &mut [u8] {
         if self.position + size > self.buffer.len() {
             self.buffer.resize(self.position + size, 0);
         }
-        
+
         let start = self.position;
         self.position += size;
         &mut self.buffer[start..self.position]
     }
-    
+
     pub fn reset(&mut self) {
         self.position = 0;
     }
@@ -447,13 +482,13 @@ impl<T> BatchQueue<T> {
             flush_interval,
         }
     }
-    
+
     pub async fn push(&self, item: T) -> bool {
         let mut items = self.items.lock().await;
         items.push(item);
         items.len() >= self.batch_size
     }
-    
+
     pub async fn flush(&self) -> Vec<T> {
         let mut items = self.items.lock().await;
         std::mem::take(&mut *items)

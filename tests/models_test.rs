@@ -3,9 +3,9 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 use self_sensored::models::{
+    enums::{ActivityContext, WorkoutType},
     ActivityMetric, BloodPressureMetric, HealthMetric, HeartRateMetric, IngestData, IngestPayload,
-    IosIngestData, IosIngestPayload, IosMetric, IosMetricData, SleepMetric,
-    WorkoutData, enums::{ActivityContext, WorkoutType},
+    IosIngestData, IosIngestPayload, IosMetric, IosMetricData, SleepMetric, WorkoutData,
 };
 
 #[test]
@@ -278,8 +278,8 @@ fn test_metric_validation() {
         id: Uuid::new_v4(),
         user_id,
         recorded_at: now,
-        step_count: Some(-1000),            // Invalid
-        distance_meters: Some(-500.0), // Invalid
+        step_count: Some(-1000),                 // Invalid
+        distance_meters: Some(-500.0),           // Invalid
         active_energy_burned_kcal: Some(-200.0), // Invalid
         basal_energy_burned_kcal: None,
         flights_climbed: None,
@@ -373,7 +373,11 @@ fn test_large_payload_performance() {
     };
 
     let generation_time = start.elapsed();
-    println!("Generated {} metrics in {:?}", payload.data.metrics.len(), generation_time);
+    println!(
+        "Generated {} metrics in {:?}",
+        payload.data.metrics.len(),
+        generation_time
+    );
 
     // Test serialization performance
     let start = Instant::now();
@@ -406,23 +410,29 @@ fn test_large_payload_performance() {
         json_str.len() < 10 * 1024 * 1024,
         "Should be reasonable size"
     );
-    
+
     // Verify mix of metric types
-    let heart_rate_count = payload.data.metrics
+    let heart_rate_count = payload
+        .data
+        .metrics
         .iter()
         .filter(|m| matches!(m, HealthMetric::HeartRate(_)))
         .count();
-    
-    let bp_count = payload.data.metrics
+
+    let bp_count = payload
+        .data
+        .metrics
         .iter()
         .filter(|m| matches!(m, HealthMetric::BloodPressure(_)))
         .count();
-    
-    let activity_count = payload.data.metrics
+
+    let activity_count = payload
+        .data
+        .metrics
         .iter()
         .filter(|m| matches!(m, HealthMetric::Activity(_)))
         .count();
-    
+
     assert!(heart_rate_count > 200);
     assert!(bp_count > 200);
     assert!(activity_count > 200);

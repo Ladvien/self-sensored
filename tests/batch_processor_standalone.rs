@@ -1,7 +1,3 @@
-use chrono::{DateTime, NaiveDate, Utc};
-use sqlx::PgPool;
-use std::time::{Duration, Instant};
-use uuid::Uuid;
 
 // Simple tests for batch processor without depending on other modules
 #[tokio::test]

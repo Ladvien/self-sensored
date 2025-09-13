@@ -81,7 +81,7 @@ where
                             message = "Non-admin user attempted to access admin endpoint"
                         );
                         Err(actix_web::error::ErrorForbidden(
-                            "Admin privileges required to access this endpoint"
+                            "Admin privileges required to access this endpoint",
                         ))
                     }
                 }
@@ -94,7 +94,7 @@ where
                         message = "Admin middleware called without authentication context"
                     );
                     Err(actix_web::error::ErrorUnauthorized(
-                        "Authentication required for admin endpoints"
+                        "Authentication required for admin endpoints",
                     ))
                 }
             }

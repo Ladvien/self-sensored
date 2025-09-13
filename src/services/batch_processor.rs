@@ -10,7 +10,11 @@ use tokio::time::sleep;
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
-use crate::config::{BatchConfig, SAFE_PARAM_LIMIT, HEART_RATE_PARAMS_PER_RECORD, BLOOD_PRESSURE_PARAMS_PER_RECORD, SLEEP_PARAMS_PER_RECORD, ACTIVITY_PARAMS_PER_RECORD, WORKOUT_PARAMS_PER_RECORD};
+use crate::config::{
+    BatchConfig, ACTIVITY_PARAMS_PER_RECORD, BLOOD_PRESSURE_PARAMS_PER_RECORD,
+    HEART_RATE_PARAMS_PER_RECORD, SAFE_PARAM_LIMIT, SLEEP_PARAMS_PER_RECORD,
+    WORKOUT_PARAMS_PER_RECORD,
+};
 use crate::middleware::metrics::Metrics;
 use crate::models::{HealthMetric, IngestPayload, ProcessingError};
 
@@ -152,8 +156,7 @@ impl BatchProcessor {
         let initial_memory = self.estimate_memory_usage();
 
         // Record batch processing start
-        let total_metrics = payload.data.metrics.len() 
-            + payload.data.workouts.len();
+        let total_metrics = payload.data.metrics.len() + payload.data.workouts.len();
 
         self.reset_counters();
 
@@ -832,8 +835,12 @@ impl BatchProcessor {
                             Some(existing.distance_meters.unwrap_or(0.0).max(distance));
                     }
                     if let Some(calories) = metric.active_energy_burned_kcal {
-                        existing.active_energy_burned_kcal =
-                            Some(existing.active_energy_burned_kcal.unwrap_or(0.0).max(calories));
+                        existing.active_energy_burned_kcal = Some(
+                            existing
+                                .active_energy_burned_kcal
+                                .unwrap_or(0.0)
+                                .max(calories),
+                        );
                     }
                     if let Some(flights) = metric.flights_climbed {
                         existing.flights_climbed =
@@ -1423,9 +1430,6 @@ impl BatchProcessor {
 
         Ok(total_inserted)
     }
-
-
-
 }
 
 /// Helper struct for grouping metrics by type

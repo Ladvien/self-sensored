@@ -1,18 +1,15 @@
-use actix_web::{test, web, App, middleware::Logger};
-use chrono::{DateTime, Utc, Duration};
+use actix_web::{middleware::Logger, test, web, App};
+use chrono::{Duration, Utc};
 use serde_json::{json, Value};
 use sqlx::PgPool;
-use std::env;
 use std::collections::HashMap;
+use std::env;
 use uuid::Uuid;
 
 use self_sensored::{
-    handlers::{
-        health::health_check,
-        ingest::ingest_handler, 
-    },
+    handlers::{health::health_check, ingest::ingest_handler},
     middleware::{auth::AuthMiddleware, rate_limit::RateLimitMiddleware},
-    models::{ApiResponse, IngestResponse, HealthMetric},
+    models::{ApiResponse, IngestResponse},
     services::{auth::AuthService, rate_limiter::RateLimiter},
 };
 
@@ -44,18 +41,27 @@ async fn setup_test_user_and_key(pool: &PgPool, email: &str) -> (Uuid, String) {
 
     // Create test user and API key
     let user = auth_service
-        .create_user(email, Some("api_test_user"), Some(serde_json::json!({"name": "API Test User"})))
+        .create_user(
+            email,
+            Some("api_test_user"),
+            Some(serde_json::json!({"name": "API Test User"})),
+        )
         .await
         .unwrap();
 
     let (plain_key, _api_key) = auth_service
-        .create_api_key(user.id, Some("API Test Key"), None, Some(serde_json::json!(["write"])), None)
+        .create_api_key(
+            user.id,
+            Some("API Test Key"),
+            None,
+            Some(serde_json::json!(["write"])),
+            None,
+        )
         .await
         .unwrap();
 
     (user.id, plain_key)
 }
-
 
 /// Test all ingest endpoints with new metric types
 #[tokio::test]
@@ -66,7 +72,7 @@ async fn test_all_ingest_endpoints_new_metrics() {
 
     let rate_limiter = web::Data::new(RateLimiter::new_in_memory(1000));
     let auth_service = web::Data::new(AuthService::new(pool.clone()));
-    
+
     let app = test::init_service(
         App::new()
             .app_data(web::Data::new(pool.clone()))
@@ -76,14 +82,15 @@ async fn test_all_ingest_endpoints_new_metrics() {
             .wrap(RateLimitMiddleware)
             .wrap(AuthMiddleware)
             .route("/health", web::get().to(health_check))
-            .route("/api/v1/ingest", web::post().to(ingest_handler))
-    ).await;
+            .route("/api/v1/ingest", web::post().to(ingest_handler)),
+    )
+    .await;
 
     println!("🚀 Testing all ingest endpoints with new metric types...");
 
     // Test 1: Standard ingest endpoint with new metrics
     let new_metrics_payload = create_all_new_metrics_payload();
-    
+
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
         .insert_header(("Authorization", format!("Bearer {}", api_key)))
@@ -92,17 +99,23 @@ async fn test_all_ingest_endpoints_new_metrics() {
         .to_request();
 
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "Standard ingest should handle new metrics");
+    assert!(
+        resp.status().is_success(),
+        "Standard ingest should handle new metrics"
+    );
 
     let body: ApiResponse<IngestResponse> = test::read_body_json(resp).await;
     assert!(body.success);
     let data = body.data.expect("Should have response data");
     assert_eq!(data.failed_count, 0);
-    assert!(data.processed_count >= 6, "Should process all 6 new metric types");
+    assert!(
+        data.processed_count >= 6,
+        "Should process all 6 new metric types"
+    );
 
     // Test 2: Async ingest endpoint
     let async_payload = create_large_mixed_payload();
-    
+
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest/async")
         .insert_header(("Authorization", format!("Bearer {}", api_key)))
@@ -111,14 +124,17 @@ async fn test_all_ingest_endpoints_new_metrics() {
         .to_request();
 
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "Async ingest should handle large payloads");
+    assert!(
+        resp.status().is_success(),
+        "Async ingest should handle large payloads"
+    );
 
     let async_body: ApiResponse<IngestResponse> = test::read_body_json(resp).await;
     assert!(async_body.success);
-    
+
     // Test 3: Batch process endpoint
     let batch_payload = create_batch_processing_payload();
-    
+
     let req = test::TestRequest::post()
         .uri("/api/v1/batch/process")
         .insert_header(("Authorization", format!("Bearer {}", api_key)))
@@ -127,22 +143,47 @@ async fn test_all_ingest_endpoints_new_metrics() {
         .to_request();
 
     let resp = test::call_service(&app, req).await;
-    assert!(resp.status().is_success(), "Batch process should handle structured batches");
+    assert!(
+        resp.status().is_success(),
+        "Batch process should handle structured batches"
+    );
 
     // Verify all metrics were stored correctly
     let storage_counts = verify_all_metric_types_stored(&pool, user_id).await;
-    
+
     println!("✅ All Ingest Endpoints Results:");
-    println!("   📊 Nutrition metrics stored: {}", storage_counts.get("nutrition").unwrap_or(&0));
-    println!("   🤒 Symptoms stored: {}", storage_counts.get("symptoms").unwrap_or(&0));
-    println!("   💝 Reproductive health stored: {}", storage_counts.get("reproductive").unwrap_or(&0));
-    println!("   🌍 Environmental stored: {}", storage_counts.get("environmental").unwrap_or(&0));
-    println!("   🧠 Mental health stored: {}", storage_counts.get("mental_health").unwrap_or(&0));
-    println!("   🚶 Mobility stored: {}", storage_counts.get("mobility").unwrap_or(&0));
+    println!(
+        "   📊 Nutrition metrics stored: {}",
+        storage_counts.get("nutrition").unwrap_or(&0)
+    );
+    println!(
+        "   🤒 Symptoms stored: {}",
+        storage_counts.get("symptoms").unwrap_or(&0)
+    );
+    println!(
+        "   💝 Reproductive health stored: {}",
+        storage_counts.get("reproductive").unwrap_or(&0)
+    );
+    println!(
+        "   🌍 Environmental stored: {}",
+        storage_counts.get("environmental").unwrap_or(&0)
+    );
+    println!(
+        "   🧠 Mental health stored: {}",
+        storage_counts.get("mental_health").unwrap_or(&0)
+    );
+    println!(
+        "   🚶 Mobility stored: {}",
+        storage_counts.get("mobility").unwrap_or(&0)
+    );
 
     // Verify minimum storage requirements
     for (metric_type, count) in storage_counts {
-        assert!(count > 0, "Should store at least one {} metric", metric_type);
+        assert!(
+            count > 0,
+            "Should store at least one {} metric",
+            metric_type
+        );
     }
 
     cleanup_test_data(&pool, user_id).await;
@@ -157,7 +198,7 @@ async fn test_validation_error_handling_all_types() {
 
     let rate_limiter = web::Data::new(RateLimiter::new_in_memory(1000));
     let auth_service = web::Data::new(AuthService::new(pool.clone()));
-    
+
     let app = test::init_service(
         App::new()
             .app_data(web::Data::new(pool.clone()))
@@ -167,8 +208,9 @@ async fn test_validation_error_handling_all_types() {
             .wrap(RateLimitMiddleware)
             .wrap(AuthMiddleware)
             .route("/health", web::get().to(health_check))
-            .route("/api/v1/ingest", web::post().to(ingest_handler))
-    ).await;
+            .route("/api/v1/ingest", web::post().to(ingest_handler)),
+    )
+    .await;
 
     println!("🚀 Testing validation and error handling for all metric types...");
 
@@ -202,10 +244,20 @@ async fn test_validation_error_handling_all_types() {
     assert!(!body.success);
     let data = body.data.expect("Should have response data");
     assert!(!data.errors.is_empty());
-    
-    let error_messages: Vec<String> = data.errors.iter().map(|e| e.error_message.clone()).collect();
-    assert!(error_messages.iter().any(|e| e.contains("water_ml")), "Should have water volume error");
-    assert!(error_messages.iter().any(|e| e.contains("energy_consumed")), "Should have energy error");
+
+    let error_messages: Vec<String> = data
+        .errors
+        .iter()
+        .map(|e| e.error_message.clone())
+        .collect();
+    assert!(
+        error_messages.iter().any(|e| e.contains("water_ml")),
+        "Should have water volume error"
+    );
+    assert!(
+        error_messages.iter().any(|e| e.contains("energy_consumed")),
+        "Should have energy error"
+    );
 
     // Test 2: Symptoms validation errors
     let invalid_symptoms = json!({
@@ -359,7 +411,7 @@ async fn test_batch_processing_mixed_metrics() {
 
     let rate_limiter = web::Data::new(RateLimiter::new_in_memory(1000));
     let auth_service = web::Data::new(AuthService::new(pool.clone()));
-    
+
     let app = test::init_service(
         App::new()
             .app_data(web::Data::new(pool.clone()))
@@ -369,8 +421,9 @@ async fn test_batch_processing_mixed_metrics() {
             .wrap(RateLimitMiddleware)
             .wrap(AuthMiddleware)
             .route("/health", web::get().to(health_check))
-            .route("/api/v1/ingest", web::post().to(ingest_handler))
-    ).await;
+            .route("/api/v1/ingest", web::post().to(ingest_handler)),
+    )
+    .await;
 
     println!("🚀 Testing batch processing with mixed metric types...");
 
@@ -389,27 +442,40 @@ async fn test_batch_processing_mixed_metrics() {
     let resp = test::call_service(&app, req).await;
     let processing_time = start_time.elapsed();
 
-    assert!(resp.status().is_success(), "Batch processing should succeed");
+    assert!(
+        resp.status().is_success(),
+        "Batch processing should succeed"
+    );
 
     let body: ApiResponse<IngestResponse> = test::read_body_json(resp).await;
     assert!(body.success);
     let data = body.data.expect("Should have response data");
     assert_eq!(data.failed_count, 0, "No records should fail in batch");
-    
+
     let records_per_second = data.processed_count as f64 / processing_time.as_secs_f64();
 
     println!("✅ Batch Processing Results:");
     println!("   📊 Records processed: {}", data.processed_count);
-    println!("   ⏱️  Processing time: {:.2}s", processing_time.as_secs_f64());
+    println!(
+        "   ⏱️  Processing time: {:.2}s",
+        processing_time.as_secs_f64()
+    );
     println!("   🚀 Records per second: {:.0}", records_per_second);
 
     // Verify performance expectations
-    assert!(records_per_second > 1000.0, "Should process >1000 records/second");
+    assert!(
+        records_per_second > 1000.0,
+        "Should process >1000 records/second"
+    );
 
     // Verify all metric types were processed
     let batch_counts = verify_batch_processing_results(&pool, user_id).await;
     for (metric_type, count) in batch_counts {
-        assert!(count > 0, "Should have processed {} metrics in batch", metric_type);
+        assert!(
+            count > 0,
+            "Should have processed {} metrics in batch",
+            metric_type
+        );
         println!("   📈 {} processed: {}", metric_type, count);
     }
 
@@ -425,7 +491,7 @@ async fn test_api_error_handling_edge_cases() {
 
     let rate_limiter = web::Data::new(RateLimiter::new_in_memory(1000));
     let auth_service = web::Data::new(AuthService::new(pool.clone()));
-    
+
     let app = test::init_service(
         App::new()
             .app_data(web::Data::new(pool.clone()))
@@ -435,8 +501,9 @@ async fn test_api_error_handling_edge_cases() {
             .wrap(RateLimitMiddleware)
             .wrap(AuthMiddleware)
             .route("/health", web::get().to(health_check))
-            .route("/api/v1/ingest", web::post().to(ingest_handler))
-    ).await;
+            .route("/api/v1/ingest", web::post().to(ingest_handler)),
+    )
+    .await;
 
     println!("🚀 Testing API error handling edge cases...");
 
@@ -461,7 +528,11 @@ async fn test_api_error_handling_edge_cases() {
         .to_request();
 
     let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), 400, "Should return bad request for malformed JSON");
+    assert_eq!(
+        resp.status(),
+        400,
+        "Should return bad request for malformed JSON"
+    );
 
     // Test 3: Missing content-type header
     let req = test::TestRequest::post()
@@ -520,7 +591,7 @@ async fn test_api_endpoint_performance_concurrent() {
 
     let rate_limiter = web::Data::new(RateLimiter::new_in_memory(1000));
     let auth_service = web::Data::new(AuthService::new(pool.clone()));
-    
+
     let app = test::init_service(
         App::new()
             .app_data(web::Data::new(pool.clone()))
@@ -530,8 +601,9 @@ async fn test_api_endpoint_performance_concurrent() {
             .wrap(RateLimitMiddleware)
             .wrap(AuthMiddleware)
             .route("/health", web::get().to(health_check))
-            .route("/api/v1/ingest", web::post().to(ingest_handler))
-    ).await;
+            .route("/api/v1/ingest", web::post().to(ingest_handler)),
+    )
+    .await;
 
     println!("🚀 Testing API endpoint performance with concurrent requests...");
 
@@ -543,7 +615,7 @@ async fn test_api_endpoint_performance_concurrent() {
     let mut results: Vec<Result<(bool, std::time::Duration), String>> = Vec::new();
     for i in 0..concurrent_requests {
         let payload = create_performance_test_payload(i);
-        
+
         let req = test::TestRequest::post()
             .uri("/api/v1/ingest")
             .insert_header(("Authorization", format!("Bearer {}", api_key)))
@@ -565,19 +637,26 @@ async fn test_api_endpoint_performance_concurrent() {
         .filter_map(|r| r.ok().map(|(_, time)| time))
         .collect();
 
-    let avg_response_time = response_times.iter().sum::<std::time::Duration>() / response_times.len() as u32;
+    let avg_response_time =
+        response_times.iter().sum::<std::time::Duration>() / response_times.len() as u32;
     let requests_per_second = concurrent_requests as f64 / total_time.as_secs_f64();
 
     println!("✅ Concurrent Performance Results:");
     println!("   👥 Concurrent requests: {}", concurrent_requests);
     println!("   ✅ Successful requests: {}", successful_requests);
-    println!("   ⏱️  Average response time: {}ms", avg_response_time.as_millis());
+    println!(
+        "   ⏱️  Average response time: {}ms",
+        avg_response_time.as_millis()
+    );
     println!("   🚀 Requests per second: {:.1}", requests_per_second);
 
     // Performance assertions
     let success_rate = successful_requests as f64 / concurrent_requests as f64;
     assert!(success_rate >= 0.95, "Success rate should be ≥95%");
-    assert!(avg_response_time.as_millis() < 2000, "Average response time should be <2000ms");
+    assert!(
+        avg_response_time.as_millis() < 2000,
+        "Average response time should be <2000ms"
+    );
 
     cleanup_test_data(&pool, user_id).await;
 }
@@ -713,7 +792,7 @@ fn create_batch_processing_payload() -> Value {
                 ]
             },
             {
-                "batch_id": "batch_2", 
+                "batch_id": "batch_2",
                 "metrics": [
                     {
                         "type": "Environmental",
@@ -730,13 +809,13 @@ fn create_batch_processing_payload() -> Value {
 
 fn create_large_mixed_batch_payload() -> Value {
     let mut all_metrics = Vec::new();
-    
+
     let base_date = Utc::now() - Duration::days(1);
-    
+
     // Create 500 mixed metrics for batch processing
     for i in 0..500 {
         let date = base_date + Duration::minutes(i * 3);
-        
+
         match i % 6 {
             0 => all_metrics.push(json!({
                 "type": "Nutrition",
@@ -782,7 +861,7 @@ fn create_large_mixed_batch_payload() -> Value {
                 "basal_body_temp": 97.0 + (i % 20) as f64 / 10.0,
                 "source": "Batch Mixed"
             })),
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 
@@ -796,7 +875,7 @@ fn create_large_mixed_batch_payload() -> Value {
 fn create_oversized_payload() -> Value {
     // Create a very large payload to test size limits
     let large_data = "x".repeat(1_000_000); // 1MB of data
-    
+
     json!({
         "data": {
             "nutrition_metrics": [
@@ -873,7 +952,7 @@ async fn verify_all_metric_types_stored(pool: &PgPool, user_id: Uuid) -> HashMap
     .unwrap_or(0);
     counts.insert("sleep".to_string(), sleep_count);
 
-    // Count activity metrics  
+    // Count activity metrics
     let activity_count = sqlx::query!(
         "SELECT COUNT(*) as count FROM activity_metrics WHERE user_id = $1",
         user_id
@@ -899,7 +978,6 @@ async fn verify_all_metric_types_stored(pool: &PgPool, user_id: Uuid) -> HashMap
 
     counts
 }
-
 
 async fn verify_batch_processing_results(pool: &PgPool, user_id: Uuid) -> HashMap<String, i64> {
     // Return counts of each metric type processed in batch

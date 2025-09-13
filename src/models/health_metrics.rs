@@ -63,7 +63,6 @@ pub struct ActivityMetric {
     pub created_at: DateTime<Utc>,
 }
 
-
 /// GPS coordinate for workout routes
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct GpsCoordinate {
@@ -195,7 +194,6 @@ impl WorkoutData {
 
         Ok(())
     }
-
 
     /// Calculate duration in seconds
     pub fn duration_seconds(&self) -> i64 {
@@ -341,7 +339,8 @@ impl SleepMetric {
         }
 
         if let Some(eff) = self.efficiency {
-            if !(config.sleep_efficiency_min..=config.sleep_efficiency_max).contains(&(eff as f32)) {
+            if !(config.sleep_efficiency_min..=config.sleep_efficiency_max).contains(&(eff as f32))
+            {
                 return Err(format!(
                     "efficiency {} is out of range ({}-{})",
                     eff, config.sleep_efficiency_min, config.sleep_efficiency_max
@@ -444,7 +443,6 @@ impl ActivityMetric {
     }
 }
 
-
 impl HealthMetric {
     pub fn validate(&self) -> Result<(), String> {
         self.validate_with_config(&ValidationConfig::default())
@@ -470,15 +468,3 @@ impl HealthMetric {
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-

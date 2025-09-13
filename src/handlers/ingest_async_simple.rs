@@ -11,9 +11,9 @@ use crate::services::batch_processor::BatchProcessor;
 
 // Import our new modular architecture components
 use super::payload_processor::{PayloadProcessor, PayloadProcessorConfig};
-use super::timeout_manager::{TimeoutManager, TimeoutConfig};
+use super::timeout_manager::{TimeoutConfig, TimeoutManager};
 // use super::background_coordinator::{
-//     BackgroundJobCoordinator, BackgroundJobConfig, JobPriority, 
+//     BackgroundJobCoordinator, BackgroundJobConfig, JobPriority,
 //     should_use_background_processing
 // };
 
@@ -42,8 +42,8 @@ pub async fn ingest_async_optimized_handler(
     // Initialize payload processor with security limits
     let payload_config = PayloadProcessorConfig {
         max_payload_size: 200 * 1024 * 1024, // 200MB
-        max_json_depth: 50, // Prevent deeply nested JSON attacks
-        max_json_elements: 1_000_000, // Prevent JSON bomb attacks
+        max_json_depth: 50,                  // Prevent deeply nested JSON attacks
+        max_json_elements: 1_000_000,        // Prevent JSON bomb attacks
         ..Default::default()
     };
     let payload_processor = PayloadProcessor::new(payload_config);
@@ -75,14 +75,17 @@ pub async fn ingest_async_optimized_handler(
     Metrics::record_data_volume("ingest", "received", payload_size as u64);
 
     // Parse payload using new modular payload processor with security limits
-    let internal_payload = match payload_processor.parse_payload_with_timeout(&raw_payload).await {
+    let internal_payload = match payload_processor
+        .parse_payload_with_timeout(&raw_payload)
+        .await
+    {
         Ok(payload) => payload,
         Err(parse_error) => {
             error!("Payload processing error: {}", parse_error);
             Metrics::record_error("payload_processing", "/api/v1/ingest-async", "error");
-            return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-                parse_error.to_string(),
-            )));
+            return Ok(
+                HttpResponse::BadRequest().json(ApiResponse::<()>::error(parse_error.to_string()))
+            );
         }
     };
 
@@ -107,7 +110,14 @@ pub async fn ingest_async_optimized_handler(
     // }
 
     // Store raw payload using new payload processor
-    let raw_id = match super::payload_processor::store_raw_payload(&pool, &auth, &internal_payload, &client_ip).await {
+    let raw_id = match super::payload_processor::store_raw_payload(
+        &pool,
+        &auth,
+        &internal_payload,
+        &client_ip,
+    )
+    .await
+    {
         Ok(id) => id,
         Err(e) => {
             error!(
@@ -125,7 +135,7 @@ pub async fn ingest_async_optimized_handler(
 
     // If payload is very large, create background job and return early
     // Background processing temporarily disabled - needs database
-    /* 
+    /*
     if timeout_manager.should_use_background_processing(total_metrics) {
         let job_config = BackgroundJobConfig {
             priority: if payload_size_mb > 100.0 { JobPriority::High } else { JobPriority::Normal },
@@ -142,7 +152,7 @@ pub async fn ingest_async_optimized_handler(
                     total_metrics = total_metrics,
                     "Created background job for large payload"
                 );
-                
+
                 return Ok(HttpResponse::Accepted().json(ApiResponse::success(IngestResponse {
                     success: true,
                     processed_count: 0,
@@ -248,7 +258,7 @@ pub async fn ingest_async_optimized_handler(
     // Determine status using timeout manager
     let timeout_reached = timeout_manager.is_approaching_timeout(1.0);
     let near_timeout = timeout_manager.is_approaching_timeout(0.8);
-    
+
     let status = if response.success && !timeout_reached {
         "success"
     } else if timeout_reached {
@@ -267,7 +277,11 @@ pub async fn ingest_async_optimized_handler(
     }
 
     // Log final statistics using timeout manager
-    timeout_manager.log_final_stats(auth.user.id, response.processed_count, response.failed_count);
+    timeout_manager.log_final_stats(
+        auth.user.id,
+        response.processed_count,
+        response.failed_count,
+    );
 
     info!(
         user_id = %auth.user.id,
@@ -311,12 +325,15 @@ async fn update_processing_status(
                 result
                     .errors
                     .iter()
-                    .map(|e| serde_json::json!({
-                        "metric_type": e.metric_type,
-                        "error_message": e.error_message
-                    }))
-                    .collect::<Vec<_>>()
-            ).unwrap()
+                    .map(|e| {
+                        serde_json::json!({
+                            "metric_type": e.metric_type,
+                            "error_message": e.error_message
+                        })
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap(),
         )
     };
 

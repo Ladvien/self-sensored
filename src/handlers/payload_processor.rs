@@ -47,7 +47,10 @@ impl PayloadProcessor {
     /// Validate payload size before processing
     pub fn validate_payload_size(&self, payload_size: usize) -> Result<()> {
         if payload_size > self.config.max_payload_size {
-            error!("Payload size {} exceeds limit {}", payload_size, self.config.max_payload_size);
+            error!(
+                "Payload size {} exceeds limit {}",
+                payload_size, self.config.max_payload_size
+            );
             return Err(actix_web::error::ErrorPayloadTooLarge(format!(
                 "Payload size {} bytes exceeds maximum of {} MB",
                 payload_size,
@@ -77,17 +80,23 @@ impl PayloadProcessor {
     }
 
     /// Parse payload with timeout and enhanced error handling
-    pub async fn parse_payload_with_timeout(&self, raw_payload: &web::Bytes) -> Result<IngestPayload> {
+    pub async fn parse_payload_with_timeout(
+        &self,
+        raw_payload: &web::Bytes,
+    ) -> Result<IngestPayload> {
         let payload_size = raw_payload.len();
-        
+
         // Validate size first
         self.validate_payload_size(payload_size)?;
-        
+
         // Validate JSON security
         self.validate_json_security(raw_payload)?;
 
         if payload_size > 10 * 1024 * 1024 {
-            info!("Processing large payload: {} MB", payload_size / (1024 * 1024));
+            info!(
+                "Processing large payload: {} MB",
+                payload_size / (1024 * 1024)
+            );
         }
 
         // Parse with timeout protection
@@ -102,7 +111,10 @@ impl PayloadProcessor {
                 )))
             }
             Err(_) => {
-                error!("JSON parsing timeout after {} seconds", self.config.json_parse_timeout_secs);
+                error!(
+                    "JSON parsing timeout after {} seconds",
+                    self.config.json_parse_timeout_secs
+                );
                 Err(actix_web::error::ErrorRequestTimeout(
                     "JSON parsing took too long".to_string(),
                 ))
@@ -115,16 +127,23 @@ impl PayloadProcessor {
         // Try iOS format first
         match self.parse_with_error_context::<IosIngestPayload>(raw_payload, "iOS format") {
             Ok(ios_payload) => {
-                info!("Successfully parsed iOS format payload ({} bytes)", raw_payload.len());
+                info!(
+                    "Successfully parsed iOS format payload ({} bytes)",
+                    raw_payload.len()
+                );
                 Ok(ios_payload.to_internal_format())
             }
             Err(ios_error) => {
                 warn!("iOS format parse failed: {}", ios_error);
 
                 // Try standard format as fallback
-                match self.parse_with_error_context::<IngestPayload>(raw_payload, "standard format") {
+                match self.parse_with_error_context::<IngestPayload>(raw_payload, "standard format")
+                {
                     Ok(standard_payload) => {
-                        info!("Successfully parsed standard format payload ({} bytes)", raw_payload.len());
+                        info!(
+                            "Successfully parsed standard format payload ({} bytes)",
+                            raw_payload.len()
+                        );
                         Ok(standard_payload)
                     }
                     Err(standard_error) => {
@@ -196,7 +215,7 @@ impl PayloadProcessor {
                     depth += 1;
                     max_depth = max_depth.max(depth);
                     element_count += 1;
-                    
+
                     if byte == b'{' {
                         brace_count += 1;
                     } else {
@@ -210,7 +229,7 @@ impl PayloadProcessor {
                             depth, self.config.max_json_depth
                         ));
                     }
-                    
+
                     if element_count > self.config.max_json_elements {
                         return Err(format!(
                             "JSON element count {} exceeds maximum allowed elements of {}",
@@ -223,7 +242,7 @@ impl PayloadProcessor {
                         return Err("Unmatched closing brackets detected".to_string());
                     }
                     depth -= 1;
-                    
+
                     if byte == b'}' {
                         brace_count -= 1;
                     } else {

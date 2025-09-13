@@ -161,7 +161,9 @@ impl LazyDataLoader {
 
     /// Check support level for a specific identifier
     pub async fn get_support_level(&self, identifier: &str) -> Option<SupportLevel> {
-        self.get_mapping(identifier).await.map(|entry| entry.support_level)
+        self.get_mapping(identifier)
+            .await
+            .map(|entry| entry.support_level)
     }
 
     /// Get statistics about data mappings
@@ -177,7 +179,7 @@ impl LazyDataLoader {
             Ok(cache) => {
                 if let Some(data) = cache.as_ref() {
                     let mut stats = DataMappingStats::default();
-                    
+
                     for entry in data.values() {
                         stats.total_count += 1;
                         match entry.support_level {
@@ -185,10 +187,13 @@ impl LazyDataLoader {
                             SupportLevel::PartialUncertain => stats.partial_uncertain += 1,
                             SupportLevel::NotSupported => stats.not_supported += 1,
                         }
-                        
-                        *stats.category_counts.entry(entry.category.clone()).or_insert(0) += 1;
+
+                        *stats
+                            .category_counts
+                            .entry(entry.category.clone())
+                            .or_insert(0) += 1;
                     }
-                    
+
                     stats
                 } else {
                     DataMappingStats::default()
@@ -228,7 +233,7 @@ impl LazyDataLoader {
                 return true; // Assume reload needed on error
             }
         };
-        
+
         match *last_loaded {
             None => true, // Never loaded
             Some(loaded_time) => {
@@ -274,26 +279,70 @@ impl LazyDataLoader {
     }
 
     /// Load data from database (future implementation)
-    async fn load_from_database(&self) -> Result<HashMap<String, DataMappingEntry>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn load_from_database(
+        &self,
+    ) -> Result<HashMap<String, DataMappingEntry>, Box<dyn std::error::Error + Send + Sync>> {
         // TODO: Implement database loading
         warn!("Database loading not yet implemented, falling back to static data");
         self.load_static_data().await
     }
 
     /// Load essential static data (reduced set instead of full DATA.md)
-    async fn load_static_data(&self) -> Result<HashMap<String, DataMappingEntry>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn load_static_data(
+        &self,
+    ) -> Result<HashMap<String, DataMappingEntry>, Box<dyn std::error::Error + Send + Sync>> {
         let mut mappings = HashMap::new();
 
         // Essential core mappings only (instead of loading the full 313-line DATA.md file)
         let core_mappings = [
-            ("HKQuantityTypeIdentifierStepCount", "Step count", SupportLevel::FullySupported, "ACTIVITY"),
-            ("HKQuantityTypeIdentifierHeartRate", "Heart rate", SupportLevel::FullySupported, "HEART"),
-            ("HKQuantityTypeIdentifierActiveEnergyBurned", "Active calories", SupportLevel::FullySupported, "ENERGY"),
-            ("HKQuantityTypeIdentifierBodyMass", "Body weight", SupportLevel::FullySupported, "BODY"),
-            ("HKCategoryTypeIdentifierSleepAnalysis", "Sleep stages", SupportLevel::FullySupported, "SLEEP"),
-            ("HKQuantityTypeIdentifierBloodPressureSystolic", "Systolic BP", SupportLevel::FullySupported, "BLOOD_PRESSURE"),
-            ("HKQuantityTypeIdentifierBloodPressureDiastolic", "Diastolic BP", SupportLevel::FullySupported, "BLOOD_PRESSURE"),
-            ("HKWorkoutType", "All workout types", SupportLevel::FullySupported, "WORKOUTS"),
+            (
+                "HKQuantityTypeIdentifierStepCount",
+                "Step count",
+                SupportLevel::FullySupported,
+                "ACTIVITY",
+            ),
+            (
+                "HKQuantityTypeIdentifierHeartRate",
+                "Heart rate",
+                SupportLevel::FullySupported,
+                "HEART",
+            ),
+            (
+                "HKQuantityTypeIdentifierActiveEnergyBurned",
+                "Active calories",
+                SupportLevel::FullySupported,
+                "ENERGY",
+            ),
+            (
+                "HKQuantityTypeIdentifierBodyMass",
+                "Body weight",
+                SupportLevel::FullySupported,
+                "BODY",
+            ),
+            (
+                "HKCategoryTypeIdentifierSleepAnalysis",
+                "Sleep stages",
+                SupportLevel::FullySupported,
+                "SLEEP",
+            ),
+            (
+                "HKQuantityTypeIdentifierBloodPressureSystolic",
+                "Systolic BP",
+                SupportLevel::FullySupported,
+                "BLOOD_PRESSURE",
+            ),
+            (
+                "HKQuantityTypeIdentifierBloodPressureDiastolic",
+                "Diastolic BP",
+                SupportLevel::FullySupported,
+                "BLOOD_PRESSURE",
+            ),
+            (
+                "HKWorkoutType",
+                "All workout types",
+                SupportLevel::FullySupported,
+                "WORKOUTS",
+            ),
             // Add more core mappings as needed, but keep it minimal
         ];
 
@@ -306,7 +355,7 @@ impl LazyDataLoader {
                     support_level: support_level.clone(),
                     category: category.to_string(),
                     notes: None,
-                }
+                },
             );
         }
 
@@ -340,22 +389,24 @@ static GLOBAL_DATA_LOADER: OnceCell<LazyDataLoader> = OnceCell::const_new();
 
 /// Initialize the global data loader
 pub async fn initialize_data_loader(config: DataLoaderConfig) -> &'static LazyDataLoader {
-    GLOBAL_DATA_LOADER.get_or_init(|| async {
-        let loader = LazyDataLoader::new(config);
-        if loader.config.preload_on_startup {
-            if let Err(e) = loader.load_data().await {
-                error!("Failed to preload health data mappings: {}", e);
+    GLOBAL_DATA_LOADER
+        .get_or_init(|| async {
+            let loader = LazyDataLoader::new(config);
+            if loader.config.preload_on_startup {
+                if let Err(e) = loader.load_data().await {
+                    error!("Failed to preload health data mappings: {}", e);
+                }
             }
-        }
-        loader
-    }).await
+            loader
+        })
+        .await
 }
 
 /// Get the global data loader instance
 pub async fn get_data_loader() -> &'static LazyDataLoader {
-    GLOBAL_DATA_LOADER.get_or_init(|| async {
-        LazyDataLoader::with_default_config()
-    }).await
+    GLOBAL_DATA_LOADER
+        .get_or_init(|| async { LazyDataLoader::with_default_config() })
+        .await
 }
 
 /// Migration recommendations for moving from static file to database
@@ -374,12 +425,12 @@ impl Default for DataLoaderMigrationPath {
             recommended_approach: "Lazy-loaded database-driven mappings with caching",
             migration_steps: vec![
                 "1. Create health_data_mappings table in database",
-                "2. Import current DATA.md content into database table", 
+                "2. Import current DATA.md content into database table",
                 "3. Update DataLoader to use database source",
                 "4. Implement cache invalidation strategies",
                 "5. Add admin interface for managing mappings",
                 "6. Remove static DATA.md file dependency",
-                "7. Add monitoring for mapping cache performance"
+                "7. Add monitoring for mapping cache performance",
             ],
             benefits: vec![
                 "Reduced memory usage at application startup",
@@ -387,7 +438,7 @@ impl Default for DataLoaderMigrationPath {
                 "Better cache control and invalidation",
                 "Easier maintenance of health data mappings",
                 "Improved application startup time",
-                "Better observability of data usage patterns"
+                "Better observability of data usage patterns",
             ],
             estimated_effort_days: 5, // 1 week for complete migration
         }
