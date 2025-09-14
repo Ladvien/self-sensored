@@ -263,6 +263,27 @@ CREATE TABLE temperature_metrics (
     CONSTRAINT check_water_temperature CHECK (water_temperature IS NULL OR water_temperature BETWEEN 0.0 AND 100.0)
 );
 
+-- Blood Glucose Metrics (CGM Data Streams)
+CREATE TABLE blood_glucose_metrics (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recorded_at TIMESTAMPTZ NOT NULL,
+    blood_glucose_mg_dl DOUBLE PRECISION NOT NULL, -- Blood glucose in mg/dL (70-180 normal, diabetic ranges vary)
+    measurement_context VARCHAR(50), -- 'fasting', 'post_meal', 'random', 'bedtime', 'pre_meal', 'post_workout'
+    medication_taken BOOLEAN, -- Whether diabetes medication was taken
+    insulin_delivery_units DOUBLE PRECISION, -- Insulin delivery units (for atomic pairing)
+    glucose_source VARCHAR(100), -- CGM device identifier for deduplication (e.g., 'dexcom_g7', 'freestyle_libre', 'manual_meter')
+    source_device VARCHAR(255),
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    -- Composite unique constraint for CGM deduplication: user + timestamp + device source
+    UNIQUE(user_id, recorded_at, glucose_source),
+    -- Medical-grade validation constraints
+    CONSTRAINT check_blood_glucose CHECK (blood_glucose_mg_dl BETWEEN 30.0 AND 600.0),
+    CONSTRAINT check_insulin_units CHECK (insulin_delivery_units IS NULL OR insulin_delivery_units >= 0.0),
+    CONSTRAINT check_measurement_context CHECK (measurement_context IS NULL OR measurement_context IN
+        ('fasting', 'post_meal', 'random', 'bedtime', 'pre_meal', 'post_workout'))
+);
+
 -- ============================================================================
 -- INDEXES
 -- ============================================================================
@@ -311,6 +332,13 @@ CREATE INDEX idx_respiratory_user_recorded ON respiratory_metrics(user_id, recor
 
 -- Temperature indexes
 CREATE INDEX idx_temperature_user_recorded ON temperature_metrics(user_id, recorded_at DESC);
+
+-- Blood glucose indexes (optimized for CGM data queries)
+CREATE INDEX idx_blood_glucose_user_recorded ON blood_glucose_metrics(user_id, recorded_at DESC);
+CREATE INDEX idx_blood_glucose_recorded ON blood_glucose_metrics(recorded_at DESC);
+CREATE INDEX idx_blood_glucose_user_source ON blood_glucose_metrics(user_id, glucose_source, recorded_at DESC);
+CREATE INDEX idx_blood_glucose_critical ON blood_glucose_metrics(user_id, recorded_at DESC)
+    WHERE blood_glucose_mg_dl < 70.0 OR blood_glucose_mg_dl > 400.0;
 CREATE INDEX idx_temperature_source ON temperature_metrics(temperature_source);
 
 -- ============================================================================
@@ -512,6 +540,204 @@ BEGIN
     END IF;
 
     RETURN result;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ============================================================================
+-- MINDFULNESS & MENTAL HEALTH TABLES
+-- ============================================================================
+
+-- Mindfulness sessions table
+CREATE TABLE mindfulness_metrics (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recorded_at TIMESTAMPTZ NOT NULL,
+
+    -- Core Session Data
+    session_duration_minutes INTEGER,
+    meditation_type VARCHAR(100), -- 'guided', 'breathwork', 'body_scan', 'loving_kindness', 'mindfulness', 'other'
+    session_quality_rating SMALLINT CHECK (session_quality_rating >= 1 AND session_quality_rating <= 5),
+
+    -- Mindful Minutes Tracking
+    mindful_minutes_today INTEGER,
+    mindful_minutes_week INTEGER,
+
+    -- Physiological Data During Session
+    breathing_rate_breaths_per_min NUMERIC(5,2),
+    heart_rate_variability_during_session NUMERIC(8,2),
+    focus_rating SMALLINT CHECK (focus_rating >= 1 AND focus_rating <= 10),
+
+    -- Session Context
+    guided_session_instructor VARCHAR(255),
+    meditation_app VARCHAR(100), -- 'calm', 'headspace', 'insight_timer', 'apple_mindfulness', 'ten_percent_happier'
+    background_sounds VARCHAR(100), -- 'nature', 'rain', 'silence', 'music', 'white_noise'
+    location_type VARCHAR(50), -- 'home', 'office', 'outdoors', 'studio', 'travel'
+    session_notes TEXT,
+
+    -- Metadata
+    source_device VARCHAR(255),
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+
+    -- Unique constraint to prevent duplicate sessions
+    UNIQUE (user_id, recorded_at, meditation_type)
+);
+
+-- Indexes for mindfulness metrics
+CREATE INDEX idx_mindfulness_user_date ON mindfulness_metrics (user_id, recorded_at);
+CREATE INDEX idx_mindfulness_meditation_type ON mindfulness_metrics (meditation_type);
+CREATE INDEX idx_mindfulness_duration ON mindfulness_metrics (session_duration_minutes);
+
+-- Mental health metrics table (HIPAA-compliant with privacy protection)
+CREATE TABLE mental_health_metrics (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recorded_at TIMESTAMPTZ NOT NULL,
+
+    -- iOS 17+ State of Mind Integration
+    state_of_mind_valence NUMERIC(3,2) CHECK (state_of_mind_valence >= -1.0 AND state_of_mind_valence <= 1.0),
+    state_of_mind_labels TEXT[], -- array of mood descriptors from iOS
+    reflection_prompt TEXT,
+
+    -- General Mental Health Ratings (1-10 scale)
+    mood_rating SMALLINT CHECK (mood_rating >= 1 AND mood_rating <= 10),
+    anxiety_level SMALLINT CHECK (anxiety_level >= 1 AND anxiety_level <= 10),
+    stress_level SMALLINT CHECK (stress_level >= 1 AND stress_level <= 10),
+    energy_level SMALLINT CHECK (energy_level >= 1 AND energy_level <= 10),
+
+    -- Clinical Screening Scores (when applicable)
+    depression_screening_score SMALLINT CHECK (depression_screening_score >= 0 AND depression_screening_score <= 27), -- PHQ-9 style
+    anxiety_screening_score SMALLINT CHECK (anxiety_screening_score >= 0 AND anxiety_screening_score <= 21), -- GAD-7 style
+
+    -- Sleep Quality Impact
+    sleep_quality_impact SMALLINT CHECK (sleep_quality_impact >= 1 AND sleep_quality_impact <= 5),
+
+    -- Context and Coping
+    trigger_event VARCHAR(255), -- 'work_stress', 'relationship', 'health', 'financial', 'social', 'other'
+    coping_strategy VARCHAR(255), -- 'exercise', 'meditation', 'social_support', 'therapy', 'journaling', 'other'
+    medication_taken BOOLEAN,
+    therapy_session_today BOOLEAN,
+
+    -- Privacy Protected Data (encrypted fields)
+    private_notes_encrypted TEXT, -- Encrypted mental health notes
+    notes_encryption_key_id UUID,
+    data_sensitivity_level VARCHAR(20) DEFAULT 'high', -- 'standard', 'high', 'medical', 'therapeutic'
+
+    -- Metadata
+    source_device VARCHAR(255),
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+
+    -- Unique constraint to prevent duplicate entries
+    UNIQUE (user_id, recorded_at)
+);
+
+-- Indexes for mental health metrics (with privacy considerations)
+CREATE INDEX idx_mental_health_user_date ON mental_health_metrics (user_id, recorded_at);
+CREATE INDEX idx_mental_health_mood ON mental_health_metrics (mood_rating) WHERE mood_rating IS NOT NULL;
+CREATE INDEX idx_mental_health_sensitivity ON mental_health_metrics (data_sensitivity_level);
+
+-- Mental health audit table (HIPAA compliance)
+CREATE TABLE mental_health_audit (
+    id BIGSERIAL PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    api_key_id UUID REFERENCES api_keys(id),
+    action VARCHAR(100) NOT NULL, -- 'create', 'read', 'update', 'delete', 'export'
+    table_name VARCHAR(100) NOT NULL,
+    record_id UUID,
+
+    -- Access Details
+    access_type VARCHAR(50), -- 'api', 'dashboard', 'export', 'analytics'
+    access_method VARCHAR(50), -- 'GET', 'POST', 'PUT', 'DELETE'
+    success BOOLEAN NOT NULL DEFAULT true,
+
+    -- Privacy and Security
+    data_sensitivity_level VARCHAR(20), -- 'standard', 'high', 'medical'
+    privacy_level VARCHAR(20), -- 'summary', 'detailed', 'full_access'
+    encryption_used BOOLEAN DEFAULT false,
+
+    -- Request Context
+    ip_address INET,
+    user_agent TEXT,
+    request_metadata JSONB DEFAULT '{}'::jsonb,
+
+    -- Timestamps
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Indexes for mental health audit
+CREATE INDEX idx_mental_health_audit_user ON mental_health_audit (user_id, created_at);
+CREATE INDEX idx_mental_health_audit_action ON mental_health_audit (action, created_at);
+CREATE INDEX idx_mental_health_audit_sensitivity ON mental_health_audit (data_sensitivity_level);
+
+-- Function to calculate wellness score from mental health metrics
+CREATE OR REPLACE FUNCTION calculate_wellness_score(
+    p_mood_rating INTEGER,
+    p_anxiety_level INTEGER,
+    p_stress_level INTEGER,
+    p_energy_level INTEGER
+) RETURNS INTEGER AS $$
+DECLARE
+    wellness_score INTEGER := 0;
+    total_components INTEGER := 0;
+BEGIN
+    -- Calculate weighted wellness score (1-10 scale)
+    -- Higher mood and energy are positive, lower anxiety and stress are positive
+
+    IF p_mood_rating IS NOT NULL THEN
+        wellness_score := wellness_score + p_mood_rating;
+        total_components := total_components + 1;
+    END IF;
+
+    IF p_energy_level IS NOT NULL THEN
+        wellness_score := wellness_score + p_energy_level;
+        total_components := total_components + 1;
+    END IF;
+
+    IF p_anxiety_level IS NOT NULL THEN
+        -- Invert anxiety (lower anxiety = better wellness)
+        wellness_score := wellness_score + (11 - p_anxiety_level);
+        total_components := total_components + 1;
+    END IF;
+
+    IF p_stress_level IS NOT NULL THEN
+        -- Invert stress (lower stress = better wellness)
+        wellness_score := wellness_score + (11 - p_stress_level);
+        total_components := total_components + 1;
+    END IF;
+
+    -- Return average if we have any components, otherwise return NULL
+    IF total_components > 0 THEN
+        RETURN ROUND(wellness_score::NUMERIC / total_components);
+    ELSE
+        RETURN NULL;
+    END IF;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+-- Function to add mental health audit entry (HIPAA compliance)
+CREATE OR REPLACE FUNCTION audit_mental_health_access(
+    p_user_id UUID,
+    p_api_key_id UUID,
+    p_action VARCHAR(100),
+    p_table_name VARCHAR(100),
+    p_record_id UUID DEFAULT NULL,
+    p_access_type VARCHAR(50) DEFAULT 'api',
+    p_access_method VARCHAR(50) DEFAULT 'GET',
+    p_data_sensitivity_level VARCHAR(20) DEFAULT 'high',
+    p_privacy_level VARCHAR(20) DEFAULT 'summary',
+    p_ip_address INET DEFAULT NULL,
+    p_user_agent TEXT DEFAULT NULL,
+    p_metadata JSONB DEFAULT '{}'::jsonb
+) RETURNS VOID AS $$
+BEGIN
+    INSERT INTO mental_health_audit (
+        user_id, api_key_id, action, table_name, record_id,
+        access_type, access_method, success, data_sensitivity_level,
+        privacy_level, encryption_used, ip_address, user_agent, request_metadata
+    ) VALUES (
+        p_user_id, p_api_key_id, p_action, p_table_name, p_record_id,
+        p_access_type, p_access_method, true, p_data_sensitivity_level,
+        p_privacy_level, true, p_ip_address, p_user_agent, p_metadata
+    );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

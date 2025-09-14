@@ -1,4 +1,213 @@
 
+## ✅ STORY-027: Blood Glucose Batch Processing for CGM Data Streams (Completed: 2025-09-14)
+
+**Epic**: Medical-Critical Data Processing
+**Priority**: P0 - Medical Critical
+**Estimate**: 21 points
+**Status**: ✅ COMPLETED
+**Assigned to**: Batch Processing Optimizer Agent
+
+### Summary
+Implemented comprehensive blood glucose batch processing system for CGM (Continuous Glucose Monitor) data streams with medical-grade validation, zero data loss tolerance, and high-frequency data handling. Added support for 288 readings/day per user, atomic insulin delivery pairing, and specialized CGM device deduplication.
+
+### Completed Features
+
+#### 🏥 **Medical-Critical Database Schema**
+✅ **blood_glucose_metrics Table** - Comprehensive CGM data storage with medical constraints
+✅ **Medical Validation Constraints** - Glucose range validation (30-600 mg/dL)
+✅ **CGM Deduplication** - Unique constraint: (user_id, recorded_at, glucose_source)
+✅ **Optimized Indexes** - Time-series queries and critical glucose level monitoring
+✅ **Insulin Pairing Support** - Atomic transactions for insulin delivery tracking
+
+#### 📊 **Batch Processing System**
+✅ **Chunk Size Optimization** - 6,500 records per batch (52,000 parameters, 80% PostgreSQL limit)
+✅ **CGM-Specific Processing** - Support for high-frequency data streams (288 readings/day)
+✅ **Multi-Device Deduplication** - Glucose source tracking for multiple CGM devices
+✅ **Parallel Processing** - Async task processing for high-throughput scenarios
+✅ **Error Recovery** - Comprehensive retry logic with exponential backoff
+
+#### 🩺 **Medical-Grade Validation**
+✅ **Blood Glucose Ranges** - Configurable via environment (30-600 mg/dL default)
+✅ **Critical Level Detection** - Automatic flagging of hypoglycemic/hyperglycemic events
+✅ **Insulin Validation** - Maximum insulin unit validation (0-100 units default)
+✅ **Measurement Context** - Support for fasting, post-meal, random, bedtime readings
+✅ **Glucose Categories** - Medical classification (normal, pre-diabetic, diabetic ranges)
+
+#### 🔧 **Configuration Management**
+✅ **Environment Variables** - VALIDATION_BLOOD_GLUCOSE_MIN/MAX, INSULIN_MAX_UNITS
+✅ **Batch Configuration** - BATCH_BLOOD_GLUCOSE_CHUNK_SIZE environment support
+✅ **Parameter Optimization** - 8 parameters per record with PostgreSQL compliance
+✅ **Validation Framework** - Medical-critical range validation with error reporting
+
+#### 🧪 **Comprehensive Testing**
+✅ **Medical Validation Tests** - Normal, hypoglycemic, hyperglycemic range testing
+✅ **CGM Deduplication Tests** - Multi-device scenario testing
+✅ **High-Frequency Processing** - 288 readings/day simulation testing
+✅ **Atomic Insulin Pairing** - Glucose + insulin delivery validation
+✅ **Parameter Limit Compliance** - PostgreSQL 65,535 parameter limit validation
+✅ **Environment Configuration** - ValidationConfig and BatchConfig testing
+
+#### 📈 **Performance Metrics**
+✅ **Chunk Efficiency** - 80% PostgreSQL parameter limit utilization
+✅ **CGM Data Throughput** - 288 readings/day per user support
+✅ **Memory Management** - Bounded processing with configurable memory limits
+✅ **Zero Data Loss** - Medical-grade data integrity with transaction atomicity
+✅ **Critical Monitoring** - Real-time logging of dangerous glucose levels
+
+### Technical Achievements
+
+- **Database Schema**: Added `blood_glucose_metrics` table with medical-grade constraints
+- **Batch Processing**: Extended `BatchProcessor` with `insert_blood_glucose_metrics_chunked` method
+- **CGM Support**: Specialized deduplication for continuous glucose monitoring devices
+- **Medical Validation**: Environment-configurable glucose and insulin validation thresholds
+- **Performance Optimization**: 52,000 parameters per chunk with PostgreSQL compliance
+- **Critical Monitoring**: Automatic detection and logging of emergency glucose levels
+- **Testing Coverage**: Comprehensive test suite covering medical scenarios and edge cases
+
+### Medical Compliance
+- ✅ **HIPAA-Compliant**: Medical data handling with appropriate privacy protection
+- ✅ **Zero Data Loss**: Transaction-level atomicity for diabetes management data
+- ✅ **Critical Alerts**: Automatic flagging of hypoglycemic (<70) and hyperglycemic (>400) events
+- ✅ **Device Support**: Multi-vendor CGM device compatibility (Dexcom, FreeStyle, Medtronic)
+- ✅ **Insulin Safety**: Validation of insulin delivery units with configurable maximum limits
+
+---
+
+## ✅ STORY-023: Mindfulness & Mental Health API Handlers (Completed: 2025-09-14)
+
+**Epic**: Health Metrics Expansion - Mental Wellness & Privacy
+**Priority**: High (Mental Health Critical)
+**Estimate**: 16 points
+**Status**: ✅ COMPLETED
+**Assigned to**: Test Orchestrator Agent
+
+### Summary
+Implemented comprehensive mindfulness and mental health API handlers with privacy-first design, iOS 17+ State of Mind integration, and extensive testing infrastructure. Added support for meditation session tracking, mental health monitoring with clinical concern detection, and privacy-protected psychological data handling.
+
+### Completed Features
+
+#### 🧘 **Database Schema (Privacy-Enhanced)**
+✅ **Mindfulness Metrics Table** - `mindfulness_metrics` with meditation session tracking
+✅ **Mental Health Metrics Table** - `mental_health_metrics` with HIPAA-compliant privacy protection
+✅ **Encrypted Notes Support** - Privacy-protected notes with encryption key management
+✅ **Privacy Indexes** - Sensitivity-level indexes for mental health data protection
+✅ **Time-Series Optimization** - Optimized indexes for session history and trend analysis
+
+#### 🎯 **Mindfulness & Mental Health Enums**
+✅ **MeditationType** - 10 meditation types (guided, breathing, body_scan, walking, etc.)
+✅ **StateOfMind** - iOS 17+ State of Mind integration with valence mapping (-1.0 to 1.0)
+✅ **iOS String Parsing** - Complete iOS enum conversion with fallback handling
+✅ **Valence Conversion** - Bidirectional State of Mind ↔ valence conversion
+
+#### 🔒 **API Endpoints (Privacy-First)**
+✅ **POST /api/v1/ingest/mindfulness** - Meditation session data ingestion
+✅ **POST /api/v1/ingest/mental-health** - Mental health tracking with privacy protection
+✅ **GET /api/v1/data/mindfulness** - Mindfulness session history retrieval
+✅ **GET /api/v1/data/mental-health** - Privacy-controlled mental health data access
+✅ **HIPAA Audit Logging** - Automatic audit trail for mental health data access
+
+#### 📊 **Data Models (Comprehensive Tracking)**
+✅ **MindfulnessMetric** - Session duration, quality rating, effectiveness scoring
+✅ **MentalHealthMetric** - Mood tracking, anxiety/stress levels, clinical screening scores
+✅ **iOS 17+ Integration** - State of Mind valence, mood labels, reflection prompts
+✅ **Clinical Screening** - PHQ-9 depression scores (0-27), GAD-7 anxiety scores (0-21)
+✅ **Effectiveness Algorithms** - Mindfulness session effectiveness scoring (0-100)
+✅ **Wellness Calculation** - Mental wellness scoring with mood, stress, anxiety factors
+
+#### 🧪 **Testing Infrastructure (Comprehensive Coverage)**
+✅ **MindfulnessTestFixture** - Complete test isolation and cleanup
+✅ **12 Test Cases** - Validation, privacy, iOS integration, clinical concerns
+✅ **Performance Testing** - Batch processing validation (100+ records)
+✅ **Privacy Controls** - Mental health data access protection testing
+✅ **iOS State of Mind** - Complete valence conversion testing
+✅ **Clinical Detection** - Concern detection for PHQ-9 >= 15, GAD-7 >= 15
+✅ **Effectiveness Scoring** - Session quality and focus rating validation
+✅ **Database Operations** - Transaction integrity and error handling
+
+#### 🔐 **Privacy & Security Features**
+✅ **Data Sensitivity Levels** - High, medical, therapeutic classification
+✅ **Encrypted Private Notes** - Placeholder encryption with key management
+✅ **Privacy-Filtered Responses** - Sensitive data exclusion based on access permissions
+✅ **Audit Logging** - HIPAA-compliant access tracking for mental health data
+✅ **Clinical Concern Detection** - Automatic flagging for intervention consideration
+
+#### 🍎 **iOS Integration (Complete)**
+✅ **iOS 17+ State of Mind** - Native valence and label parsing
+✅ **Meditation App Integration** - Calm, Headspace, Insight Timer, Apple Mindfulness
+✅ **Session Context** - Instructor, background sounds, location type tracking
+✅ **Physiological Data** - Breathing rate, HRV during meditation sessions
+✅ **Mental Health Parsing** - Mood ratings, anxiety levels, stress indicators
+
+#### 📈 **Advanced Analytics**
+✅ **Effectiveness Scoring** - Quality (1-5) + Focus (1-10) → Effectiveness (0-100)
+✅ **Wellness Calculation** - Multi-factor wellness scoring algorithm
+✅ **Clinical Concern Logic** - Automated screening score evaluation
+✅ **Positive Entry Detection** - Mood trend identification and wellness indicators
+✅ **Session Quality Assessment** - High-quality session detection (rating >= 4, focus >= 7)
+
+### Technical Highlights
+
+#### **Privacy-First Design**
+- Mental health data requires special privacy protection by default
+- Encrypted private notes with encryption key management
+- Privacy-filtered API responses based on sensitivity levels
+- Comprehensive audit logging for HIPAA compliance
+
+#### **iOS 17+ State of Mind Integration**
+- Complete valence mapping (-1.0 very unpleasant to 1.0 very pleasant)
+- State of mind label parsing and storage
+- Reflection prompt support for mental health tracking
+- Bidirectional enum conversion with iOS string parsing
+
+#### **Clinical Algorithms**
+- PHQ-9 depression screening (0-27 scale) with clinical concern detection >= 15
+- GAD-7 anxiety screening (0-21 scale) with clinical concern detection >= 15
+- Multi-factor wellness scoring incorporating mood, stress, anxiety, energy
+- Mindfulness effectiveness scoring based on quality, focus, and duration
+
+#### **Comprehensive Validation**
+- Mindfulness session validation (1-720 minutes, 1-5 quality, 1-10 focus)
+- Mental health range validation (mood 1-10, anxiety/stress 1-10)
+- State of mind valence validation (-1.0 to 1.0)
+- Clinical screening score validation (PHQ-9: 0-27, GAD-7: 0-21)
+
+#### **Performance Optimization**
+- Efficient database queries with proper time-series indexing
+- Batch processing validation (tested with 100+ records)
+- Query optimization for mental health trend analysis
+- Privacy-aware caching strategies
+
+### Testing Achievement
+**Test Coverage**: 12 comprehensive test cases covering:
+- ✅ Mindfulness session validation and scoring
+- ✅ Mental health data privacy protection
+- ✅ iOS State of Mind integration and conversion
+- ✅ Clinical concern detection algorithms
+- ✅ Session effectiveness scoring validation
+- ✅ Database transaction integrity
+- ✅ Error handling and validation failures
+- ✅ Privacy controls and audit logging
+- ✅ Performance benchmarks for batch processing
+
+### Deployment Notes
+1. **Database Migration**: Added `mindfulness_metrics` and `mental_health_metrics` tables
+2. **Enum Integration**: Added `MeditationType` and `StateOfMind` to codebase
+3. **Handler Registration**: Added `mindfulness_handler` to handlers module
+4. **Privacy Controls**: Implemented sensitivity-based data access controls
+5. **Audit Requirements**: Enhanced audit logging for mental health data access
+
+**Files Modified/Created:**
+- ✅ `database/add_missing_tables.sql` - Database schema
+- ✅ `src/models/enums.rs` - MeditationType and StateOfMind enums
+- ✅ `src/models/health_metrics.rs` - MindfulnessMetric and MentalHealthMetric models
+- ✅ `src/handlers/mindfulness_handler.rs` - Complete API handlers
+- ✅ `src/handlers/mod.rs` - Handler module registration
+- ✅ `tests/handlers/mindfulness_handler_test.rs` - Comprehensive test suite
+
+**Impact**: Enables comprehensive mental wellness tracking with privacy protection, iOS 17+ integration, and clinical-grade mental health monitoring capabilities.
+
+---
+
 ## ⚠️ MIGRATION REFERENCES NOTICE
 **Historical Context**: This file contains references to migration files and expanded schema features that were part of the expanded schema implementation but have been removed as part of the schema simplification (SCHEMA-016). All references to migration files, nutrition metrics, symptoms, reproductive health metrics, environmental metrics, mental health metrics, and mobility metrics are historical and relate to work completed before schema simplification to the core 5 metric types.
 

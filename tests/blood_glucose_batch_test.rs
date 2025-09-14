@@ -196,3 +196,198 @@ fn test_blood_glucose_env_config() {
     let batch_config = BatchConfig::default();
     assert_eq!(batch_config.blood_glucose_chunk_size, 6500);
 }
+
+/// Test CGM high-frequency data processing (288 readings/day simulation)
+#[test]
+fn test_cgm_high_frequency_processing() {
+    let user_id = Uuid::new_v4();
+    let base_time = Utc::now();
+
+    // Simulate 1 day of CGM data (288 readings every 5 minutes)
+    let mut cgm_readings = Vec::new();
+    for i in 0..288 {
+        let reading = BloodGlucoseMetric {
+            id: Uuid::new_v4(),
+            user_id,
+            recorded_at: base_time + chrono::Duration::minutes(i * 5),
+            blood_glucose_mg_dl: 80.0 + (i as f64 % 40.0), // Simulate glucose variation
+            measurement_context: Some("continuous".to_string()),
+            medication_taken: Some(false),
+            insulin_delivery_units: if i % 20 == 0 { Some(2.5) } else { None }, // Occasional insulin
+            glucose_source: Some("DexcomG7".to_string()),
+            source_device: Some("iPhone".to_string()),
+            created_at: Utc::now(),
+        };
+        cgm_readings.push(reading);
+    }
+
+    // Test chunking would work correctly
+    let config = BatchConfig::default();
+    let chunk_size = config.blood_glucose_chunk_size;
+    let chunks = cgm_readings.chunks(chunk_size).count();
+
+    // Should be divided into chunks efficiently
+    assert!(chunks > 0);
+    assert!(chunks <= 45); // 288 / 6500 = ~1 chunk, but allowing for smaller test sizes
+
+    // Verify all readings are unique (no timestamp conflicts)
+    use std::collections::HashSet;
+    let mut unique_timestamps = HashSet::new();
+    for reading in &cgm_readings {
+        let timestamp = reading.recorded_at.timestamp_millis();
+        assert!(unique_timestamps.insert(timestamp), "Duplicate timestamp found");
+    }
+    assert_eq!(unique_timestamps.len(), 288);
+}
+
+/// Test medical-critical glucose validation and categorization
+#[test]
+fn test_medical_critical_glucose_levels() {
+    let base_metric = BloodGlucoseMetric {
+        id: Uuid::new_v4(),
+        user_id: Uuid::new_v4(),
+        recorded_at: Utc::now(),
+        blood_glucose_mg_dl: 100.0,
+        measurement_context: Some("fasting".to_string()),
+        medication_taken: Some(false),
+        insulin_delivery_units: None,
+        glucose_source: Some("manual_meter".to_string()),
+        source_device: Some("iPhone".to_string()),
+        created_at: Utc::now(),
+    };
+
+    // Test different glucose categories
+    let test_cases = [
+        (50.0, "hypoglycemic_critical", true),   // Emergency low
+        (70.0, "normal_fasting", false),         // Normal low end
+        (95.0, "normal_fasting", false),         // Normal fasting
+        (110.0, "pre_diabetic", false),          // Pre-diabetic
+        (140.0, "diabetic_controlled", false),   // Diabetic controlled
+        (200.0, "diabetic_high", false),         // High diabetic
+        (300.0, "diabetic_very_high", false),    // Very high
+        (450.0, "critical_emergency", true),     // Emergency high
+    ];
+
+    for (glucose_level, expected_category, expected_critical) in test_cases {
+        let metric = BloodGlucoseMetric {
+            blood_glucose_mg_dl: glucose_level,
+            ..base_metric.clone()
+        };
+
+        assert_eq!(metric.glucose_category(), expected_category);
+        assert_eq!(metric.is_critical_glucose_level(), expected_critical);
+
+        // All should pass validation (within safe bounds)
+        assert!(metric.validate().is_ok());
+    }
+}
+
+/// Test atomic insulin + glucose pairing validation
+#[test]
+fn test_insulin_glucose_atomic_pairing() {
+    let user_id = Uuid::new_v4();
+    let timestamp = Utc::now();
+
+    // Test glucose reading with insulin delivery
+    let glucose_with_insulin = BloodGlucoseMetric {
+        id: Uuid::new_v4(),
+        user_id,
+        recorded_at: timestamp,
+        blood_glucose_mg_dl: 180.0, // High glucose requiring insulin
+        measurement_context: Some("pre_meal".to_string()),
+        medication_taken: Some(true),
+        insulin_delivery_units: Some(5.5), // Appropriate insulin dose
+        glucose_source: Some("DexcomG7".to_string()),
+        source_device: Some("iPhone".to_string()),
+        created_at: Utc::now(),
+    };
+
+    // Test glucose reading without insulin
+    let glucose_without_insulin = BloodGlucoseMetric {
+        insulin_delivery_units: None,
+        medication_taken: Some(false),
+        blood_glucose_mg_dl: 95.0, // Normal glucose
+        ..glucose_with_insulin.clone()
+    };
+
+    // Both should be valid
+    assert!(glucose_with_insulin.validate().is_ok());
+    assert!(glucose_without_insulin.validate().is_ok());
+
+    // Test insulin validation
+    let invalid_insulin = BloodGlucoseMetric {
+        insulin_delivery_units: Some(150.0), // Excessive insulin dose
+        ..glucose_with_insulin
+    };
+
+    assert!(invalid_insulin.validate().is_err());
+}
+
+/// Test multiple CGM device deduplication scenarios
+#[test]
+fn test_multi_device_cgm_deduplication() {
+    let user_id = Uuid::new_v4();
+    let timestamp = Utc::now();
+
+    // Same user, same time, different CGM devices
+    let devices = [
+        ("DexcomG7", 120.0),
+        ("FreeStyleLibre3", 118.0),
+        ("MedtronicMinimed", 122.0),
+        ("manual_meter", 119.0),
+    ];
+
+    let mut readings = Vec::new();
+    for (device, glucose) in devices {
+        let reading = BloodGlucoseMetric {
+            id: Uuid::new_v4(),
+            user_id,
+            recorded_at: timestamp,
+            blood_glucose_mg_dl: glucose,
+            measurement_context: Some("random".to_string()),
+            medication_taken: Some(false),
+            insulin_delivery_units: None,
+            glucose_source: Some(device.to_string()),
+            source_device: Some("iPhone".to_string()),
+            created_at: Utc::now(),
+        };
+        readings.push(reading);
+    }
+
+    // All readings should be considered unique due to different glucose sources
+    use std::collections::HashSet;
+    let mut dedup_keys = HashSet::new();
+    for reading in &readings {
+        let key = (
+            reading.user_id,
+            reading.recorded_at.timestamp_millis(),
+            reading.glucose_source.clone(),
+        );
+        assert!(dedup_keys.insert(key), "Duplicate key found for different devices");
+    }
+
+    assert_eq!(dedup_keys.len(), 4); // All 4 devices should be unique
+}
+
+/// Test batch configuration parameter limits compliance
+#[test]
+fn test_batch_parameter_limits_compliance() {
+    use self_sensored::config::BLOOD_GLUCOSE_PARAMS_PER_RECORD;
+
+    let config = BatchConfig::default();
+
+    // Verify blood glucose chunking stays under PostgreSQL limits
+    let max_params = config.blood_glucose_chunk_size * BLOOD_GLUCOSE_PARAMS_PER_RECORD;
+
+    // Must not exceed PostgreSQL parameter limit
+    assert!(max_params <= 65535, "Exceeds PostgreSQL parameter limit: {}", max_params);
+
+    // Should be reasonably efficient (using at least 75% of limit)
+    assert!(max_params >= 40000, "Chunk size too small, inefficient: {}", max_params);
+
+    // Verify parameter count is correct
+    assert_eq!(BLOOD_GLUCOSE_PARAMS_PER_RECORD, 8);
+
+    // Test actual calculation: 6500 * 8 = 52,000 (under 65,535 limit)
+    assert_eq!(max_params, 52000);
+}

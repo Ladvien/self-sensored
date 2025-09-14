@@ -424,6 +424,28 @@ impl BatchProcessor {
             }));
         }
 
+        if !grouped.temperature_metrics.is_empty() {
+            let temperature_metrics = std::mem::take(&mut grouped.temperature_metrics);
+            let pool = self.pool.clone();
+            let config = self.config.clone();
+            let chunk_size = config.temperature_chunk_size;
+            tasks.push(tokio::spawn(async move {
+                Self::process_with_retry(
+                    "Temperature",
+                    || {
+                        Self::insert_temperature_metrics_chunked(
+                            &pool,
+                            user_id,
+                            temperature_metrics.clone(),
+                            chunk_size,
+                        )
+                    },
+                    &config,
+                )
+                .await
+            }));
+        }
+
         if !grouped.respiratory_metrics.is_empty() {
             let respiratory_metrics = std::mem::take(&mut grouped.respiratory_metrics);
             let pool = self.pool.clone();
@@ -437,6 +459,28 @@ impl BatchProcessor {
                             &pool,
                             user_id,
                             respiratory_metrics.clone(),
+                            chunk_size,
+                        )
+                    },
+                    &config,
+                )
+                .await
+            }));
+        }
+
+        if !grouped.blood_glucose.is_empty() {
+            let blood_glucose = std::mem::take(&mut grouped.blood_glucose);
+            let pool = self.pool.clone();
+            let config = self.config.clone();
+            let chunk_size = config.blood_glucose_chunk_size;
+            tasks.push(tokio::spawn(async move {
+                Self::process_with_retry(
+                    "BloodGlucose",
+                    || {
+                        Self::insert_blood_glucose_metrics_chunked(
+                            &pool,
+                            user_id,
+                            blood_glucose.clone(),
                             chunk_size,
                         )
                     },
@@ -596,6 +640,21 @@ impl BatchProcessor {
             let (processed, failed, errors, retries) = Self::process_with_retry(
                 "Respiratory",
                 || self.insert_respiratory_metrics(user_id, respiratory_metrics.clone()),
+                &self.config,
+            )
+            .await;
+            result.processed_count += processed;
+            result.failed_count += failed;
+            result.errors.extend(errors);
+            result.retry_attempts += retries;
+        }
+
+        // Process blood glucose metrics
+        if !grouped.blood_glucose.is_empty() {
+            let blood_glucose = std::mem::take(&mut grouped.blood_glucose);
+            let (processed, failed, errors, retries) = Self::process_with_retry(
+                "BloodGlucose",
+                || self.insert_blood_glucose_metrics(user_id, blood_glucose.clone()),
                 &self.config,
             )
             .await;
@@ -1801,6 +1860,21 @@ impl BatchProcessor {
         .await
     }
 
+    /// Batch insert blood glucose metrics with CGM-specific handling
+    async fn insert_blood_glucose_metrics(
+        &self,
+        user_id: Uuid,
+        metrics: Vec<crate::models::BloodGlucoseMetric>,
+    ) -> Result<usize, sqlx::Error> {
+        Self::insert_blood_glucose_metrics_chunked(
+            &self.pool,
+            user_id,
+            metrics,
+            self.config.blood_glucose_chunk_size,
+        )
+        .await
+    }
+
     /// Batch insert respiratory metrics in optimized chunks
     async fn insert_respiratory_metrics_chunked(
         pool: &PgPool,
@@ -1873,6 +1947,101 @@ impl BatchProcessor {
                         chunk_idx = chunk_idx,
                         chunk_size = chunk.len(),
                         "Failed to insert respiratory metrics chunk"
+                    );
+                    return Err(e);
+                }
+            }
+        }
+
+        Ok(total_inserted)
+    }
+
+    /// Batch insert blood glucose metrics in optimized chunks for CGM data streams
+    async fn insert_blood_glucose_metrics_chunked(
+        pool: &PgPool,
+        user_id: Uuid,
+        metrics: Vec<crate::models::BloodGlucoseMetric>,
+        chunk_size: usize,
+    ) -> Result<usize, sqlx::Error> {
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        let chunks: Vec<&[crate::models::BloodGlucoseMetric]> = metrics.chunks(chunk_size).collect();
+        let mut total_inserted = 0;
+        let max_params_per_chunk = chunk_size * crate::config::BLOOD_GLUCOSE_PARAMS_PER_RECORD;
+
+        info!(
+            metric_type = "blood_glucose",
+            total_records = metrics.len(),
+            chunk_count = chunks.len(),
+            chunk_size = chunk_size,
+            max_params_per_chunk = max_params_per_chunk,
+            "Processing blood glucose metrics in chunks"
+        );
+
+        for (chunk_idx, chunk) in chunks.iter().enumerate() {
+            let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
+                "INSERT INTO blood_glucose_metrics (user_id, recorded_at, blood_glucose_mg_dl, measurement_context, medication_taken, insulin_delivery_units, glucose_source, source_device) "
+            );
+
+            query_builder.push_values(chunk.iter(), |mut b, metric| {
+                b.push_bind(user_id)
+                    .push_bind(metric.recorded_at)
+                    .push_bind(metric.blood_glucose_mg_dl)
+                    .push_bind(&metric.measurement_context)
+                    .push_bind(metric.medication_taken)
+                    .push_bind(metric.insulin_delivery_units)
+                    .push_bind(&metric.glucose_source)
+                    .push_bind(&metric.source_device);
+            });
+
+            // CGM-specific ON CONFLICT handling with glucose_source deduplication
+            query_builder.push(" ON CONFLICT (user_id, recorded_at, glucose_source) DO UPDATE SET
+                blood_glucose_mg_dl = EXCLUDED.blood_glucose_mg_dl,
+                measurement_context = COALESCE(EXCLUDED.measurement_context, blood_glucose_metrics.measurement_context),
+                medication_taken = COALESCE(EXCLUDED.medication_taken, blood_glucose_metrics.medication_taken),
+                insulin_delivery_units = COALESCE(EXCLUDED.insulin_delivery_units, blood_glucose_metrics.insulin_delivery_units),
+                source_device = COALESCE(EXCLUDED.source_device, blood_glucose_metrics.source_device),
+                created_at = CURRENT_TIMESTAMP");
+
+            let insert_result = query_builder.build().execute(pool).await;
+
+            match insert_result {
+                Ok(result) => {
+                    let rows_inserted = result.rows_affected() as usize;
+                    total_inserted += rows_inserted;
+
+                    // Log critical glucose levels for medical monitoring
+                    let critical_count = chunk.iter()
+                        .filter(|m| m.is_critical_glucose_level())
+                        .count();
+
+                    if critical_count > 0 {
+                        tracing::warn!(
+                            user_id = %user_id,
+                            critical_glucose_readings = critical_count,
+                            chunk_idx = chunk_idx,
+                            "Critical blood glucose levels detected in batch"
+                        );
+                    }
+
+                    info!(
+                        metric_type = "blood_glucose",
+                        chunk_idx = chunk_idx,
+                        chunk_size = chunk.len(),
+                        rows_inserted = rows_inserted,
+                        critical_readings = critical_count,
+                        "Successfully inserted blood glucose metrics chunk"
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        error = %e,
+                        metric_type = "blood_glucose",
+                        chunk_idx = chunk_idx,
+                        chunk_size = chunk.len(),
+                        "Failed to insert blood glucose metrics chunk"
                     );
                     return Err(e);
                 }
