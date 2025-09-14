@@ -1581,6 +1581,116 @@ impl BatchProcessor {
         Ok(total_inserted)
     }
 
+    /// Static version of insert_body_measurements for parallel processing with chunking
+    async fn insert_body_measurements_static(
+        pool: &PgPool,
+        user_id: Uuid,
+        metrics: Vec<crate::models::BodyMeasurementMetric>,
+    ) -> Result<usize, sqlx::Error> {
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        // Use safe default chunking to prevent parameter limit errors
+        let chunk_size = 3500; // Safe default for body measurements (14 params per record)
+
+        Self::insert_body_measurements_chunked(pool, user_id, metrics, chunk_size).await
+    }
+
+    /// Insert body measurement metrics with chunking to respect PostgreSQL parameter limits
+    async fn insert_body_measurements_chunked(
+        pool: &PgPool,
+        user_id: Uuid,
+        metrics: Vec<crate::models::BodyMeasurementMetric>,
+        chunk_size: usize,
+    ) -> Result<usize, sqlx::Error> {
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        let mut total_inserted = 0;
+        let chunks: Vec<_> = metrics.chunks(chunk_size).collect();
+
+        // Validate parameter count to prevent PostgreSQL limit errors
+        let max_params_per_chunk = chunk_size * crate::config::BODY_MEASUREMENT_PARAMS_PER_RECORD;
+        if max_params_per_chunk > crate::config::SAFE_PARAM_LIMIT {
+            return Err(sqlx::Error::Configuration(
+                format!(
+                    "Chunk size {chunk_size} would result in {max_params_per_chunk} parameters, exceeding safe limit"
+                )
+                .into(),
+            ));
+        }
+
+        // AUDIT-007: Record parameter usage for monitoring
+        crate::middleware::metrics::Metrics::record_batch_parameter_usage(
+            "body_measurement",
+            "chunked_insert",
+            max_params_per_chunk,
+        );
+
+        info!(
+            metric_type = "body_measurement",
+            total_records = metrics.len(),
+            chunk_count = chunks.len(),
+            chunk_size = chunk_size,
+            max_params_per_chunk = max_params_per_chunk,
+            "Processing body measurement metrics in chunks"
+        );
+
+        for (chunk_idx, chunk) in chunks.iter().enumerate() {
+            let mut query_builder: sqlx::QueryBuilder<sqlx::Postgres> = sqlx::QueryBuilder::new(
+                "INSERT INTO body_metrics (user_id, recorded_at, body_weight_kg, body_mass_index, body_fat_percentage, lean_body_mass_kg, waist_circumference_cm, hip_circumference_cm, chest_circumference_cm, arm_circumference_cm, thigh_circumference_cm, body_temperature_celsius, basal_body_temperature_celsius, measurement_source, source_device) "
+            );
+
+            query_builder.push_values(chunk.iter(), |mut b, metric| {
+                b.push_bind(user_id)
+                    .push_bind(metric.recorded_at)
+                    .push_bind(metric.body_weight_kg)
+                    .push_bind(metric.body_mass_index)
+                    .push_bind(metric.body_fat_percentage)
+                    .push_bind(metric.lean_body_mass_kg)
+                    .push_bind(metric.waist_circumference_cm)
+                    .push_bind(metric.hip_circumference_cm)
+                    .push_bind(metric.chest_circumference_cm)
+                    .push_bind(metric.arm_circumference_cm)
+                    .push_bind(metric.thigh_circumference_cm)
+                    .push_bind(metric.body_temperature_celsius)
+                    .push_bind(metric.basal_body_temperature_celsius)
+                    .push_bind(&metric.measurement_source)
+                    .push_bind(&metric.source_device);
+            });
+
+            query_builder.push(" ON CONFLICT (user_id, recorded_at, measurement_source) DO UPDATE SET
+                body_weight_kg = COALESCE(EXCLUDED.body_weight_kg, body_metrics.body_weight_kg),
+                body_mass_index = COALESCE(EXCLUDED.body_mass_index, body_metrics.body_mass_index),
+                body_fat_percentage = COALESCE(EXCLUDED.body_fat_percentage, body_metrics.body_fat_percentage),
+                lean_body_mass_kg = COALESCE(EXCLUDED.lean_body_mass_kg, body_metrics.lean_body_mass_kg),
+                waist_circumference_cm = COALESCE(EXCLUDED.waist_circumference_cm, body_metrics.waist_circumference_cm),
+                hip_circumference_cm = COALESCE(EXCLUDED.hip_circumference_cm, body_metrics.hip_circumference_cm),
+                chest_circumference_cm = COALESCE(EXCLUDED.chest_circumference_cm, body_metrics.chest_circumference_cm),
+                arm_circumference_cm = COALESCE(EXCLUDED.arm_circumference_cm, body_metrics.arm_circumference_cm),
+                thigh_circumference_cm = COALESCE(EXCLUDED.thigh_circumference_cm, body_metrics.thigh_circumference_cm),
+                body_temperature_celsius = COALESCE(EXCLUDED.body_temperature_celsius, body_metrics.body_temperature_celsius),
+                basal_body_temperature_celsius = COALESCE(EXCLUDED.basal_body_temperature_celsius, body_metrics.basal_body_temperature_celsius),
+                updated_at = NOW()");
+
+            let result = query_builder.build().execute(pool).await?;
+            let chunk_inserted = result.rows_affected() as usize;
+            total_inserted += chunk_inserted;
+
+            info!(
+                chunk_index = chunk_idx + 1,
+                chunk_records = chunk.len(),
+                chunk_inserted = chunk_inserted,
+                total_inserted = total_inserted,
+                "Body measurement chunk processed"
+            );
+        }
+
+        Ok(total_inserted)
+    }
+
     /// Static version of insert_workouts for parallel processing with chunking
     async fn insert_workouts_static(
         pool: &PgPool,
