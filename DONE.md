@@ -1,4 +1,92 @@
 
+## ✅ STORY-017: Add Symptoms Tracking API Handlers (Completed: 2025-09-14)
+
+**Epic**: Comprehensive Illness Monitoring & Medical Emergency Detection
+**Priority**: P0 - Critical Health Symptom Tracking
+**Estimate**: 38 points
+**Status**: ✅ COMPLETED
+**Assigned to**: SWARM Agent (Claude Code)
+
+### Summary
+Implemented comprehensive symptoms tracking API handlers with 50+ medical symptom types, emergency detection, episode-based illness tracking, and iOS HealthKit integration. Added medical validation, severity assessment, emergency alerts, and contextual health recommendations following medical best practices.
+
+### Completed Features
+
+#### 🩺 **Comprehensive Symptom Classification**
+✅ **50+ Symptom Types** - Organized by medical categories (pain, respiratory, digestive, neurological, cardiovascular, reproductive/hormonal, general/systemic)
+✅ **Medical Severity System** - 5-level severity (none, mild, moderate, severe, critical) with medical emergency detection
+✅ **Symptom Categories** - Professional medical grouping for analysis and pattern recognition
+✅ **Critical Symptom Detection** - Automatic identification of potentially life-threatening symptoms
+✅ **Duration Tracking** - Minutes to weeks duration support for acute and chronic condition monitoring
+✅ **Episode-Based Grouping** - UUID-linked symptom episodes for illness progression tracking
+
+#### 🚨 **Medical Emergency Detection**
+✅ **Critical Symptom Analysis** - Automatic emergency detection for chest pain, dyspnea, severe symptoms
+✅ **Medical Attention Requirements** - Smart assessment based on symptom type, severity, and duration
+✅ **Emergency Recommendations** - Context-specific medical advice and emergency service guidance
+✅ **Urgency Level Calculation** - 0-5 scale urgency assessment for medical prioritization
+✅ **Pattern Recognition** - Detection of symptom combinations indicating medical emergencies
+✅ **Chronic Symptom Identification** - Recognition of persistent symptoms requiring medical evaluation
+
+#### 📱 **iOS HealthKit Integration**
+✅ **Comprehensive iOS Parsing** - Support for all HealthKit symptom category types
+✅ **Severity Conversion** - iOS 1-10 scale to medical severity level mapping
+✅ **String Format Support** - Multiple iOS symptom string formats and synonyms
+✅ **Multi-Language Support** - Handling of various symptom naming conventions
+✅ **Context Preservation** - Maintains iOS metadata and source device information
+✅ **Batch Processing** - Efficient processing of large iOS health data exports
+
+#### 🏥 **Medical Analysis Engine**
+✅ **Symptom Analysis Generation** - Comprehensive analysis with emergency status and recommendations
+✅ **Medical Recommendations** - Category-specific health advice (respiratory, digestive, pain management)
+✅ **Duration-Based Assessment** - Different medical attention thresholds by symptom type
+✅ **Emergency Alert Generation** - Automatic alerts for critical symptom combinations
+✅ **Illness Episode Tracking** - Multi-symptom episode analysis with severity patterns
+✅ **Health Insight Generation** - Pattern analysis for symptom correlation and progression
+
+#### 🗄️ **Database Architecture**
+✅ **Symptoms Table** - PostgreSQL schema with proper indexing and constraints
+✅ **Symptom Type Enum** - 50+ medical symptom types with database-level validation
+✅ **Severity Level Enum** - Medical severity levels with proper ordering
+✅ **Episode Linking** - UUID-based episode relationships for illness tracking
+✅ **Performance Indexing** - Optimized queries for user, date, and episode filtering
+✅ **Medical Validation** - Database constraints preventing invalid medical combinations
+
+#### 🔗 **API Endpoints & Integration**
+✅ **Symptom Ingestion** - `POST /api/v1/ingest/symptoms` with comprehensive validation
+✅ **Symptom Data Retrieval** - `GET /api/v1/data/symptoms` with filtering and analysis
+✅ **Emergency Processing** - Real-time emergency alert generation during ingestion
+✅ **Batch Analysis** - Statistical analysis of symptom batches with category distribution
+✅ **Episode Filtering** - Advanced filtering by episode, severity, category, and emergency status
+✅ **HealthMetric Integration** - Symptoms added to unified HealthMetric enum system
+
+#### 🧪 **Comprehensive Testing Suite**
+✅ **15+ Test Scenarios** - Covering all major symptom categories and medical conditions
+✅ **Emergency Detection Tests** - Validation of critical symptom identification
+✅ **iOS Parsing Tests** - Complete iOS symptom string conversion testing
+✅ **Severity Assessment Tests** - Medical severity level validation
+✅ **Episode Tracking Tests** - Multi-symptom illness episode validation
+✅ **Edge Case Coverage** - Invalid durations, severity mismatches, chronic symptoms
+✅ **Medical Validation Tests** - Comprehensive validation rule testing
+
+### Technical Implementation
+
+**Database Schema**: Added `symptoms` table with PostgreSQL enums for medical data integrity
+**Handler Pattern**: Consistent error handling with Result<impl Responder> and structured logging
+**Medical Validation**: Configurable validation with medical best practice constraints
+**Performance**: Optimized indexing for symptom queries and episode analysis
+**Architecture**: Clean separation of medical analysis logic and HTTP endpoint concerns
+
+### Medical Safety & Compliance
+
+**Duration Limits**: 2-week maximum symptom duration with validation
+**Emergency Detection**: Medical emergency identification following clinical guidelines
+**Recommendation System**: Context-specific medical advice with emergency service guidance
+**Data Integrity**: Prevents invalid medical data combinations at database level
+**Audit Trail**: Complete logging of all symptom data operations for medical record keeping
+
+---
+
 ## ✅ STORY-020: Add Blood Glucose & Metabolic API Handlers (Completed: 2025-09-14)
 
 **Epic**: Medical-Grade Metabolic Health Tracking with CGM Integration
