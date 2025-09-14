@@ -9,3 +9,4 @@ pub mod health;
 pub mod mqtt_subscriber;
 pub mod rate_limiter;
 pub mod streaming_parser;
+pub mod user_characteristics;

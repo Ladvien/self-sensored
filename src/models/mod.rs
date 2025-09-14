@@ -5,6 +5,7 @@ pub mod db;
 pub mod enums;
 pub mod health_metrics;
 pub mod ios_models;
+pub mod user_characteristics;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -14,6 +15,7 @@ pub use background_jobs::*;
 pub use enums::*;
 pub use health_metrics::*;
 pub use ios_models::*;
+pub use user_characteristics::*;
 
 /// API response wrapper
 #[derive(Debug, Serialize, Deserialize)]
