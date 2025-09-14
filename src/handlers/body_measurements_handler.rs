@@ -315,7 +315,13 @@ pub async fn get_body_measurements_data(
     // Build query with filters
     let limit = query.limit.unwrap_or(100).min(1000); // Cap at 1000
     let mut query_builder = sqlx::QueryBuilder::new(
-        "SELECT * FROM body_measurements WHERE user_id = "
+        r#"SELECT
+            id, user_id, recorded_at, body_weight_kg, body_mass_index, body_fat_percentage,
+            lean_body_mass_kg, height_cm, waist_circumference_cm, hip_circumference_cm,
+            chest_circumference_cm, arm_circumference_cm, thigh_circumference_cm,
+            body_temperature_celsius, basal_body_temperature_celsius, measurement_source,
+            source_device, created_at
+        FROM body_measurements WHERE user_id = "#
     );
     query_builder.push_bind(auth.user_id);
 
@@ -459,6 +465,7 @@ fn convert_and_validate_body_measurement(
         body_mass_index: request.body_mass_index,
         body_fat_percentage: request.body_fat_percentage,
         lean_body_mass_kg: request.lean_body_mass_kg,
+        height_cm: request.height_cm,
         waist_circumference_cm: request.waist_circumference_cm,
         hip_circumference_cm: request.hip_circumference_cm,
         chest_circumference_cm: request.chest_circumference_cm,

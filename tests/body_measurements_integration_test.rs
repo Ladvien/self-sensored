@@ -141,7 +141,7 @@ async fn test_body_measurements_ingestion_basic() {
         SELECT
             id, user_id, recorded_at,
             body_weight_kg, body_mass_index, body_fat_percentage, lean_body_mass_kg,
-            waist_circumference_cm, hip_circumference_cm, chest_circumference_cm,
+            height_cm, waist_circumference_cm, hip_circumference_cm, chest_circumference_cm,
             arm_circumference_cm, thigh_circumference_cm,
             body_temperature_celsius, basal_body_temperature_celsius,
             measurement_source, source_device, created_at

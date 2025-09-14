@@ -80,7 +80,8 @@ pub struct BodyMeasurementMetric {
     pub body_fat_percentage: Option<f64>,
     pub lean_body_mass_kg: Option<f64>,
 
-    // Measurements
+    // Physical Measurements
+    pub height_cm: Option<f64>,
     pub waist_circumference_cm: Option<f64>,
     pub hip_circumference_cm: Option<f64>,
     pub chest_circumference_cm: Option<f64>,
