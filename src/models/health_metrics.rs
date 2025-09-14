@@ -246,6 +246,186 @@ pub struct WorkoutData {
     pub created_at: DateTime<Utc>,
 }
 
+/// Workout route data with GPS tracking (PostGIS-enabled)
+#[derive(Debug, Deserialize, Serialize, Clone, FromRow)]
+pub struct WorkoutRoute {
+    pub id: uuid::Uuid,
+    pub workout_id: uuid::Uuid,
+    pub user_id: uuid::Uuid,
+
+    // Route data as JSON array of GPS points
+    pub route_points: serde_json::Value, // Array of {lat, lng, timestamp, altitude?, accuracy?, speed?}
+
+    // Calculated route metrics
+    pub total_distance_meters: Option<f64>,
+    pub elevation_gain_meters: Option<f64>,
+    pub elevation_loss_meters: Option<f64>,
+    pub max_altitude_meters: Option<f64>,
+    pub min_altitude_meters: Option<f64>,
+
+    // Route quality and privacy
+    pub point_count: i32,
+    pub average_accuracy_meters: Option<f64>,
+    pub privacy_level: String, // "full", "approximate", "private"
+
+    pub created_at: DateTime<Utc>,
+}
+
+/// GPS route point for detailed tracking
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct RoutePoint {
+    pub latitude: f64,
+    pub longitude: f64,
+    pub timestamp: DateTime<Utc>,
+    pub altitude: Option<f64>,  // meters above sea level
+    pub accuracy: Option<f64>,  // GPS accuracy in meters
+    pub speed: Option<f64>,     // speed in m/s at this point
+}
+
+/// Workout with optional route data for comprehensive tracking
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct WorkoutWithRoute {
+    pub workout: WorkoutData,
+    pub route: Option<WorkoutRoute>,
+}
+
+impl WorkoutRoute {
+    /// Calculate route metrics from GPS points
+    pub fn calculate_metrics_from_points(points: &[RoutePoint]) -> RouteMetrics {
+        if points.is_empty() {
+            return RouteMetrics::default();
+        }
+
+        let mut total_distance = 0.0;
+        let mut elevation_gain = 0.0;
+        let mut elevation_loss = 0.0;
+        let mut max_altitude = points[0].altitude.unwrap_or(0.0);
+        let mut min_altitude = points[0].altitude.unwrap_or(0.0);
+        let mut accuracy_sum = 0.0;
+        let mut accuracy_count = 0;
+
+        for i in 1..points.len() {
+            let prev = &points[i - 1];
+            let curr = &points[i];
+
+            // Calculate distance using Haversine formula
+            let distance = haversine_distance(
+                prev.latitude, prev.longitude,
+                curr.latitude, curr.longitude
+            );
+            total_distance += distance;
+
+            // Calculate elevation changes
+            if let (Some(prev_alt), Some(curr_alt)) = (prev.altitude, curr.altitude) {
+                let elevation_change = curr_alt - prev_alt;
+                if elevation_change > 0.0 {
+                    elevation_gain += elevation_change;
+                } else {
+                    elevation_loss += elevation_change.abs();
+                }
+                max_altitude = max_altitude.max(curr_alt);
+                min_altitude = min_altitude.min(curr_alt);
+            }
+
+            // Track GPS accuracy
+            if let Some(accuracy) = curr.accuracy {
+                accuracy_sum += accuracy;
+                accuracy_count += 1;
+            }
+        }
+
+        RouteMetrics {
+            total_distance_meters: total_distance,
+            elevation_gain_meters: elevation_gain,
+            elevation_loss_meters: elevation_loss,
+            max_altitude_meters: Some(max_altitude),
+            min_altitude_meters: Some(min_altitude),
+            average_accuracy_meters: if accuracy_count > 0 {
+                Some(accuracy_sum / accuracy_count as f64)
+            } else {
+                None
+            },
+        }
+    }
+
+    /// Validate route points for basic GPS data integrity
+    pub fn validate_route_points(points: &[RoutePoint]) -> Result<(), String> {
+        if points.is_empty() {
+            return Err("Route must contain at least one GPS point".to_string());
+        }
+
+        for (i, point) in points.iter().enumerate() {
+            // Validate GPS coordinates
+            if point.latitude < -90.0 || point.latitude > 90.0 {
+                return Err(format!("Invalid latitude {} at point {}", point.latitude, i));
+            }
+            if point.longitude < -180.0 || point.longitude > 180.0 {
+                return Err(format!("Invalid longitude {} at point {}", point.longitude, i));
+            }
+
+            // Validate altitude if present (reasonable bounds)
+            if let Some(altitude) = point.altitude {
+                if altitude < -500.0 || altitude > 9000.0 { // Dead Sea to Everest range
+                    return Err(format!("Unrealistic altitude {} at point {}", altitude, i));
+                }
+            }
+
+            // Validate speed if present (reasonable bounds)
+            if let Some(speed) = point.speed {
+                if speed < 0.0 || speed > 150.0 { // 0 to ~335 mph in m/s
+                    return Err(format!("Unrealistic speed {} m/s at point {}", speed, i));
+                }
+            }
+
+            // Validate GPS accuracy if present
+            if let Some(accuracy) = point.accuracy {
+                if accuracy < 0.0 || accuracy > 1000.0 { // 0 to 1km accuracy
+                    return Err(format!("Invalid GPS accuracy {} at point {}", accuracy, i));
+                }
+            }
+        }
+
+        // Validate timestamp ordering
+        for i in 1..points.len() {
+            if points[i].timestamp < points[i - 1].timestamp {
+                return Err(format!("Timestamps not in chronological order at points {} and {}", i - 1, i));
+            }
+        }
+
+        Ok(())
+    }
+}
+
+/// Calculated route metrics
+#[derive(Debug, Default, Clone)]
+pub struct RouteMetrics {
+    pub total_distance_meters: f64,
+    pub elevation_gain_meters: f64,
+    pub elevation_loss_meters: f64,
+    pub max_altitude_meters: Option<f64>,
+    pub min_altitude_meters: Option<f64>,
+    pub average_accuracy_meters: Option<f64>,
+}
+
+/// Calculate distance between two GPS points using Haversine formula
+fn haversine_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
+    const EARTH_RADIUS: f64 = 6371000.0; // meters
+
+    let lat1_rad = lat1.to_radians();
+    let lon1_rad = lon1.to_radians();
+    let lat2_rad = lat2.to_radians();
+    let lon2_rad = lon2.to_radians();
+
+    let delta_lat = lat2_rad - lat1_rad;
+    let delta_lon = lon2_rad - lon1_rad;
+
+    let a = (delta_lat / 2.0).sin().powi(2) +
+            lat1_rad.cos() * lat2_rad.cos() * (delta_lon / 2.0).sin().powi(2);
+    let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
+
+    EARTH_RADIUS * c
+}
+
 impl GpsCoordinate {
     pub fn validate(&self) -> Result<(), String> {
         self.validate_with_config(&ValidationConfig::default())
@@ -538,12 +718,14 @@ pub struct NutritionMetric {
     pub dietary_water: Option<f64>,                    // liters
     pub dietary_caffeine: Option<f64>,                 // mg
 
-    // Macronutrients
+    // Macronutrients (Core Energy)
     pub dietary_energy_consumed: Option<f64>,          // calories
     pub dietary_carbohydrates: Option<f64>,            // grams
     pub dietary_protein: Option<f64>,                  // grams
     pub dietary_fat_total: Option<f64>,                // grams
     pub dietary_fat_saturated: Option<f64>,            // grams
+    pub dietary_fat_monounsaturated: Option<f64>,      // grams
+    pub dietary_fat_polyunsaturated: Option<f64>,      // grams
     pub dietary_cholesterol: Option<f64>,              // mg
     pub dietary_sodium: Option<f64>,                   // mg
     pub dietary_fiber: Option<f64>,                    // grams
@@ -554,11 +736,29 @@ pub struct NutritionMetric {
     pub dietary_iron: Option<f64>,                     // mg
     pub dietary_magnesium: Option<f64>,                // mg
     pub dietary_potassium: Option<f64>,                // mg
+    pub dietary_zinc: Option<f64>,                     // mg
+    pub dietary_phosphorus: Option<f64>,               // mg
 
-    // Essential Vitamins
-    pub dietary_vitamin_a: Option<f64>,                // mcg
+    // Essential Vitamins (Water-soluble)
     pub dietary_vitamin_c: Option<f64>,                // mg
+    pub dietary_vitamin_b1_thiamine: Option<f64>,      // mg
+    pub dietary_vitamin_b2_riboflavin: Option<f64>,    // mg
+    pub dietary_vitamin_b3_niacin: Option<f64>,        // mg
+    pub dietary_vitamin_b6_pyridoxine: Option<f64>,    // mg
+    pub dietary_vitamin_b12_cobalamin: Option<f64>,    // mcg
+    pub dietary_folate: Option<f64>,                   // mcg
+    pub dietary_biotin: Option<f64>,                   // mcg
+    pub dietary_pantothenic_acid: Option<f64>,         // mg
+
+    // Essential Vitamins (Fat-soluble)
+    pub dietary_vitamin_a: Option<f64>,                // mcg RAE
     pub dietary_vitamin_d: Option<f64>,                // IU
+    pub dietary_vitamin_e: Option<f64>,                // mg
+    pub dietary_vitamin_k: Option<f64>,                // mcg
+
+    // Meal Context for atomic processing
+    pub meal_type: Option<String>,                     // breakfast, lunch, dinner, snack
+    pub meal_id: Option<uuid::Uuid>,                   // Group nutrients from same meal
 
     // Metadata and source tracking
     pub source_device: Option<String>,
@@ -2351,6 +2551,7 @@ impl HealthMetric {
             HealthMetric::Menstrual(metric) => metric.validate_with_config(config),
             HealthMetric::Fertility(metric) => metric.validate_with_config(config),
             HealthMetric::Hygiene(metric) => metric.validate_with_config(config),
+            HealthMetric::Symptom(metric) => metric.validate_with_config(config),
         }
     }
 
@@ -2597,144 +2798,6 @@ pub struct SymptomAnalysis {
     pub recommendations: Vec<String>,
 }
 
-impl NutritionMetric {
-    pub fn validate(&self) -> Result<(), String> {
-        self.validate_with_config(&ValidationConfig::default())
-    }
-
-    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
-        // Validate water intake (0-10 liters per day reasonable range)
-        if let Some(water) = self.dietary_water {
-            if water < 0.0 || water > 10.0 {
-                return Err(format!(
-                    "dietary_water {} liters is out of reasonable range (0-10 L/day)",
-                    water
-                ));
-            }
-        }
-
-        // This code below is mental health validation that got misplaced - will be cleaned up
-        if let Some(valence) = self.state_of_mind_valence {
-            if valence < -1.0 || valence > 1.0 {
-                return Err(format!(
-                    "state_of_mind_valence {} must be between -1.0 and 1.0",
-                    valence
-                ));
-            }
-        }
-
-        // Validate mood rating (1-10 scale)
-        if let Some(rating) = self.mood_rating {
-            if rating < 1 || rating > 10 {
-                return Err(format!(
-                    "mood_rating {} must be between 1 and 10",
-                    rating
-                ));
-            }
-        }
-
-        // Validate anxiety level (1-10 scale)
-        if let Some(level) = self.anxiety_level {
-            if level < 1 || level > 10 {
-                return Err(format!(
-                    "anxiety_level {} must be between 1 and 10",
-                    level
-                ));
-            }
-        }
-
-        // Validate stress level (1-10 scale)
-        if let Some(level) = self.stress_level {
-            if level < 1 || level > 10 {
-                return Err(format!(
-                    "stress_level {} must be between 1 and 10",
-                    level
-                ));
-            }
-        }
-
-        // Validate energy level (1-10 scale)
-        if let Some(level) = self.energy_level {
-            if level < 1 || level > 10 {
-                return Err(format!(
-                    "energy_level {} must be between 1 and 10",
-                    level
-                ));
-            }
-        }
-
-        // Validate depression screening score (0-27 PHQ-9 style)
-        if let Some(score) = self.depression_screening_score {
-            if score < 0 || score > 27 {
-                return Err(format!(
-                    "depression_screening_score {} must be between 0 and 27",
-                    score
-                ));
-            }
-        }
-
-        // Validate anxiety screening score (0-21 GAD-7 style)
-        if let Some(score) = self.anxiety_screening_score {
-            if score < 0 || score > 21 {
-                return Err(format!(
-                    "anxiety_screening_score {} must be between 0 and 21",
-                    score
-                ));
-            }
-        }
-
-        // Validate sleep quality impact (1-5 scale)
-        if let Some(impact) = self.sleep_quality_impact {
-            if impact < 1 || impact > 5 {
-                return Err(format!(
-                    "sleep_quality_impact {} must be between 1 and 5",
-                    impact
-                ));
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Calculate wellness score from mental health metrics
-    pub fn wellness_score(&self) -> i16 {
-        let mut score = 0i32;
-        let mut components = 0;
-
-        // Higher mood and energy are positive
-        if let Some(mood) = self.mood_rating {
-            score += mood as i32;
-            components += 1;
-        }
-
-        if let Some(energy) = self.energy_level {
-            score += energy as i32;
-            components += 1;
-        }
-
-        // Lower anxiety and stress are positive (invert scores)
-        if let Some(anxiety) = self.anxiety_level {
-            score += (11 - anxiety) as i32;
-            components += 1;
-        }
-
-        if let Some(stress) = self.stress_level {
-            score += (11 - stress) as i32;
-            components += 1;
-        }
-
-        if components > 0 {
-            (score / components).clamp(1, 10) as i16
-        } else {
-            5 // Default neutral wellness score
-        }
-    }
-
-    /// Check if this entry has encrypted private notes
-    pub fn has_encrypted_notes(&self) -> bool {
-        self.private_notes_encrypted.is_some()
-    }
-}
 
 impl NutritionMetric {
     pub fn validate(&self) -> Result<(), String> {
@@ -2742,7 +2805,7 @@ impl NutritionMetric {
     }
 
     pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
-        // Validate water intake (0-10 liters per day reasonable range)
+        // Validate hydration & stimulants
         if let Some(water) = self.dietary_water {
             if water < 0.0 || water > 10.0 {
                 return Err(format!(
@@ -2752,7 +2815,6 @@ impl NutritionMetric {
             }
         }
 
-        // Validate caffeine intake (0-1000mg per day reasonable range)
         if let Some(caffeine) = self.dietary_caffeine {
             if caffeine < 0.0 || caffeine > 1000.0 {
                 return Err(format!(
@@ -2762,7 +2824,7 @@ impl NutritionMetric {
             }
         }
 
-        // Validate energy consumed (0-10000 calories per day reasonable range)
+        // Validate macronutrients (core energy)
         if let Some(energy) = self.dietary_energy_consumed {
             if energy < 0.0 || energy > 10000.0 {
                 return Err(format!(
@@ -2772,7 +2834,6 @@ impl NutritionMetric {
             }
         }
 
-        // Validate macronutrients (all should be non-negative, reasonable daily ranges)
         if let Some(carbs) = self.dietary_carbohydrates {
             if carbs < 0.0 || carbs > 2000.0 {
                 return Err(format!(
@@ -2809,6 +2870,42 @@ impl NutritionMetric {
             }
         }
 
+        if let Some(mono_fat) = self.dietary_fat_monounsaturated {
+            if mono_fat < 0.0 || mono_fat > 500.0 {
+                return Err(format!(
+                    "dietary_fat_monounsaturated {} grams is out of reasonable range (0-500 g/day)",
+                    mono_fat
+                ));
+            }
+        }
+
+        if let Some(poly_fat) = self.dietary_fat_polyunsaturated {
+            if poly_fat < 0.0 || poly_fat > 500.0 {
+                return Err(format!(
+                    "dietary_fat_polyunsaturated {} grams is out of reasonable range (0-500 g/day)",
+                    poly_fat
+                ));
+            }
+        }
+
+        if let Some(cholesterol) = self.dietary_cholesterol {
+            if cholesterol < 0.0 || cholesterol > 2000.0 {
+                return Err(format!(
+                    "dietary_cholesterol {} mg is out of reasonable range (0-2000 mg/day)",
+                    cholesterol
+                ));
+            }
+        }
+
+        if let Some(sodium) = self.dietary_sodium {
+            if sodium < 0.0 || sodium > 10000.0 {
+                return Err(format!(
+                    "dietary_sodium {} mg is out of reasonable range (0-10000 mg/day)",
+                    sodium
+                ));
+            }
+        }
+
         if let Some(fiber) = self.dietary_fiber {
             if fiber < 0.0 || fiber > 200.0 {
                 return Err(format!(
@@ -2827,27 +2924,7 @@ impl NutritionMetric {
             }
         }
 
-        // Validate cholesterol (0-2000mg per day reasonable range)
-        if let Some(cholesterol) = self.dietary_cholesterol {
-            if cholesterol < 0.0 || cholesterol > 2000.0 {
-                return Err(format!(
-                    "dietary_cholesterol {} mg is out of reasonable range (0-2000 mg/day)",
-                    cholesterol
-                ));
-            }
-        }
-
-        // Validate sodium (0-10000mg per day reasonable range - can be high in processed foods)
-        if let Some(sodium) = self.dietary_sodium {
-            if sodium < 0.0 || sodium > 10000.0 {
-                return Err(format!(
-                    "dietary_sodium {} mg is out of reasonable range (0-10000 mg/day)",
-                    sodium
-                ));
-            }
-        }
-
-        // Validate essential minerals (daily recommended values as upper bounds)
+        // Validate essential minerals
         if let Some(calcium) = self.dietary_calcium {
             if calcium < 0.0 || calcium > 5000.0 {
                 return Err(format!(
@@ -2884,16 +2961,25 @@ impl NutritionMetric {
             }
         }
 
-        // Validate essential vitamins
-        if let Some(vitamin_a) = self.dietary_vitamin_a {
-            if vitamin_a < 0.0 || vitamin_a > 10000.0 {
+        if let Some(zinc) = self.dietary_zinc {
+            if zinc < 0.0 || zinc > 100.0 {
                 return Err(format!(
-                    "dietary_vitamin_a {} mcg is out of reasonable range (0-10000 mcg/day)",
-                    vitamin_a
+                    "dietary_zinc {} mg is out of reasonable range (0-100 mg/day)",
+                    zinc
                 ));
             }
         }
 
+        if let Some(phosphorus) = self.dietary_phosphorus {
+            if phosphorus < 0.0 || phosphorus > 5000.0 {
+                return Err(format!(
+                    "dietary_phosphorus {} mg is out of reasonable range (0-5000 mg/day)",
+                    phosphorus
+                ));
+            }
+        }
+
+        // Validate water-soluble vitamins
         if let Some(vitamin_c) = self.dietary_vitamin_c {
             if vitamin_c < 0.0 || vitamin_c > 5000.0 {
                 return Err(format!(
@@ -2903,11 +2989,123 @@ impl NutritionMetric {
             }
         }
 
+        if let Some(b1) = self.dietary_vitamin_b1_thiamine {
+            if b1 < 0.0 || b1 > 100.0 {
+                return Err(format!(
+                    "dietary_vitamin_b1_thiamine {} mg is out of reasonable range (0-100 mg/day)",
+                    b1
+                ));
+            }
+        }
+
+        if let Some(b2) = self.dietary_vitamin_b2_riboflavin {
+            if b2 < 0.0 || b2 > 100.0 {
+                return Err(format!(
+                    "dietary_vitamin_b2_riboflavin {} mg is out of reasonable range (0-100 mg/day)",
+                    b2
+                ));
+            }
+        }
+
+        if let Some(b3) = self.dietary_vitamin_b3_niacin {
+            if b3 < 0.0 || b3 > 1000.0 {
+                return Err(format!(
+                    "dietary_vitamin_b3_niacin {} mg is out of reasonable range (0-1000 mg/day)",
+                    b3
+                ));
+            }
+        }
+
+        if let Some(b6) = self.dietary_vitamin_b6_pyridoxine {
+            if b6 < 0.0 || b6 > 200.0 {
+                return Err(format!(
+                    "dietary_vitamin_b6_pyridoxine {} mg is out of reasonable range (0-200 mg/day)",
+                    b6
+                ));
+            }
+        }
+
+        if let Some(b12) = self.dietary_vitamin_b12_cobalamin {
+            if b12 < 0.0 || b12 > 2000.0 {
+                return Err(format!(
+                    "dietary_vitamin_b12_cobalamin {} mcg is out of reasonable range (0-2000 mcg/day)",
+                    b12
+                ));
+            }
+        }
+
+        if let Some(folate) = self.dietary_folate {
+            if folate < 0.0 || folate > 5000.0 {
+                return Err(format!(
+                    "dietary_folate {} mcg is out of reasonable range (0-5000 mcg/day)",
+                    folate
+                ));
+            }
+        }
+
+        if let Some(biotin) = self.dietary_biotin {
+            if biotin < 0.0 || biotin > 5000.0 {
+                return Err(format!(
+                    "dietary_biotin {} mcg is out of reasonable range (0-5000 mcg/day)",
+                    biotin
+                ));
+            }
+        }
+
+        if let Some(pantothenic) = self.dietary_pantothenic_acid {
+            if pantothenic < 0.0 || pantothenic > 100.0 {
+                return Err(format!(
+                    "dietary_pantothenic_acid {} mg is out of reasonable range (0-100 mg/day)",
+                    pantothenic
+                ));
+            }
+        }
+
+        // Validate fat-soluble vitamins
+        if let Some(vitamin_a) = self.dietary_vitamin_a {
+            if vitamin_a < 0.0 || vitamin_a > 10000.0 {
+                return Err(format!(
+                    "dietary_vitamin_a {} mcg is out of reasonable range (0-10000 mcg/day)",
+                    vitamin_a
+                ));
+            }
+        }
+
         if let Some(vitamin_d) = self.dietary_vitamin_d {
             if vitamin_d < 0.0 || vitamin_d > 10000.0 {
                 return Err(format!(
                     "dietary_vitamin_d {} IU is out of reasonable range (0-10000 IU/day)",
                     vitamin_d
+                ));
+            }
+        }
+
+        if let Some(vitamin_e) = self.dietary_vitamin_e {
+            if vitamin_e < 0.0 || vitamin_e > 1000.0 {
+                return Err(format!(
+                    "dietary_vitamin_e {} mg is out of reasonable range (0-1000 mg/day)",
+                    vitamin_e
+                ));
+            }
+        }
+
+        if let Some(vitamin_k) = self.dietary_vitamin_k {
+            if vitamin_k < 0.0 || vitamin_k > 5000.0 {
+                return Err(format!(
+                    "dietary_vitamin_k {} mcg is out of reasonable range (0-5000 mcg/day)",
+                    vitamin_k
+                ));
+            }
+        }
+
+        // Validate meal context
+        if let Some(meal_type) = &self.meal_type {
+            let valid_meal_types = ["breakfast", "lunch", "dinner", "snack", "other"];
+            if !valid_meal_types.contains(&meal_type.as_str()) {
+                return Err(format!(
+                    "meal_type '{}' is not valid. Must be one of: {}",
+                    meal_type,
+                    valid_meal_types.join(", ")
                 ));
             }
         }

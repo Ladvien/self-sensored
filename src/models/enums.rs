@@ -64,31 +64,248 @@ impl fmt::Display for ActivityContext {
 #[sqlx(type_name = "workout_type", rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 pub enum WorkoutType {
-    Walking,
-    Running,
+    // Base Traditional Activities
+    AmericanFootball,
+    Archery,
+    AustralianFootball,
+    Badminton,
+    Baseball,
+    Basketball,
+    Bowling,
+    Boxing,
+    Climbing,
+    CrossTraining,
+    Curling,
     Cycling,
+    Dance,
+    DanceInspiredTraining,
+    Elliptical,
+    EquestrianSports,
+    Fencing,
+    Fishing,
+    FunctionalStrengthTraining,
+    Golf,
+    Gymnastics,
+    Handball,
+    Hiking,
+    Hockey,
+    Hunting,
+    Lacrosse,
+    MartialArts,
+    MindAndBody,
+    MixedMetabolicCardioTraining,
+    PaddleSports,
+    Play,
+    PreparationAndRecovery,
+    Racquetball,
+    Rowing,
+    Rugby,
+    Running,
+    Sailing,
+    SkatingSpots,
+    SnowSports,
+    Soccer,
+    Softball,
+    Squash,
+    StairClimbing,
+    SurfingSports,
     Swimming,
-    StrengthTraining,
+    TableTennis,
+    Tennis,
+    TrackAndField,
+    TraditionalStrengthTraining,
+    Volleyball,
+    Walking,
+    WaterFitness,
+    WaterPolo,
+    WaterSports,
+    Wrestling,
     Yoga,
+
+    // iOS 10+ Additional Activities
+    Barre,
+    CoreTraining,
+    CrossCountrySkiing,
+    DownhillSkiing,
+    Flexibility,
+    Hiit, // High Intensity Interval Training
+    JumpRope,
+    Kickboxing,
     Pilates,
-    Hiit,
-    Sports,
+    Snowboarding,
+    Stairs,
+    StepTraining,
+    WheelchairWalkPace,
+    WheelchairRunPace,
+
+    // iOS 11+ Additional Activities
+    TaiChi,
+    MixedCardio,
+    HandCycling,
+
+    // iOS 13+ Additional Activities
+    DiscSports,
+    FitnessGaming,
+
+    // Legacy/Other (for backwards compatibility)
+    StrengthTraining, // alias for TraditionalStrengthTraining
+    Sports, // generic sports category
     Other,
+}
+
+/// Workout categories for grouping and analytics
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkoutCategory {
+    Cardio,
+    StrengthTraining,
+    TeamSports,
+    IndividualSports,
+    FitnessClasses,
+    WaterSports,
+    WinterSports,
+    MindAndBody,
+    Accessibility,
+    Recreation,
+    Mixed,
 }
 
 impl WorkoutType {
     pub fn from_ios_string(s: &str) -> Self {
         match s.to_lowercase().as_str() {
-            "walking" | "walk" => Self::Walking,
-            "running" | "run" => Self::Running,
+            // Base Traditional Activities
+            "americanfootball" | "american_football" => Self::AmericanFootball,
+            "archery" => Self::Archery,
+            "australianfootball" | "australian_football" | "aussie_rules" => Self::AustralianFootball,
+            "badminton" => Self::Badminton,
+            "baseball" => Self::Baseball,
+            "basketball" => Self::Basketball,
+            "bowling" => Self::Bowling,
+            "boxing" => Self::Boxing,
+            "climbing" | "rock_climbing" => Self::Climbing,
+            "crosstraining" | "cross_training" => Self::CrossTraining,
+            "curling" => Self::Curling,
             "cycling" | "bike" | "biking" => Self::Cycling,
+            "dance" => Self::Dance,
+            "danceinspiredtraining" | "dance_inspired_training" => Self::DanceInspiredTraining,
+            "elliptical" => Self::Elliptical,
+            "equestriansports" | "equestrian_sports" | "horseback" => Self::EquestrianSports,
+            "fencing" => Self::Fencing,
+            "fishing" => Self::Fishing,
+            "functionalstrengthtraining" | "functional_strength_training" => Self::FunctionalStrengthTraining,
+            "golf" => Self::Golf,
+            "gymnastics" => Self::Gymnastics,
+            "handball" => Self::Handball,
+            "hiking" => Self::Hiking,
+            "hockey" | "ice_hockey" => Self::Hockey,
+            "hunting" => Self::Hunting,
+            "lacrosse" => Self::Lacrosse,
+            "martialarts" | "martial_arts" => Self::MartialArts,
+            "mindandbody" | "mind_and_body" => Self::MindAndBody,
+            "mixedmetaboliccardiotraining" | "mixed_metabolic_cardio_training" => Self::MixedMetabolicCardioTraining,
+            "paddlesports" | "paddle_sports" | "kayak" | "canoe" => Self::PaddleSports,
+            "play" => Self::Play,
+            "preparationandrecovery" | "preparation_and_recovery" | "warmup" | "cooldown" => Self::PreparationAndRecovery,
+            "racquetball" => Self::Racquetball,
+            "rowing" => Self::Rowing,
+            "rugby" => Self::Rugby,
+            "running" | "run" => Self::Running,
+            "sailing" => Self::Sailing,
+            "skatingsports" | "skating_sports" | "skating" | "ice_skating" => Self::SkatingSpots,
+            "snowsports" | "snow_sports" => Self::SnowSports,
+            "soccer" | "football" => Self::Soccer,
+            "softball" => Self::Softball,
+            "squash" => Self::Squash,
+            "stairclimbing" | "stair_climbing" => Self::StairClimbing,
+            "surfingsports" | "surfing_sports" | "surfing" => Self::SurfingSports,
             "swimming" | "swim" => Self::Swimming,
-            "strength_training" | "strength" | "weights" => Self::StrengthTraining,
+            "tabletennis" | "table_tennis" | "ping_pong" => Self::TableTennis,
+            "tennis" => Self::Tennis,
+            "trackandfield" | "track_and_field" => Self::TrackAndField,
+            "traditionalstrengthtraining" | "traditional_strength_training" => Self::TraditionalStrengthTraining,
+            "volleyball" => Self::Volleyball,
+            "walking" | "walk" => Self::Walking,
+            "waterfitness" | "water_fitness" | "aqua_fitness" => Self::WaterFitness,
+            "waterpolo" | "water_polo" => Self::WaterPolo,
+            "watersports" | "water_sports" => Self::WaterSports,
+            "wrestling" => Self::Wrestling,
             "yoga" => Self::Yoga,
-            "pilates" => Self::Pilates,
+
+            // iOS 10+ Additional Activities
+            "barre" => Self::Barre,
+            "coretraining" | "core_training" => Self::CoreTraining,
+            "crosscountryskiing" | "cross_country_skiing" => Self::CrossCountrySkiing,
+            "downhillskiing" | "downhill_skiing" | "alpine_skiing" => Self::DownhillSkiing,
+            "flexibility" | "stretching" => Self::Flexibility,
             "hiit" | "high_intensity_interval_training" => Self::Hiit,
+            "jumprope" | "jump_rope" => Self::JumpRope,
+            "kickboxing" => Self::Kickboxing,
+            "pilates" => Self::Pilates,
+            "snowboarding" => Self::Snowboarding,
+            "stairs" => Self::Stairs,
+            "steptraining" | "step_training" => Self::StepTraining,
+            "wheelchairwalkpace" | "wheelchair_walk_pace" => Self::WheelchairWalkPace,
+            "wheelchairrunpace" | "wheelchair_run_pace" => Self::WheelchairRunPace,
+
+            // iOS 11+ Additional Activities
+            "taichi" | "tai_chi" => Self::TaiChi,
+            "mixedcardio" | "mixed_cardio" => Self::MixedCardio,
+            "handcycling" | "hand_cycling" => Self::HandCycling,
+
+            // iOS 13+ Additional Activities
+            "discsports" | "disc_sports" | "frisbee" => Self::DiscSports,
+            "fitnessgaming" | "fitness_gaming" => Self::FitnessGaming,
+
+            // Legacy/Other (for backwards compatibility)
+            "strength_training" | "strength" | "weights" => Self::StrengthTraining,
             "sports" | "sport" => Self::Sports,
             _ => Self::Other,
+        }
+    }
+
+    /// Get the category of the workout type for grouping and analytics
+    pub fn category(&self) -> WorkoutCategory {
+        match self {
+            // Cardio Activities
+            Self::Running | Self::Walking | Self::Cycling | Self::Rowing | Self::Elliptical |
+            Self::StairClimbing | Self::Stairs | Self::JumpRope | Self::CrossCountrySkiing | Self::Hiking => WorkoutCategory::Cardio,
+
+            // Strength Training
+            Self::StrengthTraining | Self::TraditionalStrengthTraining | Self::FunctionalStrengthTraining => WorkoutCategory::StrengthTraining,
+
+            // Team Sports
+            Self::AmericanFootball | Self::Basketball | Self::Soccer | Self::Hockey | Self::Volleyball |
+            Self::Baseball | Self::Softball | Self::AustralianFootball | Self::Handball | Self::Rugby |
+            Self::WaterPolo | Self::Lacrosse => WorkoutCategory::TeamSports,
+
+            // Individual Sports
+            Self::Tennis | Self::Golf | Self::Boxing | Self::Wrestling | Self::Fencing | Self::MartialArts |
+            Self::Badminton | Self::TableTennis | Self::Squash | Self::Racquetball | Self::Archery |
+            Self::Climbing | Self::TrackAndField => WorkoutCategory::IndividualSports,
+
+            // Fitness Classes
+            Self::Yoga | Self::Pilates | Self::Hiit | Self::Barre | Self::CoreTraining | Self::Flexibility |
+            Self::StepTraining | Self::Kickboxing | Self::Dance | Self::DanceInspiredTraining => WorkoutCategory::FitnessClasses,
+
+            // Water Sports
+            Self::Swimming | Self::WaterSports | Self::PaddleSports | Self::WaterFitness | Self::SurfingSports |
+            Self::Sailing => WorkoutCategory::WaterSports,
+
+            // Winter Sports
+            Self::SnowSports | Self::DownhillSkiing | Self::Snowboarding => WorkoutCategory::WinterSports,
+
+            // Mind & Body
+            Self::MindAndBody | Self::TaiChi | Self::PreparationAndRecovery => WorkoutCategory::MindAndBody,
+
+            // Accessibility
+            Self::WheelchairWalkPace | Self::WheelchairRunPace | Self::HandCycling => WorkoutCategory::Accessibility,
+
+            // Recreation
+            Self::Play | Self::Fishing | Self::Hunting | Self::Bowling | Self::FitnessGaming | Self::DiscSports => WorkoutCategory::Recreation,
+
+            // Mixed/Other
+            Self::CrossTraining | Self::MixedCardio | Self::MixedMetabolicCardioTraining | Self::Gymnastics |
+            Self::EquestrianSports | Self::SkatingSpots | Self::Curling | Self::Sports | Self::Other => WorkoutCategory::Mixed,
         }
     }
 }
@@ -96,14 +313,91 @@ impl WorkoutType {
 impl fmt::Display for WorkoutType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            Self::Walking => "walking",
-            Self::Running => "running",
+            // Base Traditional Activities
+            Self::AmericanFootball => "american_football",
+            Self::Archery => "archery",
+            Self::AustralianFootball => "australian_football",
+            Self::Badminton => "badminton",
+            Self::Baseball => "baseball",
+            Self::Basketball => "basketball",
+            Self::Bowling => "bowling",
+            Self::Boxing => "boxing",
+            Self::Climbing => "climbing",
+            Self::CrossTraining => "cross_training",
+            Self::Curling => "curling",
             Self::Cycling => "cycling",
+            Self::Dance => "dance",
+            Self::DanceInspiredTraining => "dance_inspired_training",
+            Self::Elliptical => "elliptical",
+            Self::EquestrianSports => "equestrian_sports",
+            Self::Fencing => "fencing",
+            Self::Fishing => "fishing",
+            Self::FunctionalStrengthTraining => "functional_strength_training",
+            Self::Golf => "golf",
+            Self::Gymnastics => "gymnastics",
+            Self::Handball => "handball",
+            Self::Hiking => "hiking",
+            Self::Hockey => "hockey",
+            Self::Hunting => "hunting",
+            Self::Lacrosse => "lacrosse",
+            Self::MartialArts => "martial_arts",
+            Self::MindAndBody => "mind_and_body",
+            Self::MixedMetabolicCardioTraining => "mixed_metabolic_cardio_training",
+            Self::PaddleSports => "paddle_sports",
+            Self::Play => "play",
+            Self::PreparationAndRecovery => "preparation_and_recovery",
+            Self::Racquetball => "racquetball",
+            Self::Rowing => "rowing",
+            Self::Rugby => "rugby",
+            Self::Running => "running",
+            Self::Sailing => "sailing",
+            Self::SkatingSpots => "skating_sports",
+            Self::SnowSports => "snow_sports",
+            Self::Soccer => "soccer",
+            Self::Softball => "softball",
+            Self::Squash => "squash",
+            Self::StairClimbing => "stair_climbing",
+            Self::SurfingSports => "surfing_sports",
             Self::Swimming => "swimming",
-            Self::StrengthTraining => "strength_training",
+            Self::TableTennis => "table_tennis",
+            Self::Tennis => "tennis",
+            Self::TrackAndField => "track_and_field",
+            Self::TraditionalStrengthTraining => "traditional_strength_training",
+            Self::Volleyball => "volleyball",
+            Self::Walking => "walking",
+            Self::WaterFitness => "water_fitness",
+            Self::WaterPolo => "water_polo",
+            Self::WaterSports => "water_sports",
+            Self::Wrestling => "wrestling",
             Self::Yoga => "yoga",
-            Self::Pilates => "pilates",
+
+            // iOS 10+ Additional Activities
+            Self::Barre => "barre",
+            Self::CoreTraining => "core_training",
+            Self::CrossCountrySkiing => "cross_country_skiing",
+            Self::DownhillSkiing => "downhill_skiing",
+            Self::Flexibility => "flexibility",
             Self::Hiit => "hiit",
+            Self::JumpRope => "jump_rope",
+            Self::Kickboxing => "kickboxing",
+            Self::Pilates => "pilates",
+            Self::Snowboarding => "snowboarding",
+            Self::Stairs => "stairs",
+            Self::StepTraining => "step_training",
+            Self::WheelchairWalkPace => "wheelchair_walk_pace",
+            Self::WheelchairRunPace => "wheelchair_run_pace",
+
+            // iOS 11+ Additional Activities
+            Self::TaiChi => "tai_chi",
+            Self::MixedCardio => "mixed_cardio",
+            Self::HandCycling => "hand_cycling",
+
+            // iOS 13+ Additional Activities
+            Self::DiscSports => "disc_sports",
+            Self::FitnessGaming => "fitness_gaming",
+
+            // Legacy/Other
+            Self::StrengthTraining => "strength_training",
             Self::Sports => "sports",
             Self::Other => "other",
         };

@@ -2,7 +2,32 @@
 
 ## Current Active Stories
 
-None currently active.
+### STORY-013: Extend Workouts Table with Full Workout Types
+**Agent**: Database Architect Agent + Data Processor Agent
+**Status**: IN PROGRESS
+**Started**: 2025-09-14
+**Objective**: Implement comprehensive HealthKit workout type support (70+ types) with GPS route tracking using PostGIS
+
+**Implementation Plan**:
+1. Research all HealthKit workout types and categorization
+2. Design workout_routes table with PostGIS for GPS tracking
+3. Expand workout_type enum to include all workout categories
+4. Update workout ingestion for comprehensive type support
+5. Add GPS route point storage and geospatial calculations
+6. Implement comprehensive workout testing with route validation
+
+**Key Requirements**:
+- 70+ HealthKit workout types (cardio, sports, fitness, dance, combat, winter, water)
+- PostGIS-enabled GPS route tracking with elevation gain
+- Route point storage as JSON arrays with timestamp sync
+- Privacy-aware location data handling
+- Multi-category workout support and performance analytics
+
+**STORY-031: Add Nutrition Data Batch Processing with Meal Grouping**
+- **Claimed by**: Batch Processing Optimizer Agent
+- **Status**: In Progress
+- **Started**: 2025-09-14
+- **Focus**: Comprehensive nutrition tracking with atomic meal storage and optimized batch processing
 
 ## Project Updates & Task Claims
 

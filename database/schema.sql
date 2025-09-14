@@ -9,6 +9,7 @@
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "postgis";
 
 -- ============================================================================
 -- ENUM TYPE DEFINITIONS
@@ -20,10 +21,31 @@ CREATE TYPE activity_context AS ENUM (
     'sleeping', 'sedentary', 'active', 'post_meal', 'stressed', 'recovery'
 );
 
--- Workout Type
+-- Workout Type (Comprehensive HealthKit Support - 70+ Types)
 CREATE TYPE workout_type AS ENUM (
-    'walking', 'running', 'cycling', 'swimming', 'strength_training',
-    'yoga', 'pilates', 'hiit', 'sports', 'other'
+    -- Base Traditional Activities
+    'american_football', 'archery', 'australian_football', 'badminton', 'baseball', 'basketball', 'bowling', 'boxing',
+    'climbing', 'cross_training', 'curling', 'cycling', 'dance', 'dance_inspired_training',
+    'elliptical', 'equestrian_sports', 'fencing', 'fishing', 'functional_strength_training', 'golf', 'gymnastics',
+    'handball', 'hiking', 'hockey', 'hunting', 'lacrosse', 'martial_arts', 'mind_and_body',
+    'mixed_metabolic_cardio_training', 'paddle_sports', 'play', 'preparation_and_recovery', 'racquetball',
+    'rowing', 'rugby', 'running', 'sailing', 'skating_sports', 'snow_sports', 'soccer', 'softball',
+    'squash', 'stair_climbing', 'surfing_sports', 'swimming', 'table_tennis', 'tennis', 'track_and_field',
+    'traditional_strength_training', 'volleyball', 'walking', 'water_fitness', 'water_polo', 'water_sports',
+    'wrestling', 'yoga',
+
+    -- iOS 10+ Additional Activities
+    'barre', 'core_training', 'cross_country_skiing', 'downhill_skiing', 'flexibility', 'hiit', 'jump_rope',
+    'kickboxing', 'pilates', 'snowboarding', 'stairs', 'step_training', 'wheelchair_walk_pace', 'wheelchair_run_pace',
+
+    -- iOS 11+ Additional Activities
+    'tai_chi', 'mixed_cardio', 'hand_cycling',
+
+    -- iOS 13+ Additional Activities
+    'disc_sports', 'fitness_gaming',
+
+    -- Legacy/Other
+    'strength_training', 'sports', 'other'
 );
 
 -- Job Status and Type for background processing
@@ -261,6 +283,45 @@ CREATE TABLE workouts (
     UNIQUE(user_id, started_at)
 );
 
+-- Workout Routes (GPS Tracking with PostGIS Support)
+CREATE TABLE workout_routes (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    workout_id UUID NOT NULL REFERENCES workouts(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+    -- GPS Route Data (PostGIS geometry for efficient spatial queries)
+    route_geometry GEOMETRY(LINESTRING, 4326), -- GPS route as linestring (WGS84)
+
+    -- Route Points as JSON (for detailed analysis and reconstruction)
+    route_points JSONB NOT NULL, -- Array of {lat, lng, timestamp, altitude?, accuracy?, speed?}
+
+    -- Calculated Route Metrics
+    total_distance_meters DOUBLE PRECISION,
+    elevation_gain_meters DOUBLE PRECISION,
+    elevation_loss_meters DOUBLE PRECISION,
+    max_altitude_meters DOUBLE PRECISION,
+    min_altitude_meters DOUBLE PRECISION,
+
+    -- Route Quality & Privacy
+    point_count INTEGER NOT NULL,
+    average_accuracy_meters DOUBLE PRECISION,
+    privacy_level VARCHAR(20) DEFAULT 'full', -- full, approximate, private
+
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+
+    -- Ensure one route per workout
+    UNIQUE(workout_id)
+);
+
+-- Spatial index on route geometry for efficient geographic queries
+CREATE INDEX idx_workout_routes_geometry ON workout_routes USING GIST (route_geometry);
+
+-- Index on user_id for privacy-aware queries
+CREATE INDEX idx_workout_routes_user_id ON workout_routes (user_id);
+
+-- Index on workout type for activity-specific route analysis
+CREATE INDEX idx_workouts_type_started ON workouts (workout_type, started_at DESC);
+
 -- Nutrition Metrics (comprehensive dietary data tracking)
 CREATE TABLE nutrition_metrics (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -271,32 +332,54 @@ CREATE TABLE nutrition_metrics (
     dietary_water DOUBLE PRECISION,                    -- liters
     dietary_caffeine DOUBLE PRECISION,                 -- mg
 
-    -- Macronutrients
+    -- Macronutrients (Core Energy)
     dietary_energy_consumed DOUBLE PRECISION,          -- calories
     dietary_carbohydrates DOUBLE PRECISION,            -- grams
     dietary_protein DOUBLE PRECISION,                  -- grams
     dietary_fat_total DOUBLE PRECISION,                -- grams
     dietary_fat_saturated DOUBLE PRECISION,            -- grams
+    dietary_fat_monounsaturated DOUBLE PRECISION,      -- grams
+    dietary_fat_polyunsaturated DOUBLE PRECISION,      -- grams
     dietary_cholesterol DOUBLE PRECISION,              -- mg
     dietary_sodium DOUBLE PRECISION,                   -- mg
     dietary_fiber DOUBLE PRECISION,                    -- grams
     dietary_sugar DOUBLE PRECISION,                    -- grams
 
-    -- Minerals
+    -- Essential Minerals
     dietary_calcium DOUBLE PRECISION,                  -- mg
     dietary_iron DOUBLE PRECISION,                     -- mg
     dietary_magnesium DOUBLE PRECISION,                -- mg
     dietary_potassium DOUBLE PRECISION,                -- mg
+    dietary_zinc DOUBLE PRECISION,                     -- mg
+    dietary_phosphorus DOUBLE PRECISION,               -- mg
 
-    -- Vitamins
-    dietary_vitamin_a DOUBLE PRECISION,                -- mcg
+    -- Essential Vitamins (Water-soluble)
     dietary_vitamin_c DOUBLE PRECISION,                -- mg
+    dietary_vitamin_b1_thiamine DOUBLE PRECISION,      -- mg
+    dietary_vitamin_b2_riboflavin DOUBLE PRECISION,    -- mg
+    dietary_vitamin_b3_niacin DOUBLE PRECISION,        -- mg
+    dietary_vitamin_b6_pyridoxine DOUBLE PRECISION,    -- mg
+    dietary_vitamin_b12_cobalamin DOUBLE PRECISION,    -- mcg
+    dietary_folate DOUBLE PRECISION,                   -- mcg
+    dietary_biotin DOUBLE PRECISION,                   -- mcg
+    dietary_pantothenic_acid DOUBLE PRECISION,         -- mg
+
+    -- Essential Vitamins (Fat-soluble)
+    dietary_vitamin_a DOUBLE PRECISION,                -- mcg RAE
     dietary_vitamin_d DOUBLE PRECISION,                -- IU
+    dietary_vitamin_e DOUBLE PRECISION,                -- mg
+    dietary_vitamin_k DOUBLE PRECISION,                -- mcg
+
+    -- Meal Context for atomic processing
+    meal_type VARCHAR(50),                             -- breakfast, lunch, dinner, snack
+    meal_id UUID,                                      -- Group nutrients from same meal
 
     -- Metadata and source tracking
     source_device VARCHAR(255),
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id, recorded_at)
+
+    -- Complex deduplication key: user_id + recorded_at + nutrient_type (allows multiple nutrients per timestamp)
+    UNIQUE(user_id, recorded_at, dietary_energy_consumed, dietary_protein, dietary_carbohydrates)
 );
 
 -- Respiratory Metrics
