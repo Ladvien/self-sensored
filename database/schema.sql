@@ -1394,8 +1394,8 @@ CREATE TABLE user_characteristics (
 
     -- Privacy and Medical Information
     emergency_contact_info JSONB DEFAULT '{}'::jsonb, -- Encrypted emergency contact data
-    medical_conditions TEXT[], -- Array of relevant medical conditions affecting health metrics
-    medications TEXT[], -- Current medications that may affect health readings
+    medical_conditions TEXT[] DEFAULT '{}', -- Array of relevant medical conditions affecting health metrics
+    medications TEXT[] DEFAULT '{}', -- Current medications that may affect health readings
 
     -- Data Management
     data_sharing_preferences JSONB DEFAULT '{

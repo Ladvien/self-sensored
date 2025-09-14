@@ -2,7 +2,8 @@
 use anyhow::Result;
 use chrono::Utc;
 use serde_json::Value as JsonValue;
-use sqlx::PgPool;
+use sqlx::{PgPool, types::BigDecimal};
+use std::str::FromStr;
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -34,10 +35,12 @@ impl UserCharacteristicsService {
                 wheelchair_use,
                 activity_move_mode as "activity_move_mode!: _",
                 emergency_contact_info,
-                medical_conditions,
-                medications,
+                COALESCE(medical_conditions, '{}') as "medical_conditions!: Vec<String>",
+                COALESCE(medications, '{}') as "medications!: Vec<String>",
                 data_sharing_preferences,
-                created_at, updated_at, last_verified_at
+                created_at as "created_at!",
+                updated_at as "updated_at!",
+                last_verified_at as "last_verified_at!"
             FROM user_characteristics
             WHERE user_id = $1
             "#,
@@ -50,7 +53,11 @@ impl UserCharacteristicsService {
     }
 
     /// Create new user characteristics
-    pub async fn create(&self, user_id: Uuid, input: UserCharacteristicsInput) -> Result<UserCharacteristics> {
+    pub async fn create(
+        &self,
+        user_id: Uuid,
+        input: UserCharacteristicsInput,
+    ) -> Result<UserCharacteristics> {
         let mut characteristics = UserCharacteristics::new(user_id);
         input.apply_to(&mut characteristics);
 
@@ -74,10 +81,12 @@ impl UserCharacteristicsService {
                 wheelchair_use,
                 activity_move_mode as "activity_move_mode!: _",
                 emergency_contact_info,
-                medical_conditions,
-                medications,
+                COALESCE(medical_conditions, '{}') as "medical_conditions!: Vec<String>",
+                COALESCE(medications, '{}') as "medications!: Vec<String>",
                 data_sharing_preferences,
-                created_at, updated_at, last_verified_at
+                created_at as "created_at!",
+                updated_at as "updated_at!",
+                last_verified_at as "last_verified_at!"
             "#,
             characteristics.id,
             characteristics.user_id,
@@ -108,7 +117,11 @@ impl UserCharacteristicsService {
     }
 
     /// Update existing user characteristics
-    pub async fn update(&self, user_id: Uuid, input: UserCharacteristicsInput) -> Result<Option<UserCharacteristics>> {
+    pub async fn update(
+        &self,
+        user_id: Uuid,
+        input: UserCharacteristicsInput,
+    ) -> Result<Option<UserCharacteristics>> {
         let mut tx = self.pool.begin().await?;
 
         // Get existing characteristics
@@ -128,17 +141,17 @@ impl UserCharacteristicsService {
             r#"
             UPDATE user_characteristics
             SET
-                biological_sex = $3,
-                date_of_birth = $4,
-                blood_type = $5,
-                fitzpatrick_skin_type = $6,
-                wheelchair_use = $7,
-                activity_move_mode = $8,
-                emergency_contact_info = $9,
-                medical_conditions = $10,
-                medications = $11,
-                data_sharing_preferences = $12,
-                updated_at = $13
+                biological_sex = $2,
+                date_of_birth = $3,
+                blood_type = $4,
+                fitzpatrick_skin_type = $5,
+                wheelchair_use = $6,
+                activity_move_mode = $7,
+                emergency_contact_info = $8,
+                medical_conditions = $9,
+                medications = $10,
+                data_sharing_preferences = $11,
+                updated_at = $12
             WHERE user_id = $1
             RETURNING
                 id, user_id,
@@ -149,13 +162,14 @@ impl UserCharacteristicsService {
                 wheelchair_use,
                 activity_move_mode as "activity_move_mode!: _",
                 emergency_contact_info,
-                medical_conditions,
-                medications,
+                COALESCE(medical_conditions, '{}') as "medical_conditions!: Vec<String>",
+                COALESCE(medications, '{}') as "medications!: Vec<String>",
                 data_sharing_preferences,
-                created_at, updated_at, last_verified_at
+                created_at as "created_at!",
+                updated_at as "updated_at!",
+                last_verified_at as "last_verified_at!"
             "#,
             user_id,
-            existing.id,
             existing.biological_sex as _,
             existing.date_of_birth,
             existing.blood_type as _,
@@ -183,11 +197,16 @@ impl UserCharacteristicsService {
     }
 
     /// Create or update user characteristics (upsert)
-    pub async fn upsert(&self, user_id: Uuid, input: UserCharacteristicsInput) -> Result<UserCharacteristics> {
+    pub async fn upsert(
+        &self,
+        user_id: Uuid,
+        input: UserCharacteristicsInput,
+    ) -> Result<UserCharacteristics> {
         match self.get_by_user_id(user_id).await? {
             Some(_) => {
                 // Update existing
-                self.update(user_id, input).await?
+                self.update(user_id, input)
+                    .await?
                     .ok_or_else(|| anyhow::anyhow!("Failed to update user characteristics"))
             }
             None => {
@@ -229,7 +248,10 @@ impl UserCharacteristicsService {
     }
 
     /// Get user characteristics with personalization info
-    pub async fn get_with_personalization(&self, user_id: Uuid) -> Result<Option<UserCharacteristicsResponse>> {
+    pub async fn get_with_personalization(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Option<UserCharacteristicsResponse>> {
         match self.get_by_user_id(user_id).await? {
             Some(characteristics) => {
                 let personalization = PersonalizationInfo::from_characteristics(&characteristics);
@@ -238,12 +260,16 @@ impl UserCharacteristicsService {
                     personalization,
                 }))
             }
-            None => Ok(None)
+            None => Ok(None),
         }
     }
 
     /// Get personalized validation ranges for health metrics
-    pub async fn get_validation_ranges(&self, user_id: Uuid, metric_type: &str) -> Result<JsonValue> {
+    pub async fn get_validation_ranges(
+        &self,
+        user_id: Uuid,
+        metric_type: &str,
+    ) -> Result<JsonValue> {
         let characteristics = self.get_by_user_id(user_id).await?;
 
         let ranges = match characteristics {
@@ -297,13 +323,13 @@ impl UserCharacteristicsService {
                     _ => serde_json::json!({
                         "personalized": false,
                         "status": "no_personalization_available"
-                    })
+                    }),
                 }
             }
             None => serde_json::json!({
                 "personalized": false,
                 "status": "no_characteristics_found"
-            })
+            }),
         };
 
         Ok(ranges)
@@ -370,7 +396,9 @@ impl UserCharacteristicsService {
             "accessibility": {
                 "wheelchair_users": stats.wheelchair_users
             },
-            "average_completeness_score": stats.avg_completeness_score.unwrap_or(0.0)
+            "average_completeness_score": stats.avg_completeness_score
+                .map(|bd| bd.to_string().parse::<f64>().unwrap_or(0.0))
+                .unwrap_or(0.0)
         }))
     }
 
@@ -398,7 +426,11 @@ impl UserCharacteristicsService {
     }
 
     /// Process characteristics from iOS Health Auto Export data
-    pub async fn process_ios_data(&self, user_id: Uuid, ios_data: &JsonValue) -> Result<Option<UserCharacteristics>> {
+    pub async fn process_ios_data(
+        &self,
+        user_id: Uuid,
+        ios_data: &JsonValue,
+    ) -> Result<Option<UserCharacteristics>> {
         match UserCharacteristicsInput::from_ios_data(ios_data) {
             Ok(input) => {
                 info!(
@@ -424,7 +456,7 @@ impl UserCharacteristicsService {
     pub async fn get_emergency_info(&self, user_id: Uuid) -> Result<Option<JsonValue>> {
         match self.get_by_user_id(user_id).await? {
             Some(characteristics) => Ok(Some(characteristics.get_emergency_info())),
-            None => Ok(None)
+            None => Ok(None),
         }
     }
 
@@ -432,7 +464,7 @@ impl UserCharacteristicsService {
     pub async fn get_uv_recommendations(&self, user_id: Uuid) -> Result<Option<JsonValue>> {
         match self.get_by_user_id(user_id).await? {
             Some(characteristics) => Ok(Some(characteristics.get_uv_recommendations())),
-            None => Ok(None)
+            None => Ok(None),
         }
     }
 
@@ -440,15 +472,19 @@ impl UserCharacteristicsService {
     pub async fn get_activity_personalization(&self, user_id: Uuid) -> Result<Option<JsonValue>> {
         match self.get_by_user_id(user_id).await? {
             Some(characteristics) => Ok(Some(characteristics.get_activity_personalization())),
-            None => Ok(None)
+            None => Ok(None),
         }
     }
 
     /// Get personalized heart rate zones
-    pub async fn get_heart_rate_zones(&self, user_id: Uuid, resting_hr: Option<u16>) -> Result<Option<JsonValue>> {
+    pub async fn get_heart_rate_zones(
+        &self,
+        user_id: Uuid,
+        resting_hr: Option<u16>,
+    ) -> Result<Option<JsonValue>> {
         match self.get_by_user_id(user_id).await? {
             Some(characteristics) => Ok(Some(characteristics.get_heart_rate_zones(resting_hr))),
-            None => Ok(None)
+            None => Ok(None),
         }
     }
 }
@@ -506,12 +542,18 @@ mod tests {
         service.create(user_id, input).await.unwrap();
 
         // Test heart rate ranges
-        let hr_ranges = service.get_validation_ranges(user_id, "heart_rate").await.unwrap();
+        let hr_ranges = service
+            .get_validation_ranges(user_id, "heart_rate")
+            .await
+            .unwrap();
         assert!(hr_ranges["personalized"].as_bool().unwrap());
         assert!(hr_ranges["max_exercise"].as_u64().unwrap() > 180);
 
         // Test activity ranges (should be adapted for wheelchair use)
-        let activity_ranges = service.get_validation_ranges(user_id, "activity").await.unwrap();
+        let activity_ranges = service
+            .get_validation_ranges(user_id, "activity")
+            .await
+            .unwrap();
         assert!(activity_ranges["wheelchair_adapted"].as_bool().unwrap());
         assert_eq!(activity_ranges["step_count_max"].as_u64().unwrap(), 10000);
     }
