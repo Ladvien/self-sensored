@@ -214,7 +214,7 @@ pub fn mask_sensitive_string(input: &str) -> String {
     for &sensitive in SENSITIVE_FIELDS {
         if input_lower.contains(sensitive) {
             // For URLs, mask after the sensitive field
-            if let Some(pos) = input_lower.find(&format!("{}=", sensitive)) {
+            if let Some(pos) = input_lower.find(&format!("{sensitive}=")) {
                 let start = pos + sensitive.len() + 1;
                 if let Some(end) = input[start..].find(&['&', ' ', '\n', '\r'][..]) {
                     let end = start + end;
@@ -230,8 +230,8 @@ pub fn mask_sensitive_string(input: &str) -> String {
             }
 
             // For headers like "Authorization: Bearer token"
-            if input_lower.starts_with(&format!("{}:", sensitive)) {
-                return format!("{}: [MASKED]", sensitive);
+            if input_lower.starts_with(&format!("{sensitive}:")) {
+                return format!("{sensitive}: [MASKED]");
             }
         }
     }

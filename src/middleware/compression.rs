@@ -154,5 +154,5 @@ fn generate_simple_etag() -> String {
 
     // Use a hash of the timestamp rounded to nearest minute for cache efficiency
     let rounded_time = (now / 60) * 60;
-    format!("{:x}", rounded_time)
+    format!("{rounded_time:x}")
 }

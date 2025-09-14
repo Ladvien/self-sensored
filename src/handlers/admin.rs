@@ -306,7 +306,7 @@ pub async fn generate_test_logs(
         }
 
         // Add performance measurement
-        let timer_context = format!("test_operation_{}", i);
+        let timer_context = format!("test_operation_{i}");
         let timer = crate::middleware::PerformanceTimer::new(&timer_context, request_id);
 
         // Simulate some work

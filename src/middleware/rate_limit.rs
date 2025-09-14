@@ -40,42 +40,6 @@ fn get_client_ip(req: &ServiceRequest) -> String {
         .to_string()
 }
 
-/// Add rate limiting headers to response
-fn add_rate_limit_headers(
-    mut response: ServiceResponse<actix_web::body::BoxBody>,
-    requests_remaining: i32,
-    requests_limit: i32,
-    reset_time: chrono::DateTime<chrono::Utc>,
-    retry_after: Option<i32>,
-) -> ServiceResponse<actix_web::body::BoxBody> {
-    let headers = response.headers_mut();
-
-    // Standard rate limiting headers
-    if let Ok(limit_header) = HeaderValue::from_str(&requests_limit.to_string()) {
-        headers.insert(HeaderName::from_static("x-ratelimit-limit"), limit_header);
-    }
-
-    if let Ok(remaining_header) = HeaderValue::from_str(&requests_remaining.to_string()) {
-        headers.insert(
-            HeaderName::from_static("x-ratelimit-remaining"),
-            remaining_header,
-        );
-    }
-
-    if let Ok(reset_header) = HeaderValue::from_str(&reset_time.timestamp().to_string()) {
-        headers.insert(HeaderName::from_static("x-ratelimit-reset"), reset_header);
-    }
-
-    // Add Retry-After header for rate limited requests
-    if let Some(retry_seconds) = retry_after {
-        if let Ok(retry_header) = HeaderValue::from_str(&retry_seconds.to_string()) {
-            headers.insert(actix_web::http::header::RETRY_AFTER, retry_header);
-        }
-    }
-
-    response
-}
-
 /// Rate limiting middleware that uses API key from auth context or IP for unauthenticated requests
 pub struct RateLimitMiddleware;
 
@@ -314,8 +278,8 @@ mod tests {
     async fn test_rate_limit_middleware_success() {
         let rate_limiter = web::Data::new(RateLimiter::new_in_memory(10));
 
-        // Create a mock auth context
-        let auth_context = AuthContext {
+        // Create a mock auth context (not used in this test since we test without auth)
+        let _auth_context = AuthContext {
             user: User {
                 id: Uuid::new_v4(),
                 email: "test@example.com".to_string(),
@@ -380,12 +344,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_rate_limit_middleware_ip_based_headers() {
+        // Clean up environment first
+        std::env::remove_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR");
+
         // Test that rate limiting returns proper headers for IP-based limiting
         // Set IP rate limit to 100 for testing BEFORE creating the rate limiter
         std::env::set_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR", "100");
 
-        // Use a higher limit but make many requests to test properly
-        let rate_limiter = web::Data::new(RateLimiter::new_in_memory(100));
+        // Use low limit for API keys but IP limit will be read from env var
+        let rate_limiter = web::Data::new(RateLimiter::new_in_memory(2));
 
         let app = test::init_service(
             App::new()
@@ -414,17 +381,28 @@ mod tests {
         // Verify remaining count decremented
         let remaining_header = resp1.headers().get("x-ratelimit-remaining").unwrap();
         assert_eq!(remaining_header.to_str().unwrap(), "99");
+
+        // Clean up env var
+        std::env::remove_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR");
     }
 
     /// Test multiple requests to check rate limiting behavior
     #[tokio::test]
     async fn test_rate_limit_multiple_requests() {
+        // Use a unique IP for this test to avoid conflicts
+        let test_ip = "192.168.1.101";
+
+        // Clean up environment first
+        std::env::remove_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR");
+
         // Set IP rate limit to 3 for testing BEFORE creating the rate limiter
         std::env::set_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR", "3");
 
-        // Use a low limit to more easily trigger rate limiting
-        // Note: IP limits are read from env var at creation time
-        let rate_limiter = web::Data::new(RateLimiter::new_in_memory(3));
+        // The API key limit can be different from IP limit
+        let rate_limiter = web::Data::new(RateLimiter::new_in_memory(100));
+
+        // Clear the rate limiter to ensure clean state
+        rate_limiter.clear_all().await.unwrap();
 
         let app = test::init_service(
             App::new()
@@ -441,11 +419,13 @@ mod tests {
         for i in 0..6 {
             let req = test::TestRequest::get()
                 .uri("/test")
-                .insert_header(("x-forwarded-for", "192.168.1.100"))
+                .insert_header(("x-forwarded-for", test_ip))
                 .to_request();
 
             // Call service - rate limiting returns 429 status
             let resp = test::call_service(&app, req).await;
+
+            println!("Request {}: Status {}", i + 1, resp.status());
 
             match resp.status().as_u16() {
                 200 => {
@@ -454,6 +434,21 @@ mod tests {
                     assert!(resp.headers().contains_key("x-ratelimit-limit"));
                     assert!(resp.headers().contains_key("x-ratelimit-remaining"));
                     assert!(resp.headers().contains_key("x-ratelimit-reset"));
+
+                    // Debug: print headers
+                    let limit = resp
+                        .headers()
+                        .get("x-ratelimit-limit")
+                        .unwrap()
+                        .to_str()
+                        .unwrap();
+                    let remaining = resp
+                        .headers()
+                        .get("x-ratelimit-remaining")
+                        .unwrap()
+                        .to_str()
+                        .unwrap();
+                    println!("  Headers: limit={limit}, remaining={remaining}");
                 }
                 429 => {
                     rate_limited_count += 1;
@@ -461,14 +456,16 @@ mod tests {
                     assert!(resp.headers().contains_key("retry-after"));
                     assert!(resp.headers().contains_key("x-ratelimit-limit"));
                     assert!(resp.headers().contains_key("x-ratelimit-remaining"));
+
+                    println!("  Rate limited");
                 }
-                other => panic!("Unexpected status {} for request {}", other, i),
+                other => panic!("Unexpected status {other} for request {i}"),
             }
         }
 
         println!("Rate limiting results:");
-        println!("  - Successful requests: {}", success_count);
-        println!("  - Rate limited requests: {}", rate_limited_count);
+        println!("  - Successful requests: {success_count}");
+        println!("  - Rate limited requests: {rate_limited_count}");
 
         // With a limit of 3, we expect the first 3 requests to succeed, then rate limiting
         assert_eq!(
@@ -487,12 +484,20 @@ mod tests {
     /// Test rate limit header consistency
     #[tokio::test]
     async fn test_rate_limit_header_consistency() {
+        // Use a unique IP for this test to avoid conflicts
+        let test_ip = "192.168.1.102";
+
+        // Clean up environment first
+        std::env::remove_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR");
+
         // Set IP rate limit to 2 for testing BEFORE creating the rate limiter
         std::env::set_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR", "2");
 
-        // Use a very low limit to easily trigger rate limiting
-        // Note: IP limits are read from env var at creation time
-        let rate_limiter = web::Data::new(RateLimiter::new_in_memory(2));
+        // The API key limit can be different from IP limit
+        let rate_limiter = web::Data::new(RateLimiter::new_in_memory(100));
+
+        // Clear the rate limiter to ensure clean state
+        rate_limiter.clear_all().await.unwrap();
 
         let app = test::init_service(
             App::new()
@@ -510,7 +515,7 @@ mod tests {
         for i in 0..5 {
             let req = test::TestRequest::get()
                 .uri("/test")
-                .insert_header(("x-forwarded-for", "192.168.1.100"))
+                .insert_header(("x-forwarded-for", test_ip))
                 .to_request();
 
             // Call service - rate limiting returns 429 status
@@ -524,7 +529,7 @@ mod tests {
                 .and_then(|h| h.to_str().ok())
                 .and_then(|s| s.parse::<i32>().ok());
 
-            let limit = 2; // Using configured limit
+            let limit = 2; // Using configured limit from env var
 
             match status {
                 200 => {
@@ -532,7 +537,10 @@ mod tests {
 
                     if let Some(remaining) = remaining {
                         assert!(remaining >= 0, "Remaining count should not be negative");
-                        assert!(remaining <= limit, "Remaining should not exceed limit");
+                        assert!(
+                            remaining < limit,
+                            "Remaining should be less than limit after request"
+                        );
 
                         // Check consistency: remaining should decrease or stay 0
                         if let Some(last) = last_remaining {
@@ -553,13 +561,13 @@ mod tests {
                         );
                     }
                 }
-                other => panic!("Unexpected status {} for request {}", other, i),
+                other => panic!("Unexpected status {other} for request {i}"),
             }
         }
 
         println!("Header consistency test results:");
-        println!("  - Successful requests: {}", success_count);
-        println!("  - Rate limited requests: {}", rate_limited_count);
+        println!("  - Successful requests: {success_count}");
+        println!("  - Rate limited requests: {rate_limited_count}");
 
         // With a limit of 2, we expect 2 successful and 3 rate limited
         assert_eq!(
@@ -578,11 +586,20 @@ mod tests {
     /// Test rate limiting behavior under rapid sequential requests
     #[tokio::test]
     async fn test_rate_limit_rapid_sequential_requests() {
+        // Use a unique IP for this test to avoid conflicts
+        let test_ip = "192.168.1.103";
+
+        // Clean up environment first
+        std::env::remove_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR");
+
         // Set IP rate limit to 5 for testing BEFORE creating the rate limiter
         std::env::set_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR", "5");
 
-        // Note: IP limits are read from env var at creation time
-        let rate_limiter = web::Data::new(RateLimiter::new_in_memory(5));
+        // The API key limit can be different from IP limit
+        let rate_limiter = web::Data::new(RateLimiter::new_in_memory(100));
+
+        // Clear the rate limiter to ensure clean state
+        rate_limiter.clear_all().await.unwrap();
 
         let app = test::init_service(
             App::new()
@@ -600,26 +617,18 @@ mod tests {
         for i in 0..10 {
             let req = test::TestRequest::get()
                 .uri("/test")
-                .insert_header(("x-forwarded-for", "192.168.1.200")) // Same IP
+                .insert_header(("x-forwarded-for", test_ip))
                 .to_request();
 
-            // Use try_call_service to handle rate limit errors gracefully
-            let (status, remaining) = match test::try_call_service(&app, req).await {
-                Ok(resp) => {
-                    let status = resp.status().as_u16();
-                    let remaining = resp
-                        .headers()
-                        .get("x-ratelimit-remaining")
-                        .and_then(|h| h.to_str().ok())
-                        .and_then(|s| s.parse::<i32>().ok());
-                    (status, remaining)
-                }
-                Err(_) => {
-                    // Rate limited
-                    rate_limited_count += 1;
-                    continue;
-                }
-            };
+            // Call service directly - rate limiting returns 429 status
+            let resp = test::call_service(&app, req).await;
+            let status = resp.status().as_u16();
+
+            let remaining = resp
+                .headers()
+                .get("x-ratelimit-remaining")
+                .and_then(|h| h.to_str().ok())
+                .and_then(|s| s.parse::<i32>().ok());
 
             match status {
                 200 => {
@@ -629,8 +638,7 @@ mod tests {
                         // Check that remaining count is decreasing
                         if let Some(prev) = previous_remaining {
                             assert!(remaining <= prev,
-                                "Remaining count should decrease or stay the same: prev={}, current={}",
-                                prev, remaining);
+                                "Remaining count should decrease or stay the same: prev={prev}, current={remaining}");
                         }
                         previous_remaining = Some(remaining);
                     }
@@ -639,13 +647,13 @@ mod tests {
                     rate_limited_count += 1;
                     // Once rate limited, all subsequent requests should also be rate limited
                 }
-                other => panic!("Unexpected status {} for request {}", other, i),
+                other => panic!("Unexpected status {other} for request {i}"),
             }
         }
 
         println!("Sequential requests test results:");
-        println!("  - Successful requests: {}", success_count);
-        println!("  - Rate limited requests: {}", rate_limited_count);
+        println!("  - Successful requests: {success_count}");
+        println!("  - Rate limited requests: {rate_limited_count}");
 
         // With limit of 5, we should have exactly 5 successful and 5 rate limited
         assert_eq!(
@@ -664,13 +672,20 @@ mod tests {
     /// Test rate limiting recovery after time window expires
     #[tokio::test]
     async fn test_rate_limit_recovery() {
+        // Use a unique IP for this test to avoid conflicts
+        let test_ip = "192.168.1.104";
+
+        // Clean up environment first
+        std::env::remove_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR");
+
         // Set IP rate limit to 2 for testing BEFORE creating the rate limiter
         std::env::set_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR", "2");
 
-        // Note: This test is simplified since we can't easily manipulate time in tests
-        // In a real implementation, we'd use a time-mockable rate limiter
-        // Note: IP limits are read from env var at creation time
-        let rate_limiter = web::Data::new(RateLimiter::new_in_memory(2));
+        // The API key limit can be different from IP limit
+        let rate_limiter = web::Data::new(RateLimiter::new_in_memory(100));
+
+        // Clear the rate limiter to ensure clean state
+        rate_limiter.clear_all().await.unwrap();
 
         let app = test::init_service(
             App::new()
@@ -684,7 +699,7 @@ mod tests {
         for i in 0..3 {
             let req = test::TestRequest::get()
                 .uri("/test")
-                .insert_header(("x-forwarded-for", "192.168.1.300"))
+                .insert_header(("x-forwarded-for", test_ip))
                 .to_request();
 
             // Call service - rate limiting returns 429 status

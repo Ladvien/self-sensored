@@ -71,8 +71,7 @@ impl PayloadProcessor {
         if let Err(msg) = validation_result {
             error!("JSON security validation failed: {}", msg);
             return Err(actix_web::error::ErrorBadRequest(format!(
-                "JSON security validation failed: {}",
-                msg
+                "JSON security validation failed: {msg}"
             )));
         }
 
@@ -83,6 +82,7 @@ impl PayloadProcessor {
     pub async fn parse_payload_with_timeout(
         &self,
         raw_payload: &web::Bytes,
+        user_id: uuid::Uuid,
     ) -> Result<IngestPayload> {
         let payload_size = raw_payload.len();
 
@@ -101,13 +101,17 @@ impl PayloadProcessor {
 
         // Parse with timeout protection
         let timeout_duration = Duration::from_secs(self.config.json_parse_timeout_secs);
-        match tokio::time::timeout(timeout_duration, self.parse_with_fallback(raw_payload)).await {
+        match tokio::time::timeout(
+            timeout_duration,
+            self.parse_with_fallback(raw_payload, user_id),
+        )
+        .await
+        {
             Ok(Ok(payload)) => Ok(payload),
             Ok(Err(parse_error)) => {
                 error!("JSON parse error: {}", parse_error);
                 Err(actix_web::error::ErrorBadRequest(format!(
-                    "JSON parsing error: {}",
-                    parse_error
+                    "JSON parsing error: {parse_error}"
                 )))
             }
             Err(_) => {
@@ -123,7 +127,11 @@ impl PayloadProcessor {
     }
 
     /// Parse payload with fallback from iOS to standard format
-    async fn parse_with_fallback(&self, raw_payload: &web::Bytes) -> Result<IngestPayload> {
+    async fn parse_with_fallback(
+        &self,
+        raw_payload: &web::Bytes,
+        user_id: uuid::Uuid,
+    ) -> Result<IngestPayload> {
         // Try iOS format first
         match self.parse_with_error_context::<IosIngestPayload>(raw_payload, "iOS format") {
             Ok(ios_payload) => {
@@ -131,7 +139,7 @@ impl PayloadProcessor {
                     "Successfully parsed iOS format payload ({} bytes)",
                     raw_payload.len()
                 );
-                Ok(ios_payload.to_internal_format())
+                Ok(ios_payload.to_internal_format(user_id))
             }
             Err(ios_error) => {
                 warn!("iOS format parse failed: {}", ios_error);
@@ -161,8 +169,7 @@ impl PayloadProcessor {
                         error!("Payload preview: {}", preview);
 
                         Err(actix_web::error::ErrorBadRequest(format!(
-                            "Invalid JSON format. iOS error: {}. Standard error: {}",
-                            ios_error, standard_error
+                            "Invalid JSON format. iOS error: {ios_error}. Standard error: {standard_error}"
                         )))
                     }
                 }
@@ -183,8 +190,7 @@ impl PayloadProcessor {
                 let path = err.path().to_string();
                 let inner = err.into_inner();
                 Err(format!(
-                    "{} parsing failed at '{}': {}",
-                    format_name, path, inner
+                    "{format_name} parsing failed at '{path}': {inner}"
                 ))
             }
         }
@@ -272,11 +278,11 @@ impl PayloadProcessor {
         }
 
         if brace_count != 0 {
-            return Err(format!("Unmatched braces: {} unclosed", brace_count));
+            return Err(format!("Unmatched braces: {brace_count} unclosed"));
         }
 
         if bracket_count != 0 {
-            return Err(format!("Unmatched brackets: {} unclosed", bracket_count));
+            return Err(format!("Unmatched brackets: {bracket_count} unclosed"));
         }
 
         info!(

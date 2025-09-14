@@ -188,7 +188,7 @@ impl BackgroundJobCoordinator {
             Ok(Some(JobStatusInfo {
                 id: job_id,
                 status: job.status.as_str().to_string(),
-                job_type: BackgroundJobType::from_str(&job.job_type.as_str())
+                job_type: BackgroundJobType::from_str(job.job_type.as_str())
                     .unwrap_or(BackgroundJobType::IngestBatch),
                 priority: match job.priority {
                     1 => JobPriority::Low,

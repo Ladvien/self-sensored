@@ -58,7 +58,7 @@ async fn setup_load_test_users(pool: &PgPool, count: usize) -> Vec<(Uuid, String
     let mut users = Vec::new();
 
     for i in 0..count {
-        let email = format!("load_test_user_{}@example.com", i);
+        let email = format!("load_test_user_{i}@example.com");
 
         // Clean up existing user
         sqlx::query!("DELETE FROM users WHERE email = $1", &email)
@@ -70,7 +70,7 @@ async fn setup_load_test_users(pool: &PgPool, count: usize) -> Vec<(Uuid, String
         let user = auth_service
             .create_user(
                 &email,
-                Some(&format!("load_test_user_{}", i)),
+                Some(&format!("load_test_user_{i}")),
                 Some(serde_json::json!({"name": format!("Load Test User {}", i)})),
             )
             .await
@@ -79,7 +79,7 @@ async fn setup_load_test_users(pool: &PgPool, count: usize) -> Vec<(Uuid, String
         let (plain_key, _api_key) = auth_service
             .create_api_key(
                 user.id,
-                Some(&format!("Load Test Key {}", i)),
+                Some(&format!("Load Test Key {i}")),
                 None,
                 Some(serde_json::json!(["write"])),
                 None,
@@ -135,7 +135,7 @@ async fn test_1m_record_processing_performance() {
 
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
         .set_json(&massive_payload)
         .to_request();
@@ -160,7 +160,7 @@ async fn test_1m_record_processing_performance() {
         "   ⏱️  Processing time: {:.2}s",
         processing_time.as_secs_f64()
     );
-    println!("   🚀 Records per second: {:.0}", records_per_second);
+    println!("   🚀 Records per second: {records_per_second:.0}");
     println!("   ❌ Failed records: {}", data.failed_count);
 
     // Verify performance target: <5 minutes (300 seconds)
@@ -173,8 +173,7 @@ async fn test_1m_record_processing_performance() {
     // Verify minimum processing rate: >3,333 records/second for 5 minute target
     assert!(
         records_per_second > 3333.0,
-        "Processing rate {:.0}/s should be >3333/s",
-        records_per_second
+        "Processing rate {records_per_second:.0}/s should be >3333/s"
     );
 
     // Verify data integrity
@@ -235,7 +234,7 @@ async fn test_10k_concurrent_users() {
 
         let req = test::TestRequest::post()
             .uri("/api/v1/ingest")
-            .insert_header(("Authorization", format!("Bearer {}", api_key)))
+            .insert_header(("Authorization", format!("Bearer {api_key}")))
             .insert_header(("content-type", "application/json"))
             .set_json(&payload)
             .to_request();
@@ -301,7 +300,7 @@ async fn test_10k_concurrent_users() {
     };
 
     println!("✅ 10K Concurrent Users Results:");
-    println!("   👥 Concurrent users: {}", concurrent_users);
+    println!("   👥 Concurrent users: {concurrent_users}");
     println!("   📊 Total requests: {}", metrics.total_requests);
     println!(
         "   ✅ Successful requests: {} ({:.1}%)",
@@ -403,13 +402,13 @@ async fn test_partition_management_under_load() {
     for (i, payload) in payloads.iter().enumerate() {
         let req = test::TestRequest::post()
             .uri("/api/v1/ingest")
-            .insert_header(("Authorization", format!("Bearer {}", api_key)))
+            .insert_header(("Authorization", format!("Bearer {api_key}")))
             .insert_header(("content-type", "application/json"))
             .set_json(payload)
             .to_request();
 
         let resp = test::call_service(&app, req).await;
-        assert!(resp.status().is_success(), "Request {} should succeed", i);
+        assert!(resp.status().is_success(), "Request {i} should succeed");
 
         let body: ApiResponse<IngestResponse> = test::read_body_json(resp).await;
         let data = body.data.expect("Should have response data");
@@ -425,7 +424,7 @@ async fn test_partition_management_under_load() {
 
     println!("✅ Partition Management Results:");
     println!("   📊 Total payloads: {}", payloads.len());
-    println!("   📈 Records processed: {}", total_processed);
+    println!("   📈 Records processed: {total_processed}");
     println!(
         "   ⏱️  Processing time: {:.2}s",
         processing_time.as_secs_f64()
@@ -435,7 +434,7 @@ async fn test_partition_management_under_load() {
     let partition_count = count_active_partitions(&pool).await;
     assert!(partition_count >= 4, "Should have partitions for 4+ months");
 
-    println!("   📁 Active partitions: {}", partition_count);
+    println!("   📁 Active partitions: {partition_count}");
 
     cleanup_load_test_data(&pool, vec![user_id]).await;
 }
@@ -474,7 +473,7 @@ async fn test_field_coverage_target() {
 
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
         .set_json(&comprehensive_payload)
         .to_request();
@@ -552,7 +551,7 @@ async fn test_monitoring_alerting_triggers() {
 
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
         .set_json(&alert_triggering_payload)
         .to_request();
@@ -607,8 +606,8 @@ fn create_1m_record_payload() -> Value {
     }
 
     // Symptoms (200k)
-    let symptom_types = vec!["headache", "fatigue", "nausea", "anxiety", "muscle_cramps"];
-    let severities = vec!["mild", "moderate", "severe"];
+    let symptom_types = ["headache", "fatigue", "nausea", "anxiety", "muscle_cramps"];
+    let severities = ["mild", "moderate", "severe"];
 
     for i in 0..200_000 {
         let date = base_date + Duration::seconds(i * 180 + 60);
@@ -637,7 +636,7 @@ fn create_1m_record_payload() -> Value {
     }
 
     // Mental health metrics (200k)
-    let stress_levels = vec!["low", "medium", "high"];
+    let stress_levels = ["low", "medium", "high"];
 
     for i in 0..200_000 {
         let date = base_date + Duration::seconds(i * 180 + 140);
@@ -939,8 +938,7 @@ async fn validate_partition_creation(pool: &PgPool, date: DateTime<Utc>) {
 
     assert!(
         partition_exists,
-        "Partition for {} should exist",
-        table_date
+        "Partition for {table_date} should exist"
     );
 }
 

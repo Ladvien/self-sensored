@@ -267,10 +267,9 @@ impl HeartRateMetric {
             }
         }
         if let Some(hrv) = self.heart_rate_variability {
-            if hrv < 0.0 || hrv > 500.0 {
+            if !(0.0..=500.0).contains(&hrv) {
                 return Err(format!(
-                    "heart_rate_variability {} is out of range (0-500)",
-                    hrv
+                    "heart_rate_variability {hrv} is out of range (0-500)"
                 ));
             }
         }
@@ -355,8 +354,7 @@ impl SleepMetric {
 
         if component_total > calculated_duration {
             return Err(format!(
-                "Sleep components total ({} minutes) exceeds sleep duration ({} minutes)",
-                component_total, calculated_duration
+                "Sleep components total ({component_total} minutes) exceeds sleep duration ({calculated_duration} minutes)"
             ));
         }
 
@@ -432,10 +430,9 @@ impl ActivityMetric {
             }
         }
         if let Some(flights) = self.flights_climbed {
-            if flights < 0 || flights > 10000 {
+            if !(0..=10000).contains(&flights) {
                 return Err(format!(
-                    "flights_climbed {} is out of range (0-10000)",
-                    flights
+                    "flights_climbed {flights} is out of range (0-10000)"
                 ));
             }
         }

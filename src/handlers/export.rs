@@ -49,7 +49,7 @@ pub async fn export_health_data(
     let start_date = params.start_date.unwrap_or_else(|| {
         Utc::now() - chrono::Duration::days(365) // Default to last year
     });
-    let end_date = params.end_date.unwrap_or_else(|| Utc::now());
+    let end_date = params.end_date.unwrap_or_else(Utc::now);
 
     // Determine which metric types to include
     let metric_types = if let Some(types) = &params.metric_types {
@@ -115,7 +115,7 @@ pub async fn export_heart_rate_data(
     let start_date = params.start_date.unwrap_or_else(|| {
         Utc::now() - chrono::Duration::days(90) // Default to last 90 days
     });
-    let end_date = params.end_date.unwrap_or_else(|| Utc::now());
+    let end_date = params.end_date.unwrap_or_else(Utc::now);
 
     match format.as_str() {
         "csv" => export_heart_rate_csv(&pool, auth, start_date, end_date, include_raw).await,
@@ -136,7 +136,7 @@ pub async fn export_activity_summary(
     let start_date = params
         .start_date
         .unwrap_or_else(|| Utc::now() - chrono::Duration::days(30));
-    let end_date = params.end_date.unwrap_or_else(|| Utc::now());
+    let end_date = params.end_date.unwrap_or_else(Utc::now);
 
     let user_id = auth.user.id;
     match export_activity_analytics(&pool, auth, start_date, end_date).await {

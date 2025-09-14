@@ -43,9 +43,9 @@ mod timeout_tests {
         );
 
         println!("✅ Environment variable parsing test completed");
-        println!("   - Default timeout: {}s (DoS-protected)", default_timeout);
-        println!("   - Connection timeout: {}s", connection_timeout);
-        println!("   - Keep-alive timeout: {}s", keep_alive_timeout);
+        println!("   - Default timeout: {default_timeout}s (DoS-protected)");
+        println!("   - Connection timeout: {connection_timeout}s");
+        println!("   - Keep-alive timeout: {keep_alive_timeout}s");
         println!("   - Under Cloudflare limit (100s): ✓");
     }
 
@@ -65,8 +65,8 @@ mod timeout_tests {
         );
 
         println!("✅ Cloudflare timeout configuration test completed");
-        println!("   - Cloudflare limit: {}s", cloudflare_limit);
-        println!("   - Our timeout: {}s (DoS-protected)", our_timeout);
+        println!("   - Cloudflare limit: {cloudflare_limit}s");
+        println!("   - Our timeout: {our_timeout}s (DoS-protected)");
         println!("   - Safety margin: {}s", cloudflare_limit - our_timeout);
     }
 
@@ -93,8 +93,7 @@ mod timeout_tests {
 
         println!("✅ Payload size limits test completed");
         println!(
-            "   - Max payload size: {}MB (DoS-protected)",
-            max_payload_size_mb
+            "   - Max payload size: {max_payload_size_mb}MB (DoS-protected)"
         );
     }
 
@@ -125,9 +124,9 @@ mod timeout_tests {
         );
 
         println!("✅ DoS protection timeout configuration test completed");
-        println!("   - Request timeout: {}s", request_timeout);
-        println!("   - Connection timeout: {}s", connection_timeout);
-        println!("   - Keep-alive timeout: {}s", keep_alive_timeout);
+        println!("   - Request timeout: {request_timeout}s");
+        println!("   - Connection timeout: {connection_timeout}s");
+        println!("   - Keep-alive timeout: {keep_alive_timeout}s");
         println!("   - DoS protection: ✓");
     }
 }

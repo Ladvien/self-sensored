@@ -18,7 +18,7 @@ use crate::services::batch_processor::{BatchProcessingResult, BatchProcessor};
 /// Maximum payload size (200MB) - increased to handle large iOS exports
 const MAX_PAYLOAD_SIZE: usize = 200 * 1024 * 1024;
 /// Maximum number of metrics per request (increased to handle full day exports)
-const MAX_METRICS_PER_REQUEST: usize = 100_000;
+const MAX_METRICS_PER_REQUEST: usize = 200_000;
 
 /// Custom extractor that logs raw JSON payload before deserialization
 pub struct LoggedJson<T>(pub T);
@@ -119,15 +119,14 @@ pub async fn ingest_handler(
     }
 
     // Use enhanced JSON parsing with better error reporting
-    let internal_payload = match parse_ios_payload_enhanced(&raw_payload).await {
+    let internal_payload = match parse_ios_payload_enhanced(&raw_payload, auth.user.id).await {
         Ok(payload) => payload,
         Err(parse_error) => {
             error!("Enhanced JSON parse error: {}", parse_error);
             Metrics::record_error("enhanced_json_parse", "/api/v1/ingest", "error");
             return Ok(
                 HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
-                    "JSON parsing error: {}",
-                    parse_error
+                    "JSON parsing error: {parse_error}"
                 ))),
             );
         }
@@ -142,8 +141,7 @@ pub async fn ingest_handler(
         );
         return Ok(
             HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
-                "Too many metrics: {} exceeds limit of {}",
-                total_metrics, MAX_METRICS_PER_REQUEST
+                "Too many metrics: {total_metrics} exceeds limit of {MAX_METRICS_PER_REQUEST}"
             ))),
         );
     }
@@ -351,33 +349,31 @@ fn validate_single_workout(workout: &crate::models::WorkoutData) -> Result<(), S
     }
 
     if let Some(calories) = workout.total_energy_kcal {
-        if calories < 0.0 || calories > 10000.0 {
+        if !(0.0..=10000.0).contains(&calories) {
             return Err(format!(
-                "total_energy_kcal {} is out of reasonable range (0-10000)",
-                calories
+                "total_energy_kcal {calories} is out of reasonable range (0-10000)"
             ));
         }
     }
 
     if let Some(distance) = workout.distance_meters {
-        if distance < 0.0 || distance > 1000000.0 {
+        if !(0.0..=1000000.0).contains(&distance) {
             // Max 1000km
             return Err(format!(
-                "distance_meters {} is out of reasonable range (0-1000000)",
-                distance
+                "distance_meters {distance} is out of reasonable range (0-1000000)"
             ));
         }
     }
 
     if let Some(hr) = workout.avg_heart_rate {
         if !(20..=300).contains(&hr) {
-            return Err(format!("avg_heart_rate {} is out of range (20-300)", hr));
+            return Err(format!("avg_heart_rate {hr} is out of range (20-300)"));
         }
     }
 
     if let Some(hr) = workout.max_heart_rate {
         if !(20..=300).contains(&hr) {
-            return Err(format!("max_heart_rate {} is out of range (20-300)", hr));
+            return Err(format!("max_heart_rate {hr} is out of range (20-300)"));
         }
     }
 
@@ -463,7 +459,10 @@ async fn update_processing_status(
 }
 
 /// Parse iOS payload with enhanced error handling and validation
-async fn parse_ios_payload_enhanced(raw_payload: &web::Bytes) -> Result<IngestPayload> {
+async fn parse_ios_payload_enhanced(
+    raw_payload: &web::Bytes,
+    user_id: uuid::Uuid,
+) -> Result<IngestPayload> {
     // Log payload info for debugging large payloads
     let payload_size = raw_payload.len();
     if payload_size > 10 * 1024 * 1024 {
@@ -478,8 +477,7 @@ async fn parse_ios_payload_enhanced(raw_payload: &web::Bytes) -> Result<IngestPa
     if let Err(validation_error) = validate_json_structure_basic(raw_payload) {
         error!("JSON structure validation failed: {}", validation_error);
         return Err(actix_web::error::ErrorBadRequest(format!(
-            "Malformed JSON detected: {}",
-            validation_error
+            "Malformed JSON detected: {validation_error}"
         )));
     }
 
@@ -490,7 +488,7 @@ async fn parse_ios_payload_enhanced(raw_payload: &web::Bytes) -> Result<IngestPa
                 "Successfully parsed iOS format payload ({} bytes)",
                 payload_size
             );
-            Ok(ios_payload.to_internal_format())
+            Ok(ios_payload.to_internal_format(user_id))
         }
         Err(ios_error) => {
             warn!("iOS format parse failed: {}", ios_error);
@@ -515,8 +513,7 @@ async fn parse_ios_payload_enhanced(raw_payload: &web::Bytes) -> Result<IngestPa
                     error!("Payload preview (sanitized): {}", sanitized_preview);
 
                     Err(actix_web::error::ErrorBadRequest(format!(
-                        "Invalid JSON format. iOS error: {}. Standard error: {}",
-                        ios_error, standard_error
+                        "Invalid JSON format. iOS error: {ios_error}. Standard error: {standard_error}"
                     )))
                 }
             }
@@ -536,8 +533,7 @@ fn parse_with_error_context<T: serde::de::DeserializeOwned>(
             let path = err.path().to_string();
             let inner = err.into_inner();
             Err(format!(
-                "{} parsing failed at '{}': {}",
-                format_name, path, inner
+                "{format_name} parsing failed at '{path}': {inner}"
             ))
         }
     }
@@ -613,17 +609,16 @@ fn validate_json_structure_basic(data: &[u8]) -> std::result::Result<(), String>
 
     if in_string {
         return Err(format!(
-            "Unterminated string detected (quotes: {})",
-            quote_count
+            "Unterminated string detected (quotes: {quote_count})"
         ));
     }
 
     if brace_count != 0 {
-        return Err(format!("Unmatched braces: {} unclosed", brace_count));
+        return Err(format!("Unmatched braces: {brace_count} unclosed"));
     }
 
     if bracket_count != 0 {
-        return Err(format!("Unmatched brackets: {} unclosed", bracket_count));
+        return Err(format!("Unmatched brackets: {bracket_count} unclosed"));
     }
 
     Ok(())

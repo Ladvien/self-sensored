@@ -55,7 +55,7 @@ impl fmt::Display for ActivityContext {
             Self::Stressed => "stressed",
             Self::Recovery => "recovery",
         };
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }
 
@@ -107,7 +107,7 @@ impl fmt::Display for WorkoutType {
             Self::Sports => "sports",
             Self::Other => "other",
         };
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }
 

@@ -187,7 +187,7 @@ impl SleepRecord {
             rem_sleep_minutes: metric.rem_sleep_minutes,
             light_sleep_minutes: None, // Not provided by API model
             awake_minutes: metric.awake_minutes,
-            efficiency: metric.efficiency.map(|e| e as f64),
+            efficiency: metric.efficiency,
             source_device: metric.source_device,
             created_at: metric.created_at,
         }
@@ -206,7 +206,7 @@ impl From<crate::models::health_metrics::SleepMetric> for SleepRecord {
             rem_sleep_minutes: metric.rem_sleep_minutes,
             light_sleep_minutes: None, // Not provided by API model
             awake_minutes: metric.awake_minutes,
-            efficiency: metric.efficiency.map(|e| e as f64),
+            efficiency: metric.efficiency,
             source_device: metric.source_device,
             created_at: metric.created_at,
         }
@@ -313,8 +313,8 @@ impl WorkoutRecord {
             total_energy_kcal: workout.total_energy_kcal,
             active_energy_kcal: workout.active_energy_kcal,
             distance_meters: workout.distance_meters,
-            avg_heart_rate: workout.avg_heart_rate.map(|v| v as i32),
-            max_heart_rate: workout.max_heart_rate.map(|v| v as i32),
+            avg_heart_rate: workout.avg_heart_rate,
+            max_heart_rate: workout.max_heart_rate,
             source_device: workout.source_device,
             created_at: workout.created_at,
         }
@@ -332,8 +332,8 @@ impl From<crate::models::health_metrics::WorkoutData> for WorkoutRecord {
             total_energy_kcal: workout.total_energy_kcal,
             active_energy_kcal: workout.active_energy_kcal,
             distance_meters: workout.distance_meters,
-            avg_heart_rate: workout.avg_heart_rate.map(|v| v as i32),
-            max_heart_rate: workout.max_heart_rate.map(|v| v as i32),
+            avg_heart_rate: workout.avg_heart_rate,
+            max_heart_rate: workout.max_heart_rate,
             source_device: workout.source_device,
             created_at: workout.created_at,
         }

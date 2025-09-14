@@ -145,7 +145,8 @@ fn test_ios_payload_conversion() {
     };
 
     // Test conversion to internal format
-    let internal_payload = ios_payload.to_internal_format();
+    let test_user_id = uuid::Uuid::new_v4();
+    let internal_payload = ios_payload.to_internal_format(test_user_id);
 
     // Should have heart rate and blood pressure metrics
     assert!(!internal_payload.data.metrics.is_empty());
@@ -334,11 +335,11 @@ fn test_large_payload_performance() {
                     id: Uuid::new_v4(),
                     user_id,
                     recorded_at: timestamp,
-                    step_count: Some(5000 + (i % 10000) as i32),
+                    step_count: Some(5000 + (i % 10000)),
                     distance_meters: Some(3000.0 + (i % 5000) as f64),
                     active_energy_burned_kcal: Some(300.0 + (i % 500) as f64),
                     basal_energy_burned_kcal: Some(1800.0 + (i % 200) as f64),
-                    flights_climbed: Some(i % 20 as i32),
+                    flights_climbed: Some(i % 20_i32),
                     source_device: Some("Performance Test".to_string()),
                     created_at: now,
                 }));
@@ -351,11 +352,11 @@ fn test_large_payload_performance() {
                         user_id,
                         sleep_start: timestamp - chrono::Duration::hours(8),
                         sleep_end: timestamp,
-                        duration_minutes: Some(420 + (i % 120) as i32),
-                        deep_sleep_minutes: Some(90 + (i % 60) as i32),
-                        rem_sleep_minutes: Some(60 + (i % 40) as i32),
-                        light_sleep_minutes: Some(240 + (i % 60) as i32),
-                        awake_minutes: Some(i % 30 as i32),
+                        duration_minutes: Some(420 + (i % 120)),
+                        deep_sleep_minutes: Some(90 + (i % 60)),
+                        rem_sleep_minutes: Some(60 + (i % 40)),
+                        light_sleep_minutes: Some(240 + (i % 60)),
+                        awake_minutes: Some(i % 30_i32),
                         efficiency: Some(80.0 + (i % 20) as f64),
                         source_device: Some("Performance Test".to_string()),
                         created_at: now,
@@ -383,13 +384,13 @@ fn test_large_payload_performance() {
     let start = Instant::now();
     let json_str = serde_json::to_string(&payload).expect("Should serialize");
     let serialization_time = start.elapsed();
-    println!("Serialized in {:?}", serialization_time);
+    println!("Serialized in {serialization_time:?}");
 
     // Test deserialization performance
     let start = Instant::now();
     let _: IngestPayload = serde_json::from_str(&json_str).expect("Should deserialize");
     let deserialization_time = start.elapsed();
-    println!("Deserialized in {:?}", deserialization_time);
+    println!("Deserialized in {deserialization_time:?}");
 
     // Performance assertions
     assert!(

@@ -49,7 +49,11 @@ impl StreamingProcessor {
     }
 
     /// Process large payload with streaming to avoid memory pressure
-    pub async fn process_large_payload(&self, raw_payload: &web::Bytes) -> Result<IngestPayload> {
+    pub async fn process_large_payload(
+        &self,
+        raw_payload: &web::Bytes,
+        user_id: uuid::Uuid,
+    ) -> Result<IngestPayload> {
         let payload_size = raw_payload.len();
 
         info!(
@@ -60,20 +64,23 @@ impl StreamingProcessor {
 
         // For very large payloads, use temporary file to avoid memory pressure
         if payload_size > self.config.temp_file_threshold {
-            self.process_with_temp_file(raw_payload).await
+            self.process_with_temp_file(raw_payload, user_id).await
         } else {
             // For smaller payloads, use in-memory streaming
-            self.process_in_memory(raw_payload).await
+            self.process_in_memory(raw_payload, user_id).await
         }
     }
 
     /// Process payload using temporary file to minimize memory usage
-    async fn process_with_temp_file(&self, raw_payload: &web::Bytes) -> Result<IngestPayload> {
+    async fn process_with_temp_file(
+        &self,
+        raw_payload: &web::Bytes,
+        user_id: uuid::Uuid,
+    ) -> Result<IngestPayload> {
         // Create temporary file
         let mut temp_file = NamedTempFile::new().map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!(
-                "Failed to create temporary file: {}",
-                e
+                "Failed to create temporary file: {e}"
             ))
         })?;
 
@@ -87,8 +94,7 @@ impl StreamingProcessor {
 
             temp_file.write_all(chunk).map_err(|e| {
                 actix_web::error::ErrorInternalServerError(format!(
-                    "Failed to write to temporary file: {}",
-                    e
+                    "Failed to write to temporary file: {e}"
                 ))
             })?;
 
@@ -98,8 +104,7 @@ impl StreamingProcessor {
         // Flush and reopen for reading
         temp_file.flush().map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!(
-                "Failed to flush temporary file: {}",
-                e
+                "Failed to flush temporary file: {e}"
             ))
         })?;
 
@@ -108,8 +113,7 @@ impl StreamingProcessor {
         // Read and parse from temporary file
         let file = tokio::fs::File::open(&temp_path).await.map_err(|e| {
             actix_web::error::ErrorInternalServerError(format!(
-                "Failed to reopen temporary file: {}",
-                e
+                "Failed to reopen temporary file: {e}"
             ))
         })?;
 
@@ -121,8 +125,7 @@ impl StreamingProcessor {
         loop {
             let bytes_read = reader.read(&mut buffer).await.map_err(|e| {
                 actix_web::error::ErrorInternalServerError(format!(
-                    "Failed to read from temporary file: {}",
-                    e
+                    "Failed to read from temporary file: {e}"
                 ))
             })?;
 
@@ -146,24 +149,32 @@ impl StreamingProcessor {
         );
 
         // Parse the JSON
-        self.parse_json_content(&contents).await
+        self.parse_json_content(&contents, user_id).await
     }
 
     /// Process payload in memory with chunked reading
-    async fn process_in_memory(&self, raw_payload: &web::Bytes) -> Result<IngestPayload> {
+    async fn process_in_memory(
+        &self,
+        raw_payload: &web::Bytes,
+        user_id: uuid::Uuid,
+    ) -> Result<IngestPayload> {
         info!("Processing payload in memory with streaming");
 
         // For in-memory processing, we can parse directly
-        self.parse_json_content(raw_payload.as_ref()).await
+        self.parse_json_content(raw_payload.as_ref(), user_id).await
     }
 
     /// Parse JSON content with proper error handling
-    async fn parse_json_content(&self, content: &[u8]) -> Result<IngestPayload> {
+    async fn parse_json_content(
+        &self,
+        content: &[u8],
+        user_id: uuid::Uuid,
+    ) -> Result<IngestPayload> {
         // Try iOS format first
         match self.try_parse_ios_format(content).await {
             Ok(payload) => {
                 info!("Successfully parsed iOS format using streaming processor");
-                Ok(payload.to_internal_format())
+                Ok(payload.to_internal_format(user_id))
             }
             Err(ios_error) => {
                 warn!("iOS format parsing failed: {}", ios_error);
@@ -180,8 +191,7 @@ impl StreamingProcessor {
                         error!("Standard error: {}", standard_error);
 
                         Err(actix_web::error::ErrorBadRequest(format!(
-                            "Streaming JSON parsing failed. iOS error: {}. Standard error: {}",
-                            ios_error, standard_error
+                            "Streaming JSON parsing failed. iOS error: {ios_error}. Standard error: {standard_error}"
                         )))
                     }
                 }
@@ -197,10 +207,10 @@ impl StreamingProcessor {
         let content_owned = content.to_vec();
         tokio::task::spawn_blocking(move || {
             serde_json::from_slice::<IosIngestPayload>(&content_owned)
-                .map_err(|e| format!("iOS format parse error: {}", e))
+                .map_err(|e| format!("iOS format parse error: {e}"))
         })
         .await
-        .map_err(|e| format!("Task join error: {}", e))?
+        .map_err(|e| format!("Task join error: {e}"))?
     }
 
     /// Try parsing as standard format
@@ -211,10 +221,10 @@ impl StreamingProcessor {
         let content_owned = content.to_vec();
         tokio::task::spawn_blocking(move || {
             serde_json::from_slice::<IngestPayload>(&content_owned)
-                .map_err(|e| format!("Standard format parse error: {}", e))
+                .map_err(|e| format!("Standard format parse error: {e}"))
         })
         .await
-        .map_err(|e| format!("Task join error: {}", e))?
+        .map_err(|e| format!("Task join error: {e}"))?
     }
 
     /// Check if payload should use streaming processing

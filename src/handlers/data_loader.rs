@@ -261,7 +261,7 @@ impl LazyDataLoader {
             Ok(mut cache) => *cache = Some(data),
             Err(e) => {
                 error!("Failed to acquire write lock on cache: {}", e);
-                return Err(format!("Failed to update cache: {}", e).into());
+                return Err(format!("Failed to update cache: {e}").into());
             }
         }
 
@@ -270,7 +270,7 @@ impl LazyDataLoader {
             Ok(mut last_loaded) => *last_loaded = Some(std::time::Instant::now()),
             Err(e) => {
                 error!("Failed to acquire write lock on last_loaded: {}", e);
-                return Err(format!("Failed to update last loaded time: {}", e).into());
+                return Err(format!("Failed to update last loaded time: {e}").into());
             }
         }
 

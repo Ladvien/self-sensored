@@ -310,30 +310,25 @@ impl RateLimiter {
             entry.reset_time = Utc::now() + chrono::Duration::hours(1);
         }
 
-        // Increment counter first
-        entry.count += 1;
-
-        let remaining = limit - entry.count;
-
-        // Check if limit exceeded after incrementing
-        if remaining < 0 {
+        // Check if limit would be exceeded BEFORE incrementing
+        if entry.count >= limit {
             return Ok(RateLimitInfo {
-                requests_remaining: 0, // Don't return negative values
+                requests_remaining: 0,
                 requests_limit: limit,
                 reset_time: entry.reset_time,
                 retry_after: Some((entry.reset_time - Utc::now()).num_seconds().max(0) as i32),
             });
         }
 
+        // Increment counter after checking limit
+        entry.count += 1;
+        let remaining = limit - entry.count;
+
         Ok(RateLimitInfo {
-            requests_remaining: remaining,
+            requests_remaining: remaining.max(0),
             requests_limit: limit,
             reset_time: entry.reset_time,
-            retry_after: if remaining < 0 {
-                Some((entry.reset_time - Utc::now()).num_seconds().max(0) as i32)
-            } else {
-                None
-            },
+            retry_after: None,
         })
     }
 
@@ -372,30 +367,25 @@ impl RateLimiter {
             entry.reset_time = Utc::now() + chrono::Duration::hours(1);
         }
 
-        // Increment counter first
-        entry.count += 1;
-
-        let remaining = self.requests_per_hour - entry.count;
-
-        // Check if limit exceeded after incrementing
-        if remaining < 0 {
+        // Check if limit would be exceeded BEFORE incrementing
+        if entry.count >= self.requests_per_hour {
             return Ok(RateLimitInfo {
-                requests_remaining: 0, // Don't return negative values
+                requests_remaining: 0,
                 requests_limit: self.requests_per_hour,
                 reset_time: entry.reset_time,
                 retry_after: Some((entry.reset_time - Utc::now()).num_seconds().max(0) as i32),
             });
         }
 
+        // Increment counter after checking limit
+        entry.count += 1;
+        let remaining = self.requests_per_hour - entry.count;
+
         Ok(RateLimitInfo {
-            requests_remaining: remaining,
+            requests_remaining: remaining.max(0),
             requests_limit: self.requests_per_hour,
             reset_time: entry.reset_time,
-            retry_after: if remaining < 0 {
-                Some((entry.reset_time - Utc::now()).num_seconds().max(0) as i32)
-            } else {
-                None
-            },
+            retry_after: None,
         })
     }
 
@@ -620,6 +610,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_rate_limiter_ip_based_with_increased_limit() {
+        // Clean up environment first
+        std::env::remove_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR");
+
         // Set IP rate limit to 100 for testing BEFORE creating the rate limiter
         std::env::set_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR", "100");
 
@@ -635,10 +628,16 @@ mod tests {
         // With default of 100, we should have 99 remaining after first request
         assert_eq!(result.requests_limit, 100);
         assert_eq!(result.requests_remaining, 99);
+
+        // Clean up env var
+        std::env::remove_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR");
     }
 
     #[tokio::test]
     async fn test_rate_limiter_user_vs_ip_rate_limits() {
+        // Clean up environment first
+        std::env::remove_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR");
+
         // Set IP rate limit to 100 for testing BEFORE creating the rate limiter
         std::env::set_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR", "100");
 
@@ -668,5 +667,8 @@ mod tests {
         // IP limit should still work
         let ip_result2 = rate_limiter.check_ip_rate_limit(ip_address).await.unwrap();
         assert_eq!(ip_result2.requests_remaining, 98); // One request made earlier
+
+        // Clean up env var
+        std::env::remove_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR");
     }
 }

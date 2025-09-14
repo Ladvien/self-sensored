@@ -52,7 +52,7 @@ pub async fn optimized_ingest_handler(
     );
 
     // Optimization 1: Parse JSON with faster parser and better error handling
-    let internal_payload = match parse_payload_optimized(&payload).await {
+    let internal_payload = match parse_payload_optimized(&payload, auth.user.id).await {
         Ok(payload) => payload,
         Err(e) => {
             error!("JSON parsing failed: {}", e);
@@ -73,8 +73,7 @@ pub async fn optimized_ingest_handler(
         );
         return Ok(
             HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
-                "Too many metrics: {} exceeds limit of {}",
-                total_metrics, MAX_METRICS_PER_REQUEST
+                "Too many metrics: {total_metrics} exceeds limit of {MAX_METRICS_PER_REQUEST}"
             ))),
         );
     }
@@ -168,28 +167,30 @@ pub async fn optimized_ingest_handler(
 }
 
 /// Optimized JSON parsing with better error handling and memory efficiency
-async fn parse_payload_optimized(payload: &[u8]) -> Result<IngestPayload, String> {
+async fn parse_payload_optimized(
+    payload: &[u8],
+    user_id: uuid::Uuid,
+) -> Result<IngestPayload, String> {
     // Use spawn_blocking for CPU-intensive JSON parsing to avoid blocking the async runtime
     let payload_vec = payload.to_vec();
 
     tokio::task::spawn_blocking(move || {
         // Try iOS format first (more common based on usage patterns)
         match simd_json::from_slice::<IosIngestPayload>(&mut payload_vec.clone()) {
-            Ok(ios_payload) => Ok(ios_payload.to_internal_format()),
+            Ok(ios_payload) => Ok(ios_payload.to_internal_format(user_id)),
             Err(_) => {
                 // Try standard format
                 match simd_json::from_slice::<IngestPayload>(&mut payload_vec.clone()) {
                     Ok(standard_payload) => Ok(standard_payload),
                     Err(e) => Err(format!(
-                        "Failed to parse both iOS and standard formats: {}",
-                        e
+                        "Failed to parse both iOS and standard formats: {e}"
                     )),
                 }
             }
         }
     })
     .await
-    .map_err(|e| format!("JSON parsing task failed: {}", e))?
+    .map_err(|e| format!("JSON parsing task failed: {e}"))?
 }
 
 /// Parallel validation using task-based processing
@@ -211,7 +212,7 @@ async fn validate_payload_parallel(
     let metrics_errors = metrics_result.map_err(|e| {
         vec![crate::models::ProcessingError {
             metric_type: "ValidationTask".to_string(),
-            error_message: format!("Metrics validation task failed: {}", e),
+            error_message: format!("Metrics validation task failed: {e}"),
             index: None,
         }]
     })?;
@@ -219,7 +220,7 @@ async fn validate_payload_parallel(
     let workouts_errors = workouts_result.map_err(|e| {
         vec![crate::models::ProcessingError {
             metric_type: "ValidationTask".to_string(),
-            error_message: format!("Workouts validation task failed: {}", e),
+            error_message: format!("Workouts validation task failed: {e}"),
             index: None,
         }]
     })?;
@@ -312,20 +313,18 @@ fn validate_single_workout_optimized(workout: &crate::models::WorkoutData) -> Re
 
     // Use match for better performance than if-let chains
     match workout.total_energy_kcal {
-        Some(calories) if calories < 0.0 || calories > 10000.0 => {
+        Some(calories) if !(0.0..=10000.0).contains(&calories) => {
             return Err(format!(
-                "total_energy_kcal {} is out of reasonable range (0-10000)",
-                calories
+                "total_energy_kcal {calories} is out of reasonable range (0-10000)"
             ));
         }
         _ => {}
     }
 
     match workout.distance_meters {
-        Some(distance) if distance < 0.0 || distance > 1000000.0 => {
+        Some(distance) if !(0.0..=1000000.0).contains(&distance) => {
             return Err(format!(
-                "distance_meters {} is out of reasonable range (0-1000000)",
-                distance
+                "distance_meters {distance} is out of reasonable range (0-1000000)"
             ));
         }
         _ => {}
@@ -333,13 +332,13 @@ fn validate_single_workout_optimized(workout: &crate::models::WorkoutData) -> Re
 
     if let Some(hr) = workout.avg_heart_rate {
         if !(15..=300).contains(&hr) {
-            return Err(format!("avg_heart_rate {} is out of range (15-300)", hr));
+            return Err(format!("avg_heart_rate {hr} is out of range (15-300)"));
         }
     }
 
     if let Some(hr) = workout.max_heart_rate {
         if !(15..=300).contains(&hr) {
-            return Err(format!("max_heart_rate {} is out of range (15-300)", hr));
+            return Err(format!("max_heart_rate {hr} is out of range (15-300)"));
         }
     }
 
@@ -444,6 +443,12 @@ pub struct MetricsArena {
     position: usize,
 }
 
+impl Default for MetricsArena {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MetricsArena {
     pub fn new() -> Self {
         Self {
@@ -471,6 +476,7 @@ impl MetricsArena {
 pub struct BatchQueue<T> {
     items: Arc<tokio::sync::Mutex<Vec<T>>>,
     batch_size: usize,
+    #[allow(dead_code)]
     flush_interval: std::time::Duration,
 }
 

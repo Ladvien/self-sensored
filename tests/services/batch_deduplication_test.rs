@@ -48,15 +48,18 @@ fn create_test_sleep(sleep_start: DateTime<Utc>, sleep_end: DateTime<Utc>) -> Sl
 }
 
 /// Helper function to create a test activity metric
-fn create_test_activity(date: chrono::NaiveDate, steps: i32) -> ActivityMetric {
+fn create_test_activity(recorded_at: DateTime<Utc>, step_count: i32) -> ActivityMetric {
     ActivityMetric {
-        date,
-        steps: Some(steps),
+        id: Uuid::new_v4(),
+        user_id: Uuid::new_v4(), // Will be overridden in processing
+        recorded_at,
+        step_count: Some(step_count),
         distance_meters: Some(5000.0),
-        calories_burned: Some(300.0),
-        active_minutes: Some(60),
         flights_climbed: Some(10),
-        source: Some("test_device".to_string()),
+        active_energy_burned_kcal: Some(300.0),
+        basal_energy_burned_kcal: Some(200.0),
+        source_device: Some("test_device".to_string()),
+        created_at: Utc::now(),
     }
 }
 
@@ -191,7 +194,7 @@ async fn test_sleep_deduplication() {
 async fn test_activity_deduplication() {
     let pool = create_test_pool().await;
     setup_test_database(&pool).await.expect("Failed to setup test database");
-    
+
     let config = BatchConfig {
         enable_intra_batch_deduplication: true,
         ..BatchConfig::default()
@@ -199,12 +202,15 @@ async fn test_activity_deduplication() {
     let processor = BatchProcessor::with_config(pool, config);
     let user_id = Uuid::new_v4();
 
-    // Create duplicate activity metrics (same user_id, recorded_date)
-    let today = chrono::Utc::now().date_naive();
+    // Create activity metrics - now based on timestamps, not dates
+    let base_time = Utc::now();
     let metrics = vec![
-        HealthMetric::Activity(create_test_activity(today, 10000)),
-        HealthMetric::Activity(create_test_activity(today, 12000)), // Same date, different step count
-        HealthMetric::Activity(create_test_activity(today.succ_opt().unwrap(), 8000)), // Different date
+        // These should NOT be considered duplicates (same date, different times)
+        HealthMetric::Activity(create_test_activity(base_time, 10000)), // Time 1
+        HealthMetric::Activity(create_test_activity(base_time + chrono::Duration::hours(4), 12000)), // Time 2 (different timestamp)
+        HealthMetric::Activity(create_test_activity(base_time + chrono::Duration::days(1), 8000)), // Different day
+        // This SHOULD be a duplicate (exact same timestamp as first)
+        HealthMetric::Activity(create_test_activity(base_time, 15000)), // Same timestamp as first = duplicate
     ];
 
     let payload = IngestPayload {
@@ -217,9 +223,10 @@ async fn test_activity_deduplication() {
     let result = processor.process_batch(user_id, payload).await;
 
     let stats = result.deduplication_stats.unwrap();
-    assert_eq!(stats.activity_duplicates, 1);
+    // Should have 1 duplicate (same exact timestamp), not 2 like the old date-based logic
+    assert_eq!(stats.activity_duplicates, 1, "Should have 1 duplicate based on exact timestamp match");
     assert_eq!(stats.total_duplicates, 1);
-    assert_eq!(result.processed_count, 2);
+    assert_eq!(result.processed_count, 3, "Should process 3 unique records (4 total - 1 duplicate)");
 }
 
 #[tokio::test]
@@ -272,7 +279,6 @@ async fn test_mixed_metric_deduplication() {
     let user_id = Uuid::new_v4();
 
     let timestamp = Utc::now();
-    let today = timestamp.date_naive();
     let sleep_start = timestamp - chrono::Duration::hours(8);
 
     // Create a mix of metrics with duplicates across different types
@@ -285,9 +291,9 @@ async fn test_mixed_metric_deduplication() {
         HealthMetric::BloodPressure(create_test_blood_pressure(timestamp, 120, 80)),
         HealthMetric::BloodPressure(create_test_blood_pressure(timestamp, 125, 85)), // Duplicate
         
-        // Activity duplicates
-        HealthMetric::Activity(create_test_activity(today, 10000)),
-        HealthMetric::Activity(create_test_activity(today, 12000)), // Duplicate
+        // Activity metrics - now use timestamp, not date
+        HealthMetric::Activity(create_test_activity(timestamp, 10000)),
+        HealthMetric::Activity(create_test_activity(timestamp, 12000)), // Duplicate timestamp
         
         // Sleep with no duplicates
         HealthMetric::Sleep(create_test_sleep(sleep_start, timestamp)),
@@ -502,21 +508,20 @@ async fn test_deduplication_statistics_accuracy() {
     let user_id = Uuid::new_v4();
 
     let timestamp = Utc::now();
-    let today = timestamp.date_naive();
-    
+
     // Create a complex scenario with known duplicate counts
     let metrics = vec![
         // 3 heart rate, 2 duplicates
         HealthMetric::HeartRate(create_test_heart_rate(timestamp, 72)),
         HealthMetric::HeartRate(create_test_heart_rate(timestamp, 74)), // dup 1
         HealthMetric::HeartRate(create_test_heart_rate(timestamp, 76)), // dup 2
-        
-        // 2 blood pressure, 1 duplicate  
+
+        // 2 blood pressure, 1 duplicate
         HealthMetric::BloodPressure(create_test_blood_pressure(timestamp, 120, 80)),
         HealthMetric::BloodPressure(create_test_blood_pressure(timestamp, 125, 85)), // dup 1
-        
+
         // 1 activity, no duplicates
-        HealthMetric::Activity(create_test_activity(today, 10000)),
+        HealthMetric::Activity(create_test_activity(timestamp, 10000)),
     ];
 
     let workouts = vec![

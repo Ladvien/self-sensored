@@ -65,7 +65,7 @@ impl CachedQueryService {
         let result = self
             .query_heart_rate_from_db(auth.user.id, params)
             .await
-            .map_err(|e| actix_web::error::ErrorInternalServerError(e))?;
+            .map_err(actix_web::error::ErrorInternalServerError)?;
 
         // Cache the result
         if self.cache_enabled {
@@ -88,7 +88,7 @@ impl CachedQueryService {
         let start_date = params
             .start_date
             .unwrap_or_else(|| Utc::now() - chrono::Duration::days(30));
-        let end_date = params.end_date.unwrap_or_else(|| Utc::now());
+        let end_date = params.end_date.unwrap_or_else(Utc::now);
 
         let date_range = format!(
             "{}_{}",
@@ -120,7 +120,7 @@ impl CachedQueryService {
         let summary = self
             .compute_health_summary(auth.user.id, start_date, end_date)
             .await
-            .map_err(|e| actix_web::error::ErrorInternalServerError(e))?;
+            .map_err(actix_web::error::ErrorInternalServerError)?;
 
         // Cache with longer TTL for summaries
         if self.cache_enabled {
@@ -168,13 +168,11 @@ impl CachedQueryService {
         };
 
         // Build dynamic query with date filtering
-        let mut query = format!(
-            r#"
+        let mut query = r#"
             SELECT user_id, recorded_at, heart_rate, resting_heart_rate, context, source_device, metadata, created_at
             FROM heart_rate_metrics 
             WHERE user_id = $1
-            "#
-        );
+            "#.to_string();
 
         let mut param_count = 2;
         if params.start_date.is_some() {

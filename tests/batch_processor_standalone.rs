@@ -1,4 +1,3 @@
-
 // Simple tests for batch processor without depending on other modules
 #[tokio::test]
 async fn test_batch_processor_compilation() {
@@ -11,7 +10,7 @@ async fn test_batch_processor_compilation() {
 
     let config = BatchConfig::default();
     assert_eq!(config.max_retries, 3);
-    assert_eq!(config.enable_parallel_processing, true);
+    assert!(config.enable_parallel_processing);
     assert_eq!(config.chunk_size, 1000);
     assert_eq!(config.memory_limit_mb, 500.0);
 
@@ -56,7 +55,7 @@ async fn test_batch_config_custom() {
     assert_eq!(config.max_retries, 5);
     assert_eq!(config.initial_backoff_ms, 200);
     assert_eq!(config.max_backoff_ms, 10000);
-    assert_eq!(config.enable_parallel_processing, false);
+    assert!(!config.enable_parallel_processing);
     assert_eq!(config.chunk_size, 2000);
     assert_eq!(config.memory_limit_mb, 1000.0);
 }
@@ -67,10 +66,10 @@ fn test_processing_status_debug() {
 
     // Test Debug trait
     let status = ProcessingStatus::Pending;
-    let debug_output = format!("{:?}", status);
+    let debug_output = format!("{status:?}");
     assert!(debug_output.contains("Pending"));
 
     let status = ProcessingStatus::InProgress;
-    let debug_output = format!("{:?}", status);
+    let debug_output = format!("{status:?}");
     assert!(debug_output.contains("InProgress"));
 }

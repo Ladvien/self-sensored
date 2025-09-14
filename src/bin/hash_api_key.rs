@@ -14,8 +14,8 @@ fn main() {
     // Hash the API key
     let hash = argon2.hash_password(api_key.as_bytes(), &salt).unwrap();
 
-    println!("API Key: {}", api_key);
-    println!("Hash: {}", hash.to_string());
+    println!("API Key: {api_key}");
+    println!("Hash: {hash}");
     println!("\nSQL Update Statement:");
-    println!("UPDATE api_keys SET key_hash = '{}' WHERE id = '22222222-2222-2222-2222-222222222222'::uuid;", hash.to_string());
+    println!("UPDATE api_keys SET key_hash = '{hash}' WHERE id = '22222222-2222-2222-2222-222222222222'::uuid;");
 }

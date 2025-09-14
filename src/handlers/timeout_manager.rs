@@ -188,16 +188,15 @@ impl ProcessingStatus {
         match self {
             ProcessingStatus::Success => "Processing completed successfully".to_string(),
             ProcessingStatus::PartialSuccess { reason } => {
-                format!("Partial processing completed: {}", reason)
+                format!("Partial processing completed: {reason}")
             }
             ProcessingStatus::Timeout { processed, total } => {
                 format!(
-                    "Processing timed out. Processed {}/{} metrics",
-                    processed, total
+                    "Processing timed out. Processed {processed}/{total} metrics"
                 )
             }
             ProcessingStatus::BackgroundRecommended { reason } => {
-                format!("Background processing recommended: {}", reason)
+                format!("Background processing recommended: {reason}")
             }
         }
     }

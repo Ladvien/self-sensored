@@ -14,6 +14,7 @@ use uuid::Uuid;
 /// Background job processor that handles async processing of health data
 pub struct BackgroundProcessor {
     pool: PgPool,
+    #[allow(dead_code)]
     batch_processor: BatchProcessor,
     job_semaphore: Arc<Semaphore>,
     shutdown_tx: Option<mpsc::Sender<()>>,
@@ -247,7 +248,7 @@ impl BackgroundProcessor {
         let payload: IngestPayload = match serde_json::from_value(raw_data.raw_payload) {
             Ok(p) => p,
             Err(e) => {
-                let error_msg = format!("Failed to deserialize payload: {}", e);
+                let error_msg = format!("Failed to deserialize payload: {e}");
                 error!(job_id = %job_id, error = %error_msg, "Job failed");
 
                 Self::complete_job(&pool, job_id, JobStatus::Failed, None, Some(error_msg)).await?;

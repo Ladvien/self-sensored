@@ -34,8 +34,9 @@ fn test_ios_source_field_mapping() {
     // Parse the iOS payload
     let ios_payload: IosIngestPayload = serde_json::from_value(ios_json).expect("Failed to parse iOS payload");
 
-    // Convert to internal format
-    let internal_payload = ios_payload.to_internal_format();
+    // Convert to internal format with test user_id
+    let test_user_id = uuid::Uuid::new_v4();
+    let internal_payload = ios_payload.to_internal_format(test_user_id);
 
     // Verify that metrics were converted and have source_device field
     assert!(!internal_payload.data.metrics.is_empty(), "Should have converted metrics");
@@ -99,7 +100,8 @@ fn test_all_metric_types_source_mapping() {
     });
 
     let ios_payload: IosIngestPayload = serde_json::from_value(ios_json).expect("Failed to parse iOS payload");
-    let internal_payload = ios_payload.to_internal_format();
+    let test_user_id = uuid::Uuid::new_v4();
+    let internal_payload = ios_payload.to_internal_format(test_user_id);
 
     // Check that all converted metrics have the correct source_device mapping
     for metric in &internal_payload.data.metrics {

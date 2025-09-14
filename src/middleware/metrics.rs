@@ -18,7 +18,7 @@ use prometheus::{
 use tracing::{error, instrument};
 
 // Global metrics registry
-static METRICS_REGISTRY: Lazy<Registry> = Lazy::new(|| Registry::new());
+static METRICS_REGISTRY: Lazy<Registry> = Lazy::new(Registry::new);
 
 // HTTP request metrics
 static HTTP_REQUESTS_TOTAL: Lazy<CounterVec> = Lazy::new(|| {

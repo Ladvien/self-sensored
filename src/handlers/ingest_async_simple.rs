@@ -76,7 +76,7 @@ pub async fn ingest_async_optimized_handler(
 
     // Parse payload using new modular payload processor with security limits
     let internal_payload = match payload_processor
-        .parse_payload_with_timeout(&raw_payload)
+        .parse_payload_with_timeout(&raw_payload, auth.user.id)
         .await
     {
         Ok(payload) => payload,

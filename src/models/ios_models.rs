@@ -59,7 +59,7 @@ pub struct IosWorkout {
 
 impl IosIngestPayload {
     /// Convert iOS payload to our internal format
-    pub fn to_internal_format(&self) -> crate::models::IngestPayload {
+    pub fn to_internal_format(&self, user_id: uuid::Uuid) -> crate::models::IngestPayload {
         use crate::models::{HealthMetric, IngestData, IngestPayload, WorkoutData};
         use std::collections::HashMap;
 
@@ -100,7 +100,7 @@ impl IosIngestPayload {
 
                                 let metric = crate::models::HeartRateMetric {
                                     id: uuid::Uuid::new_v4(),
-                                    user_id: uuid::Uuid::new_v4(), // This will need to be provided by auth context
+                                    user_id,
                                     recorded_at,
                                     heart_rate: Some(qty as i16),
                                     resting_heart_rate: if context_str == Some("resting") {
@@ -158,7 +158,7 @@ impl IosIngestPayload {
 
                             let metric = crate::models::SleepMetric {
                                 id: uuid::Uuid::new_v4(),
-                                user_id: uuid::Uuid::new_v4(), // This will need to be provided by auth context
+                                user_id,
                                 sleep_start: start_time,
                                 sleep_end: end_time,
                                 duration_minutes: Some(total_minutes),
@@ -183,9 +183,8 @@ impl IosIngestPayload {
                     | "flights_climbed" => {
                         if let Some(qty) = data_point.qty {
                             if qty >= 0.0 {
-                                // Generate UUIDs for the activity metric
+                                // Generate UUID for the activity metric
                                 let id = uuid::Uuid::new_v4();
-                                let user_id = uuid::Uuid::new_v4(); // This will need to be provided by auth context
 
                                 // Basic validation - no negative values
                                 let metric = crate::models::ActivityMetric {
@@ -268,7 +267,7 @@ impl IosIngestPayload {
                 if let Ok(timestamp) = DateTime::parse_from_rfc3339(&timestamp_str) {
                     let metric = crate::models::BloodPressureMetric {
                         id: uuid::Uuid::new_v4(),
-                        user_id: uuid::Uuid::new_v4(), // This will need to be provided by auth context
+                        user_id,
                         recorded_at: timestamp.with_timezone(&Utc),
                         systolic: sys,
                         diastolic: dia,
@@ -328,7 +327,7 @@ impl IosIngestPayload {
 
                 let workout = WorkoutData {
                     id: uuid::Uuid::new_v4(),
-                    user_id: uuid::Uuid::new_v4(), // This will need to be provided by auth context
+                    user_id,
                     workout_type,
                     started_at: start_time,
                     ended_at: end_time,

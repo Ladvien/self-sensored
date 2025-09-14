@@ -54,7 +54,7 @@ self-sensored/
 │   ├── services/        # Business logic layer (auth, batch processing)
 │   ├── db/             # Database operations and connection pooling
 │   └── main.rs         # Application entry point
-├── schema.sql           # Database schema definition
+├── database/            # Database schema and SQL scripts
 ├── tests/              # Integration and unit tests
 ├── CLAUDE.md           # Project documentation and guidelines
 ├── BACKLOG.md          # Project tasks and features
@@ -83,7 +83,7 @@ RUST_ENV=development cargo run
 ### Database
 ```bash
 # Initialize database with schema
-psql -d health_export_dev < schema.sql
+psql -d health_export_dev < database/schema.sql
 
 # Prepare offline query data for CI
 cargo sqlx prepare
@@ -418,7 +418,7 @@ The API supports 5 core health metric types only:
 5. **Workout Metrics**: Exercise type, duration, heart rate, energy expenditure
 
 ### Adding a New Health Metric Type
-1. Update schema.sql for new table
+1. Update database/schema.sql for new table
 2. Add model in `src/models/`
 3. Add validation rules
 4. Update ingest handler
@@ -460,7 +460,7 @@ brew services start redis
 createdb health_export_dev
 
 # Apply schema
-psql -d health_export_dev < schema.sql
+psql -d health_export_dev < database/schema.sql
 
 # Start development server
 cargo run

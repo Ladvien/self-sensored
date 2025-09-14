@@ -116,7 +116,7 @@ async fn test_nutrition_metrics_flow() {
 
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
         .set_json(&nutrition_payload)
         .to_request();
@@ -188,7 +188,7 @@ async fn test_symptoms_tracking_flow() {
 
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
         .set_json(&symptoms_payload)
         .to_request();
@@ -244,7 +244,7 @@ async fn test_environmental_metrics_flow() {
 
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
         .set_json(&environmental_payload)
         .to_request();
@@ -304,7 +304,7 @@ async fn test_mental_health_metrics_flow() {
 
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
         .set_json(&mental_health_payload)
         .to_request();
@@ -363,7 +363,7 @@ async fn test_mobility_metrics_flow() {
 
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
         .set_json(&mobility_payload)
         .to_request();
@@ -421,7 +421,7 @@ async fn test_reproductive_health_metrics_flow() {
 
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
         .set_json(&reproductive_payload)
         .to_request();
@@ -507,7 +507,7 @@ async fn test_mixed_metric_types_flow() {
 
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
         .set_json(&mixed_payload)
         .to_request();
@@ -592,7 +592,7 @@ async fn test_field_coverage_validation() {
 
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
         .set_json(&comprehensive_payload)
         .to_request();
@@ -607,13 +607,12 @@ async fn test_field_coverage_validation() {
     let field_coverage = calculate_simulated_field_coverage();
 
     println!("✅ Field Coverage Results:");
-    println!("   📊 Overall field coverage: {:.1}%", field_coverage);
+    println!("   📊 Overall field coverage: {field_coverage:.1}%");
 
     // Verify 85% target is simulated as reached
     assert!(
         field_coverage >= 85.0,
-        "Field coverage {:.1}% should reach 85% target",
-        field_coverage
+        "Field coverage {field_coverage:.1}% should reach 85% target"
     );
 
     cleanup_test_data(&pool, user_id).await;
@@ -645,7 +644,7 @@ async fn test_api_error_handling() {
     // Test invalid JSON
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
         .set_payload("{invalid json}")
         .to_request();
@@ -662,7 +661,7 @@ async fn test_api_error_handling() {
         .uri("/api/v1/ingest")
         .insert_header(("Authorization", "Bearer invalid_key"))
         .insert_header(("content-type", "application/json"))
-        .set_json(&json!({"data": {}}))
+        .set_json(json!({"data": {}}))
         .to_request();
 
     let resp = test::call_service(&app, req).await;
@@ -718,7 +717,7 @@ async fn test_concurrent_performance() {
 
         let req = test::TestRequest::post()
             .uri("/api/v1/ingest")
-            .insert_header(("Authorization", format!("Bearer {}", api_key)))
+            .insert_header(("Authorization", format!("Bearer {api_key}")))
             .insert_header(("content-type", "application/json"))
             .set_json(&payload)
             .to_request();
@@ -735,9 +734,9 @@ async fn test_concurrent_performance() {
     let requests_per_second = concurrent_requests as f64 / total_time.as_secs_f64();
 
     println!("✅ Concurrent Performance Results:");
-    println!("   👥 Concurrent requests: {}", concurrent_requests);
-    println!("   ✅ Successful requests: {}", successful_requests);
-    println!("   🚀 Requests per second: {:.1}", requests_per_second);
+    println!("   👥 Concurrent requests: {concurrent_requests}");
+    println!("   ✅ Successful requests: {successful_requests}");
+    println!("   🚀 Requests per second: {requests_per_second:.1}");
 
     // Performance assertions
     let success_rate = successful_requests as f64 / concurrent_requests as f64;

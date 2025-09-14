@@ -65,7 +65,7 @@ pub async fn ingest_async_handler(
     }
 
     // Use enhanced JSON parsing with better error reporting
-    let internal_payload = match parse_ios_payload_enhanced(&raw_payload).await {
+    let internal_payload = match parse_ios_payload_enhanced(&raw_payload, auth.user.id).await {
         Ok(payload) => payload,
         Err(parse_error) => {
             error!("Enhanced JSON parse error: {}", parse_error);
@@ -218,7 +218,7 @@ async fn store_raw_payload(
 }
 
 /// Parse iOS payload with enhanced error handling and validation (same as main ingest handler)
-async fn parse_ios_payload_enhanced(raw_payload: &web::Bytes) -> Result<IngestPayload> {
+async fn parse_ios_payload_enhanced(raw_payload: &web::Bytes, user_id: uuid::Uuid) -> Result<IngestPayload> {
     // Log payload info for debugging large payloads
     let payload_size = raw_payload.len();
     if payload_size > 10 * 1024 * 1024 {  // > 10MB
@@ -229,7 +229,7 @@ async fn parse_ios_payload_enhanced(raw_payload: &web::Bytes) -> Result<IngestPa
     match serde_json::from_slice::<IosIngestPayload>(raw_payload) {
         Ok(ios_payload) => {
             info!("Successfully parsed iOS format payload ({} bytes)", payload_size);
-            Ok(ios_payload.to_internal_format())
+            Ok(ios_payload.to_internal_format(user_id))
         }
         Err(ios_error) => {
             warn!("iOS format parse failed: {}", ios_error);

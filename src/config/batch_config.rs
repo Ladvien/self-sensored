@@ -148,8 +148,7 @@ impl BatchConfig {
             let total_params = chunk_size * params_per_record;
             if total_params > SAFE_PARAM_LIMIT {
                 return Err(format!(
-                    "{} chunk size {} would result in {} parameters, exceeding safe limit of {}",
-                    metric_type, chunk_size, total_params, SAFE_PARAM_LIMIT
+                    "{metric_type} chunk size {chunk_size} would result in {total_params} parameters, exceeding safe limit of {SAFE_PARAM_LIMIT}"
                 ));
             }
         }

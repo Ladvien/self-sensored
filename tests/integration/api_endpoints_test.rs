@@ -33,11 +33,14 @@ fn get_test_redis_client() -> redis::Client {
 async fn setup_test_user_and_key(pool: &PgPool, email: &str) -> (Uuid, String) {
     let auth_service = AuthService::new(pool.clone());
 
-    // Clean up existing test user
-    sqlx::query!("DELETE FROM users WHERE email = $1", email)
-        .execute(pool)
-        .await
-        .unwrap();
+    // Clean up existing test user by apple_health_id since that's the unique constraint causing issues
+    sqlx::query!(
+        "DELETE FROM users WHERE apple_health_id = $1",
+        "api_test_user"
+    )
+    .execute(pool)
+    .await
+    .unwrap();
 
     // Create test user and API key
     let user = auth_service
@@ -93,7 +96,7 @@ async fn test_all_ingest_endpoints_new_metrics() {
 
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
         .set_json(&new_metrics_payload)
         .to_request();
@@ -118,7 +121,7 @@ async fn test_all_ingest_endpoints_new_metrics() {
 
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest/async")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
         .set_json(&async_payload)
         .to_request();
@@ -137,7 +140,7 @@ async fn test_all_ingest_endpoints_new_metrics() {
 
     let req = test::TestRequest::post()
         .uri("/api/v1/batch/process")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
         .set_json(&batch_payload)
         .to_request();
@@ -181,8 +184,7 @@ async fn test_all_ingest_endpoints_new_metrics() {
     for (metric_type, count) in storage_counts {
         assert!(
             count > 0,
-            "Should store at least one {} metric",
-            metric_type
+            "Should store at least one {metric_type} metric"
         );
     }
 
@@ -232,7 +234,7 @@ async fn test_validation_error_handling_all_types() {
 
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
         .set_json(&invalid_nutrition)
         .to_request();
@@ -277,7 +279,7 @@ async fn test_validation_error_handling_all_types() {
 
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
         .set_json(&invalid_symptoms)
         .to_request();
@@ -304,7 +306,7 @@ async fn test_validation_error_handling_all_types() {
 
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
         .set_json(&invalid_environmental)
         .to_request();
@@ -333,7 +335,7 @@ async fn test_validation_error_handling_all_types() {
 
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
         .set_json(&invalid_mental_health)
         .to_request();
@@ -361,7 +363,7 @@ async fn test_validation_error_handling_all_types() {
 
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
         .set_json(&invalid_mobility)
         .to_request();
@@ -389,7 +391,7 @@ async fn test_validation_error_handling_all_types() {
 
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
         .set_json(&invalid_reproductive)
         .to_request();
@@ -434,7 +436,7 @@ async fn test_batch_processing_mixed_metrics() {
 
     let req = test::TestRequest::post()
         .uri("/api/v1/batch/process")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
         .set_json(&large_mixed_batch)
         .to_request();
@@ -460,7 +462,7 @@ async fn test_batch_processing_mixed_metrics() {
         "   ⏱️  Processing time: {:.2}s",
         processing_time.as_secs_f64()
     );
-    println!("   🚀 Records per second: {:.0}", records_per_second);
+    println!("   🚀 Records per second: {records_per_second:.0}");
 
     // Verify performance expectations
     assert!(
@@ -473,10 +475,9 @@ async fn test_batch_processing_mixed_metrics() {
     for (metric_type, count) in batch_counts {
         assert!(
             count > 0,
-            "Should have processed {} metrics in batch",
-            metric_type
+            "Should have processed {metric_type} metrics in batch"
         );
-        println!("   📈 {} processed: {}", metric_type, count);
+        println!("   📈 {metric_type} processed: {count}");
     }
 
     cleanup_test_data(&pool, user_id).await;
@@ -510,9 +511,9 @@ async fn test_api_error_handling_edge_cases() {
     // Test 1: Empty payload
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
-        .set_json(&json!({}))
+        .set_json(json!({}))
         .to_request();
 
     let resp = test::call_service(&app, req).await;
@@ -522,7 +523,7 @@ async fn test_api_error_handling_edge_cases() {
     // Test 2: Malformed JSON
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
         .set_payload("{invalid json}")
         .to_request();
@@ -537,8 +538,8 @@ async fn test_api_error_handling_edge_cases() {
     // Test 3: Missing content-type header
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
-        .set_json(&json!({"data": {}}))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
+        .set_json(json!({"data": {}}))
         .to_request();
 
     let resp = test::call_service(&app, req).await;
@@ -549,7 +550,7 @@ async fn test_api_error_handling_edge_cases() {
         .uri("/api/v1/ingest")
         .insert_header(("Authorization", "Bearer invalid_key"))
         .insert_header(("content-type", "application/json"))
-        .set_json(&json!({"data": {}}))
+        .set_json(json!({"data": {}}))
         .to_request();
 
     let resp = test::call_service(&app, req).await;
@@ -559,7 +560,7 @@ async fn test_api_error_handling_edge_cases() {
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
         .insert_header(("content-type", "application/json"))
-        .set_json(&json!({"data": {}}))
+        .set_json(json!({"data": {}}))
         .to_request();
 
     let resp = test::call_service(&app, req).await;
@@ -569,7 +570,7 @@ async fn test_api_error_handling_edge_cases() {
     let oversized_payload = create_oversized_payload();
     let req = test::TestRequest::post()
         .uri("/api/v1/ingest")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .insert_header(("content-type", "application/json"))
         .set_json(&oversized_payload)
         .to_request();
@@ -618,7 +619,7 @@ async fn test_api_endpoint_performance_concurrent() {
 
         let req = test::TestRequest::post()
             .uri("/api/v1/ingest")
-            .insert_header(("Authorization", format!("Bearer {}", api_key)))
+            .insert_header(("Authorization", format!("Bearer {api_key}")))
             .insert_header(("content-type", "application/json"))
             .set_json(&payload)
             .to_request();
@@ -642,13 +643,13 @@ async fn test_api_endpoint_performance_concurrent() {
     let requests_per_second = concurrent_requests as f64 / total_time.as_secs_f64();
 
     println!("✅ Concurrent Performance Results:");
-    println!("   👥 Concurrent requests: {}", concurrent_requests);
-    println!("   ✅ Successful requests: {}", successful_requests);
+    println!("   👥 Concurrent requests: {concurrent_requests}");
+    println!("   ✅ Successful requests: {successful_requests}");
     println!(
         "   ⏱️  Average response time: {}ms",
         avg_response_time.as_millis()
     );
-    println!("   🚀 Requests per second: {:.1}", requests_per_second);
+    println!("   🚀 Requests per second: {requests_per_second:.1}");
 
     // Performance assertions
     let success_rate = successful_requests as f64 / concurrent_requests as f64;

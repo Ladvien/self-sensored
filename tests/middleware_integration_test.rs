@@ -60,7 +60,7 @@ async fn test_full_auth_flow() {
     // Test successful authentication and authorization
     let req = test::TestRequest::get()
         .uri("/protected")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .to_request();
 
     let resp = test::call_service(&app, req).await;
@@ -156,7 +156,7 @@ async fn test_rate_limiting() {
     )
     .await;
 
-    let auth_header = format!("Bearer {}", api_key);
+    let auth_header = format!("Bearer {api_key}");
 
     // First 2 requests should succeed
     for i in 0..2 {
@@ -237,7 +237,7 @@ async fn test_api_key_expiration() {
     // Request with expired API key should fail
     let req = test::TestRequest::get()
         .uri("/test")
-        .insert_header(("Authorization", format!("Bearer {}", expired_api_key)))
+        .insert_header(("Authorization", format!("Bearer {expired_api_key}")))
         .to_request();
 
     let resp = test::call_service(&app, req).await;
@@ -296,7 +296,7 @@ async fn test_inactive_user() {
     // Request with API key from inactive user should fail
     let req = test::TestRequest::get()
         .uri("/test")
-        .insert_header(("Authorization", format!("Bearer {}", api_key)))
+        .insert_header(("Authorization", format!("Bearer {api_key}")))
         .to_request();
 
     let resp = test::call_service(&app, req).await;

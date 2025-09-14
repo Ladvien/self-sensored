@@ -50,28 +50,28 @@ impl CacheKey {
     pub fn to_redis_key(&self, prefix: &str) -> String {
         match self {
             CacheKey::HeartRateQuery { user_id, hash } => {
-                format!("{}:hr_query:{}:{}", prefix, user_id, hash)
+                format!("{prefix}:hr_query:{user_id}:{hash}")
             }
             CacheKey::BloodPressureQuery { user_id, hash } => {
-                format!("{}:bp_query:{}:{}", prefix, user_id, hash)
+                format!("{prefix}:bp_query:{user_id}:{hash}")
             }
             CacheKey::SleepQuery { user_id, hash } => {
-                format!("{}:sleep_query:{}:{}", prefix, user_id, hash)
+                format!("{prefix}:sleep_query:{user_id}:{hash}")
             }
             CacheKey::ActivityQuery { user_id, hash } => {
-                format!("{}:activity_query:{}:{}", prefix, user_id, hash)
+                format!("{prefix}:activity_query:{user_id}:{hash}")
             }
             CacheKey::WorkoutQuery { user_id, hash } => {
-                format!("{}:workout_query:{}:{}", prefix, user_id, hash)
+                format!("{prefix}:workout_query:{user_id}:{hash}")
             }
             CacheKey::HealthSummary {
                 user_id,
                 date_range,
-            } => format!("{}:summary:{}:{}", prefix, user_id, date_range),
+            } => format!("{prefix}:summary:{user_id}:{date_range}"),
             CacheKey::UserMetrics {
                 user_id,
                 metric_type,
-            } => format!("{}:metrics:{}:{}", prefix, user_id, metric_type),
+            } => format!("{prefix}:metrics:{user_id}:{metric_type}"),
         }
     }
 }
@@ -234,7 +234,7 @@ impl CacheService {
             return false;
         }
 
-        let pattern = format!("{}:*:{}:*", prefix, user_id);
+        let pattern = format!("{prefix}:*:{user_id}:*");
         let mut conn = self.connection_manager.clone();
 
         match conn.keys::<_, Vec<String>>(&pattern).await {
@@ -386,6 +386,6 @@ pub fn generate_query_hash(params: &crate::handlers::query::QueryParams) -> Stri
     use sha2::{Digest, Sha256};
 
     let mut hasher = Sha256::new();
-    hasher.update(format!("{:?}", params).as_bytes());
+    hasher.update(format!("{params:?}").as_bytes());
     format!("{:x}", hasher.finalize())[..16].to_string()
 }

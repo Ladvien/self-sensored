@@ -119,21 +119,19 @@ pub async fn get_heart_rate_data(
     };
 
     // Build dynamic query with date filtering
-    let mut query = format!(
-        r#"
+    let mut query = r#"
         SELECT user_id, recorded_at, heart_rate, resting_heart_rate, context, source_device, metadata, created_at
         FROM heart_rate_metrics 
         WHERE user_id = $1
-        "#
-    );
+        "#.to_string();
 
     let mut param_count = 2;
     if params.start_date.is_some() {
-        query.push_str(&format!(" AND recorded_at >= ${}", param_count));
+        query.push_str(&format!(" AND recorded_at >= ${param_count}"));
         param_count += 1;
     }
     if params.end_date.is_some() {
-        query.push_str(&format!(" AND recorded_at <= ${}", param_count));
+        query.push_str(&format!(" AND recorded_at <= ${param_count}"));
         param_count += 1;
     }
 
@@ -213,21 +211,19 @@ pub async fn get_blood_pressure_data(
         _ => "DESC",
     };
 
-    let mut query = format!(
-        r#"
+    let mut query = r#"
         SELECT user_id, recorded_at, systolic, diastolic, pulse, source_device, metadata, created_at
         FROM blood_pressure_metrics 
         WHERE user_id = $1
-        "#
-    );
+        "#.to_string();
 
     let mut param_count = 2;
     if params.start_date.is_some() {
-        query.push_str(&format!(" AND recorded_at >= ${}", param_count));
+        query.push_str(&format!(" AND recorded_at >= ${param_count}"));
         param_count += 1;
     }
     if params.end_date.is_some() {
-        query.push_str(&format!(" AND recorded_at <= ${}", param_count));
+        query.push_str(&format!(" AND recorded_at <= ${param_count}"));
         param_count += 1;
     }
 
@@ -306,23 +302,21 @@ pub async fn get_sleep_data(
         _ => "DESC",
     };
 
-    let mut query = format!(
-        r#"
+    let mut query = r#"
         SELECT user_id, sleep_start, sleep_end, duration_minutes,
                deep_sleep_minutes, rem_sleep_minutes, light_sleep_minutes, awake_minutes, sleep_efficiency,
                source_device, metadata, created_at
         FROM sleep_metrics 
         WHERE user_id = $1
-        "#
-    );
+        "#.to_string();
 
     let mut param_count = 2;
     if params.start_date.is_some() {
-        query.push_str(&format!(" AND sleep_start >= ${}", param_count));
+        query.push_str(&format!(" AND sleep_start >= ${param_count}"));
         param_count += 1;
     }
     if params.end_date.is_some() {
-        query.push_str(&format!(" AND sleep_end <= ${}", param_count));
+        query.push_str(&format!(" AND sleep_end <= ${param_count}"));
         param_count += 1;
     }
 
@@ -401,22 +395,20 @@ pub async fn get_activity_data(
         _ => "DESC",
     };
 
-    let mut query = format!(
-        r#"
+    let mut query = r#"
         SELECT user_id, recorded_at, step_count, distance_meters, active_energy_burned_kcal,
                flights_climbed, source_device, metadata, created_at
         FROM activity_metrics 
         WHERE user_id = $1
-        "#
-    );
+        "#.to_string();
 
     let mut param_count = 2;
     if params.start_date.is_some() {
-        query.push_str(&format!(" AND recorded_at >= ${}", param_count));
+        query.push_str(&format!(" AND recorded_at >= ${param_count}"));
         param_count += 1;
     }
     if params.end_date.is_some() {
-        query.push_str(&format!(" AND recorded_at <= ${}", param_count));
+        query.push_str(&format!(" AND recorded_at <= ${param_count}"));
         param_count += 1;
     }
 
@@ -495,23 +487,21 @@ pub async fn get_workout_data(
         _ => "DESC",
     };
 
-    let mut query = format!(
-        r#"
+    let mut query = r#"
         SELECT id, user_id, workout_type, started_at, ended_at, distance_meters,
                avg_heart_rate, max_heart_rate, total_energy_kcal, active_energy_kcal,
                source_device, metadata, created_at
         FROM workouts 
         WHERE user_id = $1
-        "#
-    );
+        "#.to_string();
 
     let mut param_count = 2;
     if params.start_date.is_some() {
-        query.push_str(&format!(" AND started_at >= ${}", param_count));
+        query.push_str(&format!(" AND started_at >= ${param_count}"));
         param_count += 1;
     }
     if params.end_date.is_some() {
-        query.push_str(&format!(" AND ended_at <= ${}", param_count));
+        query.push_str(&format!(" AND ended_at <= ${param_count}"));
         param_count += 1;
     }
 
@@ -585,7 +575,7 @@ pub async fn get_health_summary(
     let start_date = params.start_date.unwrap_or_else(|| {
         Utc::now() - chrono::Duration::days(30) // Default to last 30 days
     });
-    let end_date = params.end_date.unwrap_or_else(|| Utc::now());
+    let end_date = params.end_date.unwrap_or_else(Utc::now);
 
     let date_range = DateRange {
         start_date,
@@ -630,11 +620,11 @@ async fn get_heart_rate_count(
     let mut param_count = 2;
 
     if params.start_date.is_some() {
-        query.push_str(&format!(" AND recorded_at >= ${}", param_count));
+        query.push_str(&format!(" AND recorded_at >= ${param_count}"));
         param_count += 1;
     }
     if params.end_date.is_some() {
-        query.push_str(&format!(" AND recorded_at <= ${}", param_count));
+        query.push_str(&format!(" AND recorded_at <= ${param_count}"));
     }
 
     let mut db_query = sqlx::query_scalar(&query).bind(user_id);
@@ -657,11 +647,11 @@ async fn get_blood_pressure_count(
     let mut param_count = 2;
 
     if params.start_date.is_some() {
-        query.push_str(&format!(" AND recorded_at >= ${}", param_count));
+        query.push_str(&format!(" AND recorded_at >= ${param_count}"));
         param_count += 1;
     }
     if params.end_date.is_some() {
-        query.push_str(&format!(" AND recorded_at <= ${}", param_count));
+        query.push_str(&format!(" AND recorded_at <= ${param_count}"));
     }
 
     let mut db_query = sqlx::query_scalar(&query).bind(user_id);
@@ -684,11 +674,11 @@ async fn get_sleep_count(
     let mut param_count = 2;
 
     if params.start_date.is_some() {
-        query.push_str(&format!(" AND sleep_start >= ${}", param_count));
+        query.push_str(&format!(" AND sleep_start >= ${param_count}"));
         param_count += 1;
     }
     if params.end_date.is_some() {
-        query.push_str(&format!(" AND sleep_end <= ${}", param_count));
+        query.push_str(&format!(" AND sleep_end <= ${param_count}"));
     }
 
     let mut db_query = sqlx::query_scalar(&query).bind(user_id);
@@ -711,11 +701,11 @@ async fn get_activity_count(
     let mut param_count = 2;
 
     if params.start_date.is_some() {
-        query.push_str(&format!(" AND recorded_at >= ${}", param_count));
+        query.push_str(&format!(" AND recorded_at >= ${param_count}"));
         param_count += 1;
     }
     if params.end_date.is_some() {
-        query.push_str(&format!(" AND recorded_at <= ${}", param_count));
+        query.push_str(&format!(" AND recorded_at <= ${param_count}"));
     }
 
     let mut db_query = sqlx::query_scalar(&query).bind(user_id);
@@ -738,11 +728,11 @@ async fn get_workout_count(
     let mut param_count = 2;
 
     if params.start_date.is_some() {
-        query.push_str(&format!(" AND started_at >= ${}", param_count));
+        query.push_str(&format!(" AND started_at >= ${param_count}"));
         param_count += 1;
     }
     if params.end_date.is_some() {
-        query.push_str(&format!(" AND ended_at <= ${}", param_count));
+        query.push_str(&format!(" AND ended_at <= ${param_count}"));
     }
 
     let mut db_query = sqlx::query_scalar(&query).bind(user_id);
@@ -891,7 +881,7 @@ pub async fn get_activity_summary(
             .total_distance_meters
             .and_then(|v| v.to_f64())
             .map(|v| v / 1000.0),
-        total_calories: result.total_calories.map(|v| v as f64),
+        total_calories: result.total_calories,
         avg_daily_steps: result.avg_daily_steps.and_then(|v| v.to_f32()),
     })
 }

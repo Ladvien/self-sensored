@@ -74,11 +74,11 @@ struct SleepKey {
     sleep_end_millis: i64,
 }
 
-/// Unique key for activity metrics (user_id, recorded_date)
+/// Unique key for activity metrics (user_id, recorded_at)
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct ActivityKey {
     user_id: Uuid,
-    recorded_date: chrono::NaiveDate,
+    recorded_at_millis: i64,
 }
 
 /// Unique key for workout metrics (user_id, started_at)
@@ -397,7 +397,7 @@ impl BatchProcessor {
                     result.failed_count += 1;
                     result.errors.push(ProcessingError {
                         metric_type: "Unknown".to_string(),
-                        error_message: format!("Task execution failed: {}", e),
+                        error_message: format!("Task execution failed: {e}"),
                         index: None,
                     });
                 }
@@ -576,7 +576,7 @@ impl BatchProcessor {
                             1,
                             vec![ProcessingError {
                                 metric_type: metric_type.to_string(),
-                                error_message: format!("Non-retryable error: {}", e),
+                                error_message: format!("Non-retryable error: {e}"),
                                 index: None,
                             }],
                             retry_count - 1,
@@ -808,56 +808,30 @@ impl BatchProcessor {
         deduplicated
     }
 
-    /// Deduplicate activity metrics using HashMap for aggregation
-    /// When duplicates are found (same user_id, recorded_date), merge the data by taking the maximum values
-    /// This ensures we capture the most complete activity data for each day
+    /// Deduplicate activity metrics using HashSet for O(1) lookups
+    /// Preserves order of first occurrence of each unique record
     fn deduplicate_activities(
         &self,
         user_id: Uuid,
         metrics: Vec<crate::models::ActivityMetric>,
     ) -> Vec<crate::models::ActivityMetric> {
-        let mut activity_map: HashMap<ActivityKey, crate::models::ActivityMetric> = HashMap::new();
+        let mut seen_keys = HashSet::new();
+        let mut deduplicated = Vec::new();
 
         for metric in metrics {
             let key = ActivityKey {
                 user_id,
-                recorded_date: metric.recorded_at.date_naive(),
+                recorded_at_millis: metric.recorded_at.timestamp_millis(),
             };
 
-            match activity_map.get_mut(&key) {
-                Some(existing) => {
-                    // Merge activity data by taking maximum values or first non-null values
-                    if let Some(steps) = metric.step_count {
-                        existing.step_count = Some(existing.step_count.unwrap_or(0).max(steps));
-                    }
-                    if let Some(distance) = metric.distance_meters {
-                        existing.distance_meters =
-                            Some(existing.distance_meters.unwrap_or(0.0).max(distance));
-                    }
-                    if let Some(calories) = metric.active_energy_burned_kcal {
-                        existing.active_energy_burned_kcal = Some(
-                            existing
-                                .active_energy_burned_kcal
-                                .unwrap_or(0.0)
-                                .max(calories),
-                        );
-                    }
-                    if let Some(flights) = metric.flights_climbed {
-                        existing.flights_climbed =
-                            Some(existing.flights_climbed.unwrap_or(0).max(flights));
-                    }
-                    // Keep the most recent source or first non-null source
-                    if metric.source_device.is_some() {
-                        existing.source_device = metric.source_device;
-                    }
-                }
-                None => {
-                    activity_map.insert(key, metric);
-                }
+            if seen_keys.insert(key) {
+                // First time seeing this key, keep the record
+                deduplicated.push(metric);
             }
+            // Duplicate found - skip this record
         }
 
-        activity_map.into_values().collect()
+        deduplicated
     }
 
     /// Deduplicate workout metrics using HashSet for O(1) lookups  
@@ -993,8 +967,7 @@ impl BatchProcessor {
         if max_params_per_chunk > SAFE_PARAM_LIMIT {
             return Err(sqlx::Error::Configuration(
                 format!(
-                    "Chunk size {} would result in {} parameters, exceeding safe limit",
-                    chunk_size, max_params_per_chunk
+                    "Chunk size {chunk_size} would result in {max_params_per_chunk} parameters, exceeding safe limit"
                 )
                 .into(),
             ));
@@ -1025,7 +998,7 @@ impl BatchProcessor {
                     .push_bind(metric.recorded_at)
                     .push_bind(heart_rate)
                     .push_bind(resting_heart_rate)
-                    .push_bind(&metric.context)
+                    .push_bind(metric.context)
                     .push_bind(&metric.source_device);
             });
 
@@ -1082,8 +1055,7 @@ impl BatchProcessor {
         if max_params_per_chunk > SAFE_PARAM_LIMIT {
             return Err(sqlx::Error::Configuration(
                 format!(
-                    "Chunk size {} would result in {} parameters, exceeding safe limit",
-                    chunk_size, max_params_per_chunk
+                    "Chunk size {chunk_size} would result in {max_params_per_chunk} parameters, exceeding safe limit"
                 )
                 .into(),
             ));
@@ -1172,8 +1144,7 @@ impl BatchProcessor {
         if max_params_per_chunk > SAFE_PARAM_LIMIT {
             return Err(sqlx::Error::Configuration(
                 format!(
-                    "Chunk size {} would result in {} parameters, exceeding safe limit",
-                    chunk_size, max_params_per_chunk
+                    "Chunk size {chunk_size} would result in {max_params_per_chunk} parameters, exceeding safe limit"
                 )
                 .into(),
             ));
@@ -1282,8 +1253,7 @@ impl BatchProcessor {
         if max_params_per_chunk > SAFE_PARAM_LIMIT {
             return Err(sqlx::Error::Configuration(
                 format!(
-                    "Chunk size {} would result in {} parameters, exceeding safe limit",
-                    chunk_size, max_params_per_chunk
+                    "Chunk size {chunk_size} would result in {max_params_per_chunk} parameters, exceeding safe limit"
                 )
                 .into(),
             ));
@@ -1370,8 +1340,7 @@ impl BatchProcessor {
         if max_params_per_chunk > SAFE_PARAM_LIMIT {
             return Err(sqlx::Error::Configuration(
                 format!(
-                    "Chunk size {} would result in {} parameters, exceeding safe limit",
-                    chunk_size, max_params_per_chunk
+                    "Chunk size {chunk_size} would result in {max_params_per_chunk} parameters, exceeding safe limit"
                 )
                 .into(),
             ));
@@ -1397,7 +1366,7 @@ impl BatchProcessor {
             query_builder.push_values(chunk.iter(), |mut b, workout| {
                 b.push_bind(Uuid::new_v4())
                     .push_bind(user_id)
-                    .push_bind(&workout.workout_type)
+                    .push_bind(workout.workout_type)
                     .push_bind(workout.started_at)
                     .push_bind(workout.ended_at)
                     .push_bind(workout.total_energy_kcal)

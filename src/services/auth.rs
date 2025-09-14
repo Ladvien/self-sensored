@@ -267,7 +267,7 @@ impl AuthService {
                         if let Some(ref rate_limiter) = self.rate_limiter {
                             if let Some(ip) = ip_address {
                                 let _ = rate_limiter
-                                    .check_ip_rate_limit(&format!("failed_auth:{}", ip))
+                                    .check_ip_rate_limit(&format!("failed_auth:{ip}"))
                                     .await;
                             }
                         }
@@ -335,7 +335,7 @@ impl AuthService {
                 if let Some(ref rate_limiter) = self.rate_limiter {
                     if let Some(ip) = ip_address {
                         let _ = rate_limiter
-                            .check_ip_rate_limit(&format!("failed_auth:{}", ip))
+                            .check_ip_rate_limit(&format!("failed_auth:{ip}"))
                             .await;
                     }
                 }
@@ -413,7 +413,7 @@ impl AuthService {
                                 if let Some(ref rate_limiter) = self.rate_limiter {
                                     if let Some(ip) = ip_address {
                                         let _ = rate_limiter
-                                            .check_ip_rate_limit(&format!("failed_auth:{}", ip))
+                                            .check_ip_rate_limit(&format!("failed_auth:{ip}"))
                                             .await;
                                     }
                                 }
@@ -516,7 +516,7 @@ impl AuthService {
         if let Some(ref rate_limiter) = self.rate_limiter {
             if let Some(ip) = ip_address {
                 let _ = rate_limiter
-                    .check_ip_rate_limit(&format!("failed_auth:{}", ip))
+                    .check_ip_rate_limit(&format!("failed_auth:{ip}"))
                     .await;
             }
         }
@@ -709,7 +709,7 @@ impl AuthService {
             match permissions {
                 serde_json::Value::Array(perms) => perms
                     .iter()
-                    .any(|p| p.as_str().map_or(false, |s| s == "admin")),
+                    .any(|p| p.as_str() == Some("admin")),
                 serde_json::Value::Object(perms) => perms
                     .get("admin")
                     .and_then(|v| v.as_bool())
@@ -732,7 +732,7 @@ impl AuthService {
             match permissions {
                 serde_json::Value::Array(perms) => perms
                     .iter()
-                    .any(|p| p.as_str().map_or(false, |s| s == permission)),
+                    .any(|p| p.as_str() == Some(permission)),
                 serde_json::Value::Object(perms) => perms
                     .get(permission)
                     .and_then(|v| v.as_bool())
