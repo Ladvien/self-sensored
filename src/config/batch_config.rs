@@ -9,11 +9,12 @@ pub const HEART_RATE_PARAMS_PER_RECORD: usize = 6; // user_id, recorded_at, hear
 pub const BLOOD_PRESSURE_PARAMS_PER_RECORD: usize = 6; // user_id, recorded_at, systolic, diastolic, pulse, source_device
 pub const SLEEP_PARAMS_PER_RECORD: usize = 10; // user_id, sleep_start, sleep_end, duration_minutes, deep_sleep_minutes, rem_sleep_minutes, light_sleep_minutes, awake_minutes, efficiency, source_device
 pub const ACTIVITY_PARAMS_PER_RECORD: usize = 8; // user_id, recorded_at, step_count, distance_meters, active_energy_burned_kcal, basal_energy_burned_kcal, flights_climbed, source_device
-pub const BODY_MEASUREMENT_PARAMS_PER_RECORD: usize = 14; // user_id, recorded_at, body_weight_kg, body_mass_index, body_fat_percentage, lean_body_mass_kg, waist_circumference_cm, hip_circumference_cm, chest_circumference_cm, arm_circumference_cm, thigh_circumference_cm, body_temperature_celsius, basal_body_temperature_celsius, measurement_source, source_device
-pub const TEMPERATURE_PARAMS_PER_RECORD: usize = 10; // id, user_id, recorded_at, body_temperature, basal_body_temperature, apple_sleeping_wrist_temperature, water_temperature, temperature_source, source_device, created_at
+pub const BODY_MEASUREMENT_PARAMS_PER_RECORD: usize = 16; // user_id, recorded_at, body_weight_kg, body_mass_index, body_fat_percentage, lean_body_mass_kg, height_cm, waist_circumference_cm, hip_circumference_cm, chest_circumference_cm, arm_circumference_cm, thigh_circumference_cm, body_temperature_celsius, basal_body_temperature_celsius, measurement_source, source_device
+pub const TEMPERATURE_PARAMS_PER_RECORD: usize = 8; // user_id, recorded_at, body_temperature, basal_body_temperature, apple_sleeping_wrist_temperature, water_temperature, temperature_source, source_device
 pub const RESPIRATORY_PARAMS_PER_RECORD: usize = 7; // user_id, recorded_at, respiratory_rate, oxygen_saturation, forced_vital_capacity, forced_expiratory_volume_1, peak_expiratory_flow_rate, inhaler_usage, source_device
 pub const WORKOUT_PARAMS_PER_RECORD: usize = 10; // id, user_id, workout_type, started_at, ended_at, total_energy_kcal, distance_meters, avg_heart_rate, max_heart_rate, source_device
 pub const BLOOD_GLUCOSE_PARAMS_PER_RECORD: usize = 8; // user_id, recorded_at, blood_glucose_mg_dl, measurement_context, medication_taken, insulin_delivery_units, glucose_source, source_device
+pub const NUTRITION_PARAMS_PER_RECORD: usize = 32; // user_id, recorded_at, 25+ nutrient fields, meal_type, meal_id, source_device, created_at (32 total params for comprehensive nutrition)
 
 /// Configuration for batch processing operations
 #[derive(Debug, Clone)]
@@ -34,6 +35,7 @@ pub struct BatchConfig {
     pub respiratory_chunk_size: usize, // 7 params per record -> max 9,362
     pub workout_chunk_size: usize,    // 10 params per record -> max 6,553
     pub blood_glucose_chunk_size: usize, // 8 params per record -> max 8,192
+    pub nutrition_chunk_size: usize,  // 32 params per record -> max 2,047
     pub enable_progress_tracking: bool, // Track progress for large batches
     pub enable_intra_batch_deduplication: bool, // Enable deduplication within batches
     // Dual-write configuration for activity_metrics migration
@@ -54,11 +56,12 @@ impl Default for BatchConfig {
             blood_pressure_chunk_size: 8000, // 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000 (max ~48,000 params)
             sleep_chunk_size: 6000, // 10 params: 65,535 ÷ 10 × 0.8 ≈ 6,000 (max ~60,000 params)
             activity_chunk_size: 6500, // 8 params: 65,535 ÷ 8 × 0.8 ≈ 6,500 (max ~52,000 params)
-            body_measurement_chunk_size: 3500, // 14 params: 65,535 ÷ 14 × 0.8 ≈ 3,500 (max ~49,000 params)
-            temperature_chunk_size: 5000, // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000 (max ~50,000 params)
+            body_measurement_chunk_size: 3000, // 16 params: 65,535 ÷ 16 × 0.8 ≈ 3,275, using 3,000 for safety (max ~48,000 params)
+            temperature_chunk_size: 8000, // 8 params: 65,535 ÷ 8 × 0.8 ≈ 8,000 (max ~64,000 params) - optimized for high-frequency monitoring
             respiratory_chunk_size: 7000, // 7 params: 65,535 ÷ 7 × 0.8 ≈ 7,000 (max ~49,000 params)
             workout_chunk_size: 5000, // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000 (max ~50,000 params)
             blood_glucose_chunk_size: 6500, // 8 params: 65,535 ÷ 8 × 0.8 ≈ 6,500 (max ~52,000 params)
+            nutrition_chunk_size: 1600, // 32 params: 65,535 ÷ 32 × 0.8 ≈ 1,600 (max ~51,200 params)
             enable_progress_tracking: true,
             enable_intra_batch_deduplication: true, // Enable by default for performance
             enable_dual_write_activity_metrics: false, // Disabled by default for safe rollout
@@ -131,6 +134,10 @@ impl BatchConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(6500),
+            nutrition_chunk_size: env::var("BATCH_NUTRITION_CHUNK_SIZE")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(1600),
             enable_progress_tracking: env::var("BATCH_ENABLE_PROGRESS_TRACKING")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -189,6 +196,11 @@ impl BatchConfig {
                 "blood_glucose",
                 self.blood_glucose_chunk_size,
                 BLOOD_GLUCOSE_PARAMS_PER_RECORD,
+            ),
+            (
+                "nutrition",
+                self.nutrition_chunk_size,
+                NUTRITION_PARAMS_PER_RECORD,
             ),
         ];
 

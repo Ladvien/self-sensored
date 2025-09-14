@@ -419,6 +419,168 @@ mod temperature_tests {
         assert_eq!(water_metric.water_temperature, Some(22.5));
     }
 
+    /// Test high-frequency continuous temperature monitoring (Apple Watch scenario)
+    #[tokio::test]
+    async fn test_continuous_temperature_monitoring_batch() {
+        use chrono::Duration;
+        let user_id = Uuid::new_v4();
+        let mut start_time = Utc::now() - Duration::hours(8); // 8 hours of sleep
+        let mut continuous_metrics = Vec::new();
+
+        // Simulate Apple Watch wrist temperature readings every 5 minutes during sleep
+        for i in 0..96 { // 8 hours * 12 readings per hour (every 5 minutes)
+            let temp_variation = (i as f64 / 96.0) * 2.0 - 1.0; // ±1°C variation
+            let wrist_temp = 33.8 + temp_variation + (i as f64 * 0.01); // Slight temp drift
+
+            continuous_metrics.push(TemperatureMetric {
+                id: Uuid::new_v4(),
+                user_id,
+                recorded_at: start_time,
+                body_temperature: None,
+                basal_body_temperature: None,
+                apple_sleeping_wrist_temperature: Some(wrist_temp),
+                water_temperature: None,
+                temperature_source: Some("apple_watch_continuous".to_string()),
+                source_device: Some("Apple Watch Series 9".to_string()),
+                created_at: Utc::now(),
+            });
+
+            start_time += Duration::minutes(5);
+        }
+
+        // Validate all continuous readings
+        let config = ValidationConfig::default();
+        for metric in &continuous_metrics {
+            assert!(metric.validate_with_config(&config).is_ok(),
+                    "Continuous temperature reading should be valid");
+        }
+
+        // Test chunk size optimization for high-frequency data
+        assert_eq!(continuous_metrics.len(), 96, "Should have 96 readings for 8-hour sleep");
+        assert!(continuous_metrics.len() < 8000, "Batch should be well under chunk size limit");
+    }
+
+    /// Test fertility cycle pattern validation with basal temperature trends
+    #[tokio::test]
+    async fn test_fertility_cycle_pattern_validation() {
+        use chrono::Duration;
+        let user_id = Uuid::new_v4();
+        let mut cycle_day = 1;
+        let mut cycle_metrics = Vec::new();
+        let mut base_date = Utc::now() - Duration::days(28); // Start of cycle
+
+        // Simulate 28-day fertility cycle with basal temperature patterns
+        for day in 0..28 {
+            let basal_temp = match day {
+                0..=13 => 36.2 + (day as f64 * 0.01), // Follicular phase: gradual increase
+                14..=16 => 36.6 + (day as f64 * 0.02), // Ovulation: temperature spike
+                17..=27 => 36.7 - ((day - 17) as f64 * 0.01), // Luteal phase: plateau then decline
+                _ => 36.2,
+            };
+
+            cycle_metrics.push(TemperatureMetric {
+                id: Uuid::new_v4(),
+                user_id,
+                recorded_at: base_date,
+                body_temperature: None,
+                basal_body_temperature: Some(basal_temp),
+                apple_sleeping_wrist_temperature: None,
+                water_temperature: None,
+                temperature_source: Some("fertility_tracker".to_string()),
+                source_device: Some("Tempdrop".to_string()),
+                created_at: Utc::now(),
+            });
+
+            base_date += Duration::days(1);
+        }
+
+        // Validate fertility pattern detection
+        let baseline_temp = 36.2;
+        let ovulation_days: Vec<_> = cycle_metrics.iter()
+            .filter(|m| m.basal_temp_spike(baseline_temp))
+            .collect();
+
+        assert!(ovulation_days.len() >= 3, "Should detect ovulation period (days 14-16)");
+        assert!(ovulation_days.len() <= 5, "Ovulation detection should be precise");
+
+        // Test batch processing with fertility data
+        let config = ValidationConfig::default();
+        for metric in &cycle_metrics {
+            assert!(metric.validate_with_config(&config).is_ok(),
+                    "Fertility cycle temperature should be valid");
+        }
+    }
+
+    /// Test high-volume multi-source temperature batch processing (Performance scenario)
+    #[tokio::test]
+    async fn test_high_volume_multi_source_temperature_batch() {
+        use chrono::Duration;
+        let user_id = Uuid::new_v4();
+        let mut start_time = Utc::now() - Duration::hours(24);
+        let mut high_volume_metrics = Vec::new();
+
+        // Simulate 24 hours of multi-source temperature data
+        for hour in 0..24 {
+            for source_reading in 0..20 { // 20 readings per hour from various sources
+                let timestamp = start_time + Duration::hours(hour) + Duration::minutes(source_reading * 3);
+
+                // Alternate between different temperature sources
+                let (body_temp, basal_temp, wrist_temp, water_temp, source) = match source_reading % 4 {
+                    0 => (Some(36.5 + (hour as f64 * 0.1)), None, None, None, "body_thermometer"),
+                    1 => (None, Some(36.3 + (hour as f64 * 0.05)), None, None, "fertility_tracker"),
+                    2 => (None, None, Some(33.8 + (hour as f64 * 0.02)), None, "apple_watch"),
+                    3 => (None, None, None, Some(20.0 + (hour as f64 * 0.5)), "environmental_sensor"),
+                    _ => (Some(36.5), None, None, None, "unknown"),
+                };
+
+                high_volume_metrics.push(TemperatureMetric {
+                    id: Uuid::new_v4(),
+                    user_id,
+                    recorded_at: timestamp,
+                    body_temperature: body_temp,
+                    basal_body_temperature: basal_temp,
+                    apple_sleeping_wrist_temperature: wrist_temp,
+                    water_temperature: water_temp,
+                    temperature_source: Some(source.to_string()),
+                    source_device: Some("Multi-sensor system".to_string()),
+                    created_at: Utc::now(),
+                });
+            }
+        }
+
+        // Test high-volume processing (480 readings - simulates continuous monitoring)
+        assert_eq!(high_volume_metrics.len(), 480, "Should have 480 multi-source readings");
+        assert!(high_volume_metrics.len() < 8000, "Should be under optimized chunk size");
+
+        // Validate all high-volume readings
+        let config = ValidationConfig::default();
+        let mut fever_count = 0;
+        let mut ovulation_indicators = 0;
+
+        for metric in &high_volume_metrics {
+            assert!(metric.validate_with_config(&config).is_ok(),
+                    "High-volume temperature reading should be valid");
+
+            if metric.has_fever() {
+                fever_count += 1;
+            }
+
+            if metric.basal_temp_spike(36.2) {
+                ovulation_indicators += 1;
+            }
+        }
+
+        // Medical pattern analysis
+        println!("High-volume batch processing results:");
+        println!("  Total readings: {}", high_volume_metrics.len());
+        println!("  Fever episodes detected: {}", fever_count);
+        println!("  Ovulation indicators: {}", ovulation_indicators);
+
+        // Performance assertions
+        assert!(fever_count < 50, "Fever detection should be reasonable for 24h period");
+        assert!(ovulation_indicators < 100, "Ovulation indicators should be selective");
+    }
+
     /// Test temperature data analysis functions
     #[tokio::test]
     async fn test_temperature_data_analysis() {
