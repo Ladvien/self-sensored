@@ -287,6 +287,24 @@ async fn main() -> std::io::Result<()> {
                         "/data/temperature",
                         web::get().to(handlers::temperature_handler::get_temperature_data_handler),
                     )
+                    // Body measurements endpoints (weight, BMI, body composition)
+                    .route(
+                        "/ingest/body-measurements",
+                        web::post().to(handlers::body_measurements_handler::ingest_body_measurements),
+                    )
+                    .route(
+                        "/data/body-measurements",
+                        web::get().to(handlers::body_measurements_handler::get_body_measurements_data),
+                    )
+                    // Respiratory health endpoints (SpO2, breathing rate, lung function)
+                    .route(
+                        "/ingest/respiratory",
+                        web::post().to(handlers::respiratory_handler::ingest_respiratory_handler),
+                    )
+                    .route(
+                        "/data/respiratory",
+                        web::get().to(handlers::respiratory_handler::query_respiratory_handler),
+                    )
                     // Mindfulness & Mental Health endpoints (HIPAA-compliant)
                     .route(
                         "/ingest/mindfulness",

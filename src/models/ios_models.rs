@@ -448,6 +448,132 @@ impl IosIngestPayload {
                             }
                         }
                     }
+                    // Body Measurements - Weight, BMI, Body Composition, Height, Circumferences
+                    "body_mass" | "weight" | "body_weight" | "body_mass_kg"
+                    | "body_mass_index" | "bmi"
+                    | "body_fat_percentage" | "body_fat"
+                    | "lean_body_mass" | "lean_body_mass_kg" | "muscle_mass"
+                    | "height" | "height_cm"
+                    | "waist_circumference" | "waist"
+                    | "hip_circumference" | "hip"
+                    | "chest_circumference" | "chest"
+                    | "arm_circumference" | "arm"
+                    | "thigh_circumference" | "thigh" => {
+                        if let Some(qty) = data_point.qty {
+                            // Validate body measurement ranges
+                            let is_valid = match ios_metric.name.to_lowercase().as_str() {
+                                name if name.contains("weight") || name.contains("mass") => qty >= 20.0 && qty <= 500.0,
+                                name if name.contains("bmi") => qty >= 10.0 && qty <= 60.0,
+                                name if name.contains("fat") => qty >= 3.0 && qty <= 50.0,
+                                name if name.contains("height") => qty >= 50.0 && qty <= 250.0,
+                                name if name.contains("circumference") || name.contains("waist") || name.contains("hip") || name.contains("chest") => qty >= 15.0 && qty <= 200.0,
+                                _ => qty >= 0.0 && qty <= 1000.0, // General range
+                            };
+
+                            if is_valid {
+                                let metric = crate::models::BodyMeasurementMetric {
+                                    id: uuid::Uuid::new_v4(),
+                                    user_id,
+                                    recorded_at,
+                                    // Weight & Body Composition
+                                    body_weight_kg: if matches!(
+                                        ios_metric.name.to_lowercase().as_str(),
+                                        "body_mass" | "weight" | "body_weight" | "body_mass_kg"
+                                    ) {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    body_mass_index: if matches!(
+                                        ios_metric.name.to_lowercase().as_str(),
+                                        "body_mass_index" | "bmi"
+                                    ) {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    body_fat_percentage: if matches!(
+                                        ios_metric.name.to_lowercase().as_str(),
+                                        "body_fat_percentage" | "body_fat"
+                                    ) {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    lean_body_mass_kg: if matches!(
+                                        ios_metric.name.to_lowercase().as_str(),
+                                        "lean_body_mass" | "lean_body_mass_kg" | "muscle_mass"
+                                    ) {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    // Physical Measurements
+                                    height_cm: if matches!(
+                                        ios_metric.name.to_lowercase().as_str(),
+                                        "height" | "height_cm"
+                                    ) {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    waist_circumference_cm: if matches!(
+                                        ios_metric.name.to_lowercase().as_str(),
+                                        "waist_circumference" | "waist"
+                                    ) {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    hip_circumference_cm: if matches!(
+                                        ios_metric.name.to_lowercase().as_str(),
+                                        "hip_circumference" | "hip"
+                                    ) {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    chest_circumference_cm: if matches!(
+                                        ios_metric.name.to_lowercase().as_str(),
+                                        "chest_circumference" | "chest"
+                                    ) {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    arm_circumference_cm: if matches!(
+                                        ios_metric.name.to_lowercase().as_str(),
+                                        "arm_circumference" | "arm"
+                                    ) {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    thigh_circumference_cm: if matches!(
+                                        ios_metric.name.to_lowercase().as_str(),
+                                        "thigh_circumference" | "thigh"
+                                    ) {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    // Body Temperature (if available in body measurement context)
+                                    body_temperature_celsius: None,
+                                    basal_body_temperature_celsius: None,
+                                    // Metadata
+                                    measurement_source: Some("iOS".to_string()),
+                                    source_device: data_point.source.clone(),
+                                    created_at: Utc::now(),
+                                };
+                                internal_metrics.push(crate::models::HealthMetric::BodyMeasurement(metric));
+                            } else {
+                                tracing::warn!(
+                                    "Invalid body measurement value for {}: {} (outside valid range)",
+                                    ios_metric.name, qty
+                                );
+                            }
+                        }
+                    }
                     _ => {
                         // For unknown metric types, log for debugging and try to extract as activity if numeric
                         tracing::debug!(

@@ -2260,6 +2260,67 @@ impl BatchProcessor {
             }),
         })
     }
+
+    /// Process body measurements metrics for single metric type processing
+    /// This is needed for the body measurements handler's batch processing
+    pub async fn process_body_measurements(
+        &self,
+        metrics: Vec<crate::models::BodyMeasurementMetric>,
+    ) -> Result<BatchProcessingResult, crate::models::ProcessingError> {
+        if metrics.is_empty() {
+            return Ok(BatchProcessingResult {
+                processed_count: 0,
+                failed_count: 0,
+                errors: Vec::new(),
+                processing_time_ms: 0,
+                retry_attempts: 0,
+                memory_peak_mb: Some(0.0),
+                chunk_progress: None,
+                deduplication_stats: None,
+            });
+        }
+
+        let start_time = std::time::Instant::now();
+        let user_id = metrics[0].user_id; // All metrics should have same user_id
+
+        // Deduplicate body measurements
+        let deduplicated_metrics = self.deduplicate_body_measurements(user_id, metrics.clone());
+        let duplicates_removed = metrics.len() - deduplicated_metrics.len();
+
+        // Process body measurements with retry
+        let (processed, failed, errors, retries) = Self::process_with_retry(
+            "BodyMeasurements",
+            || Self::insert_body_measurements_chunked(&self.pool, user_id, deduplicated_metrics.clone(), self.config.body_measurement_chunk_size),
+            self.config.max_retries,
+            self.config.initial_backoff_ms,
+            self.config.max_backoff_ms,
+        ).await;
+
+        let processing_time_ms = start_time.elapsed().as_millis() as u64;
+
+        Ok(BatchProcessingResult {
+            processed_count: processed,
+            failed_count: failed,
+            errors,
+            processing_time_ms,
+            retry_attempts: retries,
+            memory_peak_mb: Some(0.0), // Simplified for now
+            chunk_progress: None,
+            deduplication_stats: Some(DeduplicationStats {
+                heart_rate_duplicates: 0,
+                blood_pressure_duplicates: 0,
+                sleep_duplicates: 0,
+                activity_duplicates: 0,
+                body_measurement_duplicates: duplicates_removed,
+                temperature_duplicates: 0,
+                respiratory_duplicates: 0,
+                blood_glucose_duplicates: 0,
+                workout_duplicates: 0,
+                total_duplicates: duplicates_removed,
+                deduplication_time_ms: 0, // We're not tracking this separately here
+            }),
+        })
+    }
 }
 
 /// Helper struct for grouping metrics by type

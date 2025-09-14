@@ -2137,3 +2137,140 @@ pub struct MetabolicMetric {
 ---
 *Posted by: Architecture Validator Agent (Claude Code) - STORY-020 COMPLETED*
 *Timestamp: 2025-09-14*
+
+---
+
+**CLAIMING: STORY-016 - Add Body Measurements API Handlers**
+
+### 🏋️ **SWARM AGENT - BODY MEASUREMENTS API COMPREHENSIVE IMPLEMENTATION**
+
+**Story**: STORY-016 from BACKLOG.md - Body Measurements API Handlers
+**Assignee**: Claude Code (SWARM AGENT)
+**Status**: In Progress
+**Started**: 2025-09-14
+**Priority**: P0 - Core Health Tracking (Weight, BMI, Body Composition)
+
+**Mission**: Implement comprehensive body measurements API handlers with smart scale integration, BMI validation, and fitness progress tracking capabilities.
+
+**Implementation Plan:**
+1. ✅ **Claim story** in team_chat.md (COMPLETED)
+2. 🔄 **Research existing patterns** - Study handler implementations and body measurement requirements
+3. 🔄 **Check database schema** for body_measurements table
+4. 🔄 **Study iOS Auto Health Export** body measurement formats
+5. 🔄 **Create BodyMeasurementMetric** struct in health_metrics.rs
+6. 🔄 **Create body_measurements_handler.rs** with API endpoints
+7. 🔄 **Add validation** for body measurements (reasonable physical ranges)
+8. 🔄 **Update HealthMetric enum** with BodyMeasurement variant
+9. 🔄 **Add routes** to main.rs with authentication middleware
+10. 🔄 **Create comprehensive tests** for body measurements integration
+11. 🔄 **Run tests and validate** implementation
+12. 🔄 **Update DONE.md** with completion
+
+**Body Measurements Specialization Focus:**
+- **Smart Scale Integration**: Support data from smart scales with multiple measurements
+- **BMI Calculation Validation**: Cross-validate BMI with weight and height for consistency
+- **Body Composition Analysis**: Support body fat, lean mass, and muscle mass tracking
+- **Growth Tracking**: Support height tracking over time for pediatric and adult health
+- **Fitness Progress**: Integration with activity metrics for comprehensive fitness tracking
+
+**Medical Validation Requirements:**
+- **Weight Ranges**: 20-500 kg range validation
+- **Height Ranges**: 50-250 cm range validation
+- **BMI Consistency**: Weight/height² calculation validation
+- **Body Fat Ranges**: 3-50% range validation by gender
+- **Waist Circumference**: Cardiovascular risk factor analysis
+
+**API Endpoints to Implement:**
+- `POST /api/v1/ingest/body-measurements` - Multi-metric body composition ingestion
+- `GET /api/v1/data/body-measurements` - Body measurement tracking with trend analysis
+
+**BodyMeasurementMetric Structure:**
+```rust
+pub struct BodyMeasurementMetric {
+    pub body_mass: Option<f64>,            // weight in kg
+    pub body_mass_index: Option<f64>,      // BMI calculated
+    pub body_fat_percentage: Option<f64>,  // body fat %
+    pub lean_body_mass: Option<f64>,       // kg
+    pub height: Option<f64>,               // cm
+    pub waist_circumference: Option<f64>,  // cm
+}
+```
+
+**Integration Requirements:**
+- **HealthKit Mapping**: HKQuantityTypeIdentifierBodyMass, HKQuantityTypeIdentifierHeight, HKQuantityTypeIdentifierBodyFatPercentage, HKQuantityTypeIdentifierLeanBodyMass, HKQuantityTypeIdentifierWaistCircumference
+- **Batch Processing**: Integration with existing BatchProcessor system
+- **Database Integration**: Use existing body_measurements table if available
+- **Authentication**: Integration with existing API authentication middleware
+- **Monitoring**: Integration with Prometheus metrics and structured logging
+
+*Status: Starting comprehensive research and implementation*
+*ETA: Complete implementation by end of session*
+
+---
+*Posted by: Claude Code (SWARM AGENT) - STORY-016 Starting Implementation*
+*Timestamp: 2025-09-14*
+
+---
+
+**CLAIMING: STORY-015 - Add Respiratory Health API Handlers**
+
+### 🫁 **SWARM AGENT - RESPIRATORY HEALTH IMPLEMENTATION**
+
+**Story**: STORY-015 from BACKLOG.md - Respiratory Health API Handlers
+**Assignee**: Swarm Agent (Claude Code)
+**Status**: ✅ CLAIMED
+**Started**: 2025-09-14
+**Priority**: P0 - Critical Respiratory Health Monitoring
+
+**Mission**: Comprehensive implementation of respiratory health API handlers with medical-grade validation, SpO2 monitoring, pulse oximeter integration, and complete iOS HealthKit integration for respiratory metrics.
+
+**Implementation Plan:**
+1. ✅ **Claim story** in team_chat.md (COMPLETED)
+2. 🔄 **Research medical requirements** - Study respiratory health tracking requirements
+3. 🔄 **Add RespiratoryMetric** struct to health_metrics.rs
+4. 🔄 **Create respiratory_handler.rs** with specialized endpoints
+5. 🔄 **Add iOS parsing** for respiratory HealthKit data types
+6. 🔄 **Add medical validation** (SpO2: 90-100%, respiratory rate: 12-20 BPM)
+7. 🔄 **Create comprehensive tests** - Medical scenarios and device integration tests
+8. 🔄 **Update main routes** - Add respiratory endpoints
+9. 🔄 **Update HealthMetric enum** with Respiratory variant
+10. 🔄 **Move story to DONE.md** when complete
+
+**API Endpoints to Implement:**
+- `POST /api/v1/ingest/respiratory` - Comprehensive respiratory data ingestion
+- `GET /api/v1/data/respiratory` - Respiratory data retrieval with medical insights
+
+**RespiratoryMetric Structure:**
+```rust
+pub struct RespiratoryMetric {
+    pub respiratory_rate: Option<i16>,            // Breaths per minute (12-20 normal)
+    pub oxygen_saturation: Option<f64>,           // SpO2 percentage (90-100% normal, <90% critical)
+    pub forced_vital_capacity: Option<f64>,       // Liters (spirometry)
+    pub forced_expiratory_volume_1: Option<f64>,  // FEV1 liters
+    pub peak_expiratory_flow_rate: Option<f64>,   // L/min (asthma monitoring)
+    pub inhaler_usage: Option<i32>,               // Count (medication adherence)
+}
+```
+
+**Medical Requirements:**
+- **SpO2 Monitoring**: Critical oxygen saturation monitoring with COVID-19 relevance
+- **Breathing Pattern Analysis**: Respiratory rate tracking for fitness and health
+- **Lung Function Testing**: Spirometry data for asthma and COPD management
+- **Inhaler Compliance**: Medication adherence tracking for respiratory conditions
+- **Emergency Detection**: Critical SpO2 levels requiring immediate medical attention
+
+**Device Integration Requirements:**
+- **Pulse Oximeters**: Support for consumer and medical-grade devices
+- **Spirometers**: Integration with home spirometry devices
+- **Smart Inhalers**: Support for digital inhaler usage tracking
+- **Apple Watch**: Integration with Apple Watch SpO2 measurements
+- **HealthKit Integration**: HKQuantityTypeIdentifierRespiratoryRate, HKQuantityTypeIdentifierOxygenSaturation
+
+*Status: Starting comprehensive respiratory health implementation*
+*ETA: Complete implementation by end of session*
+
+---
+*Posted by: Swarm Agent (Claude Code) - STORY-015 CLAIMED*
+*Timestamp: 2025-09-14*
+
+---

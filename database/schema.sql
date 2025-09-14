@@ -832,5 +832,149 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ============================================================================
+-- BODY MEASUREMENTS TABLE
+-- ============================================================================
+
+-- Body Measurements table (weight, BMI, body composition, physical measurements)
+CREATE TABLE body_measurements (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recorded_at TIMESTAMPTZ NOT NULL,
+
+    -- Weight & Body Composition (Smart Scale Data)
+    body_weight_kg DOUBLE PRECISION CHECK (body_weight_kg IS NULL OR body_weight_kg BETWEEN 20.0 AND 500.0),
+    body_mass_index DOUBLE PRECISION CHECK (body_mass_index IS NULL OR body_mass_index BETWEEN 10.0 AND 60.0),
+    body_fat_percentage DOUBLE PRECISION CHECK (body_fat_percentage IS NULL OR body_fat_percentage BETWEEN 3.0 AND 50.0),
+    lean_body_mass_kg DOUBLE PRECISION CHECK (lean_body_mass_kg IS NULL OR lean_body_mass_kg BETWEEN 10.0 AND 200.0),
+
+    -- Physical Measurements
+    height_cm DOUBLE PRECISION CHECK (height_cm IS NULL OR height_cm BETWEEN 50.0 AND 250.0),
+    waist_circumference_cm DOUBLE PRECISION CHECK (waist_circumference_cm IS NULL OR waist_circumference_cm BETWEEN 40.0 AND 200.0),
+    hip_circumference_cm DOUBLE PRECISION CHECK (hip_circumference_cm IS NULL OR hip_circumference_cm BETWEEN 40.0 AND 200.0),
+    chest_circumference_cm DOUBLE PRECISION CHECK (chest_circumference_cm IS NULL OR chest_circumference_cm BETWEEN 40.0 AND 200.0),
+    arm_circumference_cm DOUBLE PRECISION CHECK (arm_circumference_cm IS NULL OR arm_circumference_cm BETWEEN 15.0 AND 60.0),
+    thigh_circumference_cm DOUBLE PRECISION CHECK (thigh_circumference_cm IS NULL OR thigh_circumference_cm BETWEEN 30.0 AND 100.0),
+
+    -- Body Temperature (moved from temperature_metrics for body measurement context)
+    body_temperature_celsius DOUBLE PRECISION CHECK (body_temperature_celsius IS NULL OR body_temperature_celsius BETWEEN 30.0 AND 45.0),
+    basal_body_temperature_celsius DOUBLE PRECISION CHECK (basal_body_temperature_celsius IS NULL OR basal_body_temperature_celsius BETWEEN 35.0 AND 39.0),
+
+    -- Measurement Context & Validation
+    measurement_source VARCHAR(50) DEFAULT 'manual', -- 'manual', 'smart_scale', 'apple_watch', 'tape_measure', 'medical_device'
+    bmi_calculated BOOLEAN DEFAULT false, -- whether BMI was calculated from weight/height or measured directly
+    measurement_reliability VARCHAR(20) DEFAULT 'standard', -- 'low', 'standard', 'high', 'medical_grade'
+
+    -- Body composition method for advanced measurements
+    body_composition_method VARCHAR(50), -- 'bioelectric_impedance', 'hydrostatic', 'dexa_scan', 'bod_pod', 'skinfold'
+
+    -- Fitness tracking context
+    fitness_phase VARCHAR(50), -- 'cutting', 'bulking', 'maintenance', 'rehabilitation', 'general_fitness'
+    measurement_conditions VARCHAR(100), -- 'fasted', 'post_meal', 'post_workout', 'morning', 'evening'
+
+    -- Metadata
+    source_device VARCHAR(255),
+    measurement_notes TEXT, -- User notes about measurement conditions, goals, etc.
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+
+    -- Unique constraint for deduplication (user + timestamp + source allows multiple measurements per day from different sources)
+    UNIQUE (user_id, recorded_at, measurement_source)
+);
+
+-- Indexes for body measurements (time-series queries and fitness tracking)
+CREATE INDEX idx_body_measurements_user_date ON body_measurements (user_id, recorded_at DESC);
+CREATE INDEX idx_body_measurements_weight ON body_measurements (user_id, body_weight_kg DESC) WHERE body_weight_kg IS NOT NULL;
+CREATE INDEX idx_body_measurements_bmi ON body_measurements (user_id, body_mass_index DESC) WHERE body_mass_index IS NOT NULL;
+CREATE INDEX idx_body_measurements_body_fat ON body_measurements (user_id, body_fat_percentage DESC) WHERE body_fat_percentage IS NOT NULL;
+CREATE INDEX idx_body_measurements_source ON body_measurements (measurement_source, recorded_at DESC);
+
+-- Function to calculate BMI consistency check (validation helper)
+CREATE OR REPLACE FUNCTION validate_bmi_consistency(
+    p_weight_kg DOUBLE PRECISION,
+    p_height_cm DOUBLE PRECISION,
+    p_bmi DOUBLE PRECISION
+) RETURNS BOOLEAN AS $$
+DECLARE
+    calculated_bmi DOUBLE PRECISION;
+    bmi_tolerance DOUBLE PRECISION := 0.5; -- Allow 0.5 BMI unit difference
+BEGIN
+    -- Return true if any required values are NULL (can't validate)
+    IF p_weight_kg IS NULL OR p_height_cm IS NULL OR p_bmi IS NULL THEN
+        RETURN true;
+    END IF;
+
+    -- Calculate BMI: weight(kg) / (height(m))²
+    calculated_bmi := p_weight_kg / POWER(p_height_cm / 100.0, 2);
+
+    -- Check if provided BMI is within tolerance of calculated BMI
+    RETURN ABS(p_bmi - calculated_bmi) <= bmi_tolerance;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+-- Function to calculate body fat percentage category
+CREATE OR REPLACE FUNCTION categorize_body_fat_percentage(
+    p_body_fat_percentage DOUBLE PRECISION,
+    p_gender VARCHAR(10) DEFAULT 'unknown' -- 'male', 'female', 'unknown'
+) RETURNS VARCHAR(20) AS $$
+BEGIN
+    IF p_body_fat_percentage IS NULL THEN
+        RETURN NULL;
+    END IF;
+
+    -- Body fat categories vary by gender (using fitness industry standards)
+    CASE p_gender
+        WHEN 'male' THEN
+            CASE
+                WHEN p_body_fat_percentage <= 6 THEN RETURN 'essential_fat';
+                WHEN p_body_fat_percentage <= 13 THEN RETURN 'athletic';
+                WHEN p_body_fat_percentage <= 17 THEN RETURN 'fitness';
+                WHEN p_body_fat_percentage <= 25 THEN RETURN 'average';
+                ELSE RETURN 'above_average';
+            END CASE;
+        WHEN 'female' THEN
+            CASE
+                WHEN p_body_fat_percentage <= 12 THEN RETURN 'essential_fat';
+                WHEN p_body_fat_percentage <= 20 THEN RETURN 'athletic';
+                WHEN p_body_fat_percentage <= 24 THEN RETURN 'fitness';
+                WHEN p_body_fat_percentage <= 31 THEN RETURN 'average';
+                ELSE RETURN 'above_average';
+            END CASE;
+        ELSE
+            -- Gender-neutral categorization (uses average of male/female ranges)
+            CASE
+                WHEN p_body_fat_percentage <= 9 THEN RETURN 'essential_fat';
+                WHEN p_body_fat_percentage <= 16 THEN RETURN 'athletic';
+                WHEN p_body_fat_percentage <= 20 THEN RETURN 'fitness';
+                WHEN p_body_fat_percentage <= 28 THEN RETURN 'average';
+                ELSE RETURN 'above_average';
+            END CASE;
+    END CASE;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+-- Trigger to validate BMI consistency on insert/update
+CREATE OR REPLACE FUNCTION trigger_validate_bmi_consistency() RETURNS TRIGGER AS $$
+BEGIN
+    -- Skip validation if BMI was not calculated from weight/height
+    IF NEW.bmi_calculated = false THEN
+        RETURN NEW;
+    END IF;
+
+    -- Validate BMI consistency
+    IF NOT validate_bmi_consistency(NEW.body_weight_kg, NEW.height_cm, NEW.body_mass_index) THEN
+        RAISE WARNING 'BMI inconsistency detected: weight=%, height=%, bmi=% for user %',
+            NEW.body_weight_kg, NEW.height_cm, NEW.body_mass_index, NEW.user_id;
+        -- Log inconsistency but don't block the insert (data quality issue, not critical error)
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER body_measurements_bmi_validation
+    BEFORE INSERT OR UPDATE ON body_measurements
+    FOR EACH ROW
+    EXECUTE FUNCTION trigger_validate_bmi_consistency();
+
+-- ============================================================================
 -- END OF SCHEMA
 -- ============================================================================

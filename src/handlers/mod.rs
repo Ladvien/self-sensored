@@ -1,6 +1,7 @@
 pub mod admin;
 pub mod auth;
 pub mod background;
+pub mod body_measurements_handler;
 pub mod environmental_handler;
 pub mod export;
 pub mod health;
@@ -12,6 +13,7 @@ pub mod nutrition_handler;
 pub mod optimized_ingest;
 pub mod query;
 pub mod reproductive_health_handler;
+pub mod respiratory_handler;
 pub mod symptoms_handler;
 pub mod temperature_handler;
 
