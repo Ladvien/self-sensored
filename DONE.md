@@ -1,4 +1,178 @@
 
+## ✅ STORY-014: Add User Characteristics Table (Completed: 2025-09-14)
+
+**Epic**: Personalized Health Tracking Infrastructure
+**Priority**: P0 - Core Personalization Framework
+**Estimate**: 42 points
+**Status**: ✅ COMPLETED
+**Assigned to**: Swarm Agent (Claude Code)
+
+### Summary
+Implemented comprehensive user characteristics table for personalized health tracking with biological characteristics, medical information, accessibility settings, and device preferences. Added full CRUD API handlers, database service layer, personalized validation ranges, and integration with health metric validation system.
+
+### Completed Features
+
+#### 🧬 **Biological Characteristics**
+✅ **Biological Sex Support** - Male, female, not_set with heart rate adjustment factors for personalized validation ranges
+✅ **Age-Based Validation** - Date of birth tracking with automatic age calculation for age-specific health metric ranges
+✅ **Blood Type Management** - ABO/Rh blood types (A+, A-, B+, B-, AB+, AB-, O+, O-, not_set) for emergency medical information
+✅ **Medical Compatibility** - Blood type donor/recipient compatibility checking for emergency medical scenarios
+
+#### ☀️ **UV Protection & Skin Health**
+✅ **Fitzpatrick Skin Type** - 6-level skin type classification (Type I-VI) for UV sensitivity assessment
+✅ **Personalized SPF Recommendations** - Skin type-specific SPF levels (SPF 15-30+) based on burn risk assessment
+✅ **Burn Time Calculations** - Personalized safe UV exposure times (10-60 minutes) without protection based on skin type
+✅ **UV Index Guidance** - Skin type-appropriate UV index limits and sun safety recommendations
+
+#### ♿ **Accessibility & Inclusive Health Tracking**
+✅ **Wheelchair Use Adaptations** - Boolean tracking with activity metric validation adjustments for wheelchair users
+✅ **Accessible Activity Validation** - Lower step count expectations (0-10,000) and adapted distance validation for wheelchair users
+✅ **Accessibility-Aware Metrics** - Flight climb validation adjustments and movement interpretation for accessibility needs
+✅ **Move Time Support** - Time-based fitness goals (minutes) instead of calorie-based for accessibility mode
+
+#### ⌚ **Apple Watch Integration**
+✅ **Activity Move Mode** - Active energy (calories) vs. move time (minutes) preference tracking for Apple Watch integration
+✅ **Fitness Goal Personalization** - Default daily goals (400 calories or 30 minutes) based on user preference and accessibility needs
+✅ **Goal Unit Display** - Appropriate unit strings (calories/minutes) for fitness tracking UI consistency
+✅ **Device Configuration** - Apple Watch move mode settings for proper device synchronization
+
+### API Endpoints
+
+#### 🔧 **Core CRUD Operations**
+✅ **GET /api/v1/user/characteristics** - Retrieve user characteristics with personalization information and completeness scoring
+✅ **POST /api/v1/user/characteristics** - Create new user characteristics with validation (fails if already exists)
+✅ **PUT /api/v1/user/characteristics** - Update existing user characteristics with validation (fails if not exists)
+✅ **PATCH /api/v1/user/characteristics** - Upsert user characteristics (create or update) with flexible partial updates
+✅ **DELETE /api/v1/user/characteristics** - Delete user characteristics permanently with cascade cleanup
+
+#### 🎯 **Personalization Endpoints**
+✅ **GET /api/v1/user/characteristics/validation/{metric_type}** - Get personalized validation ranges for heart_rate, blood_pressure, activity
+✅ **GET /api/v1/user/characteristics/uv-recommendations** - UV protection recommendations based on Fitzpatrick skin type
+✅ **GET /api/v1/user/characteristics/activity-personalization** - Activity tracking settings with wheelchair adaptations
+✅ **GET /api/v1/user/characteristics/heart-rate-zones** - Personalized training zones based on age, sex, and resting HR
+✅ **GET /api/v1/user/characteristics/emergency-info** - Emergency medical information including blood type and conditions
+
+#### 👨‍⚕️ **Medical & Emergency Features**
+✅ **POST /api/v1/user/characteristics/verify** - Mark user characteristics as verified with timestamp update
+✅ **Emergency Contact Storage** - JSONB storage for encrypted emergency contact information
+✅ **Medical Conditions Tracking** - Array storage for relevant medical conditions affecting health metrics
+✅ **Medications List** - Current medications that may affect health readings and validation ranges
+
+### Database Implementation
+
+#### 🗄️ **Schema Design**
+✅ **PostgreSQL Enum Types** - biological_sex, blood_type, fitzpatrick_skin_type, activity_move_mode for type safety
+✅ **User Characteristics Table** - Comprehensive table with foreign key constraints, indexes, and audit timestamps
+✅ **JSONB Fields** - Emergency contact info and data sharing preferences with flexible JSON storage
+✅ **Array Fields** - Medical conditions and medications as TEXT[] for efficient querying
+
+#### 🔧 **Helper Functions**
+✅ **calculate_user_age()** - PostgreSQL function to calculate age from date_of_birth with null handling
+✅ **get_personalized_heart_rate_zones()** - Function returning personalized training zones based on user characteristics
+✅ **get_personalized_validation_ranges()** - Function returning metric-specific validation ranges for users
+✅ **get_uv_protection_recommendations()** - Function returning UV protection advice based on skin type
+✅ **is_user_profile_complete()** - Function checking profile completeness and returning missing fields analysis
+
+#### 📊 **Indexing & Performance**
+✅ **Primary Index** - B-tree index on user_id for fast characteristic lookups
+✅ **Conditional Indexes** - Indexes on biological_sex, blood_type, wheelchair_use only when values are set (not default)
+✅ **Age Group Index** - Expression index on calculated age for age-based queries and analytics
+✅ **Updated At Trigger** - Automatic timestamp updates using update_updated_at_column() function
+
+### Personalized Health Validation
+
+#### 💓 **Heart Rate Personalization**
+✅ **Age-Specific Ranges** - Resting HR ranges adjust from 40-100 BPM (young) to 50-90 BPM (older adults)
+✅ **Biological Sex Adjustments** - Female users get 5% higher baseline ranges due to physiological differences
+✅ **Exercise Context Detection** - Higher validation limits (up to calculated max HR) for exercise vs. rest contexts
+✅ **Maximum HR Calculation** - 220 minus age formula with biological sex adjustments for accurate training zones
+
+#### 🩸 **Blood Pressure Personalization**
+✅ **Age-Related Targets** - Systolic limits of 140 mmHg for under 65, 150 mmHg for 65+ following medical guidelines
+✅ **Standard Validation** - Diastolic range 60-90 mmHg with age-independent validation for safety
+✅ **Medical Context** - Integration with medical conditions array for blood pressure medication considerations
+
+#### 🚶 **Activity Personalization**
+✅ **Wheelchair Adaptations** - Step count limits reduced to 10,000 max for wheelchair users vs. 50,000 for ambulatory users
+✅ **Distance Adjustments** - Maximum distance reduced to 100km for wheelchair users vs. 200km standard limit
+✅ **Flight Climb Logic** - Wheelchair users allowed 0-100 flights (ramps/elevators) vs. 0-10,000 standard range
+✅ **Context-Aware Validation** - Validation messages include wheelchair context for clear user feedback
+
+### Service Layer Implementation
+
+#### 🛠️ **UserCharacteristicsService**
+✅ **Database Operations** - Full CRUD operations with error handling, logging, and transaction management
+✅ **Validation Integration** - get_validation_ranges() method returning personalized ranges for any metric type
+✅ **iOS Data Processing** - process_ios_data() method parsing iOS Health Auto Export characteristic data formats
+✅ **Profile Analytics** - completeness scoring, missing field analysis, and personalization feature enumeration
+
+#### 📈 **Analytics & Monitoring**
+✅ **Aggregate Statistics** - get_aggregate_stats() providing anonymized completion rates and accessibility metrics
+✅ **Incomplete Profile Tracking** - get_incomplete_profiles() for targeted user engagement and onboarding
+✅ **Personalization Detection** - has_personalization_data() checking if user has sufficient data for personalization
+✅ **Profile Verification** - update_last_verified() for tracking when users confirm their characteristic accuracy
+
+#### 🔒 **Privacy & Security**
+✅ **Data Sharing Preferences** - JSONB storage for research participation, anonymized analytics, emergency sharing consent
+✅ **Medical Information Protection** - Secure storage and access patterns for sensitive health and emergency data
+✅ **Audit Trail** - Complete timestamp tracking (created_at, updated_at, last_verified_at) for compliance
+✅ **User Control** - Full delete capabilities with cascade cleanup for user data sovereignty
+
+### Testing Infrastructure
+
+#### 🧪 **Integration Tests**
+✅ **CRUD Operations Testing** - Comprehensive test suite covering create, read, update, delete operations with database cleanup
+✅ **Validation Testing** - Personalized validation range testing with various user characteristics combinations
+✅ **iOS Data Processing** - Test parsing of iOS Health Auto Export data formats with error handling
+✅ **Wheelchair User Integration** - Specific test cases for wheelchair user validation adaptations and activity metrics
+
+#### 📊 **Analytics Testing**
+✅ **Aggregate Statistics** - Testing of anonymized statistics generation with multiple user profiles
+✅ **Profile Completion** - Testing of completeness scoring and missing field detection algorithms
+✅ **Personalization Features** - Testing of personalization feature enumeration and recommendation systems
+
+#### 🔍 **Edge Case Testing**
+✅ **Age Boundary Testing** - Testing age calculations, leap years, and edge cases in age-based validation
+✅ **Medical Emergency Testing** - Testing emergency information retrieval and blood type compatibility
+✅ **UV Recommendations** - Testing skin type-based SPF and burn time calculations across all Fitzpatrick types
+✅ **Database Cleanup** - Comprehensive test data cleanup preventing test pollution and ensuring isolation
+
+### API Documentation
+
+#### 📚 **Comprehensive Documentation**
+✅ **Endpoint Documentation** - Complete API documentation with request/response examples, error codes, and parameter descriptions
+✅ **Data Model Specifications** - Detailed enum value definitions, validation rules, and field constraints
+✅ **Integration Examples** - iOS Health Auto Export integration examples with data format specifications
+✅ **Error Handling Guide** - Complete error response documentation with troubleshooting guidance
+
+#### 🔧 **Developer Resources**
+✅ **Authentication Requirements** - API key authentication patterns and header specifications
+✅ **Personalization Guide** - Documentation of personalization features and their applications
+✅ **Medical Information Handling** - Guidelines for handling sensitive medical data through the API
+✅ **Accessibility Considerations** - Documentation of wheelchair user adaptations and inclusive design patterns
+
+### Technical Architecture
+
+#### 🏗️ **Database Architecture**
+✅ **PostgreSQL Native Types** - Proper use of native enum types for type safety and storage efficiency
+✅ **JSONB Storage** - Flexible JSON storage for complex nested data (emergency contacts, preferences)
+✅ **Array Storage** - Native PostgreSQL arrays for lists (medical conditions, medications)
+✅ **Function-Based Queries** - Database functions for complex calculations and business logic
+
+#### 🔗 **Integration Patterns**
+✅ **Health Metric Validation** - validate_with_characteristics() methods integrated into health metric validation
+✅ **Service Layer Pattern** - Clean separation of concerns between handlers, services, and database operations
+✅ **Error Propagation** - Consistent error handling and logging patterns throughout the service stack
+✅ **Configuration Management** - Environment-based configuration for validation thresholds and feature flags
+
+#### 🌐 **API Design**
+✅ **RESTful Patterns** - Proper HTTP methods, status codes, and resource-based URL design
+✅ **Structured Responses** - Consistent response format with success/error patterns and detailed metadata
+✅ **Personalization Endpoints** - Dedicated endpoints for personalization features (UV, heart rate zones, activity)
+✅ **Admin Analytics** - Separate admin endpoints for aggregate statistics and user analytics
+
+---
+
 ## ✅ STORY-016: Add Body Measurements API Handlers (Completed: 2025-09-14)
 
 **Epic**: Comprehensive Body Composition & Fitness Tracking
