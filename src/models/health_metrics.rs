@@ -3,14 +3,15 @@ use crate::models::enums::{
     ActivityContext, WorkoutType, MeditationType, StateOfMind,
     MenstrualFlow, CervicalMucusQuality, OvulationTestResult,
     PregnancyTestResult, TemperatureContext, SymptomType, SymptomSeverity,
-    HygieneEventType,
+    HygieneEventType, HeartRateEventType, CardiacEventSeverity,
 };
 use crate::models::user_characteristics::UserCharacteristics;
 use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
-/// Heart rate metric with validation
+/// Heart rate metric with validation (STORY-011: Extended for Advanced Cardiovascular Monitoring)
 #[derive(Debug, Deserialize, Serialize, Clone, FromRow)]
 pub struct HeartRateMetric {
     pub id: uuid::Uuid,
@@ -19,8 +20,32 @@ pub struct HeartRateMetric {
     pub heart_rate: Option<i16>,
     pub resting_heart_rate: Option<i16>,
     pub heart_rate_variability: Option<f64>,
+
+    // Advanced Cardiovascular Metrics (STORY-011)
+    pub walking_heart_rate_average: Option<i16>,        // Average HR during walking activities (90-120 BPM normal)
+    pub heart_rate_recovery_one_minute: Option<i16>,    // HR recovery after 1 min post-exercise (18+ BPM decrease = good)
+    pub atrial_fibrillation_burden_percentage: Option<Decimal>, // AFib burden as % (0.01-100.00%)
+    pub vo2_max_ml_kg_min: Option<Decimal>, // VO2 max in ml/kg/min (14.00-65.00 range)
+
     pub source_device: Option<String>,
     pub context: Option<ActivityContext>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Heart Rate Event for cardiac monitoring and detection (STORY-011)
+#[derive(Debug, Deserialize, Serialize, Clone, FromRow)]
+pub struct HeartRateEvent {
+    pub id: uuid::Uuid,
+    pub user_id: uuid::Uuid,
+    pub event_type: HeartRateEventType,
+    pub event_occurred_at: DateTime<Utc>,
+    pub heart_rate_at_event: i16,                       // Heart rate when event occurred
+    pub event_duration_minutes: Option<i32>,            // Duration of the event in minutes
+    pub context: Option<ActivityContext>,                // Activity context when event occurred
+    pub source_device: Option<String>,                   // Device that detected the event
+    pub severity: CardiacEventSeverity,                  // Medical severity assessment
+    pub is_confirmed: bool,                              // Whether event was medically confirmed
+    pub notes: Option<String>,                           // Additional clinical notes or user observations
     pub created_at: DateTime<Utc>,
 }
 
@@ -60,11 +85,36 @@ pub struct ActivityMetric {
     pub id: uuid::Uuid,
     pub user_id: uuid::Uuid,
     pub recorded_at: DateTime<Utc>,
+
+    // Basic Activity Metrics
     pub step_count: Option<i32>,
     pub distance_meters: Option<f64>,
     pub flights_climbed: Option<i32>,
     pub active_energy_burned_kcal: Option<f64>,
     pub basal_energy_burned_kcal: Option<f64>,
+
+    // Specialized Distance Metrics for Different Activities
+    pub distance_cycling_meters: Option<f64>,
+    pub distance_swimming_meters: Option<f64>,
+    pub distance_wheelchair_meters: Option<f64>,
+    pub distance_downhill_snow_sports_meters: Option<f64>,
+
+    // Wheelchair Accessibility Metrics
+    pub push_count: Option<i32>, // Wheelchair pushes
+
+    // Swimming Analytics
+    pub swimming_stroke_count: Option<i32>,
+
+    // Cross-Platform Fitness Integration
+    pub nike_fuel_points: Option<i32>,
+
+    // Apple Watch Activity Ring Integration
+    pub apple_exercise_time_minutes: Option<i32>,
+    pub apple_stand_time_minutes: Option<i32>,
+    pub apple_move_time_minutes: Option<i32>,
+    pub apple_stand_hour_achieved: Option<bool>,
+
+    // Metadata
     pub source_device: Option<String>,
     pub created_at: DateTime<Utc>,
 }
@@ -618,6 +668,52 @@ impl HeartRateMetric {
                 ));
             }
         }
+
+        // Advanced Cardiovascular Metrics Validation (STORY-011)
+        if let Some(walking_hr) = self.walking_heart_rate_average {
+            // Walking HR should be between 60-200 BPM (normal walking range with safety margins)
+            if !(60..=200).contains(&walking_hr) {
+                return Err(format!(
+                    "walking_heart_rate_average {} is out of range (60-200 BPM)",
+                    walking_hr
+                ));
+            }
+        }
+
+        if let Some(hr_recovery) = self.heart_rate_recovery_one_minute {
+            // HR recovery should be 0-100 BPM decrease (18+ is considered good)
+            if !(0..=100).contains(&hr_recovery) {
+                return Err(format!(
+                    "heart_rate_recovery_one_minute {} is out of range (0-100 BPM)",
+                    hr_recovery
+                ));
+            }
+        }
+
+        if let Some(afib_burden) = self.atrial_fibrillation_burden_percentage {
+            use rust_decimal::prelude::ToPrimitive;
+            let burden_f64 = afib_burden.to_f64().unwrap_or(0.0);
+            // AFib burden should be 0.0-100.0% (Apple Watch shows "2% or less" as minimum)
+            if !(0.0..=100.0).contains(&burden_f64) {
+                return Err(format!(
+                    "atrial_fibrillation_burden_percentage {} is out of range (0.0-100.0%)",
+                    burden_f64
+                ));
+            }
+        }
+
+        if let Some(vo2_max) = self.vo2_max_ml_kg_min {
+            use rust_decimal::prelude::ToPrimitive;
+            let vo2_f64 = vo2_max.to_f64().unwrap_or(0.0);
+            // VO2 max should be 14.0-65.0 ml/kg/min (Apple Watch supported range)
+            if !(14.0..=65.0).contains(&vo2_f64) {
+                return Err(format!(
+                    "vo2_max_ml_kg_min {} is out of range (14.0-65.0 ml/kg/min)",
+                    vo2_f64
+                ));
+            }
+        }
+
         Ok(())
     }
 
@@ -684,6 +780,204 @@ impl HeartRateMetric {
                 self.validate_with_config(config)
             }
         }
+    }
+}
+
+/// Heart Rate Event Validation (STORY-011: Cardiac Event Detection)
+impl HeartRateEvent {
+    /// Validate heart rate event with medical-grade thresholds
+    pub fn validate(&self) -> Result<(), String> {
+        self.validate_with_config(&ValidationConfig::default())
+    }
+
+    /// Validate with configurable parameters
+    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
+        // Validate heart rate at event (critical for all event types)
+        if !(30..=300).contains(&self.heart_rate_at_event) {
+            return Err(format!(
+                "heart_rate_at_event {} is out of range (30-300 BPM)",
+                self.heart_rate_at_event
+            ));
+        }
+
+        // Validate event duration if provided
+        if let Some(duration) = self.event_duration_minutes {
+            if duration < 0 {
+                return Err(format!(
+                    "event_duration_minutes {} cannot be negative",
+                    duration
+                ));
+            }
+
+            // Maximum event duration: 24 hours for ultra-endurance scenarios
+            if duration > 1440 {
+                return Err(format!(
+                    "event_duration_minutes {} exceeds maximum (1440 minutes = 24 hours)",
+                    duration
+                ));
+            }
+        }
+
+        // Validate event type specific thresholds
+        match self.event_type {
+            HeartRateEventType::High => {
+                // High HR events should have elevated heart rates
+                if self.heart_rate_at_event < 100 {
+                    return Err(format!(
+                        "HIGH event type requires heart rate >= 100 BPM, got {}",
+                        self.heart_rate_at_event
+                    ));
+                }
+            },
+            HeartRateEventType::Low => {
+                // Low HR events should have bradycardia range
+                if self.heart_rate_at_event > 60 {
+                    return Err(format!(
+                        "LOW event type requires heart rate <= 60 BPM, got {}",
+                        self.heart_rate_at_event
+                    ));
+                }
+            },
+            HeartRateEventType::Afib => {
+                // AFib typically occurs at irregular elevated rates
+                if self.heart_rate_at_event < 60 {
+                    return Err(format!(
+                        "AFIB event type typically requires heart rate >= 60 BPM, got {}",
+                        self.heart_rate_at_event
+                    ));
+                }
+            },
+            _ => {
+                // Other event types (IRREGULAR, RAPID_INCREASE, SLOW_RECOVERY, EXERCISE_ANOMALY)
+                // are pattern-based and don't have strict HR thresholds
+            }
+        }
+
+        // Validate severity-duration consistency
+        match self.severity {
+            CardiacEventSeverity::Critical => {
+                // Critical events should be detected quickly (within 5 minutes)
+                if let Some(duration) = self.event_duration_minutes {
+                    if duration > 5 && !self.is_confirmed {
+                        return Err(
+                            "CRITICAL severity events lasting > 5 minutes require medical confirmation".to_string()
+                        );
+                    }
+                }
+            },
+            CardiacEventSeverity::High => {
+                // High severity events lasting > 30 minutes should be confirmed
+                if let Some(duration) = self.event_duration_minutes {
+                    if duration > 30 && !self.is_confirmed {
+                        return Err(
+                            "HIGH severity events lasting > 30 minutes require medical confirmation".to_string()
+                        );
+                    }
+                }
+            },
+            _ => {} // Low and Moderate severities have no duration constraints
+        }
+
+        Ok(())
+    }
+
+    /// Validate with personalized user characteristics for age-adjusted thresholds
+    pub fn validate_with_characteristics(&self, config: &ValidationConfig, characteristics: Option<&UserCharacteristics>) -> Result<(), String> {
+        // First run standard validation
+        self.validate_with_config(config)?;
+
+        if let Some(chars) = characteristics {
+            let age = chars.age().unwrap_or(30);
+
+            // Age-adjusted validation for HIGH and LOW events
+            match self.event_type {
+                HeartRateEventType::High => {
+                    // Age-adjusted maximum heart rate (220 - age formula)
+                    let max_hr = 220 - age as i16;
+                    let tachycardia_threshold = (max_hr as f64 * 0.85) as i16; // 85% of max HR
+
+                    if self.heart_rate_at_event < tachycardia_threshold {
+                        return Err(format!(
+                            "HIGH event for age {} requires heart rate >= {} BPM (85% of max), got {}",
+                            age, tachycardia_threshold, self.heart_rate_at_event
+                        ));
+                    }
+                },
+                HeartRateEventType::Low => {
+                    // Age-adjusted bradycardia thresholds
+                    let bradycardia_threshold = match age {
+                        age if age < 30 => 50,  // Younger adults: < 50 BPM
+                        age if age < 60 => 55,  // Middle-aged: < 55 BPM
+                        _ => 60,                // Older adults: < 60 BPM
+                    };
+
+                    if self.heart_rate_at_event > bradycardia_threshold {
+                        return Err(format!(
+                            "LOW event for age {} requires heart rate <= {} BPM, got {}",
+                            age, bradycardia_threshold, self.heart_rate_at_event
+                        ));
+                    }
+                },
+                _ => {} // Other event types don't require age adjustment
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Get medical urgency assessment based on event characteristics
+    pub fn get_medical_urgency(&self) -> &'static str {
+        match (&self.event_type, &self.severity) {
+            (HeartRateEventType::Afib, CardiacEventSeverity::Critical) =>
+                "EMERGENCY: Sustained AFib with critical symptoms - seek immediate medical attention",
+            (HeartRateEventType::High, CardiacEventSeverity::Critical) =>
+                "EMERGENCY: Critical tachycardia - call emergency services",
+            (HeartRateEventType::Low, CardiacEventSeverity::Critical) =>
+                "EMERGENCY: Severe bradycardia - immediate cardiac evaluation required",
+            (_, CardiacEventSeverity::High) =>
+                "URGENT: Seek medical attention within 24 hours",
+            (_, CardiacEventSeverity::Moderate) =>
+                "MODERATE: Schedule medical consultation within 1-2 weeks",
+            _ =>
+                "LOW: Continue monitoring, discuss at next routine medical visit"
+        }
+    }
+
+    /// Calculate cardiac event risk score (0-100 scale)
+    pub fn calculate_risk_score(&self) -> u8 {
+        let mut score = 0u8;
+
+        // Base severity score
+        score += match self.severity {
+            CardiacEventSeverity::Low => 10,
+            CardiacEventSeverity::Moderate => 30,
+            CardiacEventSeverity::High => 60,
+            CardiacEventSeverity::Critical => 90,
+        };
+
+        // Event type modifier
+        score += match self.event_type {
+            HeartRateEventType::Afib => 15,
+            HeartRateEventType::High | HeartRateEventType::Low => 10,
+            HeartRateEventType::Irregular => 8,
+            HeartRateEventType::RapidIncrease => 5,
+            HeartRateEventType::SlowRecovery => 3,
+            HeartRateEventType::ExerciseAnomaly => 2,
+        };
+
+        // Duration modifier (longer events are more concerning)
+        if let Some(duration) = self.event_duration_minutes {
+            score += match duration {
+                d if d > 60 => 10,   // > 1 hour
+                d if d > 30 => 7,    // 30-60 minutes
+                d if d > 10 => 5,    // 10-30 minutes
+                d if d > 5 => 3,     // 5-10 minutes
+                _ => 0,              // < 5 minutes
+            };
+        }
+
+        // Cap at 100
+        std::cmp::min(score, 100)
     }
 }
 
@@ -846,6 +1140,119 @@ impl ActivityMetric {
                 ));
             }
         }
+
+        // Validate specialized distance metrics
+        if let Some(cycling_distance) = self.distance_cycling_meters {
+            if cycling_distance < 0.0 {
+                return Err("distance_cycling_meters cannot be negative".to_string());
+            }
+            let cycling_distance_km = cycling_distance / 1000.0;
+            if cycling_distance_km > config.distance_max_km {
+                return Err(format!(
+                    "cycling distance {} km exceeds maximum of {} km",
+                    cycling_distance_km, config.distance_max_km
+                ));
+            }
+        }
+
+        if let Some(swimming_distance) = self.distance_swimming_meters {
+            if swimming_distance < 0.0 {
+                return Err("distance_swimming_meters cannot be negative".to_string());
+            }
+            // Swimming distances typically much shorter than land activities
+            let swimming_distance_km = swimming_distance / 1000.0;
+            if swimming_distance_km > 50.0 {
+                return Err(format!(
+                    "swimming distance {} km exceeds reasonable maximum of 50 km",
+                    swimming_distance_km
+                ));
+            }
+        }
+
+        if let Some(wheelchair_distance) = self.distance_wheelchair_meters {
+            if wheelchair_distance < 0.0 {
+                return Err("distance_wheelchair_meters cannot be negative".to_string());
+            }
+            let wheelchair_distance_km = wheelchair_distance / 1000.0;
+            if wheelchair_distance_km > config.distance_max_km {
+                return Err(format!(
+                    "wheelchair distance {} km exceeds maximum of {} km",
+                    wheelchair_distance_km, config.distance_max_km
+                ));
+            }
+        }
+
+        if let Some(snow_sports_distance) = self.distance_downhill_snow_sports_meters {
+            if snow_sports_distance < 0.0 {
+                return Err("distance_downhill_snow_sports_meters cannot be negative".to_string());
+            }
+            let snow_sports_distance_km = snow_sports_distance / 1000.0;
+            if snow_sports_distance_km > 100.0 {
+                return Err(format!(
+                    "downhill snow sports distance {} km exceeds reasonable maximum of 100 km",
+                    snow_sports_distance_km
+                ));
+            }
+        }
+
+        // Validate accessibility metrics
+        if let Some(push_count) = self.push_count {
+            if push_count < 0 || push_count > 50000 {
+                return Err(format!(
+                    "push_count {} is out of range (0-50000)",
+                    push_count
+                ));
+            }
+        }
+
+        // Validate swimming analytics
+        if let Some(stroke_count) = self.swimming_stroke_count {
+            if stroke_count < 0 || stroke_count > 100000 {
+                return Err(format!(
+                    "swimming_stroke_count {} is out of range (0-100000)",
+                    stroke_count
+                ));
+            }
+        }
+
+        // Validate Nike Fuel points
+        if let Some(fuel_points) = self.nike_fuel_points {
+            if fuel_points < 0 || fuel_points > 10000 {
+                return Err(format!(
+                    "nike_fuel_points {} is out of range (0-10000)",
+                    fuel_points
+                ));
+            }
+        }
+
+        // Validate Apple Watch activity ring metrics
+        if let Some(exercise_time) = self.apple_exercise_time_minutes {
+            if exercise_time < 0 || exercise_time > 1440 {
+                return Err(format!(
+                    "apple_exercise_time_minutes {} is out of range (0-1440)",
+                    exercise_time
+                ));
+            }
+        }
+
+        if let Some(stand_time) = self.apple_stand_time_minutes {
+            if stand_time < 0 || stand_time > 1440 {
+                return Err(format!(
+                    "apple_stand_time_minutes {} is out of range (0-1440)",
+                    stand_time
+                ));
+            }
+        }
+
+        if let Some(move_time) = self.apple_move_time_minutes {
+            if move_time < 0 || move_time > 1440 {
+                return Err(format!(
+                    "apple_move_time_minutes {} is out of range (0-1440)",
+                    move_time
+                ));
+            }
+        }
+
         Ok(())
     }
 

@@ -106,7 +106,7 @@ ON DELETE CASCADE;
 -- HEALTH METRICS TABLES
 -- ============================================================================
 
--- Heart Rate Metrics
+-- Heart Rate Metrics (Extended for Advanced Cardiovascular Monitoring)
 CREATE TABLE heart_rate_metrics (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -114,10 +114,64 @@ CREATE TABLE heart_rate_metrics (
     heart_rate INTEGER,
     resting_heart_rate INTEGER,
     heart_rate_variability DOUBLE PRECISION,
+
+    -- Advanced Cardiovascular Metrics (STORY-011)
+    walking_heart_rate_average INTEGER, -- Average HR during walking activities (90-120 BPM normal range)
+    heart_rate_recovery_one_minute INTEGER, -- HR recovery after 1 minute post-exercise (18+ BPM decrease = good)
+    atrial_fibrillation_burden_percentage NUMERIC(5,2), -- AFib burden as percentage (0.01-100.00%, medical-grade monitoring)
+    vo2_max_ml_kg_min NUMERIC(5,2), -- VO2 max in ml/kg/min (14.00-65.00 range, cardiorespiratory fitness)
+
     context activity_context,
     source_device VARCHAR(255),
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id, recorded_at)
+    UNIQUE(user_id, recorded_at),
+
+    -- Validation constraints for advanced metrics
+    CONSTRAINT chk_walking_hr_range CHECK (walking_heart_rate_average IS NULL OR walking_heart_rate_average BETWEEN 60 AND 200),
+    CONSTRAINT chk_hr_recovery_range CHECK (heart_rate_recovery_one_minute IS NULL OR heart_rate_recovery_one_minute BETWEEN 0 AND 100),
+    CONSTRAINT chk_afib_burden_range CHECK (atrial_fibrillation_burden_percentage IS NULL OR atrial_fibrillation_burden_percentage BETWEEN 0.00 AND 100.00),
+    CONSTRAINT chk_vo2_max_range CHECK (vo2_max_ml_kg_min IS NULL OR vo2_max_ml_kg_min BETWEEN 14.00 AND 65.00)
+);
+
+-- Create enum types for heart rate events (STORY-011)
+CREATE TYPE heart_rate_event_type AS ENUM (
+    'HIGH', -- Dangerously high heart rate (tachycardia)
+    'LOW', -- Dangerously low heart rate (bradycardia)
+    'IRREGULAR', -- Irregular rhythm detection
+    'AFIB', -- Atrial fibrillation detected
+    'RAPID_INCREASE', -- Sudden rapid HR increase
+    'SLOW_RECOVERY', -- Poor heart rate recovery post-exercise
+    'EXERCISE_ANOMALY' -- Abnormal HR pattern during exercise
+);
+
+CREATE TYPE cardiac_event_severity AS ENUM (
+    'LOW', -- Mild concern, monitoring recommended
+    'MODERATE', -- Medical consultation advised
+    'HIGH', -- Urgent medical attention recommended
+    'CRITICAL' -- Emergency medical intervention required
+);
+
+-- Heart Rate Events (STORY-011: Cardiac Event Detection and Monitoring)
+CREATE TABLE heart_rate_events (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    event_type heart_rate_event_type NOT NULL,
+    event_occurred_at TIMESTAMPTZ NOT NULL,
+    heart_rate_at_event INTEGER NOT NULL,
+    event_duration_minutes INTEGER, -- Duration of the event in minutes
+    context activity_context, -- Activity context when event occurred
+    source_device VARCHAR(255), -- Device that detected the event
+    severity cardiac_event_severity DEFAULT 'LOW', -- Medical severity assessment
+    is_confirmed BOOLEAN DEFAULT FALSE, -- Whether event was medically confirmed
+    notes TEXT, -- Additional clinical notes or user observations
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+
+    -- Ensure we don't duplicate events for same user at same time
+    UNIQUE(user_id, event_occurred_at, event_type),
+
+    -- Validation constraints for cardiac events
+    CONSTRAINT chk_hr_event_range CHECK (heart_rate_at_event BETWEEN 30 AND 300),
+    CONSTRAINT chk_event_duration CHECK (event_duration_minutes IS NULL OR event_duration_minutes >= 0)
 );
 
 -- Blood Pressure Metrics
@@ -150,16 +204,41 @@ CREATE TABLE sleep_metrics (
     UNIQUE(user_id, sleep_start)
 );
 
--- Activity Metrics
+-- Activity Metrics (Extended for Comprehensive Activity Tracking)
 CREATE TABLE activity_metrics (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     recorded_at TIMESTAMPTZ NOT NULL,
+
+    -- Basic Activity Metrics
     step_count INTEGER,
     distance_meters DOUBLE PRECISION,
     flights_climbed INTEGER,
     active_energy_burned_kcal DOUBLE PRECISION,
     basal_energy_burned_kcal DOUBLE PRECISION,
+
+    -- Specialized Distance Metrics for Different Activities
+    distance_cycling_meters DOUBLE PRECISION CHECK (distance_cycling_meters IS NULL OR distance_cycling_meters >= 0.0),
+    distance_swimming_meters DOUBLE PRECISION CHECK (distance_swimming_meters IS NULL OR distance_swimming_meters >= 0.0),
+    distance_wheelchair_meters DOUBLE PRECISION CHECK (distance_wheelchair_meters IS NULL OR distance_wheelchair_meters >= 0.0),
+    distance_downhill_snow_sports_meters DOUBLE PRECISION CHECK (distance_downhill_snow_sports_meters IS NULL OR distance_downhill_snow_sports_meters >= 0.0),
+
+    -- Wheelchair Accessibility Metrics
+    push_count INTEGER CHECK (push_count IS NULL OR push_count >= 0), -- Wheelchair pushes
+
+    -- Swimming Analytics
+    swimming_stroke_count INTEGER CHECK (swimming_stroke_count IS NULL OR swimming_stroke_count >= 0),
+
+    -- Cross-Platform Fitness Integration
+    nike_fuel_points INTEGER CHECK (nike_fuel_points IS NULL OR nike_fuel_points >= 0),
+
+    -- Apple Watch Activity Ring Integration
+    apple_exercise_time_minutes INTEGER CHECK (apple_exercise_time_minutes IS NULL OR apple_exercise_time_minutes >= 0),
+    apple_stand_time_minutes INTEGER CHECK (apple_stand_time_minutes IS NULL OR apple_stand_time_minutes >= 0),
+    apple_move_time_minutes INTEGER CHECK (apple_move_time_minutes IS NULL OR apple_move_time_minutes >= 0),
+    apple_stand_hour_achieved BOOLEAN DEFAULT false, -- Whether stand goal was achieved this hour
+
+    -- Metadata
     source_device VARCHAR(255),
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(user_id, recorded_at)
@@ -332,6 +411,12 @@ CREATE INDEX idx_raw_ingestions_processing_status ON raw_ingestions(processing_s
 CREATE INDEX idx_heart_rate_user_recorded ON heart_rate_metrics(user_id, recorded_at DESC);
 CREATE INDEX idx_heart_rate_recorded ON heart_rate_metrics(recorded_at DESC);
 
+-- Heart Rate Events indexes (STORY-011)
+CREATE INDEX idx_hr_events_user_time ON heart_rate_events(user_id, event_occurred_at DESC);
+CREATE INDEX idx_hr_events_type_severity ON heart_rate_events(event_type, severity);
+CREATE INDEX idx_hr_events_unconfirmed ON heart_rate_events(user_id, is_confirmed) WHERE is_confirmed = FALSE;
+CREATE INDEX idx_hr_events_severity_time ON heart_rate_events(severity DESC, event_occurred_at DESC) WHERE severity IN ('HIGH', 'CRITICAL');
+
 -- Blood pressure indexes
 CREATE INDEX idx_blood_pressure_user_recorded ON blood_pressure_metrics(user_id, recorded_at DESC);
 
@@ -340,6 +425,16 @@ CREATE INDEX idx_sleep_user_start ON sleep_metrics(user_id, sleep_start DESC);
 
 -- Activity indexes
 CREATE INDEX idx_activity_user_recorded ON activity_metrics(user_id, recorded_at DESC);
+
+-- Specialized Activity Indexes for Extended Metrics
+CREATE INDEX idx_activity_cycling_distance ON activity_metrics(user_id, recorded_at DESC) WHERE distance_cycling_meters IS NOT NULL;
+CREATE INDEX idx_activity_swimming_distance ON activity_metrics(user_id, recorded_at DESC) WHERE distance_swimming_meters IS NOT NULL;
+CREATE INDEX idx_activity_wheelchair_metrics ON activity_metrics(user_id, recorded_at DESC) WHERE distance_wheelchair_meters IS NOT NULL OR push_count IS NOT NULL;
+CREATE INDEX idx_activity_snow_sports ON activity_metrics(user_id, recorded_at DESC) WHERE distance_downhill_snow_sports_meters IS NOT NULL;
+CREATE INDEX idx_activity_swimming_strokes ON activity_metrics(user_id, swimming_stroke_count DESC) WHERE swimming_stroke_count IS NOT NULL;
+CREATE INDEX idx_activity_nike_fuel ON activity_metrics(user_id, nike_fuel_points DESC) WHERE nike_fuel_points IS NOT NULL;
+CREATE INDEX idx_activity_apple_exercise ON activity_metrics(user_id, apple_exercise_time_minutes DESC) WHERE apple_exercise_time_minutes IS NOT NULL;
+CREATE INDEX idx_activity_apple_stand_achieved ON activity_metrics(user_id, recorded_at DESC) WHERE apple_stand_hour_achieved = true;
 
 -- Workout indexes
 CREATE INDEX idx_workouts_user_started ON workouts(user_id, started_at DESC);

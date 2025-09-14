@@ -109,6 +109,13 @@ impl IosIngestPayload {
                                         None
                                     },
                                     heart_rate_variability: None,
+
+                                    // Advanced Cardiovascular Metrics (STORY-011) - Initialize to None for basic iOS data
+                                    walking_heart_rate_average: None,
+                                    heart_rate_recovery_one_minute: None,
+                                    atrial_fibrillation_burden_percentage: None,
+                                    vo2_max_ml_kg_min: None,
+
                                     source_device: data_point.source.clone(),
                                     context,
                                     created_at: Utc::now(),
@@ -232,6 +239,18 @@ impl IosIngestPayload {
                                     } else {
                                         None
                                     },
+                                    // Extended activity metrics - will be populated by specialized parsing later
+                                    distance_cycling_meters: None,
+                                    distance_swimming_meters: None,
+                                    distance_wheelchair_meters: None,
+                                    distance_downhill_snow_sports_meters: None,
+                                    push_count: None,
+                                    swimming_stroke_count: None,
+                                    nike_fuel_points: None,
+                                    apple_exercise_time_minutes: None,
+                                    apple_stand_time_minutes: None,
+                                    apple_move_time_minutes: None,
+                                    apple_stand_hour_achieved: None,
                                     source_device: data_point.source.clone(),
                                     created_at: Utc::now(),
                                 };

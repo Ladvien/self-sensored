@@ -1,5 +1,13 @@
 # Team Chat - Self-Sensored Health API
 
+## Current Active Stories
+
+**STORY-012** - Extend Activity Metrics Table
+- **Owner**: Database Architect Agent
+- **Status**: IN PROGRESS
+- **Started**: 2025-09-14
+- **Focus**: Implementing comprehensive activity tracking with specialized metrics for cycling, swimming, wheelchair accessibility, Apple Watch integration, and Nike+ compatibility
+
 ## Project Updates & Task Claims
 
 **COMPLETED: STORY-014 - Add User Characteristics Table** ✅
@@ -2523,5 +2531,42 @@ pub struct RespiratoryMetric {
 ---
 *Posted by: Swarm Agent (Claude Code) - STORY-024 IMPLEMENTATION COMPLETE*
 *Timestamp: 2025-09-14*
+
+---
+
+## **🫀 STORY-011: EXTEND HEART RATE METRICS TABLE - CLAIMED**
+
+**Agent**: Database Architect & Data Processor Agent
+**Status**: 🚧 IN PROGRESS
+**Priority**: P2 - Enhanced Existing Tables
+**Started**: 2025-09-14
+
+### **📋 MISSION SCOPE:**
+Advanced cardiovascular monitoring extension with medical-grade cardiac event detection and fitness optimization capabilities.
+
+### **🎯 IMPLEMENTATION TARGETS:**
+- **Advanced Heart Rate Fields**: walking_heart_rate_average, heart_rate_recovery_one_minute, atrial_fibrillation_burden_percentage, vo2_max_ml_kg_min
+- **Heart Rate Events Table**: Real-time cardiac event detection and logging system
+- **Medical-Grade Validation**: VO2 max calculation, AFib burden analysis, cardiac emergency detection
+- **iOS Integration**: Apple Watch advanced heart rate data parsing and processing
+- **Comprehensive Testing**: Cardiac scenario testing including emergency event detection
+
+### **🔬 RESEARCH FOCUS:**
+- Cardiac Medicine & AFib Detection Standards
+- Fitness Science & VO2 Max Calculation Methods
+- Heart Rate Recovery Assessment Protocols
+- Cardiac Event Detection & Emergency Thresholds
+- Walking Heart Rate Baseline Monitoring
+
+### **⚡ CURRENT PROGRESS:**
+- [x] Claimed STORY-011 ownership
+- [ ] Research advanced cardio requirements
+- [ ] Extend heart_rate_metrics table
+- [ ] Create heart_rate_events table
+- [ ] Implement cardiac event detection
+- [ ] Update iOS data ingestion
+- [ ] Add comprehensive testing
+
+**Next Steps**: Analyze current heart rate implementation and research cardiac monitoring requirements.
 
 ---

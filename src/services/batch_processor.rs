@@ -1623,7 +1623,7 @@ impl BatchProcessor {
 
         for (chunk_idx, chunk) in chunks.iter().enumerate() {
             let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
-                "INSERT INTO activity_metrics (user_id, recorded_at, step_count, distance_meters, active_energy_burned_kcal, basal_energy_burned_kcal, flights_climbed, source_device) "
+                "INSERT INTO activity_metrics (user_id, recorded_at, step_count, distance_meters, active_energy_burned_kcal, basal_energy_burned_kcal, flights_climbed, distance_cycling_meters, distance_swimming_meters, distance_wheelchair_meters, distance_downhill_snow_sports_meters, push_count, swimming_stroke_count, nike_fuel_points, apple_exercise_time_minutes, apple_stand_time_minutes, apple_move_time_minutes, apple_stand_hour_achieved, source_device) "
             );
 
             query_builder.push_values(chunk.iter(), |mut b, metric| {
@@ -1634,6 +1634,17 @@ impl BatchProcessor {
                     .push_bind(metric.active_energy_burned_kcal)
                     .push_bind(metric.basal_energy_burned_kcal)
                     .push_bind(metric.flights_climbed)
+                    .push_bind(metric.distance_cycling_meters)
+                    .push_bind(metric.distance_swimming_meters)
+                    .push_bind(metric.distance_wheelchair_meters)
+                    .push_bind(metric.distance_downhill_snow_sports_meters)
+                    .push_bind(metric.push_count)
+                    .push_bind(metric.swimming_stroke_count)
+                    .push_bind(metric.nike_fuel_points)
+                    .push_bind(metric.apple_exercise_time_minutes)
+                    .push_bind(metric.apple_stand_time_minutes)
+                    .push_bind(metric.apple_move_time_minutes)
+                    .push_bind(metric.apple_stand_hour_achieved)
                     .push_bind(&metric.source_device);
             });
 
