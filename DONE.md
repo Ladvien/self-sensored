@@ -2,6 +2,101 @@
 ## ⚠️ MIGRATION REFERENCES NOTICE
 **Historical Context**: This file contains references to migration files and expanded schema features that were part of the expanded schema implementation but have been removed as part of the schema simplification (SCHEMA-016). All references to migration files, nutrition metrics, symptoms, reproductive health metrics, environmental metrics, mental health metrics, and mobility metrics are historical and relate to work completed before schema simplification to the core 5 metric types.
 
+## ✅ STORY-021: HIPAA-Compliant Reproductive Health API Handlers (Completed: 2025-09-14)
+
+**Epic**: Health Metrics Expansion - Privacy-First Implementation
+**Priority**: High (HIPAA Critical)
+**Estimate**: 12 points
+**Status**: ✅ COMPLETED
+**Assigned to**: Claude Code (HIPAA Compliance Officer)
+
+### Summary
+Implemented comprehensive HIPAA-compliant reproductive health API handlers with maximum privacy protection, enhanced audit logging, and privacy-first design. Added support for menstrual health tracking and fertility monitoring with specialized privacy controls for sensitive data like sexual activity and pregnancy test results.
+
+### Completed Features
+
+#### 🔒 **Database Schema (HIPAA-Compliant)**
+✅ **Menstrual Health Table** - `menstrual_health` with privacy-aware design
+✅ **Fertility Tracking Table** - `fertility_tracking` with enhanced security controls
+✅ **Reproductive Health Audit Table** - Comprehensive audit trail for PHI access
+✅ **Privacy Functions** - Data anonymization and audit logging functions
+✅ **Security Indexes** - Privacy-aware indexes with access control limitations
+
+#### 🏥 **Reproductive Health Enums (Privacy-First)**
+✅ **MenstrualFlow** - Flow levels with privacy classification (sensitive/standard)
+✅ **CervicalMucusQuality** - Fertility indicators with medical accuracy
+✅ **OvulationTestResult** - Fertility probability scoring (0-95% scale)
+✅ **PregnancyTestResult** - Enhanced audit requirements for positive results
+✅ **TemperatureContext** - Fertility-relevant temperature context classification
+
+#### 🛡️ **API Endpoints (Enhanced Security)**
+✅ **POST /api/v1/ingest/reproductive-health** - Privacy-compliant data ingestion
+✅ **GET /api/v1/data/menstrual** - Menstrual health data with privacy protection
+✅ **GET /api/v1/data/fertility** - Fertility data with sexual activity exclusion
+✅ **Enhanced Audit Logging** - All reproductive health access automatically logged
+✅ **Privacy-Aware Error Handling** - Zero PHI leakage in error messages
+
+#### 📊 **Data Models (Maximum Privacy Protection)**
+✅ **MenstrualMetric** - Cycle phase calculation with privacy controls
+✅ **FertilityMetric** - Fertility probability scoring with enhanced privacy
+✅ **Sexual Activity Protection** - Special access controls and enhanced audit
+✅ **Pregnancy Data Security** - Enhanced audit for positive/indeterminate results
+✅ **Notes Encryption** - Private notes excluded from all API responses
+
+#### ✅ **Validation & Security**
+✅ **Comprehensive Validation** - Physiological range validation for all metrics
+✅ **Privacy-First Queries** - Sensitive data excluded by default from responses
+✅ **Enhanced Audit Trail** - Privacy level classification (standard/sensitive/highly_sensitive)
+✅ **Client Tracking** - IP address and user agent logging for security
+✅ **Data Retention Controls** - Anonymization functions for compliance
+
+#### 🧪 **Testing Coverage**
+✅ **Privacy Level Tests** - Comprehensive testing of privacy classifications
+✅ **Fertility Calculations** - Multi-factor fertility probability testing
+✅ **iOS Integration Tests** - Enum parsing for reproductive health data
+✅ **Validation Range Tests** - Comprehensive range validation testing
+✅ **Privacy Protection Tests** - Verification of sensitive data exclusion
+
+### 🔒 **HIPAA Compliance Features**
+- **Enhanced Audit Logging**: All reproductive health access logged with privacy levels
+- **Data Anonymization**: Built-in functions for privacy-preserving analytics
+- **Sexual Activity Protection**: Special access controls and enhanced audit requirements
+- **Pregnancy Data Security**: Enhanced audit for positive/indeterminate pregnancy tests
+- **Error Message Sanitization**: Zero PHI leakage in error responses
+- **Privacy-First API Design**: Sensitive data excluded from standard API responses
+
+### 📊 **Advanced Features**
+- **Fertility Probability Calculator**: Multi-factor scoring (ovulation tests, cervical mucus, LH levels)
+- **Cycle Phase Detection**: Automatic menstrual/follicular/ovulatory/luteal phase calculation
+- **Privacy Level Classification**: Automatic sensitivity detection and audit level assignment
+- **Medical-Grade Validation**: Physiological range validation for all reproductive health metrics
+
+### 🚀 **Technical Implementation**
+- Added comprehensive reproductive health enums with iOS parsing support
+- Implemented privacy-first API handlers with enhanced security
+- Created HIPAA-compliant database schema with audit functions
+- Added comprehensive test suite with privacy protection verification
+- Integrated with existing health metrics system and batch processing
+- Updated main.rs routing with reproductive health endpoints
+
+### ⚠️ **Deployment Requirements**
+1. Run database migration: `psql -d health_export_dev < database/schema.sql`
+2. Verify reproductive health audit functions are accessible
+3. Test enhanced audit logging for sexual activity and pregnancy data
+4. Validate privacy controls prevent unauthorized sensitive data access
+5. Confirm pregnancy test result audit triggers work correctly
+
+**Implementation Files:**
+- `/database/schema.sql` - Reproductive health tables and functions
+- `/src/models/enums.rs` - Reproductive health enums with privacy methods
+- `/src/models/health_metrics.rs` - MenstrualMetric and FertilityMetric structs
+- `/src/handlers/reproductive_health_handler.rs` - Privacy-first API handlers
+- `/src/handlers/mod.rs` - Handler module registration
+- `/src/main.rs` - Reproductive health API routes
+- `/tests/reproductive_health_integration_tests.rs` - Comprehensive test suite
+
+**Privacy Impact**: Maximum privacy protection implemented for sensitive reproductive health data with comprehensive audit trails and specialized access controls for sexual activity and pregnancy information.
+
 ## ✅ STORY-022: Environmental & Safety API Handlers (Completed: 2025-09-14)
 
 **Epic**: Health Metrics Expansion

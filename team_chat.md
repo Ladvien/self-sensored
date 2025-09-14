@@ -911,14 +911,14 @@ Working on implementing comprehensive symptoms tracking functionality:
 
 **Implementation Plan:**
 1. ✅ **Claim story in team_chat.md** (Completed)
-2. 🔄 **Add BodyMeasurementMetric** to health_metrics.rs with validation
-3. 🔄 **Add body measurements** to BatchProcessor GroupedMetrics
-4. 🔄 **Add chunked processing** with parameter limit safety
-5. 🔄 **Add BMI validation** and consistency checking
-6. 🔄 **Add deduplication** support: user_id + recorded_at + measurement_type
-7. 🔄 **Update config** with body measurements chunk size and param count
+2. ✅ **Add BodyMeasurementMetric** to health_metrics.rs with validation (Completed)
+3. ✅ **Add body measurements** to BatchProcessor GroupedMetrics (Completed)
+4. ✅ **Add chunked processing** with parameter limit safety (Completed)
+5. ✅ **Add BMI validation** and consistency checking (Completed)
+6. ✅ **Add deduplication** support: user_id + recorded_at + measurement_type (Completed)
+7. ✅ **Update config** with body measurements chunk size and param count (Completed)
 8. 🔄 **Add comprehensive tests** for batch processing
-9. 🔄 **Coordinate database integration** (table should already exist)
+9. ✅ **Coordinate database integration** (table should already exist) (Completed)
 10. 🔄 **Move story to DONE.md** when integration complete
 
 **Smart Device Integration Requirements:**

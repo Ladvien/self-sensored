@@ -43,6 +43,7 @@ async fn cleanup_test_data(pool: &PgPool, user_id: Uuid) {
         "blood_pressure_metrics",
         "sleep_metrics",
         "activity_metrics",
+        "body_metrics",
         "respiratory_metrics",
         "workouts",
         "users"
