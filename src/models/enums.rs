@@ -1250,3 +1250,127 @@ impl fmt::Display for HygieneEventType {
         write!(f, "{s}")
     }
 }
+
+// Heart Rate Event Type ENUM (STORY-011)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[sqlx(type_name = "heart_rate_event_type", rename_all = "SCREAMING_SNAKE_CASE")]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum HeartRateEventType {
+    High,            // Dangerously high heart rate (tachycardia)
+    Low,             // Dangerously low heart rate (bradycardia)
+    Irregular,       // Irregular rhythm detection
+    Afib,            // Atrial fibrillation detected
+    RapidIncrease,   // Sudden rapid HR increase
+    SlowRecovery,    // Poor heart rate recovery post-exercise
+    ExerciseAnomaly, // Abnormal HR pattern during exercise
+}
+
+impl HeartRateEventType {
+    /// Get the medical threshold values for triggering this event type
+    pub fn get_threshold_bpm(&self, user_age: Option<u8>) -> (Option<i16>, Option<i16>) {
+        match self {
+            Self::High => {
+                // Age-adjusted maximum HR thresholds for tachycardia
+                let max_hr = user_age.map(|age| 220 - age as i16).unwrap_or(180);
+                (Some((max_hr as f64 * 0.85) as i16), Some(300)) // 85% of max HR to 300 BPM
+            },
+            Self::Low => (Some(30), Some(50)), // Bradycardia: 30-50 BPM
+            Self::Irregular => (None, None), // Pattern-based, not threshold
+            Self::Afib => (None, None), // Pattern-based AFib detection
+            Self::RapidIncrease => (None, None), // Rate of change based
+            Self::SlowRecovery => (None, None), // Recovery rate based
+            Self::ExerciseAnomaly => (None, None), // Exercise context based
+        }
+    }
+
+    /// Get the medical severity for this event type
+    pub fn get_default_severity(&self) -> CardiacEventSeverity {
+        match self {
+            Self::High => CardiacEventSeverity::Moderate,
+            Self::Low => CardiacEventSeverity::Moderate,
+            Self::Irregular => CardiacEventSeverity::Moderate,
+            Self::Afib => CardiacEventSeverity::High,
+            Self::RapidIncrease => CardiacEventSeverity::Low,
+            Self::SlowRecovery => CardiacEventSeverity::Low,
+            Self::ExerciseAnomaly => CardiacEventSeverity::Low,
+        }
+    }
+
+    /// Get human-readable description for medical professionals
+    pub fn get_medical_description(&self) -> &'static str {
+        match self {
+            Self::High => "Sustained tachycardia - heart rate exceeding safe threshold for extended period",
+            Self::Low => "Bradycardia - heart rate below normal resting range, potential conduction issue",
+            Self::Irregular => "Irregular heart rhythm detected - possible arrhythmia requiring assessment",
+            Self::Afib => "Atrial fibrillation detected - irregular rapid heart rhythm requiring medical evaluation",
+            Self::RapidIncrease => "Sudden rapid heart rate increase - monitoring for potential cardiac stress",
+            Self::SlowRecovery => "Poor heart rate recovery post-exercise - potential cardiovascular fitness concern",
+            Self::ExerciseAnomaly => "Abnormal heart rate pattern during exercise - unusual cardiovascular response",
+        }
+    }
+}
+
+impl fmt::Display for HeartRateEventType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Self::High => "high",
+            Self::Low => "low",
+            Self::Irregular => "irregular",
+            Self::Afib => "afib",
+            Self::RapidIncrease => "rapid_increase",
+            Self::SlowRecovery => "slow_recovery",
+            Self::ExerciseAnomaly => "exercise_anomaly",
+        };
+        write!(f, "{s}")
+    }
+}
+
+// Cardiac Event Severity ENUM (STORY-011)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Type)]
+#[sqlx(type_name = "cardiac_event_severity", rename_all = "SCREAMING_SNAKE_CASE")]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum CardiacEventSeverity {
+    Low,      // Mild concern, monitoring recommended
+    Moderate, // Medical consultation advised
+    High,     // Urgent medical attention recommended
+    Critical, // Emergency medical intervention required
+}
+
+impl CardiacEventSeverity {
+    /// Get recommended action for this severity level
+    pub fn get_recommended_action(&self) -> &'static str {
+        match self {
+            Self::Low => "Continue monitoring. Consider discussing with healthcare provider at next routine visit.",
+            Self::Moderate => "Schedule medical consultation within 1-2 weeks to assess cardiovascular health.",
+            Self::High => "Seek urgent medical attention within 24 hours. Contact healthcare provider immediately.",
+            Self::Critical => "EMERGENCY: Seek immediate medical intervention. Call emergency services if experiencing symptoms.",
+        }
+    }
+
+    /// Get monitoring frequency recommendation
+    pub fn get_monitoring_frequency(&self) -> &'static str {
+        match self {
+            Self::Low => "Weekly heart rate monitoring recommended",
+            Self::Moderate => "Daily heart rate monitoring recommended",
+            Self::High => "Continuous monitoring until medical evaluation",
+            Self::Critical => "Immediate medical supervision required",
+        }
+    }
+
+    /// Check if this severity requires immediate notification
+    pub fn requires_immediate_notification(&self) -> bool {
+        matches!(self, Self::High | Self::Critical)
+    }
+}
+
+impl fmt::Display for CardiacEventSeverity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Self::Low => "low",
+            Self::Moderate => "moderate",
+            Self::High => "high",
+            Self::Critical => "critical",
+        };
+        write!(f, "{s}")
+    }
+}
