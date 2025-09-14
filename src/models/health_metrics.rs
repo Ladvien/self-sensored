@@ -3,7 +3,9 @@ use crate::models::enums::{
     ActivityContext, WorkoutType, MeditationType, StateOfMind,
     MenstrualFlow, CervicalMucusQuality, OvulationTestResult,
     PregnancyTestResult, TemperatureContext, SymptomType, SymptomSeverity,
+    HygieneEventType,
 };
+use crate::models::user_characteristics::UserCharacteristics;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -552,6 +554,7 @@ pub enum HealthMetric {
     Menstrual(MenstrualMetric),
     Fertility(FertilityMetric),
     Symptom(SymptomMetric),
+    Hygiene(HygieneMetric),
 }
 
 /// Main ingest payload structure
@@ -616,6 +619,71 @@ impl HeartRateMetric {
             }
         }
         Ok(())
+    }
+
+    /// Personalized validation using user characteristics
+    pub fn validate_with_characteristics(&self, config: &ValidationConfig, characteristics: Option<&UserCharacteristics>) -> Result<(), String> {
+        match characteristics {
+            Some(chars) => {
+                let age = chars.age().unwrap_or(30);
+                let sex_adjustment = chars.biological_sex.get_heart_rate_adjustment();
+
+                // Calculate personalized ranges based on age and biological sex
+                let min_resting = match age {
+                    age if age < 30 => 40,
+                    age if age < 50 => 45,
+                    _ => 50,
+                };
+                let max_resting = match age {
+                    age if age < 30 => 100,
+                    age if age < 50 => 95,
+                    _ => 90,
+                };
+                let max_exercise = 220_u32.saturating_sub(age);
+
+                // Apply biological sex adjustment
+                let adjusted_min_resting = (min_resting as f64 * sex_adjustment) as i16;
+                let adjusted_max_resting = (max_resting as f64 * sex_adjustment) as i16;
+                let adjusted_max_exercise = (max_exercise as f64 * sex_adjustment) as i16;
+
+                if let Some(bpm) = self.heart_rate {
+                    let max_hr = match self.context {
+                        Some(ActivityContext::Exercise) | Some(ActivityContext::Running) | Some(ActivityContext::Cycling) => adjusted_max_exercise,
+                        _ => adjusted_max_resting,
+                    };
+
+                    if bpm < adjusted_min_resting || bpm > max_hr {
+                        return Err(format!(
+                            "heart_rate {} is outside personalized range ({}-{}) for age {} and biological sex {:?}",
+                            bpm, adjusted_min_resting, max_hr, age, chars.biological_sex
+                        ));
+                    }
+                }
+
+                if let Some(bpm) = self.resting_heart_rate {
+                    if bpm < adjusted_min_resting || bpm > adjusted_max_resting {
+                        return Err(format!(
+                            "resting_heart_rate {} is outside personalized range ({}-{}) for age {} and biological sex {:?}",
+                            bpm, adjusted_min_resting, adjusted_max_resting, age, chars.biological_sex
+                        ));
+                    }
+                }
+
+                if let Some(hrv) = self.heart_rate_variability {
+                    if !(0.0..=500.0).contains(&hrv) {
+                        return Err(format!(
+                            "heart_rate_variability {hrv} is out of range (0-500)"
+                        ));
+                    }
+                }
+
+                Ok(())
+            }
+            None => {
+                // Fallback to standard validation
+                self.validate_with_config(config)
+            }
+        }
     }
 }
 
@@ -779,6 +847,101 @@ impl ActivityMetric {
             }
         }
         Ok(())
+    }
+
+    /// Personalized validation using user characteristics (wheelchair adaptations)
+    pub fn validate_with_characteristics(&self, config: &ValidationConfig, characteristics: Option<&UserCharacteristics>) -> Result<(), String> {
+        match characteristics {
+            Some(chars) => {
+                // Wheelchair users have different activity expectations
+                let step_max = if chars.wheelchair_use { 10000 } else { config.step_count_max };
+                let distance_max_km = if chars.wheelchair_use { 100.0 } else { config.distance_max_km };
+
+                if let Some(step_count) = self.step_count {
+                    // For wheelchair users, step count may be much lower or even zero
+                    if chars.wheelchair_use {
+                        // More lenient validation for wheelchair users
+                        if step_count < 0 || step_count > step_max {
+                            return Err(format!(
+                                "step_count {} is outside adapted range (0-{}) for wheelchair user",
+                                step_count, step_max
+                            ));
+                        }
+                    } else {
+                        if step_count < config.step_count_min || step_count > step_max {
+                            return Err(format!(
+                                "step_count {} is out of range ({}-{})",
+                                step_count, config.step_count_min, step_max
+                            ));
+                        }
+                    }
+                }
+
+                if let Some(distance) = self.distance_meters {
+                    if distance < 0.0 {
+                        return Err("distance_meters cannot be negative".to_string());
+                    }
+                    let distance_km = distance / 1000.0;
+                    if distance_km > distance_max_km {
+                        return Err(format!(
+                            "distance {} km exceeds {} maximum of {} km",
+                            distance_km,
+                            if chars.wheelchair_use { "wheelchair-adapted" } else { "standard" },
+                            distance_max_km
+                        ));
+                    }
+                }
+
+                // Energy validation remains the same but with context
+                if let Some(active_energy) = self.active_energy_burned_kcal {
+                    if active_energy < 0.0 {
+                        return Err("active_energy_burned_kcal cannot be negative".to_string());
+                    }
+                    if active_energy > config.calories_max {
+                        return Err(format!(
+                            "active_energy_burned_kcal {} exceeds maximum of {}",
+                            active_energy, config.calories_max
+                        ));
+                    }
+                }
+
+                if let Some(basal_energy) = self.basal_energy_burned_kcal {
+                    if basal_energy < 0.0 {
+                        return Err("basal_energy_burned_kcal cannot be negative".to_string());
+                    }
+                    if basal_energy > config.calories_max {
+                        return Err(format!(
+                            "basal_energy_burned_kcal {} exceeds maximum of {}",
+                            basal_energy, config.calories_max
+                        ));
+                    }
+                }
+
+                // Flights climbed may not apply to wheelchair users
+                if let Some(flights) = self.flights_climbed {
+                    if chars.wheelchair_use && flights > 0 {
+                        // Note: Some wheelchair users may still climb flights (e.g., manual wheelchair on ramps)
+                        // So we allow it but with a lower maximum
+                        if flights > 100 {
+                            return Err(format!(
+                                "flights_climbed {} seems unusually high for wheelchair user (max 100)",
+                                flights
+                            ));
+                        }
+                    } else if !(0..=10000).contains(&flights) {
+                        return Err(format!(
+                            "flights_climbed {flights} is out of range (0-10000)"
+                        ));
+                    }
+                }
+
+                Ok(())
+            }
+            None => {
+                // Fallback to standard validation
+                self.validate_with_config(config)
+            }
+        }
     }
 }
 
@@ -1780,6 +1943,7 @@ impl HealthMetric {
             HealthMetric::MentalHealth(metric) => metric.validate_with_config(config),
             HealthMetric::Menstrual(metric) => metric.validate_with_config(config),
             HealthMetric::Fertility(metric) => metric.validate_with_config(config),
+            HealthMetric::Hygiene(metric) => metric.validate_with_config(config),
         }
     }
 
@@ -1804,6 +1968,7 @@ impl HealthMetric {
             HealthMetric::Menstrual(_) => "Menstrual",
             HealthMetric::Fertility(_) => "Fertility",
             HealthMetric::Symptom(_) => "Symptom",
+            HealthMetric::Hygiene(_) => "Hygiene",
         }
     }
 }
@@ -2686,5 +2851,217 @@ impl MetabolicMetric {
             Some(_) => "life_threatening",
             None => "unknown",
         }
+    }
+}
+
+/// Hygiene event metric for behavior tracking and public health monitoring
+#[derive(Debug, Deserialize, Serialize, Clone, FromRow)]
+pub struct HygieneMetric {
+    pub id: uuid::Uuid,
+    pub user_id: uuid::Uuid,
+    pub recorded_at: DateTime<Utc>,
+
+    // Core Hygiene Event Data
+    pub event_type: HygieneEventType,
+    pub duration_seconds: Option<i32>,
+    pub quality_rating: Option<i16>, // 1-5 self-reported quality
+
+    // Public Health & Compliance Tracking
+    pub meets_who_guidelines: Option<bool>,
+    pub frequency_compliance_rating: Option<i16>, // 1-5 daily frequency adherence
+
+    // Smart Device Integration
+    pub device_detected: Option<bool>,
+    pub device_effectiveness_score: Option<f64>, // 0-100% device-measured effectiveness
+
+    // Context & Behavioral Analysis
+    pub trigger_event: Option<String>,
+    pub location_context: Option<String>,
+    pub compliance_motivation: Option<String>,
+
+    // Health Crisis Integration
+    pub health_crisis_enhanced: Option<bool>,
+    pub crisis_compliance_level: Option<i16>, // 1-5 adherence to crisis protocols
+
+    // Gamification & Habit Tracking
+    pub streak_count: Option<i32>,
+    pub daily_goal_progress: Option<i16>, // 0-200% of daily hygiene goals met
+    pub achievement_unlocked: Option<String>,
+
+    // Medical Integration
+    pub medication_adherence_related: Option<bool>,
+    pub medical_condition_context: Option<String>,
+
+    // Privacy & Data Sensitivity
+    pub data_sensitivity_level: Option<String>,
+
+    // Metadata
+    pub source_device: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+impl HygieneMetric {
+    /// Validate hygiene metric data with configurable thresholds
+    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
+        // Validate duration if provided
+        if let Some(duration) = self.duration_seconds {
+            if duration < 1 || duration > 7200 { // 1 second to 2 hours
+                return Err(format!(
+                    "duration_seconds {} is outside valid range (1-7200 seconds)",
+                    duration
+                ));
+            }
+        }
+
+        // Validate quality rating if provided
+        if let Some(quality) = self.quality_rating {
+            if quality < 1 || quality > 5 {
+                return Err(format!(
+                    "quality_rating {} is outside valid range (1-5)",
+                    quality
+                ));
+            }
+        }
+
+        // Validate frequency compliance rating if provided
+        if let Some(freq_rating) = self.frequency_compliance_rating {
+            if freq_rating < 1 || freq_rating > 5 {
+                return Err(format!(
+                    "frequency_compliance_rating {} is outside valid range (1-5)",
+                    freq_rating
+                ));
+            }
+        }
+
+        // Validate device effectiveness score if provided
+        if let Some(effectiveness) = self.device_effectiveness_score {
+            if effectiveness < 0.0 || effectiveness > 100.0 {
+                return Err(format!(
+                    "device_effectiveness_score {} is outside valid range (0.0-100.0%)",
+                    effectiveness
+                ));
+            }
+        }
+
+        // Validate crisis compliance level if provided
+        if let Some(crisis_level) = self.crisis_compliance_level {
+            if crisis_level < 1 || crisis_level > 5 {
+                return Err(format!(
+                    "crisis_compliance_level {} is outside valid range (1-5)",
+                    crisis_level
+                ));
+            }
+        }
+
+        // Validate daily goal progress if provided
+        if let Some(progress) = self.daily_goal_progress {
+            if progress < 0 || progress > 200 {
+                return Err(format!(
+                    "daily_goal_progress {} is outside valid range (0-200%)",
+                    progress
+                ));
+            }
+        }
+
+        // Validate data sensitivity level
+        if let Some(sensitivity) = &self.data_sensitivity_level {
+            let valid_levels = ["standard", "medical", "crisis_tracking"];
+            if !valid_levels.contains(&sensitivity.as_str()) {
+                return Err(format!(
+                    "data_sensitivity_level '{}' is invalid. Valid levels: {:?}",
+                    sensitivity, valid_levels
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check if hygiene event meets WHO/CDC guidelines
+    pub fn meets_health_guidelines(&self) -> bool {
+        if let Some(duration) = self.duration_seconds {
+            if let Some(recommended_duration) = self.event_type.get_recommended_duration() {
+                return duration >= recommended_duration as i32;
+            }
+        }
+        false
+    }
+
+    /// Get compliance score based on duration and frequency
+    pub fn calculate_compliance_score(&self) -> f64 {
+        let mut score = 0.0;
+        let mut components = 0;
+
+        // Duration compliance (40% of score)
+        if self.meets_health_guidelines() {
+            score += 0.4;
+        }
+        components += 1;
+
+        // Quality rating (30% of score)
+        if let Some(quality) = self.quality_rating {
+            score += (quality as f64 / 5.0) * 0.3;
+            components += 1;
+        }
+
+        // Device effectiveness (20% of score if available)
+        if let Some(effectiveness) = self.device_effectiveness_score {
+            score += (effectiveness / 100.0) * 0.2;
+            components += 1;
+        }
+
+        // Frequency compliance (10% of score)
+        if let Some(freq_rating) = self.frequency_compliance_rating {
+            score += (freq_rating as f64 / 5.0) * 0.1;
+            components += 1;
+        }
+
+        if components > 0 {
+            score
+        } else {
+            0.0
+        }
+    }
+
+    /// Check if this is a critical hygiene event for infection prevention
+    pub fn is_critical_for_infection_prevention(&self) -> bool {
+        self.event_type.is_critical_for_infection_prevention()
+    }
+
+    /// Get hygiene category for analytics
+    pub fn get_hygiene_category(&self) -> &'static str {
+        self.event_type.get_category()
+    }
+
+    /// Check if event was detected by smart device
+    pub fn was_device_detected(&self) -> bool {
+        self.device_detected.unwrap_or(false)
+    }
+
+    /// Check if event was during health crisis period
+    pub fn was_during_health_crisis(&self) -> bool {
+        self.health_crisis_enhanced.unwrap_or(false)
+    }
+
+    /// Get achievement status if any unlocked
+    pub fn has_achievement(&self) -> Option<&str> {
+        self.achievement_unlocked.as_deref()
+    }
+
+    /// Calculate habit strength based on streak count
+    pub fn habit_strength(&self) -> &'static str {
+        match self.streak_count.unwrap_or(0) {
+            0..=2 => "forming",
+            3..=6 => "developing",
+            7..=20 => "established",
+            21..=65 => "strong",
+            _ => "ingrained"
+        }
+    }
+
+    /// Check if hygiene event requires medical attention context
+    pub fn requires_medical_context(&self) -> bool {
+        self.medication_adherence_related.unwrap_or(false) ||
+        self.medical_condition_context.is_some()
     }
 }

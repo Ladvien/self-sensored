@@ -2321,6 +2321,194 @@ impl BatchProcessor {
             }),
         })
     }
+
+    /// Process hygiene events in batches with comprehensive validation and deduplication
+    pub async fn process_hygiene_events(
+        &self,
+        user_id: uuid::Uuid,
+        metrics: Vec<crate::models::health_metrics::HygieneMetric>,
+    ) -> Result<BatchProcessingResult, sqlx::Error> {
+        if metrics.is_empty() {
+            return Ok(BatchProcessingResult::default());
+        }
+
+        let start_time = std::time::Instant::now();
+
+        // Deduplicate hygiene events
+        let deduplicated_metrics = self.deduplicate_hygiene_events(user_id, metrics.clone());
+        let duplicates_removed = metrics.len() - deduplicated_metrics.len();
+
+        // Process hygiene events with retry
+        let (processed, failed, errors, retries) = Self::process_with_retry(
+            "HygieneEvents",
+            || Self::insert_hygiene_events_chunked(&self.pool, user_id, deduplicated_metrics.clone(), 6000), // Conservative chunk size for hygiene events
+            self.config.max_retries,
+            self.config.initial_backoff_ms,
+            self.config.max_backoff_ms,
+        ).await;
+
+        let processing_time_ms = start_time.elapsed().as_millis() as u64;
+
+        Ok(BatchProcessingResult {
+            processed_count: processed,
+            failed_count: failed,
+            errors,
+            processing_time_ms,
+            retry_attempts: retries,
+            memory_peak_mb: Some(0.0), // Simplified for now
+            chunk_progress: None,
+            deduplication_stats: Some(DeduplicationStats {
+                heart_rate_duplicates: 0,
+                blood_pressure_duplicates: 0,
+                sleep_duplicates: 0,
+                activity_duplicates: 0,
+                body_measurement_duplicates: 0,
+                temperature_duplicates: 0,
+                respiratory_duplicates: 0,
+                blood_glucose_duplicates: 0,
+                workout_duplicates: 0,
+                total_duplicates: duplicates_removed,
+                deduplication_time_ms: 0,
+            }),
+        })
+    }
+
+    /// Deduplicate hygiene events based on user_id, recorded_at, and event_type
+    fn deduplicate_hygiene_events(
+        &self,
+        user_id: uuid::Uuid,
+        metrics: Vec<crate::models::health_metrics::HygieneMetric>,
+    ) -> Vec<crate::models::health_metrics::HygieneMetric> {
+        // Always enable deduplication for hygiene events
+        // TODO: Add enable_deduplication to BatchConfig if needed
+
+        let start_time = std::time::Instant::now();
+
+        // Use a HashSet to track unique combinations of (user_id, recorded_at, event_type)
+        let mut seen = std::collections::HashSet::new();
+        let deduplicated: Vec<_> = metrics
+            .into_iter()
+            .filter(|metric| {
+                let key = (user_id, metric.recorded_at, metric.event_type);
+                seen.insert(key)
+            })
+            .collect();
+
+        let deduplication_time = start_time.elapsed();
+        let removed_count = seen.len() - deduplicated.len();
+
+        info!(
+            user_id = %user_id,
+            original_count = seen.len() + removed_count,
+            deduplicated_count = deduplicated.len(),
+            removed_count = removed_count,
+            deduplication_time_ms = deduplication_time.as_millis(),
+            "Hygiene events deduplication completed"
+        );
+
+        // TODO: Add deduplication stats recording to Metrics if needed
+
+        deduplicated
+    }
+
+    /// Insert hygiene events in chunks with ON CONFLICT handling
+    async fn insert_hygiene_events_chunked(
+        pool: &sqlx::PgPool,
+        user_id: uuid::Uuid,
+        metrics: Vec<crate::models::health_metrics::HygieneMetric>,
+        chunk_size: usize,
+    ) -> Result<usize, sqlx::Error> {
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        // Parameters per hygiene event record (21 total parameters)
+        const HYGIENE_PARAMS_PER_RECORD: usize = 21;
+        const SAFE_PARAM_LIMIT: usize = 60000; // Conservative PostgreSQL parameter limit
+
+        let chunks: Vec<_> = metrics.chunks(chunk_size).collect();
+        let mut total_inserted = 0;
+
+        // Validate parameter count to prevent PostgreSQL limit errors
+        let max_params_per_chunk = chunk_size * HYGIENE_PARAMS_PER_RECORD;
+        if max_params_per_chunk > SAFE_PARAM_LIMIT {
+            return Err(sqlx::Error::Configuration(
+                format!(
+                    "Chunk size {chunk_size} would result in {max_params_per_chunk} parameters, exceeding safe limit"
+                )
+                .into(),
+            ));
+        }
+
+        // TODO: Record parameter usage for monitoring
+
+        info!(
+            metric_type = "hygiene_events",
+            total_records = metrics.len(),
+            chunk_count = chunks.len(),
+            chunk_size = chunk_size,
+            max_params_per_chunk = max_params_per_chunk,
+            "Processing hygiene events in chunks"
+        );
+
+        for (chunk_idx, chunk) in chunks.iter().enumerate() {
+            let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
+                r#"INSERT INTO hygiene_events (
+                    user_id, recorded_at, event_type, duration_seconds, quality_rating,
+                    meets_who_guidelines, frequency_compliance_rating, device_detected,
+                    device_effectiveness_score, trigger_event, location_context,
+                    compliance_motivation, health_crisis_enhanced, crisis_compliance_level,
+                    daily_goal_progress, achievement_unlocked, medication_adherence_related,
+                    medical_condition_context, data_sensitivity_level, source_device
+                ) "#
+            );
+
+            query_builder.push_values(chunk.iter(), |mut b, metric| {
+                b.push_bind(user_id)
+                    .push_bind(metric.recorded_at)
+                    .push_bind(&metric.event_type)
+                    .push_bind(metric.duration_seconds)
+                    .push_bind(metric.quality_rating)
+                    .push_bind(metric.meets_who_guidelines)
+                    .push_bind(metric.frequency_compliance_rating)
+                    .push_bind(metric.device_detected)
+                    .push_bind(metric.device_effectiveness_score)
+                    .push_bind(&metric.trigger_event)
+                    .push_bind(&metric.location_context)
+                    .push_bind(&metric.compliance_motivation)
+                    .push_bind(metric.health_crisis_enhanced)
+                    .push_bind(metric.crisis_compliance_level)
+                    .push_bind(metric.daily_goal_progress)
+                    .push_bind(&metric.achievement_unlocked)
+                    .push_bind(metric.medication_adherence_related)
+                    .push_bind(&metric.medical_condition_context)
+                    .push_bind(&metric.data_sensitivity_level)
+                    .push_bind(&metric.source_device);
+            });
+
+            query_builder.push(" ON CONFLICT (user_id, recorded_at, event_type) DO NOTHING");
+
+            let result = query_builder.build().execute(pool).await?;
+            let chunk_inserted = result.rows_affected() as usize;
+            total_inserted += chunk_inserted;
+
+            info!(
+                chunk_index = chunk_idx + 1,
+                chunk_records = chunk.len(),
+                chunk_inserted = chunk_inserted,
+                "Processed hygiene events chunk"
+            );
+        }
+
+        info!(
+            total_records = metrics.len(),
+            total_inserted = total_inserted,
+            duplicates_skipped = metrics.len() - total_inserted,
+            "Completed hygiene events batch processing"
+        );
+
+        Ok(total_inserted)
+    }
 }
 
 /// Helper struct for grouping metrics by type

@@ -130,6 +130,10 @@ async fn main() -> std::io::Result<()> {
     let auth_service = AuthService::new(pool.clone());
     info!("AuthService initialized");
 
+    // Create UserCharacteristicsService
+    let user_characteristics_service = services::user_characteristics::UserCharacteristicsService::new(pool.clone());
+    info!("UserCharacteristicsService initialized");
+
     // Create RateLimiter service
     let rate_limiter = match RateLimiter::new(&redis_url).await {
         Ok(limiter) => {
@@ -191,6 +195,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(web::Data::new(pool.clone()))
             .app_data(web::Data::new(auth_service.clone()))
+            .app_data(web::Data::new(user_characteristics_service.clone()))
             .app_data(web::Data::new(rate_limiter.clone()))
             // Security-limited payload size to prevent DoS attacks
             .app_data(web::PayloadConfig::new(max_payload_size_mb * 1024 * 1024))
@@ -287,6 +292,15 @@ async fn main() -> std::io::Result<()> {
                         "/data/temperature",
                         web::get().to(handlers::temperature_handler::get_temperature_data_handler),
                     )
+                    // Hygiene events endpoints
+                    .route(
+                        "/ingest/hygiene",
+                        web::post().to(handlers::hygiene_handler::ingest_hygiene),
+                    )
+                    .route(
+                        "/data/hygiene",
+                        web::get().to(handlers::hygiene_handler::get_hygiene_data),
+                    )
                     // Body measurements endpoints (weight, BMI, body composition)
                     .route(
                         "/ingest/body-measurements",
@@ -361,6 +375,51 @@ async fn main() -> std::io::Result<()> {
                         "/data/metabolic",
                         web::get().to(handlers::metabolic_handler::get_metabolic_data_handler),
                     )
+                    // User Characteristics endpoints for personalized health tracking
+                    .route(
+                        "/user/characteristics",
+                        web::get().to(handlers::user_characteristics_handler::get_user_characteristics),
+                    )
+                    .route(
+                        "/user/characteristics",
+                        web::post().to(handlers::user_characteristics_handler::create_user_characteristics),
+                    )
+                    .route(
+                        "/user/characteristics",
+                        web::put().to(handlers::user_characteristics_handler::update_user_characteristics),
+                    )
+                    .route(
+                        "/user/characteristics",
+                        web::patch().to(handlers::user_characteristics_handler::upsert_user_characteristics),
+                    )
+                    .route(
+                        "/user/characteristics",
+                        web::delete().to(handlers::user_characteristics_handler::delete_user_characteristics),
+                    )
+                    .route(
+                        "/user/characteristics/verify",
+                        web::post().to(handlers::user_characteristics_handler::verify_user_characteristics),
+                    )
+                    .route(
+                        "/user/characteristics/validation/{metric_type}",
+                        web::get().to(handlers::user_characteristics_handler::get_validation_ranges),
+                    )
+                    .route(
+                        "/user/characteristics/uv-recommendations",
+                        web::get().to(handlers::user_characteristics_handler::get_uv_recommendations),
+                    )
+                    .route(
+                        "/user/characteristics/activity-personalization",
+                        web::get().to(handlers::user_characteristics_handler::get_activity_personalization),
+                    )
+                    .route(
+                        "/user/characteristics/heart-rate-zones",
+                        web::get().to(handlers::user_characteristics_handler::get_heart_rate_zones),
+                    )
+                    .route(
+                        "/user/characteristics/emergency-info",
+                        web::get().to(handlers::user_characteristics_handler::get_emergency_info),
+                    )
                     // Health data export endpoints
                     .route(
                         "/export/all",
@@ -393,6 +452,10 @@ async fn main() -> std::io::Result<()> {
                             .route(
                                 "/logging/test",
                                 web::post().to(handlers::admin::generate_test_logs),
+                            )
+                            .route(
+                                "/characteristics/stats",
+                                web::get().to(handlers::user_characteristics_handler::get_aggregate_stats),
                             ),
                     ),
             )

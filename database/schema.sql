@@ -832,6 +832,199 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ============================================================================
+-- HYGIENE EVENTS TABLE
+-- ============================================================================
+
+-- Hygiene event types enum
+CREATE TYPE hygiene_event_type AS ENUM (
+    'handwashing', 'toothbrushing', 'hand_sanitizer',
+    'face_washing', 'shower', 'bath', 'hair_washing',
+    'nail_care', 'oral_hygiene', 'skincare'
+);
+
+-- Hygiene events table for behavior tracking and public health monitoring
+CREATE TABLE hygiene_events (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recorded_at TIMESTAMPTZ NOT NULL,
+
+    -- Core Hygiene Event Data
+    event_type hygiene_event_type NOT NULL,
+    duration_seconds INTEGER CHECK (duration_seconds IS NULL OR duration_seconds BETWEEN 1 AND 7200), -- 1 second to 2 hours max
+    quality_rating SMALLINT CHECK (quality_rating IS NULL OR quality_rating BETWEEN 1 AND 5), -- 1-5 self-reported quality
+
+    -- Public Health & Compliance Tracking
+    meets_who_guidelines BOOLEAN, -- Whether event meets WHO/CDC guidelines (20+ sec handwashing, 2+ min brushing)
+    frequency_compliance_rating SMALLINT CHECK (frequency_compliance_rating IS NULL OR frequency_compliance_rating BETWEEN 1 AND 5), -- Daily frequency adherence
+
+    -- Smart Device Integration
+    device_detected BOOLEAN DEFAULT false, -- Whether detected by smart device (soap dispenser, smart toothbrush)
+    device_effectiveness_score DOUBLE PRECISION CHECK (device_effectiveness_score IS NULL OR device_effectiveness_score BETWEEN 0.0 AND 100.0), -- Device-measured effectiveness
+
+    -- Context & Behavioral Analysis
+    trigger_event VARCHAR(100), -- 'before_meal', 'after_bathroom', 'after_cough', 'routine', 'reminder', 'crisis_protocol'
+    location_context VARCHAR(100), -- 'home', 'work', 'public', 'healthcare', 'restaurant', 'travel'
+    compliance_motivation VARCHAR(100), -- 'habit', 'health_crisis', 'illness_prevention', 'personal_hygiene', 'medical_recommendation'
+
+    -- Health Crisis Integration (COVID-19, flu season, etc.)
+    health_crisis_enhanced BOOLEAN DEFAULT false, -- Enhanced hygiene during health emergencies
+    crisis_compliance_level SMALLINT CHECK (crisis_compliance_level IS NULL OR crisis_compliance_level BETWEEN 1 AND 5), -- Adherence to crisis protocols
+
+    -- Gamification & Habit Tracking
+    streak_count INTEGER DEFAULT 1, -- Current hygiene habit streak
+    daily_goal_progress SMALLINT CHECK (daily_goal_progress IS NULL OR daily_goal_progress BETWEEN 0 AND 200), -- Percentage of daily hygiene goals met
+    achievement_unlocked VARCHAR(255), -- Any hygiene achievement unlocked with this event
+
+    -- Medical Integration
+    medication_adherence_related BOOLEAN DEFAULT false, -- Related to medication adherence (hand hygiene before insulin, etc.)
+    medical_condition_context VARCHAR(100), -- 'diabetes_management', 'immunocompromised', 'surgical_recovery', 'wound_care'
+
+    -- Privacy & Data Sensitivity
+    data_sensitivity_level VARCHAR(20) DEFAULT 'standard', -- 'standard', 'medical', 'crisis_tracking'
+
+    -- Metadata
+    source_device VARCHAR(255),
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+
+    -- Unique constraint to prevent duplicate events (user + timestamp + event_type)
+    UNIQUE(user_id, recorded_at, event_type)
+);
+
+-- Indexes for hygiene events performance
+CREATE INDEX idx_hygiene_events_user_date ON hygiene_events (user_id, recorded_at);
+CREATE INDEX idx_hygiene_events_type ON hygiene_events (event_type, recorded_at);
+CREATE INDEX idx_hygiene_events_compliance ON hygiene_events (meets_who_guidelines) WHERE meets_who_guidelines IS NOT NULL;
+CREATE INDEX idx_hygiene_events_crisis ON hygiene_events (health_crisis_enhanced, recorded_at) WHERE health_crisis_enhanced = true;
+CREATE INDEX idx_hygiene_events_streak ON hygiene_events (user_id, streak_count DESC);
+CREATE INDEX idx_hygiene_events_sensitivity ON hygiene_events (data_sensitivity_level);
+
+-- Function to calculate hygiene compliance score
+CREATE OR REPLACE FUNCTION calculate_hygiene_compliance_score(
+    p_user_id UUID,
+    p_start_date TIMESTAMPTZ DEFAULT NOW() - INTERVAL '7 days',
+    p_end_date TIMESTAMPTZ DEFAULT NOW()
+) RETURNS JSONB AS $$
+DECLARE
+    handwashing_compliance DOUBLE PRECISION := 0;
+    toothbrushing_compliance DOUBLE PRECISION := 0;
+    overall_frequency DOUBLE PRECISION := 0;
+    quality_average DOUBLE PRECISION := 0;
+    total_events INTEGER := 0;
+    compliance_score JSONB;
+BEGIN
+    -- Calculate handwashing compliance (WHO: 20+ seconds, multiple times daily)
+    SELECT
+        COUNT(*) FILTER (WHERE duration_seconds >= 20 AND meets_who_guidelines = true)::DOUBLE PRECISION /
+        NULLIF(COUNT(*), 0) * 100,
+        COUNT(*)
+    INTO handwashing_compliance, total_events
+    FROM hygiene_events
+    WHERE user_id = p_user_id
+        AND event_type = 'handwashing'
+        AND recorded_at BETWEEN p_start_date AND p_end_date;
+
+    -- Calculate toothbrushing compliance (WHO: 2+ minutes, twice daily)
+    SELECT
+        COUNT(*) FILTER (WHERE duration_seconds >= 120 AND meets_who_guidelines = true)::DOUBLE PRECISION /
+        NULLIF(COUNT(*), 0) * 100
+    INTO toothbrushing_compliance
+    FROM hygiene_events
+    WHERE user_id = p_user_id
+        AND event_type = 'toothbrushing'
+        AND recorded_at BETWEEN p_start_date AND p_end_date;
+
+    -- Calculate overall frequency (events per day)
+    SELECT COUNT(*)::DOUBLE PRECISION / EXTRACT(EPOCH FROM (p_end_date - p_start_date)) * 86400
+    INTO overall_frequency
+    FROM hygiene_events
+    WHERE user_id = p_user_id
+        AND recorded_at BETWEEN p_start_date AND p_end_date;
+
+    -- Calculate average quality rating
+    SELECT AVG(quality_rating)
+    INTO quality_average
+    FROM hygiene_events
+    WHERE user_id = p_user_id
+        AND quality_rating IS NOT NULL
+        AND recorded_at BETWEEN p_start_date AND p_end_date;
+
+    -- Build compliance score JSON
+    compliance_score := jsonb_build_object(
+        'overall_score', COALESCE((handwashing_compliance + toothbrushing_compliance) / 2, 0),
+        'handwashing_compliance_percent', COALESCE(handwashing_compliance, 0),
+        'toothbrushing_compliance_percent', COALESCE(toothbrushing_compliance, 0),
+        'daily_frequency', COALESCE(overall_frequency, 0),
+        'average_quality_rating', COALESCE(quality_average, 0),
+        'total_events', COALESCE(total_events, 0),
+        'period_days', EXTRACT(EPOCH FROM (p_end_date - p_start_date)) / 86400,
+        'calculated_at', NOW()
+    );
+
+    RETURN compliance_score;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+-- Function to update hygiene streak counts
+CREATE OR REPLACE FUNCTION update_hygiene_streak(
+    p_user_id UUID,
+    p_event_type hygiene_event_type,
+    p_recorded_at TIMESTAMPTZ
+) RETURNS INTEGER AS $$
+DECLARE
+    current_streak INTEGER := 1;
+    last_event_date DATE;
+    current_event_date DATE;
+BEGIN
+    current_event_date := p_recorded_at::DATE;
+
+    -- Get the last event date for this user and event type
+    SELECT recorded_at::DATE INTO last_event_date
+    FROM hygiene_events
+    WHERE user_id = p_user_id
+        AND event_type = p_event_type
+        AND recorded_at < p_recorded_at
+    ORDER BY recorded_at DESC
+    LIMIT 1;
+
+    -- Calculate streak
+    IF last_event_date IS NOT NULL THEN
+        IF current_event_date = last_event_date THEN
+            -- Same day, maintain existing streak
+            SELECT COALESCE(MAX(streak_count), 1) INTO current_streak
+            FROM hygiene_events
+            WHERE user_id = p_user_id
+                AND event_type = p_event_type
+                AND recorded_at::DATE = current_event_date;
+        ELSIF current_event_date = last_event_date + INTERVAL '1 day' THEN
+            -- Consecutive day, increment streak
+            SELECT COALESCE(MAX(streak_count), 0) + 1 INTO current_streak
+            FROM hygiene_events
+            WHERE user_id = p_user_id
+                AND event_type = p_event_type
+                AND recorded_at::DATE = last_event_date;
+        ELSE
+            -- Gap in streak, reset to 1
+            current_streak := 1;
+        END IF;
+    END IF;
+
+    RETURN current_streak;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+-- Trigger to automatically calculate streak on insert
+CREATE OR REPLACE FUNCTION trigger_update_hygiene_streak() RETURNS TRIGGER AS $$
+BEGIN
+    NEW.streak_count := update_hygiene_streak(NEW.user_id, NEW.event_type, NEW.recorded_at);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER hygiene_streak_trigger
+    BEFORE INSERT ON hygiene_events
+    FOR EACH ROW EXECUTE FUNCTION trigger_update_hygiene_streak();
+
+-- ============================================================================
 -- BODY MEASUREMENTS TABLE
 -- ============================================================================
 
@@ -974,6 +1167,356 @@ CREATE TRIGGER body_measurements_bmi_validation
     BEFORE INSERT OR UPDATE ON body_measurements
     FOR EACH ROW
     EXECUTE FUNCTION trigger_validate_bmi_consistency();
+
+-- ============================================================================
+-- USER CHARACTERISTICS ENUMS (Static User Profile Data)
+-- ============================================================================
+
+-- Biological Sex for health metrics personalization
+CREATE TYPE biological_sex AS ENUM (
+    'male', 'female', 'not_set'
+);
+
+-- Blood Type for medical information
+CREATE TYPE blood_type AS ENUM (
+    'A_positive', 'A_negative', 'B_positive', 'B_negative',
+    'AB_positive', 'AB_negative', 'O_positive', 'O_negative', 'not_set'
+);
+
+-- Fitzpatrick Skin Type for UV protection recommendations
+CREATE TYPE fitzpatrick_skin_type AS ENUM (
+    'type_1', 'type_2', 'type_3', 'type_4', 'type_5', 'type_6', 'not_set'
+);
+
+-- Apple Watch Activity Move Mode for fitness personalization
+CREATE TYPE activity_move_mode AS ENUM (
+    'active_energy', 'move_time', 'not_set'
+);
+
+-- ============================================================================
+-- USER CHARACTERISTICS TABLE
+-- ============================================================================
+
+-- User Characteristics table for personalized health tracking
+CREATE TABLE user_characteristics (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+
+    -- Biological Characteristics
+    biological_sex biological_sex NOT NULL DEFAULT 'not_set',
+    date_of_birth DATE, -- For age-specific health metric validation
+    blood_type blood_type NOT NULL DEFAULT 'not_set',
+
+    -- Physical Characteristics
+    fitzpatrick_skin_type fitzpatrick_skin_type NOT NULL DEFAULT 'not_set', -- UV sensitivity (1-6 scale)
+    wheelchair_use BOOLEAN NOT NULL DEFAULT false, -- Accessibility considerations
+
+    -- Fitness Device Configuration
+    activity_move_mode activity_move_mode NOT NULL DEFAULT 'not_set', -- Apple Watch move mode
+
+    -- Privacy and Medical Information
+    emergency_contact_info JSONB DEFAULT '{}'::jsonb, -- Encrypted emergency contact data
+    medical_conditions TEXT[], -- Array of relevant medical conditions affecting health metrics
+    medications TEXT[], -- Current medications that may affect health readings
+
+    -- Data Management
+    data_sharing_preferences JSONB DEFAULT '{
+        "research_participation": false,
+        "anonymized_analytics": false,
+        "emergency_sharing": true
+    }'::jsonb,
+
+    -- Audit Trail
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    last_verified_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, -- When user last verified their characteristics
+
+    -- Unique constraint - one characteristics record per user
+    UNIQUE(user_id)
+);
+
+-- Indexes for user characteristics
+CREATE INDEX idx_user_characteristics_user_id ON user_characteristics(user_id);
+CREATE INDEX idx_user_characteristics_biological_sex ON user_characteristics(biological_sex) WHERE biological_sex != 'not_set';
+CREATE INDEX idx_user_characteristics_age_group ON user_characteristics(
+    EXTRACT(YEAR FROM AGE(date_of_birth))
+) WHERE date_of_birth IS NOT NULL;
+CREATE INDEX idx_user_characteristics_wheelchair_use ON user_characteristics(wheelchair_use) WHERE wheelchair_use = true;
+CREATE INDEX idx_user_characteristics_blood_type ON user_characteristics(blood_type) WHERE blood_type != 'not_set';
+
+-- Trigger to update updated_at timestamp
+CREATE TRIGGER update_user_characteristics_updated_at
+    BEFORE UPDATE ON user_characteristics
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
+-- USER CHARACTERISTICS HELPER FUNCTIONS
+-- ============================================================================
+
+-- Function to calculate age from date_of_birth
+CREATE OR REPLACE FUNCTION calculate_user_age(p_date_of_birth DATE)
+RETURNS INTEGER AS $$
+BEGIN
+    IF p_date_of_birth IS NULL THEN
+        RETURN NULL;
+    END IF;
+    RETURN EXTRACT(YEAR FROM AGE(p_date_of_birth));
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+-- Function to get personalized heart rate zones based on user characteristics
+CREATE OR REPLACE FUNCTION get_personalized_heart_rate_zones(
+    p_user_id UUID,
+    p_resting_heart_rate INTEGER DEFAULT 60
+) RETURNS JSONB AS $$
+DECLARE
+    user_age INTEGER;
+    max_heart_rate INTEGER;
+    zones JSONB;
+BEGIN
+    -- Get user's age
+    SELECT calculate_user_age(uc.date_of_birth)
+    INTO user_age
+    FROM user_characteristics uc
+    WHERE uc.user_id = p_user_id;
+
+    -- If no age data, use default zones
+    IF user_age IS NULL THEN
+        user_age := 30; -- Default age
+    END IF;
+
+    -- Calculate max heart rate (220 - age formula)
+    max_heart_rate := 220 - user_age;
+
+    -- Calculate heart rate zones
+    zones := jsonb_build_object(
+        'max_heart_rate', max_heart_rate,
+        'resting_heart_rate', p_resting_heart_rate,
+        'zone_1_fat_burn', jsonb_build_object(
+            'min', ROUND((max_heart_rate - p_resting_heart_rate) * 0.5 + p_resting_heart_rate),
+            'max', ROUND((max_heart_rate - p_resting_heart_rate) * 0.6 + p_resting_heart_rate)
+        ),
+        'zone_2_aerobic', jsonb_build_object(
+            'min', ROUND((max_heart_rate - p_resting_heart_rate) * 0.6 + p_resting_heart_rate),
+            'max', ROUND((max_heart_rate - p_resting_heart_rate) * 0.7 + p_resting_heart_rate)
+        ),
+        'zone_3_anaerobic', jsonb_build_object(
+            'min', ROUND((max_heart_rate - p_resting_heart_rate) * 0.7 + p_resting_heart_rate),
+            'max', ROUND((max_heart_rate - p_resting_heart_rate) * 0.8 + p_resting_heart_rate)
+        ),
+        'zone_4_vo2_max', jsonb_build_object(
+            'min', ROUND((max_heart_rate - p_resting_heart_rate) * 0.8 + p_resting_heart_rate),
+            'max', ROUND((max_heart_rate - p_resting_heart_rate) * 0.9 + p_resting_heart_rate)
+        ),
+        'zone_5_neuromuscular', jsonb_build_object(
+            'min', ROUND((max_heart_rate - p_resting_heart_rate) * 0.9 + p_resting_heart_rate),
+            'max', max_heart_rate
+        )
+    );
+
+    RETURN zones;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+-- Function to get personalized validation ranges for health metrics
+CREATE OR REPLACE FUNCTION get_personalized_validation_ranges(
+    p_user_id UUID,
+    p_metric_type VARCHAR(50)
+) RETURNS JSONB AS $$
+DECLARE
+    user_characteristics RECORD;
+    user_age INTEGER;
+    validation_ranges JSONB := '{}'::jsonb;
+BEGIN
+    -- Get user characteristics
+    SELECT uc.biological_sex, uc.date_of_birth, uc.wheelchair_use, uc.medical_conditions
+    INTO user_characteristics
+    FROM user_characteristics uc
+    WHERE uc.user_id = p_user_id;
+
+    -- Calculate age
+    user_age := calculate_user_age(user_characteristics.date_of_birth);
+
+    -- Return personalized ranges based on metric type
+    CASE p_metric_type
+        WHEN 'heart_rate' THEN
+            -- Heart rate ranges vary by age and biological sex
+            validation_ranges := jsonb_build_object(
+                'min_resting', CASE
+                    WHEN user_age IS NULL THEN 40
+                    WHEN user_age < 30 THEN 40
+                    WHEN user_age < 50 THEN 45
+                    ELSE 50
+                END,
+                'max_resting', CASE
+                    WHEN user_age IS NULL THEN 100
+                    WHEN user_age < 30 THEN 100
+                    WHEN user_age < 50 THEN 95
+                    ELSE 90
+                END,
+                'max_exercise', 220 - COALESCE(user_age, 30)
+            );
+
+        WHEN 'blood_pressure' THEN
+            -- Blood pressure ranges vary by age
+            validation_ranges := jsonb_build_object(
+                'systolic_min', 90,
+                'systolic_max', CASE
+                    WHEN user_age IS NULL THEN 140
+                    WHEN user_age < 65 THEN 140
+                    ELSE 150
+                END,
+                'diastolic_min', 60,
+                'diastolic_max', 90
+            );
+
+        WHEN 'activity' THEN
+            -- Activity ranges consider wheelchair use
+            validation_ranges := jsonb_build_object(
+                'step_count_max', CASE
+                    WHEN user_characteristics.wheelchair_use THEN 10000  -- Lower for wheelchair users
+                    ELSE 50000
+                END,
+                'distance_max_km', CASE
+                    WHEN user_characteristics.wheelchair_use THEN 100
+                    ELSE 200
+                END
+            );
+
+        ELSE
+            -- Default ranges
+            validation_ranges := jsonb_build_object('status', 'no_personalization_available');
+    END CASE;
+
+    RETURN validation_ranges;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+-- Function to get UV exposure recommendations based on Fitzpatrick skin type
+CREATE OR REPLACE FUNCTION get_uv_protection_recommendations(
+    p_user_id UUID
+) RETURNS JSONB AS $$
+DECLARE
+    skin_type fitzpatrick_skin_type;
+    recommendations JSONB;
+BEGIN
+    -- Get user's skin type
+    SELECT uc.fitzpatrick_skin_type
+    INTO skin_type
+    FROM user_characteristics uc
+    WHERE uc.user_id = p_user_id;
+
+    -- Return recommendations based on skin type
+    CASE skin_type
+        WHEN 'type_1' THEN
+            recommendations := jsonb_build_object(
+                'skin_type', 'Type I - Very Fair',
+                'burn_time_minutes', 10,
+                'spf_recommendation', 'SPF 30+',
+                'sun_exposure_advice', 'Always burn, never tan. Use highest protection.',
+                'uv_index_limit', 3
+            );
+        WHEN 'type_2' THEN
+            recommendations := jsonb_build_object(
+                'skin_type', 'Type II - Fair',
+                'burn_time_minutes', 15,
+                'spf_recommendation', 'SPF 30+',
+                'sun_exposure_advice', 'Usually burn, tan minimally. High protection needed.',
+                'uv_index_limit', 4
+            );
+        WHEN 'type_3' THEN
+            recommendations := jsonb_build_object(
+                'skin_type', 'Type III - Medium',
+                'burn_time_minutes', 20,
+                'spf_recommendation', 'SPF 15-30',
+                'sun_exposure_advice', 'Sometimes burn, tan gradually. Moderate protection.',
+                'uv_index_limit', 6
+            );
+        WHEN 'type_4' THEN
+            recommendations := jsonb_build_object(
+                'skin_type', 'Type IV - Olive',
+                'burn_time_minutes', 30,
+                'spf_recommendation', 'SPF 15+',
+                'sun_exposure_advice', 'Rarely burn, tan well. Basic protection advised.',
+                'uv_index_limit', 8
+            );
+        WHEN 'type_5' THEN
+            recommendations := jsonb_build_object(
+                'skin_type', 'Type V - Brown',
+                'burn_time_minutes', 45,
+                'spf_recommendation', 'SPF 15',
+                'sun_exposure_advice', 'Very rarely burn, tan darkly. Minimal protection needed.',
+                'uv_index_limit', 10
+            );
+        WHEN 'type_6' THEN
+            recommendations := jsonb_build_object(
+                'skin_type', 'Type VI - Black',
+                'burn_time_minutes', 60,
+                'spf_recommendation', 'SPF 15',
+                'sun_exposure_advice', 'Never burn, always tan darkly. Basic protection for comfort.',
+                'uv_index_limit', 12
+            );
+        ELSE
+            recommendations := jsonb_build_object(
+                'skin_type', 'Not Set',
+                'burn_time_minutes', 20,
+                'spf_recommendation', 'SPF 30',
+                'sun_exposure_advice', 'Use standard sun protection measures.',
+                'uv_index_limit', 6
+            );
+    END CASE;
+
+    RETURN recommendations;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+-- Function to check if user characteristics are complete for personalization
+CREATE OR REPLACE FUNCTION is_user_profile_complete(p_user_id UUID)
+RETURNS JSONB AS $$
+DECLARE
+    characteristics RECORD;
+    completeness JSONB;
+    score INTEGER := 0;
+    total_fields INTEGER := 6;
+BEGIN
+    SELECT
+        biological_sex, date_of_birth, blood_type,
+        fitzpatrick_skin_type, wheelchair_use, activity_move_mode
+    INTO characteristics
+    FROM user_characteristics
+    WHERE user_id = p_user_id;
+
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object(
+            'complete', false,
+            'completeness_score', 0,
+            'missing_fields', jsonb_build_array(
+                'biological_sex', 'date_of_birth', 'blood_type',
+                'fitzpatrick_skin_type', 'wheelchair_use', 'activity_move_mode'
+            )
+        );
+    END IF;
+
+    -- Calculate completeness score
+    IF characteristics.biological_sex != 'not_set' THEN score := score + 1; END IF;
+    IF characteristics.date_of_birth IS NOT NULL THEN score := score + 1; END IF;
+    IF characteristics.blood_type != 'not_set' THEN score := score + 1; END IF;
+    IF characteristics.fitzpatrick_skin_type != 'not_set' THEN score := score + 1; END IF;
+    -- wheelchair_use always has value (boolean), so always +1
+    score := score + 1;
+    IF characteristics.activity_move_mode != 'not_set' THEN score := score + 1; END IF;
+
+    completeness := jsonb_build_object(
+        'complete', (score = total_fields),
+        'completeness_score', ROUND((score::NUMERIC / total_fields) * 100, 1),
+        'completed_fields', score,
+        'total_fields', total_fields
+    );
+
+    RETURN completeness;
+END;
+$$ LANGUAGE plpgsql STABLE;
 
 -- ============================================================================
 -- END OF SCHEMA

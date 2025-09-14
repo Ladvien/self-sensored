@@ -843,3 +843,410 @@ impl fmt::Display for SymptomSeverity {
         write!(f, "{s}")
     }
 }
+
+// ============================================================================
+// USER CHARACTERISTICS ENUMS (Static User Profile Data)
+// ============================================================================
+
+/// Biological Sex for health metrics personalization
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[sqlx(type_name = "biological_sex", rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+pub enum BiologicalSex {
+    Male,
+    Female,
+    NotSet,
+}
+
+impl BiologicalSex {
+    pub fn from_ios_string(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "male" | "m" => Self::Male,
+            "female" | "f" => Self::Female,
+            _ => Self::NotSet,
+        }
+    }
+
+    /// Get personalized heart rate ranges based on biological sex
+    pub fn get_heart_rate_adjustment(&self) -> f64 {
+        match self {
+            Self::Male => 1.0,     // Baseline
+            Self::Female => 1.05,  // Slightly higher resting HR typically
+            Self::NotSet => 1.0,   // Use baseline
+        }
+    }
+
+    /// Check if complete for personalization
+    pub fn is_set(&self) -> bool {
+        !matches!(self, Self::NotSet)
+    }
+}
+
+impl fmt::Display for BiologicalSex {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Self::Male => "male",
+            Self::Female => "female",
+            Self::NotSet => "not_set",
+        };
+        write!(f, "{s}")
+    }
+}
+
+/// Blood Type for medical emergency information
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[sqlx(type_name = "blood_type", rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+pub enum BloodType {
+    APositive,
+    ANegative,
+    BPositive,
+    BNegative,
+    AbPositive,
+    AbNegative,
+    OPositive,
+    ONegative,
+    NotSet,
+}
+
+impl BloodType {
+    pub fn from_ios_string(s: &str) -> Self {
+        match s.to_uppercase().replace(" ", "").replace("+", "_POSITIVE").replace("-", "_NEGATIVE").as_str() {
+            "A+" | "A_POSITIVE" | "APOSITIVE" => Self::APositive,
+            "A-" | "A_NEGATIVE" | "ANEGATIVE" => Self::ANegative,
+            "B+" | "B_POSITIVE" | "BPOSITIVE" => Self::BPositive,
+            "B-" | "B_NEGATIVE" | "BNEGATIVE" => Self::BNegative,
+            "AB+" | "AB_POSITIVE" | "ABPOSITIVE" => Self::AbPositive,
+            "AB-" | "AB_NEGATIVE" | "ABNEGATIVE" => Self::AbNegative,
+            "O+" | "O_POSITIVE" | "OPOSITIVE" => Self::OPositive,
+            "O-" | "O_NEGATIVE" | "ONEGATIVE" => Self::ONegative,
+            _ => Self::NotSet,
+        }
+    }
+
+    /// Get human-readable blood type string for medical purposes
+    pub fn to_medical_string(&self) -> &'static str {
+        match self {
+            Self::APositive => "A+",
+            Self::ANegative => "A-",
+            Self::BPositive => "B+",
+            Self::BNegative => "B-",
+            Self::AbPositive => "AB+",
+            Self::AbNegative => "AB-",
+            Self::OPositive => "O+",
+            Self::ONegative => "O-",
+            Self::NotSet => "Unknown",
+        }
+    }
+
+    /// Get compatible donor blood types
+    pub fn get_compatible_donors(&self) -> Vec<BloodType> {
+        match self {
+            Self::APositive => vec![Self::APositive, Self::ANegative, Self::OPositive, Self::ONegative],
+            Self::ANegative => vec![Self::ANegative, Self::ONegative],
+            Self::BPositive => vec![Self::BPositive, Self::BNegative, Self::OPositive, Self::ONegative],
+            Self::BNegative => vec![Self::BNegative, Self::ONegative],
+            Self::AbPositive => vec![Self::APositive, Self::ANegative, Self::BPositive, Self::BNegative,
+                                     Self::AbPositive, Self::AbNegative, Self::OPositive, Self::ONegative],
+            Self::AbNegative => vec![Self::ANegative, Self::BNegative, Self::AbNegative, Self::ONegative],
+            Self::OPositive => vec![Self::OPositive, Self::ONegative],
+            Self::ONegative => vec![Self::ONegative],
+            Self::NotSet => vec![], // No compatibility info if unknown
+        }
+    }
+
+    /// Check if complete for medical purposes
+    pub fn is_set(&self) -> bool {
+        !matches!(self, Self::NotSet)
+    }
+}
+
+impl fmt::Display for BloodType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Self::APositive => "A_positive",
+            Self::ANegative => "A_negative",
+            Self::BPositive => "B_positive",
+            Self::BNegative => "B_negative",
+            Self::AbPositive => "AB_positive",
+            Self::AbNegative => "AB_negative",
+            Self::OPositive => "O_positive",
+            Self::ONegative => "O_negative",
+            Self::NotSet => "not_set",
+        };
+        write!(f, "{s}")
+    }
+}
+
+/// Fitzpatrick Skin Type for UV protection recommendations (1-6 scale)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[sqlx(type_name = "fitzpatrick_skin_type", rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+pub enum FitzpatrickSkinType {
+    Type1, // Very fair skin, always burns, never tans
+    Type2, // Fair skin, usually burns, tans minimally
+    Type3, // Medium skin, sometimes burns, tans gradually
+    Type4, // Olive skin, rarely burns, tans well
+    Type5, // Brown skin, very rarely burns, tans darkly
+    Type6, // Black skin, never burns, always tans darkly
+    NotSet,
+}
+
+impl FitzpatrickSkinType {
+    pub fn from_ios_string(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "1" | "type_1" | "type1" | "very_fair" => Self::Type1,
+            "2" | "type_2" | "type2" | "fair" => Self::Type2,
+            "3" | "type_3" | "type3" | "medium" => Self::Type3,
+            "4" | "type_4" | "type4" | "olive" => Self::Type4,
+            "5" | "type_5" | "type5" | "brown" => Self::Type5,
+            "6" | "type_6" | "type6" | "black" => Self::Type6,
+            _ => Self::NotSet,
+        }
+    }
+
+    /// Get recommended SPF level
+    pub fn get_recommended_spf(&self) -> u8 {
+        match self {
+            Self::Type1 | Self::Type2 => 30, // High protection
+            Self::Type3 => 20,               // Moderate protection
+            Self::Type4 | Self::Type5 | Self::Type6 => 15, // Basic protection
+            Self::NotSet => 30,              // Default to high protection
+        }
+    }
+
+    /// Get safe UV exposure time in minutes without protection
+    pub fn get_burn_time_minutes(&self) -> u16 {
+        match self {
+            Self::Type1 => 10,
+            Self::Type2 => 15,
+            Self::Type3 => 20,
+            Self::Type4 => 30,
+            Self::Type5 => 45,
+            Self::Type6 => 60,
+            Self::NotSet => 20, // Conservative default
+        }
+    }
+
+    /// Get skin type description
+    pub fn get_description(&self) -> &'static str {
+        match self {
+            Self::Type1 => "Type I - Very Fair (Always burns, never tans)",
+            Self::Type2 => "Type II - Fair (Usually burns, tans minimally)",
+            Self::Type3 => "Type III - Medium (Sometimes burns, tans gradually)",
+            Self::Type4 => "Type IV - Olive (Rarely burns, tans well)",
+            Self::Type5 => "Type V - Brown (Very rarely burns, tans darkly)",
+            Self::Type6 => "Type VI - Black (Never burns, always tans darkly)",
+            Self::NotSet => "Not Set",
+        }
+    }
+
+    /// Check if complete for UV recommendations
+    pub fn is_set(&self) -> bool {
+        !matches!(self, Self::NotSet)
+    }
+}
+
+impl fmt::Display for FitzpatrickSkinType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Self::Type1 => "type_1",
+            Self::Type2 => "type_2",
+            Self::Type3 => "type_3",
+            Self::Type4 => "type_4",
+            Self::Type5 => "type_5",
+            Self::Type6 => "type_6",
+            Self::NotSet => "not_set",
+        };
+        write!(f, "{s}")
+    }
+}
+
+/// Apple Watch Activity Move Mode for fitness personalization
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[sqlx(type_name = "activity_move_mode", rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+pub enum ActivityMoveMode {
+    ActiveEnergy, // Calories-based move goals
+    MoveTime,     // Time-based move goals (accessibility)
+    NotSet,
+}
+
+impl ActivityMoveMode {
+    pub fn from_ios_string(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "active_energy" | "activeenergy" | "calories" | "energy" => Self::ActiveEnergy,
+            "move_time" | "movetime" | "time" | "minutes" => Self::MoveTime,
+            _ => Self::NotSet,
+        }
+    }
+
+    /// Get default daily goal based on move mode
+    pub fn get_default_daily_goal(&self) -> f64 {
+        match self {
+            Self::ActiveEnergy => 400.0, // 400 calories per day
+            Self::MoveTime => 30.0,      // 30 minutes per day
+            Self::NotSet => 400.0,       // Default to energy-based
+        }
+    }
+
+    /// Get goal unit string
+    pub fn get_unit_string(&self) -> &'static str {
+        match self {
+            Self::ActiveEnergy => "calories",
+            Self::MoveTime => "minutes",
+            Self::NotSet => "calories",
+        }
+    }
+
+    /// Check if this mode is for accessibility (wheelchair users typically use move time)
+    pub fn is_accessibility_mode(&self) -> bool {
+        matches!(self, Self::MoveTime)
+    }
+
+    /// Check if complete for fitness tracking
+    pub fn is_set(&self) -> bool {
+        !matches!(self, Self::NotSet)
+    }
+}
+
+impl fmt::Display for ActivityMoveMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Self::ActiveEnergy => "active_energy",
+            Self::MoveTime => "move_time",
+            Self::NotSet => "not_set",
+        };
+        write!(f, "{s}")
+    }
+}
+
+// ============================================================================
+// HYGIENE EVENTS ENUMS
+// ============================================================================
+
+/// Hygiene event types for behavior tracking and public health monitoring
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Type)]
+#[sqlx(type_name = "hygiene_event_type", rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+pub enum HygieneEventType {
+    Handwashing,
+    Toothbrushing,
+    HandSanitizer,
+    FaceWashing,
+    Shower,
+    Bath,
+    HairWashing,
+    NailCare,
+    OralHygiene,
+    Skincare,
+}
+
+impl HygieneEventType {
+    /// Convert from iOS HealthKit or device strings
+    pub fn from_ios_string(s: &str) -> Option<Self> {
+        match s.to_lowercase().replace("-", "_").replace(" ", "_").as_str() {
+            "handwashing" | "hand_washing" | "wash_hands" => Some(Self::Handwashing),
+            "toothbrushing" | "tooth_brushing" | "brush_teeth" | "dental_hygiene" => Some(Self::Toothbrushing),
+            "hand_sanitizer" | "handsanitizer" | "sanitizer" | "alcohol_rub" => Some(Self::HandSanitizer),
+            "face_washing" | "facewashing" | "wash_face" => Some(Self::FaceWashing),
+            "shower" | "showering" => Some(Self::Shower),
+            "bath" | "bathing" | "taking_bath" => Some(Self::Bath),
+            "hair_washing" | "hairwashing" | "wash_hair" | "shampoo" => Some(Self::HairWashing),
+            "nail_care" | "nailcare" | "nail_hygiene" | "trim_nails" => Some(Self::NailCare),
+            "oral_hygiene" | "oralhygiene" | "mouth_care" | "dental_care" => Some(Self::OralHygiene),
+            "skincare" | "skin_care" | "moisturize" | "skin_hygiene" => Some(Self::Skincare),
+            _ => None,
+        }
+    }
+
+    /// Get WHO/CDC recommended duration for the hygiene event (in seconds)
+    pub fn get_recommended_duration(&self) -> Option<u32> {
+        match self {
+            Self::Handwashing => Some(20),        // WHO: 20+ seconds
+            Self::Toothbrushing => Some(120),     // ADA: 2+ minutes
+            Self::HandSanitizer => Some(15),      // CDC: 15+ seconds until dry
+            Self::FaceWashing => Some(30),        // General recommendation
+            Self::Shower => Some(300),            // 5 minutes average
+            Self::Bath => Some(900),              // 15 minutes average
+            Self::HairWashing => Some(60),        // 1 minute average
+            Self::NailCare => Some(180),          // 3 minutes for proper care
+            Self::OralHygiene => Some(180),       // 3 minutes including flossing
+            Self::Skincare => Some(120),          // 2 minutes for routine
+        }
+    }
+
+    /// Get recommended daily frequency for the hygiene event
+    pub fn get_recommended_daily_frequency(&self) -> u32 {
+        match self {
+            Self::Handwashing => 8,               // Multiple times throughout day
+            Self::Toothbrushing => 2,             // Morning and night
+            Self::HandSanitizer => 6,             // As needed supplement to handwashing
+            Self::FaceWashing => 2,               // Morning and night
+            Self::Shower => 1,                    // Once daily
+            Self::Bath => 0,                      // Optional, not daily requirement
+            Self::HairWashing => 0,               // Varies by hair type, not daily
+            Self::NailCare => 0,                  // Weekly, not daily
+            Self::OralHygiene => 1,               // Once daily (beyond toothbrushing)
+            Self::Skincare => 2,                  // Morning and night
+        }
+    }
+
+    /// Get hygiene category for grouping and analytics
+    pub fn get_category(&self) -> &'static str {
+        match self {
+            Self::Handwashing | Self::HandSanitizer => "hand_hygiene",
+            Self::Toothbrushing | Self::OralHygiene => "oral_hygiene",
+            Self::FaceWashing | Self::Skincare => "facial_hygiene",
+            Self::Shower | Self::Bath | Self::HairWashing => "body_hygiene",
+            Self::NailCare => "personal_grooming",
+        }
+    }
+
+    /// Check if this hygiene event is critical for infection prevention
+    pub fn is_critical_for_infection_prevention(&self) -> bool {
+        matches!(self, Self::Handwashing | Self::HandSanitizer)
+    }
+
+    /// Check if this hygiene event supports public health monitoring
+    pub fn supports_public_health_tracking(&self) -> bool {
+        matches!(self,
+            Self::Handwashing | Self::HandSanitizer | Self::Toothbrushing |
+            Self::FaceWashing | Self::OralHygiene
+        )
+    }
+
+    /// Get smart device integration types that might track this event
+    pub fn get_smart_device_types(&self) -> Vec<&'static str> {
+        match self {
+            Self::Handwashing => vec!["smart_soap_dispenser", "smart_faucet", "hand_hygiene_sensor"],
+            Self::Toothbrushing => vec!["smart_toothbrush", "oral_b_connect", "philips_sonicare"],
+            Self::HandSanitizer => vec!["smart_dispenser", "alcohol_sensor"],
+            Self::FaceWashing => vec!["smart_mirror", "facial_cleansing_device"],
+            Self::Shower => vec!["smart_shower", "water_usage_sensor", "shower_timer"],
+            Self::Bath => vec!["smart_bathtub", "water_level_sensor"],
+            Self::HairWashing => vec!["smart_shampoo_dispenser", "hair_care_device"],
+            Self::NailCare => vec!["nail_care_kit", "manicure_timer"],
+            Self::OralHygiene => vec!["water_flosser", "mouthwash_dispenser"],
+            Self::Skincare => vec!["skincare_device", "moisturizer_dispenser", "facial_cleansing_brush"],
+        }
+    }
+}
+
+impl fmt::Display for HygieneEventType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Self::Handwashing => "handwashing",
+            Self::Toothbrushing => "toothbrushing",
+            Self::HandSanitizer => "hand_sanitizer",
+            Self::FaceWashing => "face_washing",
+            Self::Shower => "shower",
+            Self::Bath => "bath",
+            Self::HairWashing => "hair_washing",
+            Self::NailCare => "nail_care",
+            Self::OralHygiene => "oral_hygiene",
+            Self::Skincare => "skincare",
+        };
+        write!(f, "{s}")
+    }
+}
