@@ -2,6 +2,108 @@
 ## ⚠️ MIGRATION REFERENCES NOTICE
 **Historical Context**: This file contains references to migration files and expanded schema features that were part of the expanded schema implementation but have been removed as part of the schema simplification (SCHEMA-016). All references to migration files, nutrition metrics, symptoms, reproductive health metrics, environmental metrics, mental health metrics, and mobility metrics are historical and relate to work completed before schema simplification to the core 5 metric types.
 
+## ✅ STORY-022: Environmental & Safety API Handlers (Completed: 2025-09-14)
+
+**Epic**: Health Metrics Expansion
+**Priority**: Medium
+**Estimate**: 8 points
+**Status**: ✅ COMPLETED
+
+### Summary
+Implemented comprehensive environmental and safety API handlers with full iOS Auto Health Export integration. Added support for UV exposure tracking, audio exposure monitoring with WHO safety thresholds, and safety event detection including fall detection.
+
+### Completed Features
+✅ **Environmental Metrics Processing**
+- UV exposure index tracking with GPS coordinates
+- Time in daylight measurement
+- Ambient temperature, humidity, and air pressure monitoring
+- Altitude tracking for comprehensive environmental data
+
+✅ **Audio Exposure Monitoring**
+- Environmental audio exposure measurement
+- Headphone audio exposure tracking
+- WHO safety threshold detection (85+ dB automatic flagging)
+- Duration-based safety event triggering
+- Comprehensive hearing health protection
+
+✅ **Safety Event Management**
+- Fall detection with severity levels (1-5 scale)
+- Emergency SOS event tracking
+- GPS location preservation for safety events
+- Emergency contact notification status
+- Resolution tracking for safety incidents
+
+✅ **iOS Integration**
+- Complete HealthKit environmental data type parsing
+- UV exposure (HKQuantityTypeIdentifierUVExposure)
+- Time in daylight (HKQuantityTypeIdentifierTimeInDaylight)
+- Environmental audio exposure parsing
+- Headphone audio exposure detection
+- Fall detection event parsing with metadata preservation
+
+✅ **API Endpoints**
+- `POST /api/v1/ingest/environmental` - Environmental data ingestion
+- `POST /api/v1/ingest/audio-exposure` - Audio exposure data ingestion
+- `POST /api/v1/ingest/safety-events` - Safety event ingestion
+- `GET /api/v1/data/environmental` - Environmental data retrieval with filtering
+
+✅ **Validation & Safety**
+- Medical-grade validation ranges for all environmental metrics
+- WHO safety thresholds for audio exposure (85 dB threshold)
+- GPS coordinate validation (latitude/longitude bounds)
+- Temperature range validation (-50°C to 60°C)
+- Humidity percentage validation (0-100%)
+- UV index validation (0-20 scale)
+
+✅ **Database Integration**
+- Environmental metrics table with comprehensive field support
+- Audio exposure fields integrated into environmental table
+- Safety events stored with location and severity data
+- Conflict resolution with ON CONFLICT DO UPDATE
+- Proper indexing for time-series queries
+
+✅ **Comprehensive Testing**
+- Unit tests for all validation functions
+- Integration tests for API endpoints
+- iOS data conversion testing with real payloads
+- Validation error testing with edge cases
+- Empty payload rejection testing
+- Dangerous audio level detection testing
+
+✅ **Monitoring Integration**
+- Metrics recording for environmental data processing
+- Safety event logging with appropriate severity levels
+- Audio exposure event warnings for dangerous levels
+- Performance tracking for all endpoints
+
+### Technical Implementation
+- **Models**: EnvironmentalMetric, AudioExposureMetric, SafetyEventMetric with comprehensive validation
+- **Handler**: environmental_handler.rs with specialized endpoints for each metric type
+- **iOS Parser**: Extended ios_models.rs with environmental HealthKit data type support
+- **Tests**: Complete test suite in tests/handlers/environmental_handler_test.rs
+- **Database**: Integrated with existing environmental_metrics table structure
+- **Routing**: Added to main.rs with proper middleware integration
+
+### Impact
+- ✅ Comprehensive environmental health tracking capability
+- ✅ Professional-grade hearing health protection with WHO standards
+- ✅ Critical safety monitoring with fall detection and emergency response
+- ✅ Full iOS Auto Health Export app compatibility
+- ✅ Production-ready API endpoints with proper error handling
+- ✅ Complete test coverage ensuring reliability
+
+**Files Modified**:
+- src/handlers/environmental_handler.rs (new)
+- src/models/health_metrics.rs (environmental metrics added)
+- src/models/ios_models.rs (environmental parsing added)
+- tests/handlers/environmental_handler_test.rs (new)
+- src/main.rs (routing updated)
+- src/handlers/mod.rs (handler registration)
+
+**Commit**: 686488f - feat: add comprehensive environmental & safety API handlers with iOS integration
+
+---
+
 ## Epic: Schema Alignment Critical Fixes
 
 ---
