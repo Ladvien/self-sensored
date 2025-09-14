@@ -2,14 +2,17 @@ use actix_web::{test, web, App, Result};
 use chrono::{DateTime, Utc};
 use serde_json::json;
 use sqlx::PgPool;
+use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 use self_sensored::handlers::mindfulness_handler::{
     ingest_mindfulness, ingest_mental_health, get_mindfulness_data, get_mental_health_data,
-    MindfulnessIngestRequest, MentalHealthIngestRequest, MindfulnessSessionData, MentalHealthData
+    MindfulnessIngestRequest, MentalHealthIngestRequest, MindfulnessSessionData, MentalHealthData,
+    warm_mindfulness_cache, log_performance_metrics
 };
 use self_sensored::models::{MindfulnessMetric, MentalHealthMetric};
 use self_sensored::services::auth::AuthContext;
+use self_sensored::services::cache::{CacheService, CacheConfig};
 
 /// Test fixture for mindfulness and mental health testing
 pub struct MindfulnessTestFixture {
@@ -786,6 +789,57 @@ async fn test_batch_processing_performance() {
 
     // Performance should be reasonable (less than 1 second for 100 records)
     assert!(validation_time.as_secs() < 1, "Validation should complete quickly");
+
+    fixture.teardown().await;
+}
+/// Test performance optimization features including Redis caching and query optimization
+#[actix_rt::test]
+async fn test_performance_optimizations() {
+    let fixture = MindfulnessTestFixture::setup().await;
+
+    // Initialize cache service for testing
+    let cache_config = CacheConfig {
+        enabled: true,
+        default_ttl_seconds: 600,
+        summary_ttl_seconds: 1800,
+        user_data_ttl_seconds: 600,
+        key_prefix: "health_export_test".to_string(),
+    };
+
+    // Use local Redis for testing or skip if not available
+    let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
+
+    let cache_service = match CacheService::new(&redis_url, cache_config).await {
+        Ok(service) => service,
+        Err(_) => {
+            println\!("Redis not available, skipping cache performance tests");
+            fixture.teardown().await;
+            return;
+        }
+    };
+
+    // Test performance metrics logging
+    log_performance_metrics(
+        "test_endpoint",
+        fixture.user_id,
+        150, // Under 200ms target
+        true,
+        50,
+    );
+
+    // Test cache warming functionality
+    let cache_warm_start = Instant::now();
+    let warm_result = warm_mindfulness_cache(&fixture.pool, &cache_service, fixture.user_id).await;
+    let cache_warm_time = cache_warm_start.elapsed();
+
+    println\!("Cache warming took {:?}, success: {}", cache_warm_time, warm_result);
+
+    // Test cache statistics if Redis is working
+    let cache_stats = cache_service.get_stats().await;
+    println\!("Cache stats: hits={}, misses={}, enabled={}",
+             cache_stats.hits, cache_stats.misses, cache_stats.enabled);
+
+    assert\!(cache_stats.enabled, "Cache should be enabled for performance testing");
 
     fixture.teardown().await;
 }

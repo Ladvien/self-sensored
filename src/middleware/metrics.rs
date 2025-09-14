@@ -818,6 +818,34 @@ impl Metrics {
             .with_label_values(&[table, "rollback"])
             .observe(duration.as_secs_f64());
     }
+
+    // Nutrition-specific metrics methods
+
+    /// Record nutrition data ingestion
+    #[instrument(skip_all)]
+    pub fn record_nutrition_ingest(&self, count: u64) {
+        HEALTH_METRICS_STORED_TOTAL
+            .with_label_values(&["nutrition"])
+            .inc_by(count as f64);
+    }
+
+    /// Record nutrition processing errors
+    #[instrument(skip_all)]
+    pub fn record_nutrition_error(&self, error_type: &str) {
+        ERRORS_TOTAL
+            .with_label_values(&[error_type, "/api/v1/ingest/nutrition", "warning"])
+            .inc();
+    }
+
+    /// Convenience property for nutrition ingests total (using generic health metrics counter)
+    pub fn nutrition_ingests_total(&self) -> &'static prometheus::CounterVec {
+        &HEALTH_METRICS_STORED_TOTAL
+    }
+
+    /// Convenience property for nutrition errors total (using generic error counter)
+    pub fn nutrition_errors_total(&self) -> &'static prometheus::CounterVec {
+        &ERRORS_TOTAL
+    }
 }
 
 /// Handler for Prometheus metrics endpoint

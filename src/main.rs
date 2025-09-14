@@ -278,6 +278,71 @@ async fn main() -> std::io::Result<()> {
                         "/data/environmental",
                         web::get().to(handlers::environmental_handler::get_environmental_data_handler),
                     )
+                    // Temperature metrics endpoints
+                    .route(
+                        "/ingest/temperature",
+                        web::post().to(handlers::temperature_handler::ingest_temperature_handler),
+                    )
+                    .route(
+                        "/data/temperature",
+                        web::get().to(handlers::temperature_handler::get_temperature_data_handler),
+                    )
+                    // Mindfulness & Mental Health endpoints (HIPAA-compliant)
+                    .route(
+                        "/ingest/mindfulness",
+                        web::post().to(handlers::mindfulness_handler::ingest_mindfulness),
+                    )
+                    .route(
+                        "/ingest/mental-health",
+                        web::post().to(handlers::mindfulness_handler::ingest_mental_health),
+                    )
+                    .route(
+                        "/data/mindfulness",
+                        web::get().to(handlers::mindfulness_handler::get_mindfulness_data),
+                    )
+                    .route(
+                        "/data/mental-health",
+                        web::get().to(handlers::mindfulness_handler::get_mental_health_data),
+                    )
+                    // Nutrition & Hydration endpoints (comprehensive dietary tracking)
+                    .route(
+                        "/ingest/nutrition",
+                        web::post().to(handlers::nutrition_handler::ingest_nutrition_data),
+                    )
+                    .route(
+                        "/data/nutrition",
+                        web::get().to(handlers::nutrition_handler::get_nutrition_data),
+                    )
+                    .route(
+                        "/data/hydration",
+                        web::get().to(handlers::nutrition_handler::get_hydration_data),
+                    )
+                    // Symptoms Tracking endpoints (comprehensive illness monitoring)
+                    .route(
+                        "/ingest/symptoms",
+                        web::post().to(handlers::symptoms_handler::ingest_symptoms_handler),
+                    )
+                    .route(
+                        "/data/symptoms",
+                        web::get().to(handlers::symptoms_handler::get_symptoms_handler),
+                    )
+                    // Blood Glucose & Metabolic endpoints (medical-grade data handling)
+                    .route(
+                        "/ingest/blood-glucose",
+                        web::post().to(handlers::metabolic_handler::ingest_blood_glucose_handler),
+                    )
+                    .route(
+                        "/ingest/metabolic",
+                        web::post().to(handlers::metabolic_handler::ingest_metabolic_handler),
+                    )
+                    .route(
+                        "/data/blood-glucose",
+                        web::get().to(handlers::metabolic_handler::get_blood_glucose_data_handler),
+                    )
+                    .route(
+                        "/data/metabolic",
+                        web::get().to(handlers::metabolic_handler::get_metabolic_data_handler),
+                    )
                     // Health data export endpoints
                     .route(
                         "/export/all",

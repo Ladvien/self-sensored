@@ -634,6 +634,21 @@ impl BatchProcessor {
             result.retry_attempts += retries;
         }
 
+        // Process temperature metrics
+        if !grouped.temperature_metrics.is_empty() {
+            let temperature_metrics = std::mem::take(&mut grouped.temperature_metrics);
+            let (processed, failed, errors, retries) = Self::process_with_retry(
+                "Temperature",
+                || self.insert_temperature_metrics(user_id, temperature_metrics.clone()),
+                &self.config,
+            )
+            .await;
+            result.processed_count += processed;
+            result.failed_count += failed;
+            result.errors.extend(errors);
+            result.retry_attempts += retries;
+        }
+
         // Process respiratory metrics
         if !grouped.respiratory_metrics.is_empty() {
             let respiratory_metrics = std::mem::take(&mut grouped.respiratory_metrics);
@@ -2049,6 +2064,201 @@ impl BatchProcessor {
         }
 
         Ok(total_inserted)
+    }
+
+    /// Batch insert temperature metrics in optimized chunks with medical validation
+    /// Handles body temperature, basal body temperature, Apple Watch wrist temperature, and water temperature
+    /// Supports fertility tracking patterns and fever detection
+    async fn insert_temperature_metrics_chunked(
+        pool: &PgPool,
+        user_id: Uuid,
+        metrics: Vec<crate::models::TemperatureMetric>,
+        chunk_size: usize,
+    ) -> Result<usize, sqlx::Error> {
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        let chunks: Vec<&[crate::models::TemperatureMetric]> = metrics.chunks(chunk_size).collect();
+        let mut total_inserted = 0;
+        let max_params_per_chunk = chunk_size * crate::config::TEMPERATURE_PARAMS_PER_RECORD;
+
+        info!(
+            metric_type = "temperature",
+            total_records = metrics.len(),
+            chunk_count = chunks.len(),
+            chunk_size = chunk_size,
+            max_params_per_chunk = max_params_per_chunk,
+            "Processing temperature metrics in chunks"
+        );
+
+        for (chunk_idx, chunk) in chunks.iter().enumerate() {
+            let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
+                "INSERT INTO temperature_metrics (user_id, recorded_at, body_temperature, basal_body_temperature, apple_sleeping_wrist_temperature, water_temperature, temperature_source, source_device) "
+            );
+
+            query_builder.push_values(chunk.iter(), |mut b, metric| {
+                b.push_bind(user_id)
+                    .push_bind(metric.recorded_at)
+                    .push_bind(metric.body_temperature)
+                    .push_bind(metric.basal_body_temperature)
+                    .push_bind(metric.apple_sleeping_wrist_temperature)
+                    .push_bind(metric.water_temperature)
+                    .push_bind(&metric.temperature_source)
+                    .push_bind(&metric.source_device);
+            });
+
+            // Use composite key for conflict resolution: user_id, recorded_at, temperature_source
+            // This allows multiple temperature readings at the same time from different sources
+            query_builder.push(" ON CONFLICT (user_id, recorded_at, temperature_source) DO UPDATE SET
+                body_temperature = COALESCE(EXCLUDED.body_temperature, temperature_metrics.body_temperature),
+                basal_body_temperature = COALESCE(EXCLUDED.basal_body_temperature, temperature_metrics.basal_body_temperature),
+                apple_sleeping_wrist_temperature = COALESCE(EXCLUDED.apple_sleeping_wrist_temperature, temperature_metrics.apple_sleeping_wrist_temperature),
+                water_temperature = COALESCE(EXCLUDED.water_temperature, temperature_metrics.water_temperature),
+                source_device = COALESCE(EXCLUDED.source_device, temperature_metrics.source_device),
+                updated_at = NOW()");
+
+            let insert_result = query_builder.build().execute(pool).await;
+
+            match insert_result {
+                Ok(result) => {
+                    let rows_inserted = result.rows_affected() as usize;
+                    total_inserted += rows_inserted;
+
+                    // Medical monitoring: count fever cases and critical temperatures in this chunk
+                    let fever_count = chunk
+                        .iter()
+                        .filter(|metric| {
+                            metric.body_temperature.map_or(false, |temp| temp > 38.0)
+                        })
+                        .count();
+
+                    let critical_count = chunk
+                        .iter()
+                        .filter(|metric| {
+                            metric.body_temperature.map_or(false, |temp| temp < 35.0 || temp > 40.0)
+                        })
+                        .count();
+
+                    let ovulation_indicators = chunk
+                        .iter()
+                        .filter(|metric| {
+                            metric.basal_body_temperature.map_or(false, |temp| temp > 36.5)
+                        })
+                        .count();
+
+                    // Log medical alerts for monitoring
+                    if fever_count > 0 {
+                        tracing::warn!(
+                            user_id = %user_id,
+                            fever_episodes = fever_count,
+                            chunk_idx = chunk_idx,
+                            "Fever episodes detected in temperature batch"
+                        );
+                    }
+
+                    if critical_count > 0 {
+                        tracing::warn!(
+                            user_id = %user_id,
+                            critical_temperature_readings = critical_count,
+                            chunk_idx = chunk_idx,
+                            "Critical temperature readings detected (hypothermia/hyperthermia)"
+                        );
+                    }
+
+                    info!(
+                        metric_type = "temperature",
+                        chunk_idx = chunk_idx,
+                        chunk_size = chunk.len(),
+                        rows_inserted = rows_inserted,
+                        fever_episodes = fever_count,
+                        critical_temperatures = critical_count,
+                        ovulation_indicators = ovulation_indicators,
+                        "Successfully inserted temperature metrics chunk"
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        error = %e,
+                        metric_type = "temperature",
+                        chunk_idx = chunk_idx,
+                        chunk_size = chunk.len(),
+                        "Failed to insert temperature metrics chunk"
+                    );
+                    return Err(e);
+                }
+            }
+        }
+
+        Ok(total_inserted)
+    }
+
+    /// Insert temperature metrics (non-chunked version for sequential processing)
+    async fn insert_temperature_metrics(
+        &self,
+        user_id: Uuid,
+        metrics: Vec<crate::models::TemperatureMetric>,
+    ) -> Result<usize, sqlx::Error> {
+        Self::insert_temperature_metrics_chunked(&self.pool, user_id, metrics, self.config.temperature_chunk_size).await
+    }
+
+    /// Add a method to process temperature metrics for single metric type processing
+    /// This is needed for the temperature handler's batch processing
+    pub async fn process_temperature_metrics(
+        &self,
+        user_id: Uuid,
+        metrics: Vec<crate::models::TemperatureMetric>,
+    ) -> Result<BatchProcessingResult, crate::models::ProcessingError> {
+        if metrics.is_empty() {
+            return Ok(BatchProcessingResult {
+                processed_count: 0,
+                failed_count: 0,
+                errors: Vec::new(),
+                processing_time_ms: 0,
+                retry_attempts: 0,
+                memory_peak_mb: Some(0.0),
+                chunk_progress: None,
+                deduplication_stats: None,
+            });
+        }
+
+        let start_time = std::time::Instant::now();
+
+        // Deduplicate temperature metrics
+        let deduplicated_metrics = self.deduplicate_temperature_metrics(user_id, metrics);
+        let duplicates_removed = metrics.len() - deduplicated_metrics.len();
+
+        // Process temperature metrics with retry
+        let (processed, failed, errors, retries) = Self::process_with_retry(
+            "Temperature",
+            || Self::insert_temperature_metrics_chunked(&self.pool, user_id, deduplicated_metrics.clone(), self.config.temperature_chunk_size),
+            &self.config,
+        ).await;
+
+        let duration = start_time.elapsed();
+
+        Ok(BatchProcessingResult {
+            processed_count: processed,
+            failed_count: failed,
+            errors,
+            processing_time_ms: duration.as_millis() as u64,
+            retry_attempts: retries,
+            memory_peak_mb: Some(self.estimate_memory_usage()),
+            chunk_progress: None,
+            deduplication_stats: Some(crate::services::batch_processor::DeduplicationStats {
+                heart_rate_duplicates: 0,
+                blood_pressure_duplicates: 0,
+                sleep_duplicates: 0,
+                activity_duplicates: 0,
+                body_measurement_duplicates: 0,
+                temperature_duplicates: duplicates_removed,
+                respiratory_duplicates: 0,
+                blood_glucose_duplicates: 0,
+                workout_duplicates: 0,
+                total_duplicates: duplicates_removed,
+                deduplication_time_ms: 0, // We're not tracking this separately here
+            }),
+        })
     }
 }
 

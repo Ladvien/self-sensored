@@ -5,7 +5,7 @@ use uuid::Uuid;
 use tokio::time::sleep;
 
 use self_sensored::models::{
-    ActivityMetric, BloodPressureMetric, HealthMetric, HeartRateMetric, IngestData,
+    ActivityMetric, BloodPressureMetric, BodyMeasurementMetric, HealthMetric, HeartRateMetric, IngestData,
     IngestPayload, RespiratoryMetric, SleepMetric, WorkoutData,
 };
 use self_sensored::services::batch_processor::{BatchConfig, BatchProcessor, ProcessingStatus};
@@ -43,6 +43,7 @@ async fn cleanup_test_data(pool: &PgPool, user_id: Uuid) {
         "blood_pressure_metrics",
         "sleep_metrics",
         "activity_metrics",
+        "body_metrics",
         "respiratory_metrics",
         "workouts",
         "users"

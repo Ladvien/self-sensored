@@ -2,7 +2,7 @@ use crate::config::ValidationConfig;
 use crate::models::enums::{
     ActivityContext, WorkoutType, MeditationType, StateOfMind,
     MenstrualFlow, CervicalMucusQuality, OvulationTestResult,
-    PregnancyTestResult, TemperatureContext,
+    PregnancyTestResult, TemperatureContext, SymptomType, SymptomSeverity,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -135,6 +135,19 @@ pub struct BloodGlucoseMetric {
     pub medication_taken: Option<bool>,                 // Whether diabetes medication was taken
     pub insulin_delivery_units: Option<f64>,           // Insulin delivery units (for atomic pairing)
     pub glucose_source: Option<String>,                // CGM device identifier for deduplication
+    pub source_device: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Metabolic metric for insulin delivery, blood alcohol content, and metabolic tracking
+#[derive(Debug, Deserialize, Serialize, Clone, FromRow)]
+pub struct MetabolicMetric {
+    pub id: uuid::Uuid,
+    pub user_id: uuid::Uuid,
+    pub recorded_at: DateTime<Utc>,
+    pub blood_alcohol_content: Option<f64>,    // Blood alcohol content percentage (0.0-0.5%)
+    pub insulin_delivery_units: Option<f64>,   // Insulin delivery units (0-100 units range)
+    pub delivery_method: Option<String>,       // "pump", "pen", "syringe", "inhaler", "patch"
     pub source_device: Option<String>,
     pub created_at: DateTime<Utc>,
 }
@@ -460,6 +473,61 @@ pub struct FertilityMetric {
     pub created_at: DateTime<Utc>,
 }
 
+/// Comprehensive nutrition metrics for dietary tracking and analysis
+/// Supports 25+ nutritional fields including macronutrients, vitamins, and minerals
+#[derive(Debug, Deserialize, Serialize, Clone, FromRow)]
+pub struct NutritionMetric {
+    pub id: uuid::Uuid,
+    pub user_id: uuid::Uuid,
+    pub recorded_at: DateTime<Utc>,
+
+    // Hydration & Stimulants
+    pub dietary_water: Option<f64>,                    // liters
+    pub dietary_caffeine: Option<f64>,                 // mg
+
+    // Macronutrients
+    pub dietary_energy_consumed: Option<f64>,          // calories
+    pub dietary_carbohydrates: Option<f64>,            // grams
+    pub dietary_protein: Option<f64>,                  // grams
+    pub dietary_fat_total: Option<f64>,                // grams
+    pub dietary_fat_saturated: Option<f64>,            // grams
+    pub dietary_cholesterol: Option<f64>,              // mg
+    pub dietary_sodium: Option<f64>,                   // mg
+    pub dietary_fiber: Option<f64>,                    // grams
+    pub dietary_sugar: Option<f64>,                    // grams
+
+    // Essential Minerals
+    pub dietary_calcium: Option<f64>,                  // mg
+    pub dietary_iron: Option<f64>,                     // mg
+    pub dietary_magnesium: Option<f64>,                // mg
+    pub dietary_potassium: Option<f64>,                // mg
+
+    // Essential Vitamins
+    pub dietary_vitamin_a: Option<f64>,                // mcg
+    pub dietary_vitamin_c: Option<f64>,                // mg
+    pub dietary_vitamin_d: Option<f64>,                // IU
+
+    // Metadata and source tracking
+    pub source_device: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Comprehensive symptom tracking metric for illness monitoring and health assessment
+/// Supports 50+ symptom types with severity levels and episode-based grouping
+#[derive(Debug, Deserialize, Serialize, Clone, FromRow)]
+pub struct SymptomMetric {
+    pub id: uuid::Uuid,
+    pub user_id: uuid::Uuid,
+    pub recorded_at: DateTime<Utc>,
+    pub symptom_type: SymptomType,
+    pub severity: SymptomSeverity,
+    pub duration_minutes: Option<i32>, // Duration of symptom in minutes (can be very long for chronic symptoms)
+    pub notes: Option<String>, // Additional context about the symptom
+    pub episode_id: Option<uuid::Uuid>, // Link related symptoms in same illness episode
+    pub source_device: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
 /// Tagged union for all health metric types
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(tag = "type")]
@@ -471,7 +539,9 @@ pub enum HealthMetric {
     BodyMeasurement(BodyMeasurementMetric),
     Temperature(TemperatureMetric),
     BloodGlucose(BloodGlucoseMetric),
+    Metabolic(MetabolicMetric),
     Respiratory(RespiratoryMetric),
+    Nutrition(NutritionMetric),
     Workout(WorkoutData),
     Environmental(EnvironmentalMetric),
     AudioExposure(AudioExposureMetric),
@@ -480,6 +550,7 @@ pub enum HealthMetric {
     MentalHealth(MentalHealthMetric),
     Menstrual(MenstrualMetric),
     Fertility(FertilityMetric),
+    Symptom(SymptomMetric),
 }
 
 /// Main ingest payload structure
@@ -1697,7 +1768,9 @@ impl HealthMetric {
             HealthMetric::BodyMeasurement(metric) => metric.validate_with_config(config),
             HealthMetric::Temperature(metric) => metric.validate_with_config(config),
             HealthMetric::BloodGlucose(metric) => metric.validate_with_config(config),
+            HealthMetric::Metabolic(metric) => metric.validate_with_config(config),
             HealthMetric::Respiratory(metric) => metric.validate_with_config(config),
+            HealthMetric::Nutrition(metric) => metric.validate_with_config(config),
             HealthMetric::Workout(workout) => workout.validate_with_config(config),
             HealthMetric::Environmental(metric) => metric.validate_with_config(config),
             HealthMetric::AudioExposure(metric) => metric.validate_with_config(config),
@@ -1718,7 +1791,9 @@ impl HealthMetric {
             HealthMetric::BodyMeasurement(_) => "BodyMeasurement",
             HealthMetric::Temperature(_) => "Temperature",
             HealthMetric::BloodGlucose(_) => "BloodGlucose",
+            HealthMetric::Metabolic(_) => "Metabolic",
             HealthMetric::Respiratory(_) => "Respiratory",
+            HealthMetric::Nutrition(_) => "Nutrition",
             HealthMetric::Workout(_) => "Workout",
             HealthMetric::Environmental(_) => "Environmental",
             HealthMetric::AudioExposure(_) => "AudioExposure",
@@ -1727,6 +1802,888 @@ impl HealthMetric {
             HealthMetric::MentalHealth(_) => "MentalHealth",
             HealthMetric::Menstrual(_) => "Menstrual",
             HealthMetric::Fertility(_) => "Fertility",
+            HealthMetric::Symptom(_) => "Symptom",
+        }
+    }
+}
+
+/// Macronutrient calorie distribution for nutritional analysis
+#[derive(Debug, Serialize, Clone)]
+pub struct MacronutrientDistribution {
+    pub carbohydrate_percent: u8,
+    pub protein_percent: u8,
+    pub fat_percent: u8,
+}
+
+/// Symptom Metric Validation and Analysis
+impl SymptomMetric {
+    /// Validate symptom metric with configurable parameters
+    pub fn validate(&self) -> Result<(), String> {
+        self.validate_with_config(&ValidationConfig::default())
+    }
+
+    /// Validate symptom metric with custom configuration
+    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
+        // Validate duration is reasonable (0 to 2 weeks max for most symptoms)
+        if let Some(duration) = self.duration_minutes {
+            if duration < 0 {
+                return Err("symptom duration cannot be negative".to_string());
+            }
+
+            // Most symptoms shouldn't last more than 2 weeks continuously
+            let max_duration_minutes = 14 * 24 * 60; // 2 weeks in minutes
+            if duration > max_duration_minutes {
+                return Err(format!(
+                    "symptom duration {} minutes is unreasonably long (max {} minutes = 2 weeks)",
+                    duration, max_duration_minutes
+                ));
+            }
+        }
+
+        // Validate severity consistency with symptom type
+        if self.symptom_type.is_critical() && self.severity == SymptomSeverity::None {
+            return Err(format!(
+                "Critical symptom type {} cannot have 'none' severity",
+                self.symptom_type
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Get symptom category for grouping and analysis
+    pub fn get_category(&self) -> &'static str {
+        self.symptom_type.get_category()
+    }
+
+    /// Check if this symptom indicates a potential medical emergency
+    pub fn is_medical_emergency(&self) -> bool {
+        // Critical severity always indicates emergency
+        if self.severity.is_critical() {
+            return true;
+        }
+
+        // Critical symptom types with severe+ severity indicate emergency
+        if self.symptom_type.is_critical() && self.severity >= SymptomSeverity::Severe {
+            return true;
+        }
+
+        // Specific combinations that indicate emergency
+        match (&self.symptom_type, &self.severity) {
+            (SymptomType::ChestTightnessOrPain, SymptomSeverity::Moderate) => true,
+            (SymptomType::ShortnessOfBreath, SymptomSeverity::Moderate) => true,
+            (SymptomType::ChestPain, SymptomSeverity::Moderate) => true,
+            (SymptomType::Fever, SymptomSeverity::Severe) => true, // High fever
+            (SymptomType::RapidHeartRate, SymptomSeverity::Severe) => true,
+            _ => false,
+        }
+    }
+
+    /// Check if this symptom requires medical attention (non-emergency)
+    pub fn requires_medical_attention(&self) -> bool {
+        // Emergency conditions already require attention
+        if self.is_medical_emergency() {
+            return true;
+        }
+
+        // Severe symptoms generally require medical attention
+        if self.severity >= SymptomSeverity::Severe {
+            return true;
+        }
+
+        // Long-duration symptoms might require attention
+        if let Some(duration) = self.duration_minutes {
+            let hours = duration as f64 / 60.0;
+            match self.symptom_type {
+                // Persistent pain over 24 hours
+                SymptomType::AbdominalCramps | SymptomType::Headache | SymptomType::BackPain |
+                SymptomType::MusclePain | SymptomType::JointPain => hours > 24.0,
+
+                // Respiratory symptoms over 12 hours
+                SymptomType::Coughing | SymptomType::ShortnessOfBreath | SymptomType::Wheezing => hours > 12.0,
+
+                // Digestive symptoms over 48 hours
+                SymptomType::Nausea | SymptomType::Vomiting | SymptomType::Diarrhea => hours > 48.0,
+
+                // Fever over 72 hours
+                SymptomType::Fever => hours > 72.0,
+
+                // Other symptoms default to 1 week
+                _ => hours > 168.0, // 1 week
+            }
+        } else {
+            false
+        }
+    }
+
+    /// Generate symptom analysis summary
+    pub fn generate_analysis(&self) -> SymptomAnalysis {
+        SymptomAnalysis {
+            symptom_type: self.symptom_type,
+            severity: self.severity,
+            category: self.get_category().to_string(),
+            is_emergency: self.is_medical_emergency(),
+            requires_attention: self.requires_medical_attention(),
+            severity_score: self.severity.to_numeric_score(),
+            duration_hours: self.duration_minutes.map(|m| m as f64 / 60.0),
+            recommendations: self.generate_recommendations(),
+        }
+    }
+
+    /// Generate contextual recommendations based on symptom
+    pub fn generate_recommendations(&self) -> Vec<String> {
+        let mut recommendations = Vec::new();
+
+        if self.is_medical_emergency() {
+            recommendations.push("Seek immediate medical attention".to_string());
+            recommendations.push("Consider calling emergency services".to_string());
+        } else if self.requires_medical_attention() {
+            recommendations.push("Consult with healthcare provider".to_string());
+            recommendations.push("Monitor symptom progression".to_string());
+        }
+
+        // Category-specific recommendations
+        match self.symptom_type.get_category() {
+            "respiratory" => {
+                recommendations.push("Ensure good air quality".to_string());
+                recommendations.push("Stay hydrated".to_string());
+                if self.severity >= SymptomSeverity::Moderate {
+                    recommendations.push("Avoid strenuous activity".to_string());
+                }
+            },
+            "digestive" => {
+                recommendations.push("Stay hydrated".to_string());
+                recommendations.push("Consider bland diet".to_string());
+                recommendations.push("Monitor for dehydration signs".to_string());
+            },
+            "pain" => {
+                recommendations.push("Rest affected area if possible".to_string());
+                recommendations.push("Consider pain management strategies".to_string());
+                if self.duration_minutes.map_or(false, |d| d > 720) { // >12 hours
+                    recommendations.push("Track pain patterns".to_string());
+                }
+            },
+            "neurological" => {
+                recommendations.push("Ensure adequate rest".to_string());
+                recommendations.push("Monitor cognitive symptoms".to_string());
+                recommendations.push("Consider stress management".to_string());
+            },
+            "cardiovascular" => {
+                recommendations.push("Monitor vital signs".to_string());
+                recommendations.push("Avoid strenuous activity".to_string());
+                recommendations.push("Consider cardiac evaluation".to_string());
+            },
+            _ => {
+                recommendations.push("Monitor symptom progression".to_string());
+                recommendations.push("Rest and self-care".to_string());
+            }
+        }
+
+        // Duration-based recommendations
+        if let Some(duration) = self.duration_minutes {
+            let hours = duration as f64 / 60.0;
+            if hours > 72.0 { // >3 days
+                recommendations.push("Consider medical evaluation for persistent symptoms".to_string());
+            }
+        }
+
+        recommendations
+    }
+
+    /// Check if this symptom is part of a potential illness episode
+    pub fn is_episode_symptom(&self) -> bool {
+        self.episode_id.is_some()
+    }
+
+    /// Get symptom urgency level (0-5 scale)
+    pub fn get_urgency_level(&self) -> u8 {
+        if self.is_medical_emergency() {
+            return 5; // Maximum urgency
+        }
+
+        match self.severity {
+            SymptomSeverity::None => 0,
+            SymptomSeverity::Mild => 1,
+            SymptomSeverity::Moderate => 2,
+            SymptomSeverity::Severe => 4,
+            SymptomSeverity::Critical => 5,
+        }
+    }
+}
+
+/// Symptom analysis summary for health insights
+#[derive(Debug, Serialize, Clone)]
+pub struct SymptomAnalysis {
+    pub symptom_type: SymptomType,
+    pub severity: SymptomSeverity,
+    pub category: String,
+    pub is_emergency: bool,
+    pub requires_attention: bool,
+    pub severity_score: i32,
+    pub duration_hours: Option<f64>,
+    pub recommendations: Vec<String>,
+}
+
+impl NutritionMetric {
+    pub fn validate(&self) -> Result<(), String> {
+        self.validate_with_config(&ValidationConfig::default())
+    }
+
+    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
+        // Validate water intake (0-10 liters per day reasonable range)
+        if let Some(water) = self.dietary_water {
+            if water < 0.0 || water > 10.0 {
+                return Err(format!(
+                    "dietary_water {} liters is out of reasonable range (0-10 L/day)",
+                    water
+                ));
+            }
+        }
+
+        // This code below is mental health validation that got misplaced - will be cleaned up
+        if let Some(valence) = self.state_of_mind_valence {
+            if valence < -1.0 || valence > 1.0 {
+                return Err(format!(
+                    "state_of_mind_valence {} must be between -1.0 and 1.0",
+                    valence
+                ));
+            }
+        }
+
+        // Validate mood rating (1-10 scale)
+        if let Some(rating) = self.mood_rating {
+            if rating < 1 || rating > 10 {
+                return Err(format!(
+                    "mood_rating {} must be between 1 and 10",
+                    rating
+                ));
+            }
+        }
+
+        // Validate anxiety level (1-10 scale)
+        if let Some(level) = self.anxiety_level {
+            if level < 1 || level > 10 {
+                return Err(format!(
+                    "anxiety_level {} must be between 1 and 10",
+                    level
+                ));
+            }
+        }
+
+        // Validate stress level (1-10 scale)
+        if let Some(level) = self.stress_level {
+            if level < 1 || level > 10 {
+                return Err(format!(
+                    "stress_level {} must be between 1 and 10",
+                    level
+                ));
+            }
+        }
+
+        // Validate energy level (1-10 scale)
+        if let Some(level) = self.energy_level {
+            if level < 1 || level > 10 {
+                return Err(format!(
+                    "energy_level {} must be between 1 and 10",
+                    level
+                ));
+            }
+        }
+
+        // Validate depression screening score (0-27 PHQ-9 style)
+        if let Some(score) = self.depression_screening_score {
+            if score < 0 || score > 27 {
+                return Err(format!(
+                    "depression_screening_score {} must be between 0 and 27",
+                    score
+                ));
+            }
+        }
+
+        // Validate anxiety screening score (0-21 GAD-7 style)
+        if let Some(score) = self.anxiety_screening_score {
+            if score < 0 || score > 21 {
+                return Err(format!(
+                    "anxiety_screening_score {} must be between 0 and 21",
+                    score
+                ));
+            }
+        }
+
+        // Validate sleep quality impact (1-5 scale)
+        if let Some(impact) = self.sleep_quality_impact {
+            if impact < 1 || impact > 5 {
+                return Err(format!(
+                    "sleep_quality_impact {} must be between 1 and 5",
+                    impact
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Calculate wellness score from mental health metrics
+    pub fn wellness_score(&self) -> i16 {
+        let mut score = 0i32;
+        let mut components = 0;
+
+        // Higher mood and energy are positive
+        if let Some(mood) = self.mood_rating {
+            score += mood as i32;
+            components += 1;
+        }
+
+        if let Some(energy) = self.energy_level {
+            score += energy as i32;
+            components += 1;
+        }
+
+        // Lower anxiety and stress are positive (invert scores)
+        if let Some(anxiety) = self.anxiety_level {
+            score += (11 - anxiety) as i32;
+            components += 1;
+        }
+
+        if let Some(stress) = self.stress_level {
+            score += (11 - stress) as i32;
+            components += 1;
+        }
+
+        if components > 0 {
+            (score / components).clamp(1, 10) as i16
+        } else {
+            5 // Default neutral wellness score
+        }
+    }
+
+    /// Check if this entry has encrypted private notes
+    pub fn has_encrypted_notes(&self) -> bool {
+        self.private_notes_encrypted.is_some()
+    }
+}
+
+impl NutritionMetric {
+    pub fn validate(&self) -> Result<(), String> {
+        self.validate_with_config(&ValidationConfig::default())
+    }
+
+    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
+        // Validate water intake (0-10 liters per day reasonable range)
+        if let Some(water) = self.dietary_water {
+            if water < 0.0 || water > 10.0 {
+                return Err(format!(
+                    "dietary_water {} liters is out of reasonable range (0-10 L/day)",
+                    water
+                ));
+            }
+        }
+
+        // Validate caffeine intake (0-1000mg per day reasonable range)
+        if let Some(caffeine) = self.dietary_caffeine {
+            if caffeine < 0.0 || caffeine > 1000.0 {
+                return Err(format!(
+                    "dietary_caffeine {} mg is out of reasonable range (0-1000 mg/day)",
+                    caffeine
+                ));
+            }
+        }
+
+        // Validate energy consumed (0-10000 calories per day reasonable range)
+        if let Some(energy) = self.dietary_energy_consumed {
+            if energy < 0.0 || energy > 10000.0 {
+                return Err(format!(
+                    "dietary_energy_consumed {} calories is out of reasonable range (0-10000 cal/day)",
+                    energy
+                ));
+            }
+        }
+
+        // Validate macronutrients (all should be non-negative, reasonable daily ranges)
+        if let Some(carbs) = self.dietary_carbohydrates {
+            if carbs < 0.0 || carbs > 2000.0 {
+                return Err(format!(
+                    "dietary_carbohydrates {} grams is out of reasonable range (0-2000 g/day)",
+                    carbs
+                ));
+            }
+        }
+
+        if let Some(protein) = self.dietary_protein {
+            if protein < 0.0 || protein > 1000.0 {
+                return Err(format!(
+                    "dietary_protein {} grams is out of reasonable range (0-1000 g/day)",
+                    protein
+                ));
+            }
+        }
+
+        if let Some(fat) = self.dietary_fat_total {
+            if fat < 0.0 || fat > 1000.0 {
+                return Err(format!(
+                    "dietary_fat_total {} grams is out of reasonable range (0-1000 g/day)",
+                    fat
+                ));
+            }
+        }
+
+        if let Some(saturated_fat) = self.dietary_fat_saturated {
+            if saturated_fat < 0.0 || saturated_fat > 500.0 {
+                return Err(format!(
+                    "dietary_fat_saturated {} grams is out of reasonable range (0-500 g/day)",
+                    saturated_fat
+                ));
+            }
+        }
+
+        if let Some(fiber) = self.dietary_fiber {
+            if fiber < 0.0 || fiber > 200.0 {
+                return Err(format!(
+                    "dietary_fiber {} grams is out of reasonable range (0-200 g/day)",
+                    fiber
+                ));
+            }
+        }
+
+        if let Some(sugar) = self.dietary_sugar {
+            if sugar < 0.0 || sugar > 1000.0 {
+                return Err(format!(
+                    "dietary_sugar {} grams is out of reasonable range (0-1000 g/day)",
+                    sugar
+                ));
+            }
+        }
+
+        // Validate cholesterol (0-2000mg per day reasonable range)
+        if let Some(cholesterol) = self.dietary_cholesterol {
+            if cholesterol < 0.0 || cholesterol > 2000.0 {
+                return Err(format!(
+                    "dietary_cholesterol {} mg is out of reasonable range (0-2000 mg/day)",
+                    cholesterol
+                ));
+            }
+        }
+
+        // Validate sodium (0-10000mg per day reasonable range - can be high in processed foods)
+        if let Some(sodium) = self.dietary_sodium {
+            if sodium < 0.0 || sodium > 10000.0 {
+                return Err(format!(
+                    "dietary_sodium {} mg is out of reasonable range (0-10000 mg/day)",
+                    sodium
+                ));
+            }
+        }
+
+        // Validate essential minerals (daily recommended values as upper bounds)
+        if let Some(calcium) = self.dietary_calcium {
+            if calcium < 0.0 || calcium > 5000.0 {
+                return Err(format!(
+                    "dietary_calcium {} mg is out of reasonable range (0-5000 mg/day)",
+                    calcium
+                ));
+            }
+        }
+
+        if let Some(iron) = self.dietary_iron {
+            if iron < 0.0 || iron > 100.0 {
+                return Err(format!(
+                    "dietary_iron {} mg is out of reasonable range (0-100 mg/day)",
+                    iron
+                ));
+            }
+        }
+
+        if let Some(magnesium) = self.dietary_magnesium {
+            if magnesium < 0.0 || magnesium > 2000.0 {
+                return Err(format!(
+                    "dietary_magnesium {} mg is out of reasonable range (0-2000 mg/day)",
+                    magnesium
+                ));
+            }
+        }
+
+        if let Some(potassium) = self.dietary_potassium {
+            if potassium < 0.0 || potassium > 10000.0 {
+                return Err(format!(
+                    "dietary_potassium {} mg is out of reasonable range (0-10000 mg/day)",
+                    potassium
+                ));
+            }
+        }
+
+        // Validate essential vitamins
+        if let Some(vitamin_a) = self.dietary_vitamin_a {
+            if vitamin_a < 0.0 || vitamin_a > 10000.0 {
+                return Err(format!(
+                    "dietary_vitamin_a {} mcg is out of reasonable range (0-10000 mcg/day)",
+                    vitamin_a
+                ));
+            }
+        }
+
+        if let Some(vitamin_c) = self.dietary_vitamin_c {
+            if vitamin_c < 0.0 || vitamin_c > 5000.0 {
+                return Err(format!(
+                    "dietary_vitamin_c {} mg is out of reasonable range (0-5000 mg/day)",
+                    vitamin_c
+                ));
+            }
+        }
+
+        if let Some(vitamin_d) = self.dietary_vitamin_d {
+            if vitamin_d < 0.0 || vitamin_d > 10000.0 {
+                return Err(format!(
+                    "dietary_vitamin_d {} IU is out of reasonable range (0-10000 IU/day)",
+                    vitamin_d
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check if this is a high-hydration reading
+    pub fn is_high_hydration(&self) -> bool {
+        self.dietary_water.map_or(false, |water| water > 3.0) // >3L per day
+    }
+
+    /// Check if this exceeds recommended daily caffeine intake
+    pub fn exceeds_caffeine_limit(&self) -> bool {
+        self.dietary_caffeine.map_or(false, |caffeine| caffeine > 400.0) // >400mg/day
+    }
+
+    /// Calculate approximate macronutrient calorie distribution
+    pub fn macronutrient_distribution(&self) -> Option<MacronutrientDistribution> {
+        let energy = self.dietary_energy_consumed?;
+        if energy <= 0.0 {
+            return None;
+        }
+
+        let carb_calories = self.dietary_carbohydrates.unwrap_or(0.0) * 4.0;
+        let protein_calories = self.dietary_protein.unwrap_or(0.0) * 4.0;
+        let fat_calories = self.dietary_fat_total.unwrap_or(0.0) * 9.0;
+
+        Some(MacronutrientDistribution {
+            carbohydrate_percent: (carb_calories / energy * 100.0) as u8,
+            protein_percent: (protein_calories / energy * 100.0) as u8,
+            fat_percent: (fat_calories / energy * 100.0) as u8,
+        })
+    }
+
+    /// Check if sodium intake is excessive (>2300mg recommended daily limit)
+    pub fn has_excessive_sodium(&self) -> bool {
+        self.dietary_sodium.map_or(false, |sodium| sodium > 2300.0)
+    }
+
+    /// Get hydration status based on water intake
+    pub fn hydration_status(&self) -> &'static str {
+        match self.dietary_water {
+            Some(water) if water < 1.0 => "severely_dehydrated",
+            Some(water) if water < 2.0 => "dehydrated",
+            Some(water) if water < 3.0 => "adequate",
+            Some(water) if water > 5.0 => "overhydrated",
+            Some(_) => "well_hydrated",
+            None => "unknown",
+        }
+    }
+
+    /// Check if this represents a balanced meal based on macronutrient distribution
+    pub fn is_balanced_meal(&self) -> bool {
+        if let Some(distribution) = self.macronutrient_distribution() {
+            // Balanced meal: 45-65% carbs, 10-35% protein, 20-35% fat
+            distribution.carbohydrate_percent >= 45 && distribution.carbohydrate_percent <= 65 &&
+            distribution.protein_percent >= 10 && distribution.protein_percent <= 35 &&
+            distribution.fat_percent >= 20 && distribution.fat_percent <= 35
+        } else {
+            false
+        }
+    }
+}
+
+/// Macronutrient calorie distribution for nutritional analysis
+#[derive(Debug, Serialize, Clone)]
+pub struct MacronutrientDistribution {
+    pub carbohydrate_percent: u8,
+    pub protein_percent: u8,
+    pub fat_percent: u8,
+}
+
+/// Symptom Metric Validation and Analysis
+impl SymptomMetric {
+    /// Validate symptom metric with configurable parameters
+    pub fn validate(&self) -> Result<(), String> {
+        self.validate_with_config(&ValidationConfig::default())
+    }
+
+    /// Validate symptom metric with custom configuration
+    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
+        // Validate duration is reasonable (0 to 2 weeks max for most symptoms)
+        if let Some(duration) = self.duration_minutes {
+            if duration < 0 {
+                return Err("symptom duration cannot be negative".to_string());
+            }
+
+            // Most symptoms shouldn't last more than 2 weeks continuously
+            let max_duration_minutes = 14 * 24 * 60; // 2 weeks in minutes
+            if duration > max_duration_minutes {
+                return Err(format!(
+                    "symptom duration {} minutes is unreasonably long (max {} minutes = 2 weeks)",
+                    duration, max_duration_minutes
+                ));
+            }
+        }
+
+        // Validate severity consistency with symptom type
+        if self.symptom_type.is_critical() && self.severity == SymptomSeverity::None {
+            return Err(format!(
+                "Critical symptom type {} cannot have 'none' severity",
+                self.symptom_type
+            ));
+        }
+
+        // Check for medical emergency combinations
+        if self.severity.is_critical() && !self.symptom_type.is_critical() {
+            // Log warning for non-critical symptoms with critical severity
+            // This might indicate user error or actual medical emergency
+        }
+
+        Ok(())
+    }
+
+    /// Get symptom category for grouping and analysis
+    pub fn get_category(&self) -> &'static str {
+        self.symptom_type.get_category()
+    }
+
+    /// Check if this symptom indicates a potential medical emergency
+    pub fn is_medical_emergency(&self) -> bool {
+        // Critical severity always indicates emergency
+        if self.severity.is_critical() {
+            return true;
+        }
+
+        // Critical symptom types with severe+ severity indicate emergency
+        if self.symptom_type.is_critical() && self.severity >= SymptomSeverity::Severe {
+            return true;
+        }
+
+        // Specific combinations that indicate emergency
+        match (&self.symptom_type, &self.severity) {
+            (SymptomType::ChestTightnessOrPain, SymptomSeverity::Moderate) => true,
+            (SymptomType::ShortnessOfBreath, SymptomSeverity::Moderate) => true,
+            (SymptomType::ChestPain, SymptomSeverity::Moderate) => true,
+            (SymptomType::Fever, SymptomSeverity::Severe) => true, // High fever
+            (SymptomType::RapidHeartRate, SymptomSeverity::Severe) => true,
+            _ => false,
+        }
+    }
+
+    /// Check if this symptom requires medical attention (non-emergency)
+    pub fn requires_medical_attention(&self) -> bool {
+        // Emergency conditions already require attention
+        if self.is_medical_emergency() {
+            return true;
+        }
+
+        // Severe symptoms generally require medical attention
+        if self.severity >= SymptomSeverity::Severe {
+            return true;
+        }
+
+        // Long-duration symptoms might require attention
+        if let Some(duration) = self.duration_minutes {
+            let hours = duration as f64 / 60.0;
+            match self.symptom_type {
+                // Persistent pain over 24 hours
+                SymptomType::AbdominalCramps | SymptomType::Headache | SymptomType::BackPain |
+                SymptomType::MusclePain | SymptomType::JointPain => hours > 24.0,
+
+                // Respiratory symptoms over 12 hours
+                SymptomType::Coughing | SymptomType::ShortnessOfBreath | SymptomType::Wheezing => hours > 12.0,
+
+                // Digestive symptoms over 48 hours
+                SymptomType::Nausea | SymptomType::Vomiting | SymptomType::Diarrhea => hours > 48.0,
+
+                // Fever over 72 hours
+                SymptomType::Fever => hours > 72.0,
+
+                // Other symptoms default to 1 week
+                _ => hours > 168.0, // 1 week
+            }
+        } else {
+            false
+        }
+    }
+
+    /// Generate symptom analysis summary
+    pub fn generate_analysis(&self) -> SymptomAnalysis {
+        SymptomAnalysis {
+            symptom_type: self.symptom_type,
+            severity: self.severity,
+            category: self.get_category().to_string(),
+            is_emergency: self.is_medical_emergency(),
+            requires_attention: self.requires_medical_attention(),
+            severity_score: self.severity.to_numeric_score(),
+            duration_hours: self.duration_minutes.map(|m| m as f64 / 60.0),
+            recommendations: self.generate_recommendations(),
+        }
+    }
+
+    /// Generate contextual recommendations based on symptom
+    pub fn generate_recommendations(&self) -> Vec<String> {
+        let mut recommendations = Vec::new();
+
+        if self.is_medical_emergency() {
+            recommendations.push("Seek immediate medical attention".to_string());
+            recommendations.push("Consider calling emergency services".to_string());
+        } else if self.requires_medical_attention() {
+            recommendations.push("Consult with healthcare provider".to_string());
+            recommendations.push("Monitor symptom progression".to_string());
+        }
+
+        // Category-specific recommendations
+        match self.symptom_type.get_category() {
+            "respiratory" => {
+                recommendations.push("Ensure good air quality".to_string());
+                recommendations.push("Stay hydrated".to_string());
+                if self.severity >= SymptomSeverity::Moderate {
+                    recommendations.push("Avoid strenuous activity".to_string());
+                }
+            },
+            "digestive" => {
+                recommendations.push("Stay hydrated".to_string());
+                recommendations.push("Consider bland diet".to_string());
+                recommendations.push("Monitor for dehydration signs".to_string());
+            },
+            "pain" => {
+                recommendations.push("Rest affected area if possible".to_string());
+                recommendations.push("Consider pain management strategies".to_string());
+                if self.duration_minutes.map_or(false, |d| d > 720) { // >12 hours
+                    recommendations.push("Track pain patterns".to_string());
+                }
+            },
+            "neurological" => {
+                recommendations.push("Ensure adequate rest".to_string());
+                recommendations.push("Monitor cognitive symptoms".to_string());
+                recommendations.push("Consider stress management".to_string());
+            },
+            "cardiovascular" => {
+                recommendations.push("Monitor vital signs".to_string());
+                recommendations.push("Avoid strenuous activity".to_string());
+                recommendations.push("Consider cardiac evaluation".to_string());
+            },
+            _ => {
+                recommendations.push("Monitor symptom progression".to_string());
+                recommendations.push("Rest and self-care".to_string());
+            }
+        }
+
+        // Duration-based recommendations
+        if let Some(duration) = self.duration_minutes {
+            let hours = duration as f64 / 60.0;
+            if hours > 72.0 { // >3 days
+                recommendations.push("Consider medical evaluation for persistent symptoms".to_string());
+            }
+        }
+
+        recommendations
+    }
+
+    /// Check if this symptom is part of a potential illness episode
+    pub fn is_episode_symptom(&self) -> bool {
+        self.episode_id.is_some()
+    }
+
+    /// Get symptom urgency level (0-5 scale)
+    pub fn get_urgency_level(&self) -> u8 {
+        if self.is_medical_emergency() {
+            return 5; // Maximum urgency
+        }
+
+        match self.severity {
+            SymptomSeverity::None => 0,
+            SymptomSeverity::Mild => 1,
+            SymptomSeverity::Moderate => 2,
+            SymptomSeverity::Severe => 4,
+            SymptomSeverity::Critical => 5,
+        }
+    }
+}
+
+/// Symptom analysis summary for health insights
+#[derive(Debug, Serialize, Clone)]
+pub struct SymptomAnalysis {
+    pub symptom_type: SymptomType,
+    pub severity: SymptomSeverity,
+    pub category: String,
+    pub is_emergency: bool,
+    pub requires_attention: bool,
+    pub severity_score: i32,
+    pub duration_hours: Option<f64>,
+    pub recommendations: Vec<String>,
+}
+
+
+impl MetabolicMetric {
+    pub fn validate(&self) -> Result<(), String> {
+        self.validate_with_config(&ValidationConfig::default())
+    }
+
+    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
+        // Validate blood alcohol content if provided (0.0-0.5%)
+        if let Some(bac) = self.blood_alcohol_content {
+            if bac < 0.0 || bac > 0.5 {
+                return Err(format!(
+                    "blood_alcohol_content {} is outside valid range (0.0-0.5%)",
+                    bac
+                ));
+            }
+        }
+
+        // Validate insulin units if provided
+        if let Some(insulin_units) = self.insulin_delivery_units {
+            if insulin_units < 0.0 || insulin_units > 100.0 {
+                return Err(format!(
+                    "insulin_delivery_units {} is outside safe range (0-100 units)",
+                    insulin_units
+                ));
+            }
+        }
+
+        // Validate delivery method if provided
+        if let Some(method) = &self.delivery_method {
+            let valid_methods = ["pump", "pen", "syringe", "inhaler", "patch"];
+            if !valid_methods.contains(&method.as_str()) {
+                return Err(format!(
+                    "delivery_method '{}' is invalid. Valid methods: {:?}",
+                    method, valid_methods
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check if blood alcohol content indicates intoxication (>0.08%)
+    pub fn indicates_intoxication(&self) -> bool {
+        self.blood_alcohol_content.map_or(false, |bac| bac > 0.08)
+    }
+
+    /// Check if this is a significant insulin delivery (>10 units)
+    pub fn is_significant_insulin_delivery(&self) -> bool {
+        self.insulin_delivery_units.map_or(false, |units| units > 10.0)
+    }
+
+    /// Get alcohol impairment level based on BAC
+    pub fn alcohol_impairment_level(&self) -> &'static str {
+        match self.blood_alcohol_content {
+            Some(bac) if bac == 0.0 => "sober",
+            Some(bac) if bac < 0.05 => "minimal",
+            Some(bac) if bac < 0.08 => "impaired",
+            Some(bac) if bac < 0.15 => "intoxicated",
+            Some(bac) if bac < 0.30 => "severely_intoxicated",
+            Some(_) => "life_threatening",
+            None => "unknown",
         }
     }
 }

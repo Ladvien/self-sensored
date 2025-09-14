@@ -446,18 +446,19 @@ async fn store_safety_event_metric(
     // For the demonstration, we'll store as a health symptom with event type
     sqlx::query!(
         r#"
-        INSERT INTO health_symptoms (
+        INSERT INTO symptoms (
             id, user_id, recorded_at, symptom_type, severity,
-            body_location, notes, source_device, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            duration_minutes, notes, episode_id, source_device, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         "#,
         metric.id,
         user_id,
         metric.recorded_at,
         metric.event_type,
         metric.severity_level.map(|s| s as i32),
-        format!("Location: lat={:?}, lng={:?}", metric.location_latitude, metric.location_longitude).as_str(),
+        None::<i32>, // duration_minutes
         metric.notes,
+        None::<uuid::Uuid>, // episode_id
         metric.source_device,
         metric.created_at
     )

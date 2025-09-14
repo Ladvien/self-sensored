@@ -284,6 +284,27 @@ CREATE TABLE blood_glucose_metrics (
         ('fasting', 'post_meal', 'random', 'bedtime', 'pre_meal', 'post_workout'))
 );
 
+-- Metabolic metrics table for insulin delivery and blood alcohol content tracking
+CREATE TABLE metabolic_metrics (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recorded_at TIMESTAMPTZ NOT NULL,
+    blood_alcohol_content DOUBLE PRECISION, -- Blood alcohol content percentage (0.0-0.5% range)
+    insulin_delivery_units DOUBLE PRECISION, -- Insulin delivery units (0-100 units safe range)
+    delivery_method VARCHAR(50), -- 'pump', 'pen', 'syringe', 'inhaler', 'patch'
+    source_device VARCHAR(255),
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    -- Unique constraint for temporal deduplication
+    UNIQUE(user_id, recorded_at),
+    -- Medical-grade validation constraints
+    CONSTRAINT check_blood_alcohol_content CHECK (blood_alcohol_content IS NULL OR
+        (blood_alcohol_content >= 0.0 AND blood_alcohol_content <= 0.5)),
+    CONSTRAINT check_metabolic_insulin_units CHECK (insulin_delivery_units IS NULL OR
+        (insulin_delivery_units >= 0.0 AND insulin_delivery_units <= 100.0)),
+    CONSTRAINT check_delivery_method CHECK (delivery_method IS NULL OR delivery_method IN
+        ('pump', 'pen', 'syringe', 'inhaler', 'patch'))
+);
+
 -- ============================================================================
 -- INDEXES
 -- ============================================================================
@@ -339,6 +360,15 @@ CREATE INDEX idx_blood_glucose_recorded ON blood_glucose_metrics(recorded_at DES
 CREATE INDEX idx_blood_glucose_user_source ON blood_glucose_metrics(user_id, glucose_source, recorded_at DESC);
 CREATE INDEX idx_blood_glucose_critical ON blood_glucose_metrics(user_id, recorded_at DESC)
     WHERE blood_glucose_mg_dl < 70.0 OR blood_glucose_mg_dl > 400.0;
+
+-- Metabolic metrics indexes
+CREATE INDEX idx_metabolic_user_recorded ON metabolic_metrics(user_id, recorded_at DESC);
+CREATE INDEX idx_metabolic_recorded ON metabolic_metrics(recorded_at DESC);
+CREATE INDEX idx_metabolic_user_delivery_method ON metabolic_metrics(user_id, delivery_method, recorded_at DESC);
+CREATE INDEX idx_metabolic_alcohol ON metabolic_metrics(user_id, recorded_at DESC)
+    WHERE blood_alcohol_content > 0.08; -- Index for intoxication levels
+CREATE INDEX idx_metabolic_insulin ON metabolic_metrics(user_id, recorded_at DESC)
+    WHERE insulin_delivery_units > 10.0; -- Index for significant insulin deliveries
 CREATE INDEX idx_temperature_source ON temperature_metrics(temperature_source);
 
 -- ============================================================================
@@ -385,6 +415,66 @@ CREATE TYPE pregnancy_test_result AS ENUM (
 CREATE TYPE temperature_context AS ENUM (
     'basal', 'fever', 'general', 'sleeping', 'environmental'
 );
+
+-- Symptom Type Enumeration (40+ symptom types for comprehensive tracking)
+CREATE TYPE symptom_type AS ENUM (
+    -- Pain Symptoms
+    'abdominal_cramps', 'headache', 'breast_pain', 'pelvic_pain', 'chest_tightness_or_pain',
+    'back_pain', 'muscle_pain', 'joint_pain', 'tooth_pain', 'eye_pain',
+
+    -- Respiratory Symptoms
+    'coughing', 'shortness_of_breath', 'wheezing', 'congestion', 'runny_nose',
+    'sneezing', 'sore_throat', 'chest_congestion',
+
+    -- Digestive Symptoms
+    'bloating', 'nausea', 'vomiting', 'diarrhea', 'constipation',
+    'heartburn', 'loss_of_appetite', 'excessive_hunger',
+
+    -- Neurological Symptoms
+    'dizziness', 'fatigue', 'mood_changes', 'sleep_disturbances', 'memory_issues',
+    'concentration_problems', 'anxiety', 'depression', 'irritability',
+
+    -- Cardiovascular Symptoms
+    'palpitations', 'rapid_heart_rate', 'chest_pain', 'high_blood_pressure',
+    'cold_hands_or_feet',
+
+    -- Reproductive/Hormonal Symptoms
+    'hot_flashes', 'night_sweats', 'breast_tenderness', 'vaginal_dryness',
+    'irregular_periods', 'heavy_periods', 'mood_swings',
+
+    -- General/Systemic Symptoms
+    'fever', 'chills', 'sweating', 'weight_gain', 'weight_loss',
+    'hair_loss', 'dry_skin', 'rash', 'itching', 'swelling'
+);
+
+-- Symptom Severity Levels
+CREATE TYPE symptom_severity AS ENUM (
+    'none', 'mild', 'moderate', 'severe', 'critical'
+);
+
+-- ============================================================================
+-- SYMPTOMS TRACKING TABLES
+-- ============================================================================
+
+-- Symptoms Table for comprehensive symptom tracking and illness episode management
+CREATE TABLE symptoms (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recorded_at TIMESTAMPTZ NOT NULL,
+    symptom_type symptom_type NOT NULL,
+    severity symptom_severity NOT NULL DEFAULT 'mild',
+    duration_minutes INTEGER CHECK (duration_minutes IS NULL OR duration_minutes >= 0),
+    notes TEXT, -- Additional context about the symptom
+    episode_id UUID, -- Link related symptoms in same illness episode
+    source_device VARCHAR(255),
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, recorded_at, symptom_type) -- Prevent duplicate symptoms at same time
+);
+
+-- Index for efficient symptom queries
+CREATE INDEX idx_symptoms_user_recorded ON symptoms(user_id, recorded_at DESC);
+CREATE INDEX idx_symptoms_type_severity ON symptoms(symptom_type, severity);
+CREATE INDEX idx_symptoms_episode ON symptoms(episode_id) WHERE episode_id IS NOT NULL;
 
 -- ============================================================================
 -- REPRODUCTIVE HEALTH TABLES (Privacy-First Design)

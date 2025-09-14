@@ -2,6 +2,7 @@ use actix_web::{web, HttpResponse, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use std::time::Duration;
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
@@ -9,6 +10,7 @@ use crate::models::{
     MindfulnessMetric, MentalHealthMetric, ProcessingError
 };
 use crate::services::auth::AuthContext;
+use crate::services::cache::{CacheService, CacheKey};
 
 /// Request payload for mindfulness session ingestion
 #[derive(Debug, Deserialize, Serialize)]
@@ -95,7 +97,7 @@ pub struct MentalHealthQueryParams {
 }
 
 /// Privacy-filtered mental health response
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MentalHealthResponse {
     pub data: Vec<MentalHealthSummary>,
     pub privacy_level: String,
@@ -103,7 +105,7 @@ pub struct MentalHealthResponse {
 }
 
 /// Summary of mental health data with privacy protection
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MentalHealthSummary {
     pub id: Uuid,
     pub recorded_at: DateTime<Utc>,
@@ -116,11 +118,12 @@ pub struct MentalHealthSummary {
     pub source_device: Option<String>,
 }
 
-/// Mindfulness session ingestion endpoint
+/// Mindfulness session ingestion endpoint with cache invalidation
 /// POST /api/v1/ingest/mindfulness
-#[instrument(skip(pool, auth, payload))]
+#[instrument(skip(pool, cache, auth, payload))]
 pub async fn ingest_mindfulness(
     pool: web::Data<PgPool>,
+    cache: web::Data<CacheService>,
     auth: AuthContext,
     payload: web::Json<MindfulnessIngestRequest>,
 ) -> Result<HttpResponse> {
@@ -128,7 +131,7 @@ pub async fn ingest_mindfulness(
     let session_count = payload.data.len();
 
     info!(
-        user_id = %auth.user_id,
+        user_id = %auth.user.id,
         session_count = session_count,
         "Processing mindfulness session ingestion"
     );
@@ -139,11 +142,11 @@ pub async fn ingest_mindfulness(
 
     // Process each mindfulness session
     for (index, session_data) in payload.data.iter().enumerate() {
-        match process_mindfulness_session(&pool, auth.user_id, session_data).await {
+        match process_mindfulness_session(&pool, auth.user.id, session_data).await {
             Ok(_) => {
                 processed_count += 1;
                 info!(
-                    user_id = %auth.user_id,
+                    user_id = %auth.user.id,
                     index = index,
                     duration = session_data.session_duration_minutes,
                     meditation_type = ?session_data.meditation_type,
@@ -158,7 +161,7 @@ pub async fn ingest_mindfulness(
                     index: Some(index),
                 });
                 warn!(
-                    user_id = %auth.user_id,
+                    user_id = %auth.user.id,
                     index = index,
                     error = errors.last().unwrap().error_message,
                     "Failed to process mindfulness session"
@@ -169,6 +172,16 @@ pub async fn ingest_mindfulness(
 
     let processing_time_ms = start_time.elapsed().as_millis() as u64;
 
+    // Invalidate user's mindfulness cache after successful ingestion
+    if processed_count > 0 {
+        let cache_invalidated = invalidate_mindfulness_cache(&cache, auth.user.id).await;
+        info!(
+            user_id = %auth.user.id,
+            cache_invalidated = cache_invalidated,
+            "Cache invalidation after mindfulness ingestion"
+        );
+    }
+
     let response = MindfulnessIngestResponse {
         success: failed_count == 0,
         processed_count,
@@ -178,22 +191,33 @@ pub async fn ingest_mindfulness(
         privacy_protection_applied: false, // Mindfulness sessions don't require special privacy protection
     };
 
+    // Log performance metrics
+    log_performance_metrics(
+        "ingest_mindfulness",
+        auth.user.id,
+        processing_time_ms,
+        false, // Ingestion never hits cache
+        processed_count,
+    );
+
     info!(
-        user_id = %auth.user_id,
+        user_id = %auth.user.id,
         processed_count = processed_count,
         failed_count = failed_count,
         processing_time_ms = processing_time_ms,
-        "Completed mindfulness session ingestion"
+        performance_target_met = processing_time_ms < 200,
+        "Completed mindfulness session ingestion with cache invalidation"
     );
 
     Ok(HttpResponse::Ok().json(response))
 }
 
-/// Mental health data ingestion endpoint with privacy protection
+/// Mental health data ingestion endpoint with privacy protection and cache invalidation
 /// POST /api/v1/ingest/mental-health
-#[instrument(skip(pool, auth, payload))]
+#[instrument(skip(pool, cache, auth, payload))]
 pub async fn ingest_mental_health(
     pool: web::Data<PgPool>,
+    cache: web::Data<CacheService>,
     auth: AuthContext,
     payload: web::Json<MentalHealthIngestRequest>,
 ) -> Result<HttpResponse> {
@@ -201,7 +225,7 @@ pub async fn ingest_mental_health(
     let data_count = payload.data.len();
 
     info!(
-        user_id = %auth.user_id,
+        user_id = %auth.user.id,
         data_count = data_count,
         "Processing mental health data ingestion with privacy protection"
     );
@@ -212,11 +236,11 @@ pub async fn ingest_mental_health(
 
     // Process each mental health data entry
     for (index, health_data) in payload.data.iter().enumerate() {
-        match process_mental_health_data(&pool, auth.user_id, health_data).await {
+        match process_mental_health_data(&pool, auth.user.id, health_data).await {
             Ok(_) => {
                 processed_count += 1;
                 info!(
-                    user_id = %auth.user_id,
+                    user_id = %auth.user.id,
                     index = index,
                     has_private_notes = health_data.private_notes.is_some(),
                     "Successfully processed mental health data with privacy protection"
@@ -230,7 +254,7 @@ pub async fn ingest_mental_health(
                     index: Some(index),
                 });
                 error!(
-                    user_id = %auth.user_id,
+                    user_id = %auth.user.id,
                     index = index,
                     error = errors.last().unwrap().error_message,
                     "Failed to process mental health data"
@@ -242,7 +266,17 @@ pub async fn ingest_mental_health(
     let processing_time_ms = start_time.elapsed().as_millis() as u64;
 
     // Add audit log entry for mental health data ingestion
-    audit_mental_health_access(&pool, auth.user_id, "ingestion", processed_count).await;
+    audit_mental_health_access(&pool, auth.user.id, "ingestion", processed_count).await;
+
+    // Invalidate user's mental health cache after successful ingestion
+    if processed_count > 0 {
+        let cache_invalidated = invalidate_mental_health_cache(&cache, auth.user.id).await;
+        info!(
+            user_id = %auth.user.id,
+            cache_invalidated = cache_invalidated,
+            "Mental health cache invalidation after ingestion"
+        );
+    }
 
     let response = MindfulnessIngestResponse {
         success: failed_count == 0,
@@ -253,94 +287,178 @@ pub async fn ingest_mental_health(
         privacy_protection_applied: true, // Mental health data has privacy protection
     };
 
+    // Log performance metrics for mental health ingestion
+    log_performance_metrics(
+        "ingest_mental_health",
+        auth.user.id,
+        processing_time_ms,
+        false, // Ingestion never hits cache
+        processed_count,
+    );
+
     info!(
-        user_id = %auth.user_id,
+        user_id = %auth.user.id,
         processed_count = processed_count,
         failed_count = failed_count,
         processing_time_ms = processing_time_ms,
-        "Completed mental health data ingestion with privacy protection"
+        performance_target_met = processing_time_ms < 200,
+        "Completed mental health data ingestion with privacy protection and cache invalidation"
     );
 
     Ok(HttpResponse::Ok().json(response))
 }
 
-/// Retrieve mindfulness session history
+/// Retrieve mindfulness session history with Redis caching
 /// GET /api/v1/data/mindfulness
-#[instrument(skip(pool, auth))]
+#[instrument(skip(pool, cache, auth))]
 pub async fn get_mindfulness_data(
     pool: web::Data<PgPool>,
+    cache: web::Data<CacheService>,
     auth: AuthContext,
     query: web::Query<MindfulnessQueryParams>,
 ) -> Result<HttpResponse> {
+    let start_time = std::time::Instant::now();
+
     info!(
-        user_id = %auth.user_id,
+        user_id = %auth.user.id,
         start_date = ?query.start_date,
         end_date = ?query.end_date,
         meditation_type = ?query.meditation_type,
-        "Retrieving mindfulness session data"
+        "Retrieving mindfulness session data with caching"
     );
 
-    match fetch_mindfulness_sessions(&pool, auth.user_id, &query).await {
+    // Generate cache key based on query parameters
+    let query_hash = generate_mindfulness_query_hash(&query);
+    let cache_key = CacheKey::MindfulnessQuery {
+        user_id: auth.user.id,
+        hash: query_hash.clone(),
+    };
+
+    // Try to get from cache first
+    if let Some(cached_sessions) = cache.get::<Vec<MindfulnessMetric>>(&cache_key, "health_export").await {
+        let processing_time_ms = start_time.elapsed().as_millis() as u64;
+        info!(
+            user_id = %auth.user.id,
+            session_count = cached_sessions.len(),
+            processing_time_ms = processing_time_ms,
+            cache_hit = true,
+            "Retrieved mindfulness sessions from cache"
+        );
+        return Ok(HttpResponse::Ok().json(cached_sessions));
+    }
+
+    // Cache miss - fetch from database with optimized query
+    match fetch_mindfulness_sessions_optimized(&pool, auth.user.id, &query).await {
         Ok(sessions) => {
+            let processing_time_ms = start_time.elapsed().as_millis() as u64;
+
+            // Cache the results for 10 minutes (configurable TTL for mental health data)
+            let cache_ttl = Duration::from_secs(600); // 10 minutes
+            cache.set(&cache_key, "health_export", sessions.clone(), Some(cache_ttl)).await;
+
             info!(
-                user_id = %auth.user_id,
+                user_id = %auth.user.id,
                 session_count = sessions.len(),
-                "Successfully retrieved mindfulness sessions"
+                processing_time_ms = processing_time_ms,
+                cache_hit = false,
+                "Successfully retrieved and cached mindfulness sessions"
             );
+
             Ok(HttpResponse::Ok().json(sessions))
         }
         Err(e) => {
+            let processing_time_ms = start_time.elapsed().as_millis() as u64;
             error!(
-                user_id = %auth.user_id,
+                user_id = %auth.user.id,
                 error = %e,
+                processing_time_ms = processing_time_ms,
                 "Failed to retrieve mindfulness sessions"
             );
             Ok(HttpResponse::InternalServerError().json(serde_json::json!({
                 "error": "Failed to retrieve mindfulness data",
-                "details": e.to_string()
+                "details": e.to_string(),
+                "processing_time_ms": processing_time_ms
             })))
         }
     }
 }
 
-/// Retrieve mental health data with privacy controls
+/// Retrieve mental health data with privacy controls and caching
 /// GET /api/v1/data/mental-health
-#[instrument(skip(pool, auth))]
+#[instrument(skip(pool, cache, auth))]
 pub async fn get_mental_health_data(
     pool: web::Data<PgPool>,
+    cache: web::Data<CacheService>,
     auth: AuthContext,
     query: web::Query<MentalHealthQueryParams>,
 ) -> Result<HttpResponse> {
+    let start_time = std::time::Instant::now();
+    let include_sensitive = query.include_sensitive_data.unwrap_or(false);
+
     info!(
-        user_id = %auth.user_id,
+        user_id = %auth.user.id,
         start_date = ?query.start_date,
         end_date = ?query.end_date,
-        include_sensitive = query.include_sensitive_data.unwrap_or(false),
-        "Retrieving mental health data with privacy controls"
+        include_sensitive = include_sensitive,
+        "Retrieving mental health data with privacy controls and caching"
     );
 
     // Add audit log entry for mental health data access
-    audit_mental_health_access(&pool, auth.user_id, "retrieval", 0).await;
+    audit_mental_health_access(&pool, auth.user.id, "retrieval", 0).await;
 
-    match fetch_mental_health_data(&pool, auth.user_id, &query).await {
+    // Generate cache key based on query parameters (include sensitive flag in hash)
+    let query_hash = generate_mental_health_query_hash(&query);
+    let cache_key = CacheKey::MentalHealthQuery {
+        user_id: auth.user.id,
+        hash: query_hash.clone(),
+    };
+
+    // Try to get from cache first (shorter TTL for mental health data)
+    if let Some(cached_response) = cache.get::<MentalHealthResponse>(&cache_key, "health_export").await {
+        let processing_time_ms = start_time.elapsed().as_millis() as u64;
+        info!(
+            user_id = %auth.user.id,
+            data_count = cached_response.data.len(),
+            privacy_level = cached_response.privacy_level,
+            processing_time_ms = processing_time_ms,
+            cache_hit = true,
+            "Retrieved mental health data from cache"
+        );
+        return Ok(HttpResponse::Ok().json(cached_response));
+    }
+
+    // Cache miss - fetch from database with optimized query
+    match fetch_mental_health_data_optimized(&pool, auth.user.id, &query).await {
         Ok(response) => {
+            let processing_time_ms = start_time.elapsed().as_millis() as u64;
+
+            // Cache the results for 5 minutes (shorter TTL for sensitive mental health data)
+            let cache_ttl = Duration::from_secs(300); // 5 minutes for mental health data
+            cache.set(&cache_key, "health_export", response.clone(), Some(cache_ttl)).await;
+
             info!(
-                user_id = %auth.user_id,
+                user_id = %auth.user.id,
                 data_count = response.data.len(),
                 privacy_level = response.privacy_level,
-                "Successfully retrieved mental health data"
+                processing_time_ms = processing_time_ms,
+                cache_hit = false,
+                "Successfully retrieved and cached mental health data"
             );
+
             Ok(HttpResponse::Ok().json(response))
         }
         Err(e) => {
+            let processing_time_ms = start_time.elapsed().as_millis() as u64;
             error!(
-                user_id = %auth.user_id,
+                user_id = %auth.user.id,
                 error = %e,
+                processing_time_ms = processing_time_ms,
                 "Failed to retrieve mental health data"
             );
             Ok(HttpResponse::InternalServerError().json(serde_json::json!({
                 "error": "Failed to retrieve mental health data",
-                "details": e.to_string()
+                "details": e.to_string(),
+                "processing_time_ms": processing_time_ms
             })))
         }
     }
@@ -622,11 +740,12 @@ async fn fetch_mental_health_data(
         .collect();
 
     let privacy_level = if include_sensitive { "detailed" } else { "summary" };
+    let total_count = data.len() as i64; // Store count before moving data
 
     Ok(MentalHealthResponse {
         data,
         privacy_level: privacy_level.to_string(),
-        total_count: data.len() as i64, // In a real implementation, this would be a separate count query
+        total_count,
     })
 }
 
@@ -646,8 +765,9 @@ async fn audit_mental_health_access(
         "Mental health data access audit log"
     );
 
-    // Example audit log insertion (would use a proper audit table)
-    let _ = sqlx::query!(
+    // Try to insert into audit_log table if it exists, otherwise just log
+    // This allows the system to work without the audit table for testing/development
+    let audit_result = sqlx::query!(
         "INSERT INTO audit_log (user_id, action, resource_type, record_count, created_at)
          VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT DO NOTHING",
@@ -659,4 +779,242 @@ async fn audit_mental_health_access(
     )
     .execute(pool)
     .await;
+
+    if let Err(e) = audit_result {
+        warn!(
+            user_id = %user_id,
+            error = %e,
+            "Failed to insert audit log entry - audit table may not exist"
+        );
+    }
+}
+
+/// Performance-optimized mindfulness sessions query with proper indexing
+async fn fetch_mindfulness_sessions_optimized(
+    pool: &PgPool,
+    user_id: Uuid,
+    query: &MindfulnessQueryParams,
+) -> Result<Vec<MindfulnessMetric>, sqlx::Error> {
+    let limit = query.limit.unwrap_or(100).min(1000); // Cap at 1000 records
+
+    // Use a more efficient query with explicit column selection and optimized WHERE clause
+    let mut query_builder = sqlx::QueryBuilder::new(
+        r#"SELECT id, user_id, recorded_at, session_duration_minutes, meditation_type,
+           session_quality_rating, mindful_minutes_today, mindful_minutes_week,
+           breathing_rate_breaths_per_min, heart_rate_variability_during_session,
+           focus_rating, guided_session_instructor, meditation_app, background_sounds,
+           location_type, session_notes, source_device, created_at
+           FROM mindfulness_metrics WHERE user_id = "#
+    );
+    query_builder.push_bind(user_id);
+
+    if let Some(start_date) = query.start_date {
+        query_builder.push(" AND recorded_at >= ");
+        query_builder.push_bind(start_date);
+    }
+
+    if let Some(end_date) = query.end_date {
+        query_builder.push(" AND recorded_at <= ");
+        query_builder.push_bind(end_date);
+    }
+
+    if let Some(ref meditation_type) = query.meditation_type {
+        query_builder.push(" AND meditation_type = ");
+        query_builder.push_bind(meditation_type);
+    }
+
+    if let Some(min_duration) = query.min_duration {
+        query_builder.push(" AND session_duration_minutes >= ");
+        query_builder.push_bind(min_duration);
+    }
+
+    // Use index-optimized ordering
+    query_builder.push(" ORDER BY recorded_at DESC LIMIT ");
+    query_builder.push_bind(limit);
+
+    let query = query_builder.build_query_as::<MindfulnessMetric>();
+    query.fetch_all(pool).await
+}
+
+/// Performance-optimized mental health data query with privacy filtering
+async fn fetch_mental_health_data_optimized(
+    pool: &PgPool,
+    user_id: Uuid,
+    query: &MentalHealthQueryParams,
+) -> Result<MentalHealthResponse, sqlx::Error> {
+    let limit = query.limit.unwrap_or(50).min(500); // Lower limit for mental health data
+    let include_sensitive = query.include_sensitive_data.unwrap_or(false);
+
+    // Use optimized query with selective column retrieval
+    let mut query_builder = sqlx::QueryBuilder::new(
+        r#"SELECT id, user_id, recorded_at, state_of_mind_valence, state_of_mind_labels,
+           mood_rating, anxiety_level, stress_level, energy_level,
+           private_notes_encrypted, source_device, created_at
+           FROM mental_health_metrics WHERE user_id = "#
+    );
+    query_builder.push_bind(user_id);
+
+    if let Some(start_date) = query.start_date {
+        query_builder.push(" AND recorded_at >= ");
+        query_builder.push_bind(start_date);
+    }
+
+    if let Some(end_date) = query.end_date {
+        query_builder.push(" AND recorded_at <= ");
+        query_builder.push_bind(end_date);
+    }
+
+    // Use index-optimized ordering
+    query_builder.push(" ORDER BY recorded_at DESC LIMIT ");
+    query_builder.push_bind(limit);
+
+    let query_result = query_builder.build_query_as::<MentalHealthMetric>();
+    let metrics = query_result.fetch_all(pool).await?;
+
+    // Convert to privacy-filtered summaries with optimized processing
+    let data = metrics
+        .into_iter()
+        .map(|metric| {
+            let wellness_score = Some(metric.wellness_score());
+            MentalHealthSummary {
+                id: metric.id,
+                recorded_at: metric.recorded_at,
+                mood_rating: if include_sensitive { metric.mood_rating } else { None },
+                stress_level: if include_sensitive { metric.stress_level } else { None },
+                anxiety_level: if include_sensitive { metric.anxiety_level } else { None },
+                energy_level: metric.energy_level, // Energy level is less sensitive
+                wellness_score,
+                has_notes: metric.has_encrypted_notes(),
+                source_device: metric.source_device,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let privacy_level = if include_sensitive { "detailed" } else { "summary" };
+    let total_count = data.len() as i64;
+
+    Ok(MentalHealthResponse {
+        data,
+        privacy_level: privacy_level.to_string(),
+        total_count,
+    })
+}
+
+/// Generate cache key hash from mindfulness query parameters
+pub fn generate_mindfulness_query_hash(params: &MindfulnessQueryParams) -> String {
+    use sha2::{Digest, Sha256};
+
+    let mut hasher = Sha256::new();
+    hasher.update(format!("{params:?}").as_bytes());
+    format!("{:x}", hasher.finalize())[..16].to_string()
+}
+
+/// Generate cache key hash from mental health query parameters
+pub fn generate_mental_health_query_hash(params: &MentalHealthQueryParams) -> String {
+    use sha2::{Digest, Sha256};
+
+    let mut hasher = Sha256::new();
+    hasher.update(format!("{params:?}").as_bytes());
+    format!("{:x}", hasher.finalize())[..16].to_string()
+}
+
+/// Cache warming function for mindfulness data
+pub async fn warm_mindfulness_cache(
+    pool: &PgPool,
+    cache: &CacheService,
+    user_id: Uuid,
+) -> bool {
+    // Warm cache with recent mindfulness sessions (last 7 days)
+    let recent_query = MindfulnessQueryParams {
+        start_date: Some(Utc::now() - chrono::Duration::days(7)),
+        end_date: Some(Utc::now()),
+        meditation_type: None,
+        min_duration: None,
+        limit: Some(50),
+    };
+
+    match fetch_mindfulness_sessions_optimized(pool, user_id, &recent_query).await {
+        Ok(sessions) => {
+            let cache_key = CacheKey::MindfulnessQuery {
+                user_id,
+                hash: generate_mindfulness_query_hash(&recent_query),
+            };
+
+            cache.set(
+                &cache_key,
+                "health_export",
+                sessions,
+                Some(Duration::from_secs(600)), // 10 minutes
+            ).await
+        }
+        Err(e) => {
+            warn!(
+                user_id = %user_id,
+                error = %e,
+                "Failed to warm mindfulness cache"
+            );
+            false
+        }
+    }
+}
+
+/// Performance monitoring for mindfulness endpoints
+pub fn log_performance_metrics(
+    endpoint: &str,
+    user_id: Uuid,
+    processing_time_ms: u64,
+    cache_hit: bool,
+    record_count: usize,
+) {
+    info!(
+        endpoint = endpoint,
+        user_id = %user_id,
+        processing_time_ms = processing_time_ms,
+        cache_hit = cache_hit,
+        record_count = record_count,
+        performance_target_met = processing_time_ms < 200, // Target: <200ms
+        "Mindfulness endpoint performance metrics"
+    );
+
+    // In a production system, this would emit metrics to Prometheus
+    // histogram_observe("mindfulness_request_duration_seconds", processing_time_ms as f64 / 1000.0);
+    // counter_inc("mindfulness_requests_total", &[("endpoint", endpoint), ("cache_hit", &cache_hit.to_string())]);
+}
+
+/// Invalidate mindfulness-related cache entries for a user
+async fn invalidate_mindfulness_cache(
+    cache: &CacheService,
+    user_id: Uuid,
+) -> bool {
+    // Use wildcard pattern to invalidate all mindfulness cache entries for the user
+    let pattern = format!("health_export:mindfulness*:{user_id}:*");
+
+    info!(
+        user_id = %user_id,
+        pattern = %pattern,
+        "Invalidating mindfulness cache entries"
+    );
+
+    // In the current cache service, we'd need to use the general user cache invalidation
+    // This will clear all cache entries for the user, including mindfulness data
+    cache.invalidate_user_cache(user_id, "health_export").await
+}
+
+/// Invalidate mental health-related cache entries for a user
+async fn invalidate_mental_health_cache(
+    cache: &CacheService,
+    user_id: Uuid,
+) -> bool {
+    // Use wildcard pattern to invalidate all mental health cache entries for the user
+    let pattern = format!("health_export:mental_health*:{user_id}:*");
+
+    info!(
+        user_id = %user_id,
+        pattern = %pattern,
+        "Invalidating mental health cache entries"
+    );
+
+    // In the current cache service, we'd need to use the general user cache invalidation
+    // This will clear all cache entries for the user, including mental health data
+    cache.invalidate_user_cache(user_id, "health_export").await
 }

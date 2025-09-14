@@ -42,6 +42,11 @@ pub enum CacheKey {
     SleepQuery { user_id: Uuid, hash: String },
     ActivityQuery { user_id: Uuid, hash: String },
     WorkoutQuery { user_id: Uuid, hash: String },
+    MindfulnessQuery { user_id: Uuid, hash: String },
+    MentalHealthQuery { user_id: Uuid, hash: String },
+    MindfulnessInsights { user_id: Uuid, period: String },
+    MentalHealthInsights { user_id: Uuid, period: String },
+    MindfulnessTrends { user_id: Uuid, days: u32 },
     HealthSummary { user_id: Uuid, date_range: String },
     UserMetrics { user_id: Uuid, metric_type: String },
 }
@@ -63,6 +68,21 @@ impl CacheKey {
             }
             CacheKey::WorkoutQuery { user_id, hash } => {
                 format!("{prefix}:workout_query:{user_id}:{hash}")
+            }
+            CacheKey::MindfulnessQuery { user_id, hash } => {
+                format!("{prefix}:mindfulness_query:{user_id}:{hash}")
+            }
+            CacheKey::MentalHealthQuery { user_id, hash } => {
+                format!("{prefix}:mental_health_query:{user_id}:{hash}")
+            }
+            CacheKey::MindfulnessInsights { user_id, period } => {
+                format!("{prefix}:mindfulness_insights:{user_id}:{period}")
+            }
+            CacheKey::MentalHealthInsights { user_id, period } => {
+                format!("{prefix}:mental_health_insights:{user_id}:{period}")
+            }
+            CacheKey::MindfulnessTrends { user_id, days } => {
+                format!("{prefix}:mindfulness_trends:{user_id}:{days}d")
             }
             CacheKey::HealthSummary {
                 user_id,

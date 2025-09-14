@@ -509,3 +509,337 @@ impl fmt::Display for StateOfMind {
         write!(f, "{s}")
     }
 }
+
+// ============================================================================
+// SYMPTOM TRACKING ENUMS
+// ============================================================================
+
+/// Comprehensive symptom type enumeration for illness tracking and health monitoring
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[sqlx(type_name = "symptom_type", rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+pub enum SymptomType {
+    // Pain Symptoms
+    AbdominalCramps,
+    Headache,
+    BreastPain,
+    PelvicPain,
+    ChestTightnessOrPain,
+    BackPain,
+    MusclePain,
+    JointPain,
+    ToothPain,
+    EyePain,
+
+    // Respiratory Symptoms
+    Coughing,
+    ShortnessOfBreath,
+    Wheezing,
+    Congestion,
+    RunnyNose,
+    Sneezing,
+    SoreThroat,
+    ChestCongestion,
+
+    // Digestive Symptoms
+    Bloating,
+    Nausea,
+    Vomiting,
+    Diarrhea,
+    Constipation,
+    Heartburn,
+    LossOfAppetite,
+    ExcessiveHunger,
+
+    // Neurological Symptoms
+    Dizziness,
+    Fatigue,
+    MoodChanges,
+    SleepDisturbances,
+    MemoryIssues,
+    ConcentrationProblems,
+    Anxiety,
+    Depression,
+    Irritability,
+
+    // Cardiovascular Symptoms
+    Palpitations,
+    RapidHeartRate,
+    ChestPain,
+    HighBloodPressure,
+    ColdHandsOrFeet,
+
+    // Reproductive/Hormonal Symptoms
+    HotFlashes,
+    NightSweats,
+    BreastTenderness,
+    VaginalDryness,
+    IrregularPeriods,
+    HeavyPeriods,
+    MoodSwings,
+
+    // General/Systemic Symptoms
+    Fever,
+    Chills,
+    Sweating,
+    WeightGain,
+    WeightLoss,
+    HairLoss,
+    DrySkin,
+    Rash,
+    Itching,
+    Swelling,
+}
+
+impl SymptomType {
+    /// Convert from iOS HealthKit symptom strings
+    pub fn from_ios_string(s: &str) -> Option<Self> {
+        match s.to_lowercase().replace("-", "_").replace(" ", "_").as_str() {
+            // Pain symptoms
+            "abdominal_cramps" | "abdominalcramps" | "stomach_pain" => Some(Self::AbdominalCramps),
+            "headache" | "head_ache" => Some(Self::Headache),
+            "breast_pain" | "breastpain" => Some(Self::BreastPain),
+            "pelvic_pain" | "pelvicpain" => Some(Self::PelvicPain),
+            "chest_tightness_or_pain" | "chest_tightness" => Some(Self::ChestTightnessOrPain),
+            "back_pain" | "backpain" => Some(Self::BackPain),
+            "muscle_pain" | "musclepain" | "muscle_ache" => Some(Self::MusclePain),
+            "joint_pain" | "jointpain" | "joint_ache" => Some(Self::JointPain),
+            "tooth_pain" | "toothpain" | "dental_pain" => Some(Self::ToothPain),
+            "eye_pain" | "eyepain" => Some(Self::EyePain),
+
+            // Respiratory symptoms
+            "coughing" | "cough" => Some(Self::Coughing),
+            "shortness_of_breath" | "shortnessofbreath" | "dyspnea" => Some(Self::ShortnessOfBreath),
+            "wheezing" => Some(Self::Wheezing),
+            "congestion" | "nasal_congestion" => Some(Self::Congestion),
+            "runny_nose" | "runnynose" | "rhinorrhea" => Some(Self::RunnyNose),
+            "sneezing" => Some(Self::Sneezing),
+            "sore_throat" | "sorethroat" => Some(Self::SoreThroat),
+            "chest_congestion" | "chestcongestion" => Some(Self::ChestCongestion),
+
+            // Digestive symptoms
+            "bloating" => Some(Self::Bloating),
+            "nausea" => Some(Self::Nausea),
+            "vomiting" | "throwing_up" => Some(Self::Vomiting),
+            "diarrhea" | "loose_stools" => Some(Self::Diarrhea),
+            "constipation" => Some(Self::Constipation),
+            "heartburn" | "acid_reflux" => Some(Self::Heartburn),
+            "loss_of_appetite" | "lossofappetite" | "no_appetite" => Some(Self::LossOfAppetite),
+            "excessive_hunger" | "excessivehunger" | "increased_appetite" => Some(Self::ExcessiveHunger),
+
+            // Neurological symptoms
+            "dizziness" | "dizzy" => Some(Self::Dizziness),
+            "fatigue" | "tired" | "exhaustion" => Some(Self::Fatigue),
+            "mood_changes" | "moodchanges" => Some(Self::MoodChanges),
+            "sleep_disturbances" | "sleepdisturbances" | "insomnia" => Some(Self::SleepDisturbances),
+            "memory_issues" | "memoryissues" | "forgetfulness" => Some(Self::MemoryIssues),
+            "concentration_problems" | "concentrationproblems" | "brain_fog" => Some(Self::ConcentrationProblems),
+            "anxiety" | "anxious" => Some(Self::Anxiety),
+            "depression" | "depressed" | "sad" => Some(Self::Depression),
+            "irritability" | "irritable" => Some(Self::Irritability),
+
+            // Cardiovascular symptoms
+            "palpitations" | "heart_palpitations" => Some(Self::Palpitations),
+            "rapid_heart_rate" | "rapidheartrate" | "tachycardia" => Some(Self::RapidHeartRate),
+            "chest_pain" | "chestpain" => Some(Self::ChestPain),
+            "high_blood_pressure" | "highbloodpressure" | "hypertension" => Some(Self::HighBloodPressure),
+            "cold_hands_or_feet" | "coldhandsorfeet" | "cold_extremities" => Some(Self::ColdHandsOrFeet),
+
+            // Reproductive/Hormonal symptoms
+            "hot_flashes" | "hotflashes" | "hot_flash" => Some(Self::HotFlashes),
+            "night_sweats" | "nightsweats" => Some(Self::NightSweats),
+            "breast_tenderness" | "breasttenderness" => Some(Self::BreastTenderness),
+            "vaginal_dryness" | "vaginaldryness" => Some(Self::VaginalDryness),
+            "irregular_periods" | "irregularperiods" => Some(Self::IrregularPeriods),
+            "heavy_periods" | "heavyperiods" | "menorrhagia" => Some(Self::HeavyPeriods),
+            "mood_swings" | "moodswings" => Some(Self::MoodSwings),
+
+            // General/Systemic symptoms
+            "fever" | "high_temperature" => Some(Self::Fever),
+            "chills" | "shivering" => Some(Self::Chills),
+            "sweating" | "excessive_sweating" => Some(Self::Sweating),
+            "weight_gain" | "weightgain" => Some(Self::WeightGain),
+            "weight_loss" | "weightloss" => Some(Self::WeightLoss),
+            "hair_loss" | "hairloss" | "alopecia" => Some(Self::HairLoss),
+            "dry_skin" | "dryskin" => Some(Self::DrySkin),
+            "rash" | "skin_rash" => Some(Self::Rash),
+            "itching" | "itchy" | "pruritus" => Some(Self::Itching),
+            "swelling" | "edema" | "inflammation" => Some(Self::Swelling),
+
+            _ => None,
+        }
+    }
+
+    /// Get symptom category for grouping
+    pub fn get_category(&self) -> &'static str {
+        match self {
+            Self::AbdominalCramps | Self::Headache | Self::BreastPain | Self::PelvicPain
+            | Self::ChestTightnessOrPain | Self::BackPain | Self::MusclePain | Self::JointPain
+            | Self::ToothPain | Self::EyePain => "pain",
+
+            Self::Coughing | Self::ShortnessOfBreath | Self::Wheezing | Self::Congestion
+            | Self::RunnyNose | Self::Sneezing | Self::SoreThroat | Self::ChestCongestion => "respiratory",
+
+            Self::Bloating | Self::Nausea | Self::Vomiting | Self::Diarrhea | Self::Constipation
+            | Self::Heartburn | Self::LossOfAppetite | Self::ExcessiveHunger => "digestive",
+
+            Self::Dizziness | Self::Fatigue | Self::MoodChanges | Self::SleepDisturbances
+            | Self::MemoryIssues | Self::ConcentrationProblems | Self::Anxiety
+            | Self::Depression | Self::Irritability => "neurological",
+
+            Self::Palpitations | Self::RapidHeartRate | Self::ChestPain | Self::HighBloodPressure
+            | Self::ColdHandsOrFeet => "cardiovascular",
+
+            Self::HotFlashes | Self::NightSweats | Self::BreastTenderness | Self::VaginalDryness
+            | Self::IrregularPeriods | Self::HeavyPeriods | Self::MoodSwings => "reproductive_hormonal",
+
+            Self::Fever | Self::Chills | Self::Sweating | Self::WeightGain | Self::WeightLoss
+            | Self::HairLoss | Self::DrySkin | Self::Rash | Self::Itching | Self::Swelling => "general_systemic",
+        }
+    }
+
+    /// Check if symptom indicates potential medical emergency
+    pub fn is_critical(&self) -> bool {
+        matches!(self,
+            Self::ChestTightnessOrPain | Self::ShortnessOfBreath | Self::ChestPain
+            | Self::RapidHeartRate | Self::HighBloodPressure
+        )
+    }
+}
+
+impl fmt::Display for SymptomType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Self::AbdominalCramps => "abdominal_cramps",
+            Self::Headache => "headache",
+            Self::BreastPain => "breast_pain",
+            Self::PelvicPain => "pelvic_pain",
+            Self::ChestTightnessOrPain => "chest_tightness_or_pain",
+            Self::BackPain => "back_pain",
+            Self::MusclePain => "muscle_pain",
+            Self::JointPain => "joint_pain",
+            Self::ToothPain => "tooth_pain",
+            Self::EyePain => "eye_pain",
+            Self::Coughing => "coughing",
+            Self::ShortnessOfBreath => "shortness_of_breath",
+            Self::Wheezing => "wheezing",
+            Self::Congestion => "congestion",
+            Self::RunnyNose => "runny_nose",
+            Self::Sneezing => "sneezing",
+            Self::SoreThroat => "sore_throat",
+            Self::ChestCongestion => "chest_congestion",
+            Self::Bloating => "bloating",
+            Self::Nausea => "nausea",
+            Self::Vomiting => "vomiting",
+            Self::Diarrhea => "diarrhea",
+            Self::Constipation => "constipation",
+            Self::Heartburn => "heartburn",
+            Self::LossOfAppetite => "loss_of_appetite",
+            Self::ExcessiveHunger => "excessive_hunger",
+            Self::Dizziness => "dizziness",
+            Self::Fatigue => "fatigue",
+            Self::MoodChanges => "mood_changes",
+            Self::SleepDisturbances => "sleep_disturbances",
+            Self::MemoryIssues => "memory_issues",
+            Self::ConcentrationProblems => "concentration_problems",
+            Self::Anxiety => "anxiety",
+            Self::Depression => "depression",
+            Self::Irritability => "irritability",
+            Self::Palpitations => "palpitations",
+            Self::RapidHeartRate => "rapid_heart_rate",
+            Self::ChestPain => "chest_pain",
+            Self::HighBloodPressure => "high_blood_pressure",
+            Self::ColdHandsOrFeet => "cold_hands_or_feet",
+            Self::HotFlashes => "hot_flashes",
+            Self::NightSweats => "night_sweats",
+            Self::BreastTenderness => "breast_tenderness",
+            Self::VaginalDryness => "vaginal_dryness",
+            Self::IrregularPeriods => "irregular_periods",
+            Self::HeavyPeriods => "heavy_periods",
+            Self::MoodSwings => "mood_swings",
+            Self::Fever => "fever",
+            Self::Chills => "chills",
+            Self::Sweating => "sweating",
+            Self::WeightGain => "weight_gain",
+            Self::WeightLoss => "weight_loss",
+            Self::HairLoss => "hair_loss",
+            Self::DrySkin => "dry_skin",
+            Self::Rash => "rash",
+            Self::Itching => "itching",
+            Self::Swelling => "swelling",
+        };
+        write!(f, "{s}")
+    }
+}
+
+/// Symptom severity levels for medical assessment
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type, PartialOrd, Ord)]
+#[sqlx(type_name = "symptom_severity", rename_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
+pub enum SymptomSeverity {
+    None,
+    Mild,
+    Moderate,
+    Severe,
+    Critical,
+}
+
+impl SymptomSeverity {
+    /// Convert from iOS severity ratings (typically 1-10 scale)
+    pub fn from_severity_score(score: Option<i32>) -> Self {
+        match score {
+            Some(s) if s <= 0 => Self::None,
+            Some(s) if s <= 3 => Self::Mild,
+            Some(s) if s <= 6 => Self::Moderate,
+            Some(s) if s <= 8 => Self::Severe,
+            Some(_) => Self::Critical,
+            None => Self::Mild, // Default if no severity provided
+        }
+    }
+
+    /// Convert from iOS string values
+    pub fn from_ios_string(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "none" | "0" => Self::None,
+            "mild" | "low" | "1" | "2" | "3" => Self::Mild,
+            "moderate" | "medium" | "4" | "5" | "6" => Self::Moderate,
+            "severe" | "high" | "7" | "8" => Self::Severe,
+            "critical" | "emergency" | "9" | "10" => Self::Critical,
+            _ => Self::Mild, // Default for unknown values
+        }
+    }
+
+    /// Get numeric score (0-10 scale)
+    pub fn to_numeric_score(&self) -> i32 {
+        match self {
+            Self::None => 0,
+            Self::Mild => 2,
+            Self::Moderate => 5,
+            Self::Severe => 7,
+            Self::Critical => 10,
+        }
+    }
+
+    /// Check if severity requires immediate medical attention
+    pub fn requires_medical_attention(&self) -> bool {
+        matches!(self, Self::Severe | Self::Critical)
+    }
+
+    /// Check if severity is critical medical emergency level
+    pub fn is_critical(&self) -> bool {
+        matches!(self, Self::Critical)
+    }
+}
+
+impl fmt::Display for SymptomSeverity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Self::None => "none",
+            Self::Mild => "mild",
+            Self::Moderate => "moderate",
+            Self::Severe => "severe",
+            Self::Critical => "critical",
+        };
+        write!(f, "{s}")
+    }
+}
