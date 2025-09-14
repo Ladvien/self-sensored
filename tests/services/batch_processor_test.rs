@@ -43,7 +43,7 @@ async fn cleanup_test_data(pool: &PgPool, user_id: Uuid) {
         "blood_pressure_metrics",
         "sleep_metrics",
         "activity_metrics",
-        "body_metrics",
+        "body_measurements",
         "respiratory_metrics",
         "workouts",
         "users"
@@ -717,6 +717,423 @@ async fn test_respiratory_metrics_batch_processing() {
 
     println!("RESPIRATORY BATCH TEST: Processed 1,000 respiratory metrics in {:?}", elapsed);
     println!("Performance: {:.2} respiratory metrics/sec", 1000.0 / elapsed.as_secs_f64());
+
+    cleanup_test_data(&pool, user_id).await;
+}
+
+/// Create sample body measurement metrics for smart scale testing
+fn create_sample_body_measurements(count: usize) -> Vec<HealthMetric> {
+    (0..count)
+        .map(|i| {
+            let recorded_at = Utc::now() - chrono::Duration::hours(i as i64);
+
+            // Simulate smart scale data with multiple devices
+            let measurement_source = match i % 4 {
+                0 => "InBody_720".to_string(),
+                1 => "Withings_Body_Plus".to_string(),
+                2 => "Fitbit_Aria_2".to_string(),
+                _ => "Apple_Watch_Series_9".to_string(),
+            };
+
+            let weight = 70.0 + (i as f64 % 30.0); // Weight range 70-100kg
+            let height = 175.0 + (i as f64 % 20.0); // Height range 175-195cm
+            let bmi = weight / ((height / 100.0) * (height / 100.0)); // Calculate BMI
+
+            HealthMetric::BodyMeasurement(BodyMeasurementMetric {
+                id: Uuid::new_v4(),
+                user_id: Uuid::new_v4(), // Will be overridden in test
+                recorded_at,
+                // Core smart scale measurements
+                body_weight_kg: Some(weight),
+                body_mass_index: Some(bmi),
+                body_fat_percentage: Some(15.0 + (i as f64 % 20.0)), // Body fat 15-35%
+                lean_body_mass_kg: Some(weight * (1.0 - (15.0 + i as f64 % 20.0) / 100.0)),
+
+                // Physical measurements (some scales provide circumference data)
+                height_cm: if i % 5 == 0 { Some(height) } else { None }, // Height measured occasionally
+                waist_circumference_cm: if i % 3 == 0 { Some(80.0 + i as f64 % 15.0) } else { None },
+                hip_circumference_cm: if i % 3 == 0 { Some(95.0 + i as f64 % 10.0) } else { None },
+                chest_circumference_cm: None, // Less common on smart scales
+                arm_circumference_cm: None,
+                thigh_circumference_cm: None,
+
+                // Body temperature (some smart scales include this)
+                body_temperature_celsius: if i % 10 == 0 { Some(36.5 + (i as f64 % 3.0) / 10.0) } else { None },
+                basal_body_temperature_celsius: None,
+
+                // Metadata
+                measurement_source: Some(measurement_source),
+                source_device: Some("Smart Scale API".to_string()),
+                created_at: recorded_at,
+            })
+        })
+        .collect()
+}
+
+/// Test body measurements batch processing with smart scale integration
+#[tokio::test]
+async fn test_body_measurements_batch_processing() {
+    use self_sensored::config::ValidationConfig;
+
+    let pool = create_test_pool().await;
+    let user_id = create_test_user(&pool).await;
+
+    let config = BatchConfig {
+        enable_parallel_processing: true,
+        body_measurement_chunk_size: 3000, // Optimized for 16 params per record
+        enable_intra_batch_deduplication: true,
+        ..BatchConfig::default()
+    };
+
+    let processor = BatchProcessor::with_config(pool.clone(), config);
+
+    // Create sample body measurements with smart scale data
+    let mut body_measurements = create_sample_body_measurements(2000);
+
+    // Override user_id for consistency
+    for metric in &mut body_measurements {
+        if let HealthMetric::BodyMeasurement(ref mut body_metric) = metric {
+            body_metric.user_id = user_id;
+        }
+    }
+
+    let payload = IngestPayload {
+        data: IngestData {
+            metrics: body_measurements,
+            workouts: vec![],
+        },
+    };
+
+    // Process the batch
+    let start_time = Instant::now();
+    let result = processor.process_batch(user_id, payload).await;
+    let elapsed = start_time.elapsed();
+
+    // Verify processing results
+    assert_eq!(result.processed_count, 2000, "Should process all body measurement metrics");
+    assert_eq!(result.failed_count, 0, "Should have no processing failures");
+    assert!(elapsed < Duration::from_secs(10),
+        "2K body measurements should process quickly, took {:?}", elapsed);
+
+    // Verify data integrity with BMI validation
+    let measurements_with_bmi: i64 = sqlx::query_scalar!(
+        "SELECT COUNT(*) FROM body_measurements WHERE user_id = $1 AND body_mass_index IS NOT NULL",
+        user_id
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert!(measurements_with_bmi > 0, "Should have body measurements with BMI data");
+
+    // Test multi-device deduplication (same timestamp, different sources)
+    let unique_sources: i64 = sqlx::query_scalar!(
+        "SELECT COUNT(DISTINCT measurement_source) FROM body_measurements WHERE user_id = $1",
+        user_id
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert!(unique_sources >= 3, "Should have measurements from multiple smart scale sources");
+
+    println!("BODY MEASUREMENTS BATCH TEST: Processed 2,000 body measurements in {:?}", elapsed);
+    println!("Performance: {:.2} body measurements/sec", 2000.0 / elapsed.as_secs_f64());
+
+    cleanup_test_data(&pool, user_id).await;
+}
+
+/// Test BMI consistency validation for body measurements
+#[tokio::test]
+async fn test_bmi_consistency_validation() {
+    let pool = create_test_pool().await;
+    let user_id = create_test_user(&pool).await;
+
+    let processor = BatchProcessor::new(pool.clone());
+
+    let recorded_at = Utc::now();
+    let weight = 75.0; // 75kg
+    let height = 175.0; // 175cm
+    let calculated_bmi = weight / ((height / 100.0) * (height / 100.0)); // Should be ~24.5
+
+    // Test consistent BMI (should pass validation)
+    let consistent_measurement = BodyMeasurementMetric {
+        id: Uuid::new_v4(),
+        user_id,
+        recorded_at,
+        body_weight_kg: Some(weight),
+        body_mass_index: Some(calculated_bmi), // Consistent BMI
+        height_cm: Some(height),
+        body_fat_percentage: Some(18.5),
+        lean_body_mass_kg: Some(61.1),
+        waist_circumference_cm: None,
+        hip_circumference_cm: None,
+        chest_circumference_cm: None,
+        arm_circumference_cm: None,
+        thigh_circumference_cm: None,
+        body_temperature_celsius: None,
+        basal_body_temperature_celsius: None,
+        measurement_source: Some("InBody_Test".to_string()),
+        source_device: Some("Test Scale".to_string()),
+        created_at: recorded_at,
+    };
+
+    // Test BMI consistency validation
+    assert!(consistent_measurement.validate_bmi_consistency(Some(height)).is_ok(),
+        "BMI consistency check should pass for calculated BMI");
+
+    // Test multi-metric reading detection
+    assert!(consistent_measurement.is_multi_metric_reading(),
+        "Should detect multi-metric smart scale reading");
+
+    // Process the measurement
+    let payload = IngestPayload {
+        data: IngestData {
+            metrics: vec![HealthMetric::BodyMeasurement(consistent_measurement)],
+            workouts: vec![],
+        },
+    };
+
+    let result = processor.process_batch(user_id, payload).await;
+
+    assert_eq!(result.processed_count, 1, "Should process consistent BMI measurement");
+    assert_eq!(result.failed_count, 0, "Should have no validation failures");
+
+    // Verify the BMI was stored correctly
+    let stored_bmi: Option<f64> = sqlx::query_scalar!(
+        "SELECT body_mass_index FROM body_measurements WHERE user_id = $1 AND recorded_at = $2",
+        user_id,
+        recorded_at
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert!(stored_bmi.is_some(), "BMI should be stored");
+    let bmi_diff = (stored_bmi.unwrap() - calculated_bmi).abs();
+    assert!(bmi_diff < 0.1, "Stored BMI should match calculated BMI within tolerance");
+
+    cleanup_test_data(&pool, user_id).await;
+}
+
+/// Test body measurements deduplication with multi-device scenarios
+#[tokio::test]
+async fn test_body_measurements_multi_device_deduplication() {
+    let pool = create_test_pool().await;
+    let user_id = create_test_user(&pool).await;
+
+    let processor = BatchProcessor::new(pool.clone());
+
+    let recorded_at = Utc::now();
+
+    // Create identical measurements from different smart scales (same timestamp)
+    let measurements = vec![
+        // InBody scale measurement
+        BodyMeasurementMetric {
+            id: Uuid::new_v4(),
+            user_id,
+            recorded_at,
+            body_weight_kg: Some(70.5),
+            body_mass_index: Some(23.1),
+            body_fat_percentage: Some(18.2),
+            lean_body_mass_kg: Some(57.7),
+            height_cm: Some(175.0),
+            waist_circumference_cm: None,
+            hip_circumference_cm: None,
+            chest_circumference_cm: None,
+            arm_circumference_cm: None,
+            thigh_circumference_cm: None,
+            body_temperature_celsius: None,
+            basal_body_temperature_celsius: None,
+            measurement_source: Some("InBody_720".to_string()),
+            source_device: Some("Smart Scale".to_string()),
+            created_at: recorded_at,
+        },
+        // Withings scale measurement (different source, same time)
+        BodyMeasurementMetric {
+            id: Uuid::new_v4(),
+            user_id,
+            recorded_at,
+            body_weight_kg: Some(70.6), // Slightly different reading
+            body_mass_index: Some(23.1),
+            body_fat_percentage: Some(18.5),
+            lean_body_mass_kg: Some(57.5),
+            height_cm: Some(175.0),
+            waist_circumference_cm: None,
+            hip_circumference_cm: None,
+            chest_circumference_cm: None,
+            arm_circumference_cm: None,
+            thigh_circumference_cm: None,
+            body_temperature_celsius: None,
+            basal_body_temperature_celsius: None,
+            measurement_source: Some("Withings_Body_Plus".to_string()),
+            source_device: Some("Smart Scale".to_string()),
+            created_at: recorded_at,
+        },
+        // Apple Watch measurement (different source, same time)
+        BodyMeasurementMetric {
+            id: Uuid::new_v4(),
+            user_id,
+            recorded_at,
+            body_weight_kg: None, // Apple Watch doesn't measure weight
+            body_mass_index: None,
+            body_fat_percentage: None,
+            lean_body_mass_kg: None,
+            height_cm: Some(175.0), // Height from Health app
+            waist_circumference_cm: None,
+            hip_circumference_cm: None,
+            chest_circumference_cm: None,
+            arm_circumference_cm: None,
+            thigh_circumference_cm: None,
+            body_temperature_celsius: Some(36.7), // Apple Watch body temp
+            basal_body_temperature_celsius: None,
+            measurement_source: Some("Apple_Watch_Series_9".to_string()),
+            source_device: Some("Apple Watch".to_string()),
+            created_at: recorded_at,
+        },
+    ];
+
+    let health_metrics: Vec<HealthMetric> = measurements
+        .into_iter()
+        .map(HealthMetric::BodyMeasurement)
+        .collect();
+
+    let payload = IngestPayload {
+        data: IngestData {
+            metrics: health_metrics,
+            workouts: vec![],
+        },
+    };
+
+    let result = processor.process_batch(user_id, payload).await;
+
+    // Should process all 3 measurements (different sources = no duplication)
+    assert_eq!(result.processed_count, 3, "Should process measurements from different sources");
+    assert_eq!(result.failed_count, 0, "Should have no processing failures");
+
+    // Verify that deduplication stats are tracked
+    if let Some(dedup_stats) = result.deduplication_stats {
+        println!("Body measurement duplicates detected: {}", dedup_stats.body_measurement_duplicates);
+    }
+
+    // Verify all three measurements were stored (different measurement_source)
+    let stored_count: i64 = sqlx::query_scalar!(
+        "SELECT COUNT(*) FROM body_measurements WHERE user_id = $1 AND recorded_at = $2",
+        user_id,
+        recorded_at
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(stored_count, 3, "Should store measurements from different sources separately");
+
+    // Verify we can distinguish between sources
+    let sources: Vec<String> = sqlx::query_scalar!(
+        "SELECT DISTINCT measurement_source FROM body_measurements WHERE user_id = $1 AND recorded_at = $2 ORDER BY measurement_source",
+        user_id,
+        recorded_at
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap()
+    .into_iter()
+    .filter_map(|s| s)
+    .collect();
+
+    assert_eq!(sources.len(), 3, "Should have 3 distinct measurement sources");
+    assert!(sources.contains(&"InBody_720".to_string()), "Should contain InBody source");
+    assert!(sources.contains(&"Withings_Body_Plus".to_string()), "Should contain Withings source");
+    assert!(sources.contains(&"Apple_Watch_Series_9".to_string()), "Should contain Apple Watch source");
+
+    cleanup_test_data(&pool, user_id).await;
+}
+
+/// Benchmark body measurements processing for fitness tracking apps
+#[tokio::test]
+async fn benchmark_body_measurements_fitness_tracking() {
+    let pool = create_test_pool().await;
+    let user_id = create_test_user(&pool).await;
+
+    // Use optimized config for large fitness data imports
+    let config = BatchConfig {
+        enable_parallel_processing: true,
+        body_measurement_chunk_size: 3000, // 16 params per record, ~48K parameters per chunk
+        enable_intra_batch_deduplication: true,
+        memory_limit_mb: 500.0,
+        ..BatchConfig::default()
+    };
+
+    let processor = BatchProcessor::with_config(pool.clone(), config);
+
+    // Simulate importing 2 years of daily body measurements from fitness tracking app
+    let daily_measurements_count = 365 * 2; // 2 years of daily data
+    let mut all_measurements = create_sample_body_measurements(daily_measurements_count);
+
+    // Override user_id for consistency
+    for metric in &mut all_measurements {
+        if let HealthMetric::BodyMeasurement(ref mut body_metric) = metric {
+            body_metric.user_id = user_id;
+
+            // Add some historical data patterns
+            if let Some(ref mut source) = body_metric.measurement_source {
+                // Simulate device upgrades over time
+                if body_metric.recorded_at < Utc::now() - chrono::Duration::days(365) {
+                    *source = "Fitbit_Aria_1".to_string(); // Older device
+                }
+            }
+        }
+    }
+
+    let payload = IngestPayload {
+        data: IngestData {
+            metrics: all_measurements,
+            workouts: vec![],
+        },
+    };
+
+    // Measure processing time for fitness tracking scenario
+    let start_time = Instant::now();
+    let result = processor.process_batch(user_id, payload).await;
+    let elapsed = start_time.elapsed();
+
+    // Performance requirements for fitness tracking data import
+    assert_eq!(result.processed_count, daily_measurements_count, "Should process all historical body measurements");
+    assert_eq!(result.failed_count, 0, "Should have no processing failures");
+    assert!(elapsed < Duration::from_secs(15),
+        "2 years of body measurements should import quickly, took {:?}", elapsed);
+
+    // Verify memory usage stayed within limits
+    if let Some(memory_peak) = result.memory_peak_mb {
+        assert!(memory_peak <= 500.0, "Memory usage should stay within configured limit");
+    }
+
+    // Verify data quality and trends
+    let weight_measurements: i64 = sqlx::query_scalar!(
+        "SELECT COUNT(*) FROM body_measurements WHERE user_id = $1 AND body_weight_kg IS NOT NULL",
+        user_id
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    let bmi_measurements: i64 = sqlx::query_scalar!(
+        "SELECT COUNT(*) FROM body_measurements WHERE user_id = $1 AND body_mass_index IS NOT NULL",
+        user_id
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert!(weight_measurements > 0, "Should have weight measurements for trend analysis");
+    assert!(bmi_measurements > 0, "Should have BMI measurements for health tracking");
+
+    println!("FITNESS TRACKING BENCHMARK: Imported {} body measurements in {:?}",
+             daily_measurements_count, elapsed);
+    println!("Performance: {:.2} measurements/sec",
+             daily_measurements_count as f64 / elapsed.as_secs_f64());
+    println!("Average processing per measurement: {:.2}ms",
+             elapsed.as_millis() as f64 / daily_measurements_count as f64);
 
     cleanup_test_data(&pool, user_id).await;
 }

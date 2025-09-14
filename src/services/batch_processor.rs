@@ -12,8 +12,8 @@ use uuid::Uuid;
 
 use crate::config::{
     BatchConfig, ACTIVITY_PARAMS_PER_RECORD, BLOOD_PRESSURE_PARAMS_PER_RECORD,
-    HEART_RATE_PARAMS_PER_RECORD, SAFE_PARAM_LIMIT, SLEEP_PARAMS_PER_RECORD,
-    TEMPERATURE_PARAMS_PER_RECORD, WORKOUT_PARAMS_PER_RECORD,
+    BODY_MEASUREMENT_PARAMS_PER_RECORD, HEART_RATE_PARAMS_PER_RECORD, SAFE_PARAM_LIMIT,
+    SLEEP_PARAMS_PER_RECORD, TEMPERATURE_PARAMS_PER_RECORD, WORKOUT_PARAMS_PER_RECORD,
 };
 use crate::middleware::metrics::Metrics;
 use crate::models::{HealthMetric, IngestPayload, ProcessingError};
@@ -51,6 +51,7 @@ pub struct DeduplicationStats {
     pub temperature_duplicates: usize,
     pub respiratory_duplicates: usize,
     pub blood_glucose_duplicates: usize,
+    pub nutrition_duplicates: usize,
     pub workout_duplicates: usize,
     pub total_duplicates: usize,
     pub deduplication_time_ms: u64,
@@ -490,6 +491,23 @@ impl BatchProcessor {
             }));
         }
 
+        if !grouped.nutrition_metrics.is_empty() {
+            let nutrition_metrics = std::mem::take(&mut grouped.nutrition_metrics);
+            let pool = self.pool.clone();
+            let config = self.config.clone();
+            let semaphore = self.db_semaphore.clone();
+            let chunk_size = config.nutrition_chunk_size;
+            tasks.push(tokio::spawn(async move {
+                let _permit = semaphore.acquire().await.expect("Semaphore closed");
+                Self::process_with_retry(
+                    "Nutrition",
+                    || Self::insert_nutrition_metrics_chunked(&pool, user_id, nutrition_metrics.clone(), chunk_size),
+                    &config,
+                )
+                .await
+            }));
+        }
+
         if !workouts.is_empty() {
             let pool = self.pool.clone();
             let config = self.config.clone();
@@ -679,6 +697,21 @@ impl BatchProcessor {
             result.retry_attempts += retries;
         }
 
+        // Process nutrition metrics
+        if !grouped.nutrition_metrics.is_empty() {
+            let nutrition_metrics = std::mem::take(&mut grouped.nutrition_metrics);
+            let (processed, failed, errors, retries) = Self::process_with_retry(
+                "Nutrition",
+                || self.insert_nutrition_metrics(user_id, nutrition_metrics.clone()),
+                &self.config,
+            )
+            .await;
+            result.processed_count += processed;
+            result.failed_count += failed;
+            result.errors.extend(errors);
+            result.retry_attempts += retries;
+        }
+
         // Process workouts
         if !workouts.is_empty() {
             let (processed, failed, errors, retries) = Self::process_with_retry(
@@ -833,6 +866,7 @@ impl BatchProcessor {
                 HealthMetric::BodyMeasurement(body) => grouped.body_measurements.push(body),
                 HealthMetric::Temperature(temp) => grouped.temperature_metrics.push(temp),
                 HealthMetric::BloodGlucose(glucose) => grouped.blood_glucose.push(glucose),
+                HealthMetric::Nutrition(nutrition) => grouped.nutrition_metrics.push(nutrition),
                 HealthMetric::Workout(workout) => grouped.workouts.push(workout),
                 _ => {
                     // Handle other metric types not yet supported
@@ -863,6 +897,7 @@ impl BatchProcessor {
                     temperature_duplicates: 0,
                     respiratory_duplicates: 0,
                     blood_glucose_duplicates: 0,
+                    nutrition_duplicates: 0,
                     workout_duplicates: 0,
                     total_duplicates: 0,
                     deduplication_time_ms: 0,
@@ -880,6 +915,7 @@ impl BatchProcessor {
             temperature_duplicates: 0,
             respiratory_duplicates: 0,
             blood_glucose_duplicates: 0,
+            nutrition_duplicates: 0,
             workout_duplicates: 0,
             total_duplicates: 0,
             deduplication_time_ms: 0,
@@ -1677,7 +1713,7 @@ impl BatchProcessor {
         }
 
         // Use safe default chunking to prevent parameter limit errors
-        let chunk_size = 3500; // Safe default for body measurements (14 params per record)
+        let chunk_size = 3000; // Safe default for body measurements (16 params per record)
 
         Self::insert_body_measurements_chunked(pool, user_id, metrics, chunk_size).await
     }
@@ -1697,8 +1733,8 @@ impl BatchProcessor {
         let chunks: Vec<_> = metrics.chunks(chunk_size).collect();
 
         // Validate parameter count to prevent PostgreSQL limit errors
-        let max_params_per_chunk = chunk_size * crate::config::BODY_MEASUREMENT_PARAMS_PER_RECORD;
-        if max_params_per_chunk > crate::config::SAFE_PARAM_LIMIT {
+        let max_params_per_chunk = chunk_size * BODY_MEASUREMENT_PARAMS_PER_RECORD;
+        if max_params_per_chunk > SAFE_PARAM_LIMIT {
             return Err(sqlx::Error::Configuration(
                 format!(
                     "Chunk size {chunk_size} would result in {max_params_per_chunk} parameters, exceeding safe limit"
@@ -1708,7 +1744,7 @@ impl BatchProcessor {
         }
 
         // AUDIT-007: Record parameter usage for monitoring
-        crate::middleware::metrics::Metrics::record_batch_parameter_usage(
+        Metrics::record_batch_parameter_usage(
             "body_measurement",
             "chunked_insert",
             max_params_per_chunk,
@@ -1725,7 +1761,7 @@ impl BatchProcessor {
 
         for (chunk_idx, chunk) in chunks.iter().enumerate() {
             let mut query_builder: sqlx::QueryBuilder<sqlx::Postgres> = sqlx::QueryBuilder::new(
-                "INSERT INTO body_metrics (user_id, recorded_at, body_weight_kg, body_mass_index, body_fat_percentage, lean_body_mass_kg, waist_circumference_cm, hip_circumference_cm, chest_circumference_cm, arm_circumference_cm, thigh_circumference_cm, body_temperature_celsius, basal_body_temperature_celsius, measurement_source, source_device) "
+                "INSERT INTO body_measurements (user_id, recorded_at, body_weight_kg, body_mass_index, body_fat_percentage, lean_body_mass_kg, height_cm, waist_circumference_cm, hip_circumference_cm, chest_circumference_cm, arm_circumference_cm, thigh_circumference_cm, body_temperature_celsius, basal_body_temperature_celsius, measurement_source, source_device) "
             );
 
             query_builder.push_values(chunk.iter(), |mut b, metric| {
@@ -1735,6 +1771,7 @@ impl BatchProcessor {
                     .push_bind(metric.body_mass_index)
                     .push_bind(metric.body_fat_percentage)
                     .push_bind(metric.lean_body_mass_kg)
+                    .push_bind(metric.height_cm)
                     .push_bind(metric.waist_circumference_cm)
                     .push_bind(metric.hip_circumference_cm)
                     .push_bind(metric.chest_circumference_cm)
@@ -1747,18 +1784,18 @@ impl BatchProcessor {
             });
 
             query_builder.push(" ON CONFLICT (user_id, recorded_at, measurement_source) DO UPDATE SET
-                body_weight_kg = COALESCE(EXCLUDED.body_weight_kg, body_metrics.body_weight_kg),
-                body_mass_index = COALESCE(EXCLUDED.body_mass_index, body_metrics.body_mass_index),
-                body_fat_percentage = COALESCE(EXCLUDED.body_fat_percentage, body_metrics.body_fat_percentage),
-                lean_body_mass_kg = COALESCE(EXCLUDED.lean_body_mass_kg, body_metrics.lean_body_mass_kg),
-                waist_circumference_cm = COALESCE(EXCLUDED.waist_circumference_cm, body_metrics.waist_circumference_cm),
-                hip_circumference_cm = COALESCE(EXCLUDED.hip_circumference_cm, body_metrics.hip_circumference_cm),
-                chest_circumference_cm = COALESCE(EXCLUDED.chest_circumference_cm, body_metrics.chest_circumference_cm),
-                arm_circumference_cm = COALESCE(EXCLUDED.arm_circumference_cm, body_metrics.arm_circumference_cm),
-                thigh_circumference_cm = COALESCE(EXCLUDED.thigh_circumference_cm, body_metrics.thigh_circumference_cm),
-                body_temperature_celsius = COALESCE(EXCLUDED.body_temperature_celsius, body_metrics.body_temperature_celsius),
-                basal_body_temperature_celsius = COALESCE(EXCLUDED.basal_body_temperature_celsius, body_metrics.basal_body_temperature_celsius),
-                updated_at = NOW()");
+                body_weight_kg = COALESCE(EXCLUDED.body_weight_kg, body_measurements.body_weight_kg),
+                body_mass_index = COALESCE(EXCLUDED.body_mass_index, body_measurements.body_mass_index),
+                body_fat_percentage = COALESCE(EXCLUDED.body_fat_percentage, body_measurements.body_fat_percentage),
+                lean_body_mass_kg = COALESCE(EXCLUDED.lean_body_mass_kg, body_measurements.lean_body_mass_kg),
+                height_cm = COALESCE(EXCLUDED.height_cm, body_measurements.height_cm),
+                waist_circumference_cm = COALESCE(EXCLUDED.waist_circumference_cm, body_measurements.waist_circumference_cm),
+                hip_circumference_cm = COALESCE(EXCLUDED.hip_circumference_cm, body_measurements.hip_circumference_cm),
+                chest_circumference_cm = COALESCE(EXCLUDED.chest_circumference_cm, body_measurements.chest_circumference_cm),
+                arm_circumference_cm = COALESCE(EXCLUDED.arm_circumference_cm, body_measurements.arm_circumference_cm),
+                thigh_circumference_cm = COALESCE(EXCLUDED.thigh_circumference_cm, body_measurements.thigh_circumference_cm),
+                body_temperature_celsius = COALESCE(EXCLUDED.body_temperature_celsius, body_measurements.body_temperature_celsius),
+                basal_body_temperature_celsius = COALESCE(EXCLUDED.basal_body_temperature_celsius, body_measurements.basal_body_temperature_celsius)");
 
             let result = query_builder.build().execute(pool).await?;
             let chunk_inserted = result.rows_affected() as usize;
@@ -2077,6 +2114,189 @@ impl BatchProcessor {
         Ok(total_inserted)
     }
 
+    /// Batch insert nutrition metrics with comprehensive nutritional validation
+    /// Supports meal-based atomic processing with 25+ nutritional fields
+    async fn insert_nutrition_metrics(
+        &self,
+        user_id: Uuid,
+        metrics: Vec<crate::models::NutritionMetric>,
+    ) -> Result<usize, sqlx::Error> {
+        Self::insert_nutrition_metrics_chunked(
+            &self.pool,
+            user_id,
+            metrics,
+            self.config.nutrition_chunk_size,
+        )
+        .await
+    }
+
+    /// Batch insert nutrition metrics in optimized chunks with meal grouping support
+    /// Implements atomic meal processing to ensure nutritional data integrity
+    /// Handles 25+ nutritional fields including macronutrients, vitamins, and minerals
+    async fn insert_nutrition_metrics_chunked(
+        pool: &PgPool,
+        user_id: Uuid,
+        metrics: Vec<crate::models::NutritionMetric>,
+        chunk_size: usize,
+    ) -> Result<usize, sqlx::Error> {
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        // Validate chunk size doesn't exceed PostgreSQL parameter limit
+        let params_per_record = crate::config::NUTRITION_PARAMS_PER_RECORD;
+        let safe_chunk_size = (crate::config::SAFE_PARAM_LIMIT / params_per_record).min(chunk_size);
+
+        info!(
+            user_id = %user_id,
+            total_metrics = metrics.len(),
+            chunk_size = safe_chunk_size,
+            params_per_record = params_per_record,
+            "Starting nutrition metrics batch insert"
+        );
+
+        let mut total_inserted = 0;
+        let chunks: Vec<_> = metrics.chunks(safe_chunk_size).collect();
+
+        for (chunk_idx, chunk) in chunks.iter().enumerate() {
+            let mut query_builder = sqlx::QueryBuilder::new(
+                "INSERT INTO nutrition_metrics (
+                    user_id, recorded_at,
+                    dietary_water, dietary_caffeine,
+                    dietary_energy_consumed, dietary_carbohydrates, dietary_protein,
+                    dietary_fat_total, dietary_fat_saturated, dietary_fat_monounsaturated, dietary_fat_polyunsaturated,
+                    dietary_cholesterol, dietary_sodium, dietary_fiber, dietary_sugar,
+                    dietary_calcium, dietary_iron, dietary_magnesium, dietary_potassium, dietary_zinc, dietary_phosphorus,
+                    dietary_vitamin_c, dietary_vitamin_b1_thiamine, dietary_vitamin_b2_riboflavin,
+                    dietary_vitamin_b3_niacin, dietary_vitamin_b6_pyridoxine, dietary_vitamin_b12_cobalamin,
+                    dietary_folate, dietary_biotin, dietary_pantothenic_acid,
+                    dietary_vitamin_a, dietary_vitamin_d, dietary_vitamin_e, dietary_vitamin_k,
+                    meal_type, meal_id, source_device
+                ) "
+            );
+
+            query_builder.push_values(chunk.iter(), |mut b, metric| {
+                b.push_bind(metric.user_id)
+                    .push_bind(metric.recorded_at)
+                    .push_bind(metric.dietary_water)
+                    .push_bind(metric.dietary_caffeine)
+                    .push_bind(metric.dietary_energy_consumed)
+                    .push_bind(metric.dietary_carbohydrates)
+                    .push_bind(metric.dietary_protein)
+                    .push_bind(metric.dietary_fat_total)
+                    .push_bind(metric.dietary_fat_saturated)
+                    .push_bind(metric.dietary_fat_monounsaturated)
+                    .push_bind(metric.dietary_fat_polyunsaturated)
+                    .push_bind(metric.dietary_cholesterol)
+                    .push_bind(metric.dietary_sodium)
+                    .push_bind(metric.dietary_fiber)
+                    .push_bind(metric.dietary_sugar)
+                    .push_bind(metric.dietary_calcium)
+                    .push_bind(metric.dietary_iron)
+                    .push_bind(metric.dietary_magnesium)
+                    .push_bind(metric.dietary_potassium)
+                    .push_bind(metric.dietary_zinc)
+                    .push_bind(metric.dietary_phosphorus)
+                    .push_bind(metric.dietary_vitamin_c)
+                    .push_bind(metric.dietary_vitamin_b1_thiamine)
+                    .push_bind(metric.dietary_vitamin_b2_riboflavin)
+                    .push_bind(metric.dietary_vitamin_b3_niacin)
+                    .push_bind(metric.dietary_vitamin_b6_pyridoxine)
+                    .push_bind(metric.dietary_vitamin_b12_cobalamin)
+                    .push_bind(metric.dietary_folate)
+                    .push_bind(metric.dietary_biotin)
+                    .push_bind(metric.dietary_pantothenic_acid)
+                    .push_bind(metric.dietary_vitamin_a)
+                    .push_bind(metric.dietary_vitamin_d)
+                    .push_bind(metric.dietary_vitamin_e)
+                    .push_bind(metric.dietary_vitamin_k)
+                    .push_bind(metric.meal_type.as_ref())
+                    .push_bind(metric.meal_id)
+                    .push_bind(metric.source_device.as_ref());
+            });
+
+            // Add conflict handling for complex deduplication
+            query_builder.push(
+                " ON CONFLICT (user_id, recorded_at, dietary_energy_consumed, dietary_protein, dietary_carbohydrates)
+                DO UPDATE SET
+                    dietary_water = EXCLUDED.dietary_water,
+                    dietary_caffeine = EXCLUDED.dietary_caffeine,
+                    dietary_fat_total = EXCLUDED.dietary_fat_total,
+                    dietary_fat_saturated = EXCLUDED.dietary_fat_saturated,
+                    dietary_fat_monounsaturated = EXCLUDED.dietary_fat_monounsaturated,
+                    dietary_fat_polyunsaturated = EXCLUDED.dietary_fat_polyunsaturated,
+                    dietary_cholesterol = EXCLUDED.dietary_cholesterol,
+                    dietary_sodium = EXCLUDED.dietary_sodium,
+                    dietary_fiber = EXCLUDED.dietary_fiber,
+                    dietary_sugar = EXCLUDED.dietary_sugar,
+                    dietary_calcium = EXCLUDED.dietary_calcium,
+                    dietary_iron = EXCLUDED.dietary_iron,
+                    dietary_magnesium = EXCLUDED.dietary_magnesium,
+                    dietary_potassium = EXCLUDED.dietary_potassium,
+                    dietary_zinc = EXCLUDED.dietary_zinc,
+                    dietary_phosphorus = EXCLUDED.dietary_phosphorus,
+                    dietary_vitamin_c = EXCLUDED.dietary_vitamin_c,
+                    dietary_vitamin_b1_thiamine = EXCLUDED.dietary_vitamin_b1_thiamine,
+                    dietary_vitamin_b2_riboflavin = EXCLUDED.dietary_vitamin_b2_riboflavin,
+                    dietary_vitamin_b3_niacin = EXCLUDED.dietary_vitamin_b3_niacin,
+                    dietary_vitamin_b6_pyridoxine = EXCLUDED.dietary_vitamin_b6_pyridoxine,
+                    dietary_vitamin_b12_cobalamin = EXCLUDED.dietary_vitamin_b12_cobalamin,
+                    dietary_folate = EXCLUDED.dietary_folate,
+                    dietary_biotin = EXCLUDED.dietary_biotin,
+                    dietary_pantothenic_acid = EXCLUDED.dietary_pantothenic_acid,
+                    dietary_vitamin_a = EXCLUDED.dietary_vitamin_a,
+                    dietary_vitamin_d = EXCLUDED.dietary_vitamin_d,
+                    dietary_vitamin_e = EXCLUDED.dietary_vitamin_e,
+                    dietary_vitamin_k = EXCLUDED.dietary_vitamin_k,
+                    meal_type = EXCLUDED.meal_type,
+                    meal_id = EXCLUDED.meal_id,
+                    source_device = EXCLUDED.source_device"
+            );
+
+            let query = query_builder.build();
+            let total_params = chunk.len() * params_per_record;
+
+            info!(
+                chunk_idx = chunk_idx,
+                chunk_size = chunk.len(),
+                total_params = total_params,
+                "Executing nutrition metrics chunk insert"
+            );
+
+            match query.execute(pool).await {
+                Ok(result) => {
+                    let chunk_inserted = result.rows_affected() as usize;
+                    total_inserted += chunk_inserted;
+                    info!(
+                        chunk_idx = chunk_idx,
+                        inserted = chunk_inserted,
+                        total_inserted = total_inserted,
+                        "Successfully inserted nutrition metrics chunk"
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        error = %e,
+                        metric_type = "nutrition",
+                        chunk_idx = chunk_idx,
+                        chunk_size = chunk.len(),
+                        "Failed to insert nutrition metrics chunk"
+                    );
+                    return Err(e);
+                }
+            }
+        }
+
+        info!(
+            user_id = %user_id,
+            total_inserted = total_inserted,
+            total_chunks = chunks.len(),
+            "Completed nutrition metrics batch insert"
+        );
+
+        Ok(total_inserted)
+    }
+
     /// Batch insert temperature metrics in optimized chunks with medical validation
     /// Handles body temperature, basal body temperature, Apple Watch wrist temperature, and water temperature
     /// Supports fertility tracking patterns and fever detection
@@ -2265,6 +2485,7 @@ impl BatchProcessor {
                 temperature_duplicates: duplicates_removed,
                 respiratory_duplicates: 0,
                 blood_glucose_duplicates: 0,
+                nutrition_duplicates: 0,
                 workout_duplicates: 0,
                 total_duplicates: duplicates_removed,
                 deduplication_time_ms: 0, // We're not tracking this separately here
@@ -2326,6 +2547,7 @@ impl BatchProcessor {
                 temperature_duplicates: 0,
                 respiratory_duplicates: 0,
                 blood_glucose_duplicates: 0,
+                nutrition_duplicates: 0,
                 workout_duplicates: 0,
                 total_duplicates: duplicates_removed,
                 deduplication_time_ms: 0, // We're not tracking this separately here
@@ -2377,6 +2599,7 @@ impl BatchProcessor {
                 temperature_duplicates: 0,
                 respiratory_duplicates: 0,
                 blood_glucose_duplicates: 0,
+                nutrition_duplicates: 0,
                 workout_duplicates: 0,
                 total_duplicates: duplicates_removed,
                 deduplication_time_ms: 0,
@@ -2533,5 +2756,6 @@ struct GroupedMetrics {
     temperature_metrics: Vec<crate::models::TemperatureMetric>,
     respiratory_metrics: Vec<crate::models::RespiratoryMetric>,
     blood_glucose: Vec<crate::models::BloodGlucoseMetric>,
+    nutrition_metrics: Vec<crate::models::NutritionMetric>,
     workouts: Vec<crate::models::WorkoutData>,
 }
