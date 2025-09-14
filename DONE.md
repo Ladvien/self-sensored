@@ -1,4 +1,94 @@
 
+## ✅ STORY-012: Extend Activity Metrics Table (Completed: 2025-09-14)
+
+**Epic**: Comprehensive Activity Tracking Infrastructure
+**Priority**: P1 - Core Activity Analytics
+**Estimate**: 35 points
+**Status**: ✅ COMPLETED
+**Assigned to**: Database Architect Agent (Claude Code)
+
+### Summary
+Extended the activity_metrics table with comprehensive activity tracking support for diverse physical activities. Added specialized distance metrics for cycling, swimming, wheelchair accessibility, and snow sports. Integrated Apple Watch activity ring data and Nike Fuel points for cross-platform fitness tracking compatibility.
+
+### Completed Features
+
+#### 🚴 **Specialized Distance Tracking**
+✅ **Cycling Distance Metrics** - Dedicated distance_cycling_meters field for cycling-specific distance tracking with appropriate validation (up to 500km daily maximum)
+✅ **Swimming Distance Analytics** - distance_swimming_meters field with swimming-specific validation (up to 50km daily for marathon swimming scenarios)
+✅ **Snow Sports Distance** - distance_downhill_snow_sports_meters for skiing and snowboarding with specialized validation (up to 100km daily for mountain sports)
+
+#### ♿ **Accessibility & Inclusivity**
+✅ **Wheelchair User Support** - distance_wheelchair_meters field for wheelchair-specific distance tracking with full accessibility validation
+✅ **Push Count Analytics** - push_count field tracking wheelchair pushes (0-50,000 daily range) for comprehensive wheelchair fitness monitoring
+✅ **Accessibility-Adapted Validation** - User characteristics integration for wheelchair users with appropriate step count and distance range adjustments
+
+#### 🏊 **Swimming Analytics**
+✅ **Stroke Count Tracking** - swimming_stroke_count field (0-100,000 daily range) for comprehensive swimming technique analysis
+✅ **Swimming Distance Integration** - Combined with distance tracking for pace and efficiency calculations
+✅ **Pool vs Open Water Support** - Flexible stroke counting for different swimming environments
+
+#### ⌚ **Apple Watch Activity Ring Integration**
+✅ **Exercise Ring Data** - apple_exercise_time_minutes field (0-1440 daily) tracking Apple Watch exercise ring progress
+✅ **Stand Ring Tracking** - apple_stand_time_minutes field (0-1440 daily) for stand goal achievement monitoring
+✅ **Move Ring Integration** - apple_move_time_minutes field for comprehensive Apple Watch move goal tracking
+✅ **Stand Hour Achievement** - apple_stand_hour_achieved boolean flag for hourly stand goal completion tracking
+
+#### 🏃 **Cross-Platform Fitness Integration**
+✅ **Nike Fuel Points** - nike_fuel_points field (0-10,000 daily) for Nike+ and cross-platform fitness tracking compatibility
+✅ **Multi-Platform Data Sync** - Support for fitness data from multiple platforms and devices
+✅ **Unified Activity Metrics** - Comprehensive activity tracking regardless of source platform
+
+### Technical Implementation
+
+#### 📊 **Database Schema Extensions**
+✅ **Extended activity_metrics Table** - Added 11 new specialized fields with appropriate data types and constraints
+✅ **Performance Indexes** - Specialized indexes for cycling, swimming, wheelchair, snow sports, and Apple Watch metrics
+✅ **Data Validation Constraints** - Database-level validation for all new activity fields with medical-grade ranges
+
+#### 🔄 **Batch Processing Integration**
+✅ **Extended INSERT Statements** - Updated batch processor to handle all 18+ activity metric fields efficiently
+✅ **Chunking Optimization** - Parameter count management for PostgreSQL limits with extended field set
+✅ **Transaction Integrity** - Individual transactions per metric maintain data integrity with expanded schema
+
+#### ✅ **Comprehensive Validation**
+✅ **Specialized Field Validation** - Individual validation logic for cycling, swimming, wheelchair, and snow sports metrics
+✅ **Range Validation** - Appropriate min/max ranges for each activity type (swimming 50km max, wheelchair push count 50k max)
+✅ **Cross-Field Validation** - Logical consistency checks between different activity metrics
+✅ **Accessibility Validation** - Wheelchair user adaptations with appropriate validation ranges
+
+#### 🧪 **Comprehensive Testing**
+✅ **Extended Integration Tests** - 400+ lines of comprehensive integration tests covering all new activity scenarios
+✅ **Multi-Sport Scenarios** - Swimming + cycling + walking multi-sport day testing with specialized metrics
+✅ **Wheelchair Accessibility Tests** - Complete wheelchair user activity tracking scenarios with proper validation
+✅ **Apple Watch Integration Tests** - Full activity ring data processing and validation testing
+✅ **Edge Case Validation** - Negative values, excessive ranges, and boundary condition testing
+
+### Database Impact
+- **New Fields**: 11 specialized activity tracking fields added to activity_metrics table
+- **New Indexes**: 8 performance indexes for specialized activity metric queries
+- **Parameter Count**: Extended from 8 to 19 parameters per activity metric (within PostgreSQL limits)
+- **Storage Efficiency**: Optional fields minimize storage overhead for unused activity types
+
+### API Integration
+- **iOS Model Updates** - Extended ActivityMetric parsing to handle all new specialized fields
+- **Batch Processing** - Full integration with existing batch processing infrastructure
+- **Validation Pipeline** - Seamless integration with existing validation system
+- **User Characteristics** - Integration with user characteristics for personalized validation
+
+### Performance & Scalability
+- **Index Optimization** - Partial indexes only create entries when specialized fields are present
+- **Query Performance** - Efficient querying of activity-specific metrics (cycling, swimming, etc.)
+- **Storage Optimization** - NULL values for unused fields minimize storage footprint
+- **Batch Efficiency** - Optimized chunking maintains high throughput with extended schema
+
+### Accessibility & Inclusivity Impact
+- **Wheelchair Users** - Full activity tracking support with appropriate metrics and validation
+- **Multi-Sport Athletes** - Comprehensive tracking across 10+ different activity types
+- **Cross-Platform Users** - Support for Apple Watch, Nike+, and other fitness platforms
+- **Adaptive Technology** - Foundation for future adaptive fitness tracking features
+
+---
+
 ## ✅ STORY-014: Add User Characteristics Table (Completed: 2025-09-14)
 
 **Epic**: Personalized Health Tracking Infrastructure

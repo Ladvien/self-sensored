@@ -2,13 +2,17 @@
 
 ## Current Active Stories
 
-**STORY-012** - Extend Activity Metrics Table
-- **Owner**: Database Architect Agent
-- **Status**: IN PROGRESS
-- **Started**: 2025-09-14
-- **Focus**: Implementing comprehensive activity tracking with specialized metrics for cycling, swimming, wheelchair accessibility, Apple Watch integration, and Nike+ compatibility
+None currently active.
 
 ## Project Updates & Task Claims
+
+**COMPLETED: STORY-012 - Extend Activity Metrics Table** ✅
+
+**Status**: Successfully implemented comprehensive activity tracking with specialized metrics infrastructure
+**Implementation**: Extended database schema, batch processing, validation system, and comprehensive testing
+**Features**: Cycling, swimming, wheelchair accessibility, Apple Watch activity rings, Nike Fuel points integration
+**Impact**: Supports 10+ diverse activity types with full accessibility and cross-platform compatibility
+**Testing**: 400+ lines of integration tests covering multi-sport scenarios and wheelchair accessibility
 
 **COMPLETED: STORY-014 - Add User Characteristics Table** ✅
 
