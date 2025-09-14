@@ -809,7 +809,7 @@ impl fmt::Display for StateOfMind {
 // ============================================================================
 
 /// Comprehensive symptom type enumeration for illness tracking and health monitoring
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Type)]
 #[sqlx(type_name = "symptom_type", rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 pub enum SymptomType {

@@ -431,7 +431,7 @@ impl GpsCoordinate {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
         if !(config.latitude_min..=config.latitude_max).contains(&self.latitude) {
             return Err(format!(
                 "latitude {} is out of range ({} to {})",
@@ -458,7 +458,7 @@ impl WorkoutData {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
         if self.ended_at <= self.started_at {
             return Err("ended_at must be after started_at".to_string());
         }
@@ -844,7 +844,7 @@ impl HeartRateMetric {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
         if let Some(bpm) = self.heart_rate {
             if !(config.heart_rate_min..=config.heart_rate_max).contains(&bpm) {
                 return Err(format!(
@@ -1186,7 +1186,7 @@ impl BloodPressureMetric {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
         // Medical ranges as specified in story requirements
         if self.systolic < config.systolic_min || self.systolic > config.systolic_max {
             return Err(format!(
@@ -1226,7 +1226,7 @@ impl SleepMetric {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
         if self.sleep_end <= self.sleep_start {
             return Err("sleep_end must be after sleep_start".to_string());
         }
@@ -1290,7 +1290,7 @@ impl ActivityMetric {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
         if let Some(step_count) = self.step_count {
             if step_count < config.step_count_min || step_count > config.step_count_max {
                 return Err(format!(
@@ -1557,7 +1557,7 @@ impl BodyMeasurementMetric {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
         // Body weight validation (20-500 kg range)
         if let Some(weight) = self.body_weight_kg {
             if weight < config.body_weight_min_kg || weight > config.body_weight_max_kg {
@@ -1702,7 +1702,7 @@ impl RespiratoryMetric {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
         // Respiratory rate validation
         if let Some(rate) = self.respiratory_rate {
             if rate < config.respiratory_rate_min || rate > config.respiratory_rate_max {
@@ -1842,7 +1842,7 @@ impl TemperatureMetric {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
         // Validate body temperature ranges (medical-grade validation)
         if let Some(temp) = self.body_temperature {
             if !(config.body_temperature_min..=config.body_temperature_max).contains(&(temp as f32)) {
@@ -1909,7 +1909,7 @@ impl EnvironmentalMetric {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
         // Validate UV index range (0-11+ scale)
         if let Some(uv) = self.uv_index {
             if uv < 0.0 || uv > 20.0 {
@@ -2012,7 +2012,7 @@ impl SafetyEventMetric {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
         // Validate event type is not empty
         if self.event_type.is_empty() {
             return Err("event_type cannot be empty".to_string());
@@ -2481,7 +2481,7 @@ impl BloodGlucoseMetric {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
         // Medical-critical blood glucose validation (70-180 mg/dL normal, diabetic ranges vary)
         if !(config.blood_glucose_min..=config.blood_glucose_max).contains(&(self.blood_glucose_mg_dl as f32)) {
             return Err(format!(
@@ -2530,7 +2530,7 @@ impl HealthMetric {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
         match self {
             HealthMetric::HeartRate(metric) => metric.validate_with_config(config),
             HealthMetric::BloodPressure(metric) => metric.validate_with_config(config),
@@ -2589,201 +2589,6 @@ pub struct MacronutrientDistribution {
     pub fat_percent: u8,
 }
 
-/// Symptom Metric Validation and Analysis
-impl SymptomMetric {
-    /// Validate symptom metric with configurable parameters
-    pub fn validate(&self) -> Result<(), String> {
-        self.validate_with_config(&ValidationConfig::default())
-    }
-
-    /// Validate symptom metric with custom configuration
-    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
-        // Validate duration is reasonable (0 to 2 weeks max for most symptoms)
-        if let Some(duration) = self.duration_minutes {
-            if duration < 0 {
-                return Err("symptom duration cannot be negative".to_string());
-            }
-
-            // Most symptoms shouldn't last more than 2 weeks continuously
-            let max_duration_minutes = 14 * 24 * 60; // 2 weeks in minutes
-            if duration > max_duration_minutes {
-                return Err(format!(
-                    "symptom duration {} minutes is unreasonably long (max {} minutes = 2 weeks)",
-                    duration, max_duration_minutes
-                ));
-            }
-        }
-
-        // Validate severity consistency with symptom type
-        if self.symptom_type.is_critical() && self.severity == SymptomSeverity::None {
-            return Err(format!(
-                "Critical symptom type {} cannot have 'none' severity",
-                self.symptom_type
-            ));
-        }
-
-        Ok(())
-    }
-
-    /// Get symptom category for grouping and analysis
-    pub fn get_category(&self) -> &'static str {
-        self.symptom_type.get_category()
-    }
-
-    /// Check if this symptom indicates a potential medical emergency
-    pub fn is_medical_emergency(&self) -> bool {
-        // Critical severity always indicates emergency
-        if self.severity.is_critical() {
-            return true;
-        }
-
-        // Critical symptom types with severe+ severity indicate emergency
-        if self.symptom_type.is_critical() && self.severity >= SymptomSeverity::Severe {
-            return true;
-        }
-
-        // Specific combinations that indicate emergency
-        match (&self.symptom_type, &self.severity) {
-            (SymptomType::ChestTightnessOrPain, SymptomSeverity::Moderate) => true,
-            (SymptomType::ShortnessOfBreath, SymptomSeverity::Moderate) => true,
-            (SymptomType::ChestPain, SymptomSeverity::Moderate) => true,
-            (SymptomType::Fever, SymptomSeverity::Severe) => true, // High fever
-            (SymptomType::RapidHeartRate, SymptomSeverity::Severe) => true,
-            _ => false,
-        }
-    }
-
-    /// Check if this symptom requires medical attention (non-emergency)
-    pub fn requires_medical_attention(&self) -> bool {
-        // Emergency conditions already require attention
-        if self.is_medical_emergency() {
-            return true;
-        }
-
-        // Severe symptoms generally require medical attention
-        if self.severity >= SymptomSeverity::Severe {
-            return true;
-        }
-
-        // Long-duration symptoms might require attention
-        if let Some(duration) = self.duration_minutes {
-            let hours = duration as f64 / 60.0;
-            match self.symptom_type {
-                // Persistent pain over 24 hours
-                SymptomType::AbdominalCramps | SymptomType::Headache | SymptomType::BackPain |
-                SymptomType::MusclePain | SymptomType::JointPain => hours > 24.0,
-
-                // Respiratory symptoms over 12 hours
-                SymptomType::Coughing | SymptomType::ShortnessOfBreath | SymptomType::Wheezing => hours > 12.0,
-
-                // Digestive symptoms over 48 hours
-                SymptomType::Nausea | SymptomType::Vomiting | SymptomType::Diarrhea => hours > 48.0,
-
-                // Fever over 72 hours
-                SymptomType::Fever => hours > 72.0,
-
-                // Other symptoms default to 1 week
-                _ => hours > 168.0, // 1 week
-            }
-        } else {
-            false
-        }
-    }
-
-    /// Generate symptom analysis summary
-    pub fn generate_analysis(&self) -> SymptomAnalysis {
-        SymptomAnalysis {
-            symptom_type: self.symptom_type,
-            severity: self.severity,
-            category: self.get_category().to_string(),
-            is_emergency: self.is_medical_emergency(),
-            requires_attention: self.requires_medical_attention(),
-            severity_score: self.severity.to_numeric_score(),
-            duration_hours: self.duration_minutes.map(|m| m as f64 / 60.0),
-            recommendations: self.generate_recommendations(),
-        }
-    }
-
-    /// Generate contextual recommendations based on symptom
-    pub fn generate_recommendations(&self) -> Vec<String> {
-        let mut recommendations = Vec::new();
-
-        if self.is_medical_emergency() {
-            recommendations.push("Seek immediate medical attention".to_string());
-            recommendations.push("Consider calling emergency services".to_string());
-        } else if self.requires_medical_attention() {
-            recommendations.push("Consult with healthcare provider".to_string());
-            recommendations.push("Monitor symptom progression".to_string());
-        }
-
-        // Category-specific recommendations
-        match self.symptom_type.get_category() {
-            "respiratory" => {
-                recommendations.push("Ensure good air quality".to_string());
-                recommendations.push("Stay hydrated".to_string());
-                if self.severity >= SymptomSeverity::Moderate {
-                    recommendations.push("Avoid strenuous activity".to_string());
-                }
-            },
-            "digestive" => {
-                recommendations.push("Stay hydrated".to_string());
-                recommendations.push("Consider bland diet".to_string());
-                recommendations.push("Monitor for dehydration signs".to_string());
-            },
-            "pain" => {
-                recommendations.push("Rest affected area if possible".to_string());
-                recommendations.push("Consider pain management strategies".to_string());
-                if self.duration_minutes.map_or(false, |d| d > 720) { // >12 hours
-                    recommendations.push("Track pain patterns".to_string());
-                }
-            },
-            "neurological" => {
-                recommendations.push("Ensure adequate rest".to_string());
-                recommendations.push("Monitor cognitive symptoms".to_string());
-                recommendations.push("Consider stress management".to_string());
-            },
-            "cardiovascular" => {
-                recommendations.push("Monitor vital signs".to_string());
-                recommendations.push("Avoid strenuous activity".to_string());
-                recommendations.push("Consider cardiac evaluation".to_string());
-            },
-            _ => {
-                recommendations.push("Monitor symptom progression".to_string());
-                recommendations.push("Rest and self-care".to_string());
-            }
-        }
-
-        // Duration-based recommendations
-        if let Some(duration) = self.duration_minutes {
-            let hours = duration as f64 / 60.0;
-            if hours > 72.0 { // >3 days
-                recommendations.push("Consider medical evaluation for persistent symptoms".to_string());
-            }
-        }
-
-        recommendations
-    }
-
-    /// Check if this symptom is part of a potential illness episode
-    pub fn is_episode_symptom(&self) -> bool {
-        self.episode_id.is_some()
-    }
-
-    /// Get symptom urgency level (0-5 scale)
-    pub fn get_urgency_level(&self) -> u8 {
-        if self.is_medical_emergency() {
-            return 5; // Maximum urgency
-        }
-
-        match self.severity {
-            SymptomSeverity::None => 0,
-            SymptomSeverity::Mild => 1,
-            SymptomSeverity::Moderate => 2,
-            SymptomSeverity::Severe => 4,
-            SymptomSeverity::Critical => 5,
-        }
-    }
-}
 
 /// Symptom analysis summary for health insights
 #[derive(Debug, Serialize, Clone)]
@@ -2804,7 +2609,7 @@ impl NutritionMetric {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
         // Validate hydration & stimulants
         if let Some(water) = self.dietary_water {
             if water < 0.0 || water > 10.0 {
@@ -3171,13 +2976,6 @@ impl NutritionMetric {
     }
 }
 
-/// Macronutrient calorie distribution for nutritional analysis
-#[derive(Debug, Serialize, Clone)]
-pub struct MacronutrientDistribution {
-    pub carbohydrate_percent: u8,
-    pub protein_percent: u8,
-    pub fat_percent: u8,
-}
 
 /// Symptom Metric Validation and Analysis
 impl SymptomMetric {
@@ -3381,19 +3179,6 @@ impl SymptomMetric {
     }
 }
 
-/// Symptom analysis summary for health insights
-#[derive(Debug, Serialize, Clone)]
-pub struct SymptomAnalysis {
-    pub symptom_type: SymptomType,
-    pub severity: SymptomSeverity,
-    pub category: String,
-    pub is_emergency: bool,
-    pub requires_attention: bool,
-    pub severity_score: i32,
-    pub duration_hours: Option<f64>,
-    pub recommendations: Vec<String>,
-}
-
 
 impl MetabolicMetric {
     pub fn validate(&self) -> Result<(), String> {
@@ -3507,7 +3292,7 @@ pub struct HygieneMetric {
 
 impl HygieneMetric {
     /// Validate hygiene metric data with configurable thresholds
-    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
         // Validate duration if provided
         if let Some(duration) = self.duration_seconds {
             if duration < 1 || duration > 7200 { // 1 second to 2 hours

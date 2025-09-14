@@ -194,7 +194,7 @@ impl UserCharacteristics {
 }
 
 /// Input model for creating/updating user characteristics
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, Default)]
 pub struct UserCharacteristicsInput {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub biological_sex: Option<BiologicalSex>,

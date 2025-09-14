@@ -978,7 +978,7 @@ fn identify_deficiency_risks(metrics: &[NutritionMetric]) -> Vec<String> {
 fn identify_excess_warnings(metrics: &[NutritionMetric]) -> Vec<String> {
     let mut warnings = Vec::new();
 
-    let avg_sodium: f64 = metrics.iter().filter_map(|m| m.dietary_sodium).sum() / metrics.len() as f64;
+    let avg_sodium: f64 = metrics.iter().filter_map(|m| m.dietary_sodium).sum::<f64>() / metrics.len() as f64;
     if avg_sodium > 2300.0 {
         warnings.push("Excessive sodium intake".to_string());
     }
@@ -1005,7 +1005,7 @@ fn identify_dietary_concerns(metrics: &[NutritionMetric]) -> Vec<DietaryConcern>
     }
 
     // Check for low fiber
-    let avg_fiber: f64 = metrics.iter().filter_map(|m| m.dietary_fiber).sum() / metrics.len() as f64;
+    let avg_fiber: f64 = metrics.iter().filter_map(|m| m.dietary_fiber).sum::<f64>() / metrics.len() as f64;
     if avg_fiber < 25.0 { // 25g daily recommendation
         concerns.push(DietaryConcern {
             concern_type: "low_fiber".to_string(),
