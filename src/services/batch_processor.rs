@@ -40,13 +40,17 @@ pub struct BatchProcessingResult {
     pub deduplication_stats: Option<DeduplicationStats>,
 }
 
-/// Statistics about deduplication during batch processing  
+/// Statistics about deduplication during batch processing
 #[derive(Debug, Clone)]
 pub struct DeduplicationStats {
     pub heart_rate_duplicates: usize,
     pub blood_pressure_duplicates: usize,
     pub sleep_duplicates: usize,
     pub activity_duplicates: usize,
+    pub body_measurement_duplicates: usize,
+    pub temperature_duplicates: usize,
+    pub respiratory_duplicates: usize,
+    pub blood_glucose_duplicates: usize,
     pub workout_duplicates: usize,
     pub total_duplicates: usize,
     pub deduplication_time_ms: u64,
@@ -86,6 +90,22 @@ struct ActivityKey {
 struct WorkoutKey {
     user_id: Uuid,
     started_at_millis: i64,
+}
+
+/// Unique key for blood glucose metrics (user_id, recorded_at, glucose_source)
+/// Special deduplication for CGM data streams with source-based deduplication
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct BloodGlucoseKey {
+    user_id: Uuid,
+    recorded_at_millis: i64,
+    glucose_source: Option<String>,
+}
+
+/// Unique key for respiratory metrics (user_id, recorded_at, measurement_type)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct RespiratoryKey {
+    user_id: Uuid,
+    recorded_at_millis: i64,
 }
 
 /// Progress tracking for chunked operations
@@ -644,7 +664,14 @@ impl BatchProcessor {
                 HealthMetric::BloodPressure(bp) => grouped.blood_pressures.push(bp),
                 HealthMetric::Sleep(sleep) => grouped.sleep_metrics.push(sleep),
                 HealthMetric::Activity(activity) => grouped.activities.push(activity),
+                HealthMetric::BodyMeasurement(body) => grouped.body_measurements.push(body),
+                HealthMetric::Temperature(temp) => grouped.temperature_metrics.push(temp),
+                HealthMetric::BloodGlucose(glucose) => grouped.blood_glucose.push(glucose),
                 HealthMetric::Workout(workout) => grouped.workouts.push(workout),
+                _ => {
+                    // Handle other metric types not yet supported
+                    warn!("Metric type {} not yet supported in batch processing", metric.metric_type());
+                }
             }
         }
 
@@ -666,6 +693,9 @@ impl BatchProcessor {
                     blood_pressure_duplicates: 0,
                     sleep_duplicates: 0,
                     activity_duplicates: 0,
+                    temperature_duplicates: 0,
+                    respiratory_duplicates: 0,
+                    blood_glucose_duplicates: 0,
                     workout_duplicates: 0,
                     total_duplicates: 0,
                     deduplication_time_ms: 0,
@@ -679,6 +709,9 @@ impl BatchProcessor {
             blood_pressure_duplicates: 0,
             sleep_duplicates: 0,
             activity_duplicates: 0,
+            temperature_duplicates: 0,
+            respiratory_duplicates: 0,
+            blood_glucose_duplicates: 0,
             workout_duplicates: 0,
             total_duplicates: 0,
             deduplication_time_ms: 0,
@@ -705,6 +738,16 @@ impl BatchProcessor {
         grouped.activities = self.deduplicate_activities(user_id, grouped.activities);
         stats.activity_duplicates = original_activity_count - grouped.activities.len();
 
+        // Deduplicate temperature metrics
+        let original_temperature_count = grouped.temperature_metrics.len();
+        grouped.temperature_metrics = self.deduplicate_temperature_metrics(user_id, grouped.temperature_metrics);
+        stats.temperature_duplicates = original_temperature_count - grouped.temperature_metrics.len();
+
+        // Deduplicate respiratory metrics
+        let original_respiratory_count = grouped.respiratory_metrics.len();
+        grouped.respiratory_metrics = self.deduplicate_respiratory_metrics(user_id, grouped.respiratory_metrics);
+        stats.respiratory_duplicates = original_respiratory_count - grouped.respiratory_metrics.len();
+
         // Deduplicate workout metrics
         let original_workout_count = grouped.workouts.len();
         grouped.workouts = self.deduplicate_workouts(user_id, grouped.workouts);
@@ -714,6 +757,8 @@ impl BatchProcessor {
             + stats.blood_pressure_duplicates
             + stats.sleep_duplicates
             + stats.activity_duplicates
+            + stats.temperature_duplicates
+            + stats.respiratory_duplicates
             + stats.workout_duplicates;
 
         stats.deduplication_time_ms = start_time.elapsed().as_millis() as u64;
@@ -725,6 +770,8 @@ impl BatchProcessor {
                 blood_pressure_duplicates = stats.blood_pressure_duplicates,
                 sleep_duplicates = stats.sleep_duplicates,
                 activity_duplicates = stats.activity_duplicates,
+                temperature_duplicates = stats.temperature_duplicates,
+                respiratory_duplicates = stats.respiratory_duplicates,
                 workout_duplicates = stats.workout_duplicates,
                 total_duplicates = stats.total_duplicates,
                 deduplication_time_ms = stats.deduplication_time_ms,
@@ -851,6 +898,29 @@ impl BatchProcessor {
 
             if seen_keys.insert(key) {
                 deduplicated.push(workout);
+            }
+        }
+
+        deduplicated
+    }
+
+    /// Deduplicate respiratory metrics using HashSet for O(1) lookups
+    /// Preserves order of first occurrence of each unique record
+    fn deduplicate_respiratory_metrics(
+        &self,
+        user_id: Uuid,
+        metrics: Vec<crate::models::RespiratoryMetric>,
+    ) -> Vec<crate::models::RespiratoryMetric> {
+        let mut seen_keys = HashSet::new();
+        let mut deduplicated = Vec::new();
+
+        for metric in metrics {
+            let key = RespiratoryKey {
+                user_id,
+                recorded_at_millis: metric.recorded_at.timestamp_millis(),
+            };
+            if seen_keys.insert(key) {
+                deduplicated.push(metric);
             }
         }
 
@@ -1408,5 +1478,9 @@ struct GroupedMetrics {
     blood_pressures: Vec<crate::models::BloodPressureMetric>,
     sleep_metrics: Vec<crate::models::SleepMetric>,
     activities: Vec<crate::models::ActivityMetric>,
+    body_measurements: Vec<crate::models::BodyMeasurementMetric>,
+    temperature_metrics: Vec<crate::models::TemperatureMetric>,
+    respiratory_metrics: Vec<crate::models::RespiratoryMetric>,
+    blood_glucose: Vec<crate::models::BloodGlucoseMetric>,
     workouts: Vec<crate::models::WorkoutData>,
 }

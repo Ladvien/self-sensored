@@ -78,7 +78,7 @@ impl IosIngestPayload {
                     .or_else(|| parse_ios_date(&data_point.end))
                     .unwrap_or_else(Utc::now);
 
-                // Convert based on metric name (handle more variations)
+                // Convert based on metric name (handle more variations including environmental)
                 match ios_metric.name.to_lowercase().as_str() {
                     "heart_rate"
                     | "heartrate"
@@ -239,6 +239,215 @@ impl IosIngestPayload {
                             }
                         }
                     }
+                    // Temperature Metrics - Body, Basal, Apple Watch Wrist, Environmental
+                    "body_temperature"
+                    | "basal_body_temperature"
+                    | "apple_sleeping_wrist_temperature"
+                    | "wrist_temperature"
+                    | "water_temperature"
+                    | "temperature" => {
+                        if let Some(qty) = data_point.qty {
+                            // Temperature should be in Celsius, validate range
+                            if qty >= -50.0 && qty <= 100.0 {
+                                let metric = crate::models::TemperatureMetric {
+                                    id: uuid::Uuid::new_v4(),
+                                    user_id,
+                                    recorded_at,
+                                    body_temperature: if matches!(
+                                        ios_metric.name.to_lowercase().as_str(),
+                                        "body_temperature" | "temperature"
+                                    ) {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    basal_body_temperature: if ios_metric
+                                        .name
+                                        .to_lowercase()
+                                        .as_str()
+                                        == "basal_body_temperature"
+                                    {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    apple_sleeping_wrist_temperature: if matches!(
+                                        ios_metric.name.to_lowercase().as_str(),
+                                        "apple_sleeping_wrist_temperature" | "wrist_temperature"
+                                    ) {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    water_temperature: if ios_metric
+                                        .name
+                                        .to_lowercase()
+                                        .as_str()
+                                        == "water_temperature"
+                                    {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    temperature_source: data_point
+                                        .extra
+                                        .get("source_type")
+                                        .and_then(|v| v.as_str())
+                                        .map(|s| s.to_string())
+                                        .or_else(|| Some("iOS".to_string())),
+                                    source_device: data_point.source.clone(),
+                                    created_at: Utc::now(),
+                                };
+                                internal_metrics.push(HealthMetric::Temperature(metric));
+                            }
+                        }
+                    }
+                    // Environmental & Safety Metrics
+                    "uv_exposure" | "uv_index" | "environmental_uv_exposure" => {
+                        if let Some(qty) = data_point.qty {
+                            if qty >= 0.0 {
+                                let metric = crate::models::EnvironmentalMetric {
+                                    id: uuid::Uuid::new_v4(),
+                                    user_id,
+                                    recorded_at,
+                                    uv_index: Some(qty),
+                                    uv_exposure_minutes: None,
+                                    time_in_daylight_minutes: None,
+                                    ambient_temperature_celsius: None,
+                                    humidity_percent: None,
+                                    air_pressure_hpa: None,
+                                    altitude_meters: None,
+                                    location_latitude: data_point
+                                        .extra
+                                        .get("latitude")
+                                        .and_then(|v| v.as_f64()),
+                                    location_longitude: data_point
+                                        .extra
+                                        .get("longitude")
+                                        .and_then(|v| v.as_f64()),
+                                    source_device: data_point.source.clone(),
+                                    created_at: Utc::now(),
+                                };
+                                internal_metrics.push(crate::models::HealthMetric::Environmental(metric));
+                            }
+                        }
+                    }
+                    "time_in_daylight" | "daylight_time" | "sun_exposure_time" => {
+                        if let Some(qty) = data_point.qty {
+                            if qty >= 0.0 {
+                                let metric = crate::models::EnvironmentalMetric {
+                                    id: uuid::Uuid::new_v4(),
+                                    user_id,
+                                    recorded_at,
+                                    uv_index: None,
+                                    uv_exposure_minutes: None,
+                                    time_in_daylight_minutes: Some(qty as i32),
+                                    ambient_temperature_celsius: None,
+                                    humidity_percent: None,
+                                    air_pressure_hpa: None,
+                                    altitude_meters: None,
+                                    location_latitude: data_point
+                                        .extra
+                                        .get("latitude")
+                                        .and_then(|v| v.as_f64()),
+                                    location_longitude: data_point
+                                        .extra
+                                        .get("longitude")
+                                        .and_then(|v| v.as_f64()),
+                                    source_device: data_point.source.clone(),
+                                    created_at: Utc::now(),
+                                };
+                                internal_metrics.push(crate::models::HealthMetric::Environmental(metric));
+                            }
+                        }
+                    }
+                    "environmental_audio_exposure" | "environmental_sound_exposure" => {
+                        if let Some(qty) = data_point.qty {
+                            if qty >= 0.0 {
+                                let duration_minutes = data_point
+                                    .extra
+                                    .get("duration_minutes")
+                                    .and_then(|v| v.as_i64())
+                                    .unwrap_or(1) as i32;
+
+                                let audio_exposure_event = qty >= 85.0; // WHO safe listening threshold
+
+                                let metric = crate::models::AudioExposureMetric {
+                                    id: uuid::Uuid::new_v4(),
+                                    user_id,
+                                    recorded_at,
+                                    environmental_audio_exposure_db: Some(qty),
+                                    headphone_audio_exposure_db: None,
+                                    exposure_duration_minutes: duration_minutes,
+                                    audio_exposure_event,
+                                    source_device: data_point.source.clone(),
+                                    created_at: Utc::now(),
+                                };
+                                internal_metrics.push(crate::models::HealthMetric::AudioExposure(metric));
+                            }
+                        }
+                    }
+                    "headphone_audio_exposure" | "headphone_sound_exposure" => {
+                        if let Some(qty) = data_point.qty {
+                            if qty >= 0.0 {
+                                let duration_minutes = data_point
+                                    .extra
+                                    .get("duration_minutes")
+                                    .and_then(|v| v.as_i64())
+                                    .unwrap_or(1) as i32;
+
+                                let audio_exposure_event = qty >= 85.0; // WHO safe listening threshold
+
+                                let metric = crate::models::AudioExposureMetric {
+                                    id: uuid::Uuid::new_v4(),
+                                    user_id,
+                                    recorded_at,
+                                    environmental_audio_exposure_db: None,
+                                    headphone_audio_exposure_db: Some(qty),
+                                    exposure_duration_minutes: duration_minutes,
+                                    audio_exposure_event,
+                                    source_device: data_point.source.clone(),
+                                    created_at: Utc::now(),
+                                };
+                                internal_metrics.push(crate::models::HealthMetric::AudioExposure(metric));
+                            }
+                        }
+                    }
+                    "fall_detection" | "number_of_times_fallen" | "falls_detected" => {
+                        if let Some(qty) = data_point.qty {
+                            if qty > 0.0 {
+                                let metric = crate::models::SafetyEventMetric {
+                                    id: uuid::Uuid::new_v4(),
+                                    user_id,
+                                    recorded_at,
+                                    event_type: "fall_detected".to_string(),
+                                    severity_level: Some(3), // Default moderate severity for falls
+                                    location_latitude: data_point
+                                        .extra
+                                        .get("latitude")
+                                        .and_then(|v| v.as_f64()),
+                                    location_longitude: data_point
+                                        .extra
+                                        .get("longitude")
+                                        .and_then(|v| v.as_f64()),
+                                    emergency_contacts_notified: data_point
+                                        .extra
+                                        .get("emergency_contacts_notified")
+                                        .and_then(|v| v.as_bool())
+                                        .unwrap_or(false),
+                                    resolution_status: Some("pending".to_string()),
+                                    notes: data_point
+                                        .extra
+                                        .get("notes")
+                                        .and_then(|v| v.as_str())
+                                        .map(|s| s.to_string()),
+                                    source_device: data_point.source.clone(),
+                                    created_at: Utc::now(),
+                                };
+                                internal_metrics.push(crate::models::HealthMetric::SafetyEvent(metric));
+                            }
+                        }
+                    }
                     _ => {
                         // For unknown metric types, log for debugging and try to extract as activity if numeric
                         tracing::debug!(
@@ -246,6 +455,18 @@ impl IosIngestPayload {
                             ios_metric.name,
                             data_point.qty
                         );
+
+                        // Check if it might be an environmental metric we don't recognize yet
+                        if ios_metric.name.to_lowercase().contains("environmental")
+                            || ios_metric.name.to_lowercase().contains("audio")
+                            || ios_metric.name.to_lowercase().contains("sound")
+                            || ios_metric.name.to_lowercase().contains("uv")
+                            || ios_metric.name.to_lowercase().contains("daylight") {
+                            tracing::info!(
+                                "Potentially environmental metric not yet supported: '{}'",
+                                ios_metric.name
+                            );
+                        }
 
                         // If it has a numeric quantity, store as generic activity data
                         if let Some(qty) = data_point.qty {

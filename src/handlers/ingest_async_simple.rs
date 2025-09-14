@@ -187,6 +187,7 @@ pub async fn ingest_async_optimized_handler(
             blood_pressure_chunk_size: 8000,
             sleep_chunk_size: 5000,
             activity_chunk_size: 7000,
+            respiratory_chunk_size: 7000,
             workout_chunk_size: 5000,
             enable_progress_tracking: false, // Disable for speed
             enable_intra_batch_deduplication: true,

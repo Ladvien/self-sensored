@@ -248,6 +248,23 @@ async fn main() -> std::io::Result<()> {
                         "/data/summary",
                         web::get().to(handlers::query::get_health_summary),
                     )
+                    // Environmental & Safety data endpoints
+                    .route(
+                        "/ingest/environmental",
+                        web::post().to(handlers::environmental_handler::ingest_environmental_handler),
+                    )
+                    .route(
+                        "/ingest/audio-exposure",
+                        web::post().to(handlers::environmental_handler::ingest_audio_exposure_handler),
+                    )
+                    .route(
+                        "/ingest/safety-events",
+                        web::post().to(handlers::environmental_handler::ingest_safety_events_handler),
+                    )
+                    .route(
+                        "/data/environmental",
+                        web::get().to(handlers::environmental_handler::get_environmental_data_handler),
+                    )
                     // Health data export endpoints
                     .route(
                         "/export/all",

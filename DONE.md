@@ -1,4 +1,3 @@
-Based on the comprehensive database redesign analysis, I'll create Jira stories organized into parallel work streams. Each story includes detailed acceptance criteria, testing requirements, and definition of done.
 
 ## ⚠️ MIGRATION REFERENCES NOTICE
 **Historical Context**: This file contains references to migration files and expanded schema features that were part of the expanded schema implementation but have been removed as part of the schema simplification (SCHEMA-016). All references to migration files, nutrition metrics, symptoms, reproductive health metrics, environmental metrics, mental health metrics, and mobility metrics are historical and relate to work completed before schema simplification to the core 5 metric types.

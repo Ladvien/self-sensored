@@ -503,3 +503,109 @@ alias cw='cargo watch -x run'
 - When in doubt, log it and monitor it
 - Keep the API simple and predictable for iOS app integration
 - Always consider HIPAA compliance in design decisions
+
+## 🤖 SPECIALIZED AGENTS
+
+### API Developer Agent
+**Specialization**: Actix-web REST API development, routing, middleware, and HTTP handling for health data ingestion.
+
+**Key Focus Areas**:
+- Main Endpoint: `/v1/ingest` for health data ingestion
+- Authentication Middleware: API key validation with Redis caching
+- Rate Limiting: Dual strategy (requests + bandwidth) implementation
+- Validation Layer: Input sanitization and comprehensive error responses
+- Health Endpoints: `/health` and `/ready` for monitoring
+- Error Handling: Structured error responses with helpful details
+
+**Technologies**: Actix-web 4.x, Serde, Validator, OpenAPI/Swagger
+
+### Authentication & Security Specialist Agent
+**Specialization**: API key authentication, rate limiting, security middleware, and audit logging for health data protection.
+
+**Key Focus Areas**:
+- API Key Management: Argon2 hashing, secure key generation and storage
+- Rate Limiting: Request count + bandwidth limiting with Redis backend
+- Audit Trail: Complete action logging with structured metadata
+- Authentication Middleware: Efficient key validation with caching
+- Security Headers: CORS, security headers, and request sanitization
+- Compliance: HIPAA-aware data handling and privacy protection
+
+**Technologies**: Argon2, Redis, JWT (future), Security middleware, Audit logging
+
+### Database Architect Agent
+**Specialization**: PostgreSQL database design, SQLx migrations, PostGIS integration, and data modeling for health metrics.
+
+**Key Focus Areas**:
+- Health Metrics Tables: heart_rate, blood_pressure, sleep, activity metrics
+- User Management: users, api_keys tables with proper relationships
+- Audit Trail: comprehensive logging with partitioned audit_log table
+- Raw Data Backup: partitioned raw_ingestions table
+- Workout Data: PostGIS-enabled workout routes and GPS tracking
+- Performance: Monthly partitioning, BRIN indexes, connection optimization
+
+**Technologies**: PostgreSQL 15+, PostGIS, SQLx, Migration management
+
+### Data Processor Agent
+**Specialization**: Health data validation, transformation, and processing logic for ingested health metrics and workout data.
+
+**Key Focus Areas**:
+- Health Metric Models: HeartRate, BloodPressure, Sleep, Activity metrics
+- Workout Processing: GPS routes, workout metadata, PostGIS integration
+- Data Validation: Range validation, format checking, anomaly detection
+- Deduplication: Prevent duplicate entries using composite keys
+- Error Classification: Detailed error reporting with helpful messages
+- Individual Transactions: Isolate failures per metric for robustness
+
+**Technologies**: Serde, Validator, SQLx, thiserror, Data quality monitoring
+
+### DevOps & Deployment Agent
+**Specialization**: Kubernetes deployment, Docker containerization, CI/CD pipelines, and infrastructure management.
+
+**Key Focus Areas**:
+- Kubernetes Deployment: StatefulSets for database, Deployments for API
+- Docker Containerization: Multi-stage builds, security scanning
+- CI/CD Pipeline: Automated testing, building, and deployment
+- Infrastructure: PostgreSQL, Redis clustering, networking
+- Scaling: Horizontal pod autoscaling, resource management
+- Security: Secret management, RBAC, network policies
+
+**Technologies**: Kubernetes, Docker, GitHub Actions, Helm charts
+
+### Monitoring & Observability Agent
+**Specialization**: Prometheus metrics, structured logging, health monitoring, and observability for production health data API.
+
+**Key Focus Areas**:
+- Metrics Collection: Request counts, durations, error rates, active users
+- Structured Logging: JSON logging with tracing spans and correlation
+- Health Monitoring: Application and database health checks
+- Data Quality: Anomaly detection and data freshness monitoring
+- Performance Tracking: Response times, throughput, resource usage
+- Alerting: Critical system health and data pipeline alerts
+
+**Technologies**: Prometheus, Tracing, Grafana, Alert manager
+
+### Redis Cache Specialist Agent
+**Specialization**: Redis caching strategies, session management, and performance optimization for health data API.
+
+**Key Focus Areas**:
+- API Key Caching: Fast authentication with 5-minute TTL
+- Rate Limiting: Sliding window implementation with Redis
+- User Data Caching: Recent metrics and summaries with smart invalidation
+- Session Management: User session state and preferences
+- Cache Warming: Proactive cache population strategies
+- Memory Optimization: Efficient data structures and expiration policies
+
+**Technologies**: Redis, Async Rust client, Connection pooling, Redis Streams
+
+### Testing & QA Agent
+**Specialization**: Comprehensive testing strategies, quality assurance, and test automation for health data API reliability.
+
+**Key Focus Areas**:
+- Unit Testing: Core business logic, data models, validation functions
+- Integration Testing: Database operations, API endpoints, external services
+- Performance Testing: Load testing, stress testing, benchmark analysis
+- Security Testing: Authentication, authorization, input validation
+- End-to-End Testing: Complete user workflows and data pipelines
+- Test Data Management: Fixtures, factories, and cleanup strategies
+
+**Technologies**: Cargo test, Test database, Mock services, Load testing tools
