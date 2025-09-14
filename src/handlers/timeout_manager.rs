@@ -191,9 +191,7 @@ impl ProcessingStatus {
                 format!("Partial processing completed: {reason}")
             }
             ProcessingStatus::Timeout { processed, total } => {
-                format!(
-                    "Processing timed out. Processed {processed}/{total} metrics"
-                )
+                format!("Processing timed out. Processed {processed}/{total} metrics")
             }
             ProcessingStatus::BackgroundRecommended { reason } => {
                 format!("Background processing recommended: {reason}")

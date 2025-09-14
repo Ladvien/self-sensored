@@ -272,9 +272,11 @@ mod tests {
         let parser = StreamingJsonParser::new();
 
         // Simulate stream by chunking the data
-        let chunks = [json_data[..10].as_bytes(),
+        let chunks = [
+            json_data[..10].as_bytes(),
             json_data[10..20].as_bytes(),
-            json_data[20..].as_bytes()];
+            json_data[20..].as_bytes(),
+        ];
 
         // TODO: Add actual stream test implementation
     }

@@ -92,9 +92,7 @@ mod timeout_tests {
         );
 
         println!("✅ Payload size limits test completed");
-        println!(
-            "   - Max payload size: {max_payload_size_mb}MB (DoS-protected)"
-        );
+        println!("   - Max payload size: {max_payload_size_mb}MB (DoS-protected)");
     }
 
     #[test]

@@ -936,10 +936,7 @@ async fn validate_partition_creation(pool: &PgPool, date: DateTime<Utc>) {
     .exists
     .unwrap_or(false);
 
-    assert!(
-        partition_exists,
-        "Partition for {table_date} should exist"
-    );
+    assert!(partition_exists, "Partition for {table_date} should exist");
 }
 
 async fn count_active_partitions(pool: &PgPool) -> i64 {

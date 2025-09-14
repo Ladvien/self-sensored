@@ -532,9 +532,7 @@ fn parse_with_error_context<T: serde::de::DeserializeOwned>(
         Err(err) => {
             let path = err.path().to_string();
             let inner = err.into_inner();
-            Err(format!(
-                "{format_name} parsing failed at '{path}': {inner}"
-            ))
+            Err(format!("{format_name} parsing failed at '{path}': {inner}"))
         }
     }
 }

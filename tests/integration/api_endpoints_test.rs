@@ -182,10 +182,7 @@ async fn test_all_ingest_endpoints_new_metrics() {
 
     // Verify minimum storage requirements
     for (metric_type, count) in storage_counts {
-        assert!(
-            count > 0,
-            "Should store at least one {metric_type} metric"
-        );
+        assert!(count > 0, "Should store at least one {metric_type} metric");
     }
 
     cleanup_test_data(&pool, user_id).await;

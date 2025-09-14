@@ -215,7 +215,8 @@ pub async fn get_blood_pressure_data(
         SELECT user_id, recorded_at, systolic, diastolic, pulse, source_device, metadata, created_at
         FROM blood_pressure_metrics 
         WHERE user_id = $1
-        "#.to_string();
+        "#
+    .to_string();
 
     let mut param_count = 2;
     if params.start_date.is_some() {
@@ -400,7 +401,8 @@ pub async fn get_activity_data(
                flights_climbed, source_device, metadata, created_at
         FROM activity_metrics 
         WHERE user_id = $1
-        "#.to_string();
+        "#
+    .to_string();
 
     let mut param_count = 2;
     if params.start_date.is_some() {
@@ -493,7 +495,8 @@ pub async fn get_workout_data(
                source_device, metadata, created_at
         FROM workouts 
         WHERE user_id = $1
-        "#.to_string();
+        "#
+    .to_string();
 
     let mut param_count = 2;
     if params.start_date.is_some() {

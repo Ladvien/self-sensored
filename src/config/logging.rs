@@ -236,9 +236,7 @@ fn parse_log_level(level_str: &str) -> Level {
         "warn" | "warning" => Level::WARN,
         "error" => Level::ERROR,
         _ => {
-            eprintln!(
-                "Warning: Invalid log level '{level_str}', defaulting to 'info'"
-            );
+            eprintln!("Warning: Invalid log level '{level_str}', defaulting to 'info'");
             Level::INFO
         }
     }
