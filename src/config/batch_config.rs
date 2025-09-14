@@ -16,6 +16,10 @@ pub const WORKOUT_PARAMS_PER_RECORD: usize = 10; // id, user_id, workout_type, s
 pub const BLOOD_GLUCOSE_PARAMS_PER_RECORD: usize = 8; // user_id, recorded_at, blood_glucose_mg_dl, measurement_context, medication_taken, insulin_delivery_units, glucose_source, source_device
 pub const NUTRITION_PARAMS_PER_RECORD: usize = 32; // user_id, recorded_at, 25+ nutrient fields, meal_type, meal_id, source_device, created_at (32 total params for comprehensive nutrition)
 
+// Reproductive Health Parameters (HIPAA-Compliant with Privacy Controls)
+pub const MENSTRUAL_PARAMS_PER_RECORD: usize = 8; // user_id, recorded_at, menstrual_flow, spotting, cycle_day, cramps_severity, mood_rating, energy_level, notes, source_device
+pub const FERTILITY_PARAMS_PER_RECORD: usize = 12; // user_id, recorded_at, cervical_mucus_quality, ovulation_test_result, sexual_activity, pregnancy_test_result, basal_body_temperature, temperature_context, cervix_firmness, cervix_position, lh_level, notes, source_device
+
 /// Configuration for batch processing operations
 #[derive(Debug, Clone)]
 pub struct BatchConfig {
@@ -36,10 +40,19 @@ pub struct BatchConfig {
     pub workout_chunk_size: usize,    // 10 params per record -> max 6,553
     pub blood_glucose_chunk_size: usize, // 8 params per record -> max 8,192
     pub nutrition_chunk_size: usize,  // 32 params per record -> max 2,047
+
+    // Reproductive Health Batch Processing (HIPAA-Compliant with Privacy Controls)
+    pub menstrual_chunk_size: usize,  // 8 params per record -> max 8,192
+    pub fertility_chunk_size: usize,  // 12 params per record -> max 5,461
+
     pub enable_progress_tracking: bool, // Track progress for large batches
     pub enable_intra_batch_deduplication: bool, // Enable deduplication within batches
     // Dual-write configuration for activity_metrics migration
     pub enable_dual_write_activity_metrics: bool, // Feature flag for dual-write pattern
+
+    // Privacy and Security Configuration for Reproductive Health
+    pub enable_reproductive_health_encryption: bool, // Enable encryption for sensitive reproductive data
+    pub reproductive_health_audit_logging: bool, // Enable enhanced audit logging for reproductive health access
 }
 
 impl Default for BatchConfig {
@@ -62,9 +75,18 @@ impl Default for BatchConfig {
             workout_chunk_size: 5000, // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000 (max ~50,000 params)
             blood_glucose_chunk_size: 6500, // 8 params: 65,535 ÷ 8 × 0.8 ≈ 6,500 (max ~52,000 params)
             nutrition_chunk_size: 1600, // 32 params: 65,535 ÷ 32 × 0.8 ≈ 1,600 (max ~51,200 params)
+
+            // Reproductive Health Batch Processing (Privacy-Optimized Chunk Sizes)
+            menstrual_chunk_size: 6500, // 8 params: 65,535 ÷ 8 × 0.8 ≈ 6,500 (max ~52,000 params)
+            fertility_chunk_size: 4300, // 12 params: 65,535 ÷ 12 × 0.8 ≈ 4,360 (max ~52,320 params)
+
             enable_progress_tracking: true,
             enable_intra_batch_deduplication: true, // Enable by default for performance
             enable_dual_write_activity_metrics: false, // Disabled by default for safe rollout
+
+            // Privacy and Security Defaults for Reproductive Health
+            enable_reproductive_health_encryption: true, // Enable encryption by default for sensitive data
+            reproductive_health_audit_logging: true, // Enable enhanced audit logging by default
         }
     }
 }
@@ -138,6 +160,17 @@ impl BatchConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(1600),
+
+            // Reproductive Health Batch Processing Environment Configuration
+            menstrual_chunk_size: env::var("BATCH_MENSTRUAL_CHUNK_SIZE")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(6500),
+            fertility_chunk_size: env::var("BATCH_FERTILITY_CHUNK_SIZE")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(4300),
+
             enable_progress_tracking: env::var("BATCH_ENABLE_PROGRESS_TRACKING")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -150,6 +183,16 @@ impl BatchConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(false),
+
+            // Privacy and Security Environment Configuration for Reproductive Health
+            enable_reproductive_health_encryption: env::var("BATCH_REPRODUCTIVE_HEALTH_ENCRYPTION")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(true),
+            reproductive_health_audit_logging: env::var("BATCH_REPRODUCTIVE_HEALTH_AUDIT_LOGGING")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(true),
         }
     }
 
@@ -201,6 +244,17 @@ impl BatchConfig {
                 "nutrition",
                 self.nutrition_chunk_size,
                 NUTRITION_PARAMS_PER_RECORD,
+            ),
+            // Reproductive Health Batch Processing Validation (HIPAA-Compliant)
+            (
+                "menstrual",
+                self.menstrual_chunk_size,
+                MENSTRUAL_PARAMS_PER_RECORD,
+            ),
+            (
+                "fertility",
+                self.fertility_chunk_size,
+                FERTILITY_PARAMS_PER_RECORD,
             ),
         ];
 

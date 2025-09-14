@@ -74,6 +74,26 @@ pub struct ValidationConfig {
     pub body_fat_max_percent: f64,         // Maximum body fat percentage (50.0%)
     pub body_temperature_min_celsius: f64, // Body temperature minimum for body metrics
     pub body_temperature_max_celsius: f64, // Body temperature maximum for body metrics
+
+    // Reproductive Health Validation Thresholds (HIPAA-Compliant Medical-Grade)
+    pub menstrual_cycle_day_min: i16,      // Minimum cycle day (1)
+    pub menstrual_cycle_day_max: i16,      // Maximum cycle day (45 for irregular cycles)
+    pub menstrual_cramps_severity_min: i16, // Minimum cramps severity (0 - no pain)
+    pub menstrual_cramps_severity_max: i16, // Maximum cramps severity (10 - severe pain)
+    pub menstrual_mood_rating_min: i16,    // Minimum mood rating (1 - terrible)
+    pub menstrual_mood_rating_max: i16,    // Maximum mood rating (5 - great)
+    pub menstrual_energy_level_min: i16,   // Minimum energy level (1 - exhausted)
+    pub menstrual_energy_level_max: i16,   // Maximum energy level (5 - energetic)
+
+    // Fertility Tracking Validation Thresholds (Medical-Grade)
+    pub fertility_basal_temp_min: f32,     // Minimum basal body temperature (35.0°C)
+    pub fertility_basal_temp_max: f32,     // Maximum basal body temperature (39.0°C)
+    pub fertility_cervix_firmness_min: i16, // Minimum cervix firmness (1 - soft)
+    pub fertility_cervix_firmness_max: i16, // Maximum cervix firmness (3 - firm)
+    pub fertility_cervix_position_min: i16, // Minimum cervix position (1 - low)
+    pub fertility_cervix_position_max: i16, // Maximum cervix position (3 - high)
+    pub fertility_lh_level_min: f64,       // Minimum LH level (0.0 mIU/mL)
+    pub fertility_lh_level_max: f64,       // Maximum LH level (100.0 mIU/mL)
 }
 
 impl Default for ValidationConfig {
@@ -150,6 +170,26 @@ impl Default for ValidationConfig {
             body_fat_max_percent: 50.0,         // Maximum body fat (severe obesity)
             body_temperature_min_celsius: 30.0, // Body temperature minimum
             body_temperature_max_celsius: 45.0, // Body temperature maximum
+
+            // Reproductive Health Validation Defaults (Medical-Grade HIPAA-Compliant)
+            menstrual_cycle_day_min: 1,          // First day of cycle
+            menstrual_cycle_day_max: 45,         // Maximum for very irregular cycles
+            menstrual_cramps_severity_min: 0,    // No pain
+            menstrual_cramps_severity_max: 10,   // Severe pain (0-10 medical scale)
+            menstrual_mood_rating_min: 1,        // Terrible mood
+            menstrual_mood_rating_max: 5,        // Great mood
+            menstrual_energy_level_min: 1,       // Exhausted
+            menstrual_energy_level_max: 5,       // Energetic
+
+            // Fertility Tracking Validation Defaults (Medical-Grade)
+            fertility_basal_temp_min: 35.0,      // Low basal body temperature (°C)
+            fertility_basal_temp_max: 39.0,      // High basal body temperature (°C)
+            fertility_cervix_firmness_min: 1,    // Soft cervix
+            fertility_cervix_firmness_max: 3,    // Firm cervix
+            fertility_cervix_position_min: 1,    // Low cervix position
+            fertility_cervix_position_max: 3,    // High cervix position
+            fertility_lh_level_min: 0.0,         // Minimum LH level (mIU/mL)
+            fertility_lh_level_max: 100.0,       // Maximum LH level (mIU/mL)
         }
     }
 }
@@ -387,6 +427,74 @@ impl ValidationConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(45.0),
+
+            // Reproductive Health Validation from Environment (HIPAA-Compliant)
+            menstrual_cycle_day_min: env::var("VALIDATION_MENSTRUAL_CYCLE_DAY_MIN")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(1),
+            menstrual_cycle_day_max: env::var("VALIDATION_MENSTRUAL_CYCLE_DAY_MAX")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(45),
+            menstrual_cramps_severity_min: env::var("VALIDATION_MENSTRUAL_CRAMPS_SEVERITY_MIN")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0),
+            menstrual_cramps_severity_max: env::var("VALIDATION_MENSTRUAL_CRAMPS_SEVERITY_MAX")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(10),
+            menstrual_mood_rating_min: env::var("VALIDATION_MENSTRUAL_MOOD_RATING_MIN")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(1),
+            menstrual_mood_rating_max: env::var("VALIDATION_MENSTRUAL_MOOD_RATING_MAX")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(5),
+            menstrual_energy_level_min: env::var("VALIDATION_MENSTRUAL_ENERGY_LEVEL_MIN")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(1),
+            menstrual_energy_level_max: env::var("VALIDATION_MENSTRUAL_ENERGY_LEVEL_MAX")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(5),
+
+            // Fertility Tracking Validation from Environment (Medical-Grade)
+            fertility_basal_temp_min: env::var("VALIDATION_FERTILITY_BASAL_TEMP_MIN")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(35.0),
+            fertility_basal_temp_max: env::var("VALIDATION_FERTILITY_BASAL_TEMP_MAX")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(39.0),
+            fertility_cervix_firmness_min: env::var("VALIDATION_FERTILITY_CERVIX_FIRMNESS_MIN")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(1),
+            fertility_cervix_firmness_max: env::var("VALIDATION_FERTILITY_CERVIX_FIRMNESS_MAX")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(3),
+            fertility_cervix_position_min: env::var("VALIDATION_FERTILITY_CERVIX_POSITION_MIN")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(1),
+            fertility_cervix_position_max: env::var("VALIDATION_FERTILITY_CERVIX_POSITION_MAX")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(3),
+            fertility_lh_level_min: env::var("VALIDATION_FERTILITY_LH_LEVEL_MIN")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0.0),
+            fertility_lh_level_max: env::var("VALIDATION_FERTILITY_LH_LEVEL_MAX")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(100.0),
         }
     }
 
@@ -467,6 +575,40 @@ impl ValidationConfig {
 
         if self.insulin_max_units <= 0.0 {
             return Err("insulin_max_units must be positive".to_string());
+        }
+
+        // Reproductive Health Validation Consistency (HIPAA-Compliant Medical-Grade)
+        if self.menstrual_cycle_day_min >= self.menstrual_cycle_day_max {
+            return Err("menstrual_cycle_day_min must be less than menstrual_cycle_day_max".to_string());
+        }
+
+        if self.menstrual_cramps_severity_min > self.menstrual_cramps_severity_max {
+            return Err("menstrual_cramps_severity_min must be less than or equal to menstrual_cramps_severity_max".to_string());
+        }
+
+        if self.menstrual_mood_rating_min > self.menstrual_mood_rating_max {
+            return Err("menstrual_mood_rating_min must be less than or equal to menstrual_mood_rating_max".to_string());
+        }
+
+        if self.menstrual_energy_level_min > self.menstrual_energy_level_max {
+            return Err("menstrual_energy_level_min must be less than or equal to menstrual_energy_level_max".to_string());
+        }
+
+        // Fertility Tracking Validation Consistency (Medical-Grade)
+        if self.fertility_basal_temp_min >= self.fertility_basal_temp_max {
+            return Err("fertility_basal_temp_min must be less than fertility_basal_temp_max".to_string());
+        }
+
+        if self.fertility_cervix_firmness_min > self.fertility_cervix_firmness_max {
+            return Err("fertility_cervix_firmness_min must be less than or equal to fertility_cervix_firmness_max".to_string());
+        }
+
+        if self.fertility_cervix_position_min > self.fertility_cervix_position_max {
+            return Err("fertility_cervix_position_min must be less than or equal to fertility_cervix_position_max".to_string());
+        }
+
+        if self.fertility_lh_level_min >= self.fertility_lh_level_max {
+            return Err("fertility_lh_level_min must be less than fertility_lh_level_max".to_string());
         }
 
         Ok(())
