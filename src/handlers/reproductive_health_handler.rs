@@ -164,7 +164,7 @@ pub async fn ingest_reproductive_health(
 
     info!(
         user_id = %auth.user.id,
-        api_key_id = ?auth.api_key.as_ref().map(|k| &k.id),
+        api_key_id = %auth.api_key.id,
         client_ip = %client_ip,
         "Starting HIPAA-compliant reproductive health data ingestion"
     );
@@ -186,7 +186,7 @@ pub async fn ingest_reproductive_health(
                     log_reproductive_health_audit(
                         &pool,
                         &auth.user.id,
-                        auth.api_key.as_ref().map(|k| &k.id),
+                        Some(&auth.api_key.id),
                         "ingest",
                         "menstrual_health",
                         "menstrual_data",
@@ -235,7 +235,7 @@ pub async fn ingest_reproductive_health(
                     log_reproductive_health_audit(
                         &pool,
                         &auth.user.id,
-                        auth.api_key.as_ref().map(|k| &k.id),
+                        Some(&auth.api_key.id),
                         "ingest",
                         "fertility_tracking",
                         "fertility_data",

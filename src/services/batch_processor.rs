@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::config::{
     BatchConfig, ACTIVITY_PARAMS_PER_RECORD, BLOOD_PRESSURE_PARAMS_PER_RECORD,
     HEART_RATE_PARAMS_PER_RECORD, SAFE_PARAM_LIMIT, SLEEP_PARAMS_PER_RECORD,
-    WORKOUT_PARAMS_PER_RECORD,
+    TEMPERATURE_PARAMS_PER_RECORD, WORKOUT_PARAMS_PER_RECORD,
 };
 use crate::middleware::metrics::Metrics;
 use crate::models::{HealthMetric, IngestPayload, ProcessingError};
@@ -83,6 +83,24 @@ struct SleepKey {
 struct ActivityKey {
     user_id: Uuid,
     recorded_at_millis: i64,
+}
+
+/// Unique key for body measurement metrics (user_id, recorded_at, measurement_source)
+/// Using measurement_source for smart device differentiation (manual vs smart_scale vs apple_watch)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct BodyMeasurementKey {
+    user_id: Uuid,
+    recorded_at_millis: i64,
+    measurement_source: String, // manual, smart_scale, apple_watch, etc.
+}
+
+/// Unique key for temperature metrics (user_id, recorded_at, temperature_source)
+/// Using temperature_source for device differentiation (thermometer, wearable, manual, etc.)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct TemperatureKey {
+    user_id: Uuid,
+    recorded_at_millis: i64,
+    temperature_source: String, // thermometer, wearable, manual, apple_watch, etc.
 }
 
 /// Unique key for workout metrics (user_id, started_at)
@@ -384,6 +402,50 @@ impl BatchProcessor {
             }));
         }
 
+        if !grouped.body_measurements.is_empty() {
+            let body_measurements = std::mem::take(&mut grouped.body_measurements);
+            let pool = self.pool.clone();
+            let config = self.config.clone();
+            let chunk_size = config.body_measurement_chunk_size;
+            tasks.push(tokio::spawn(async move {
+                Self::process_with_retry(
+                    "BodyMeasurement",
+                    || {
+                        Self::insert_body_measurements_chunked(
+                            &pool,
+                            user_id,
+                            body_measurements.clone(),
+                            chunk_size,
+                        )
+                    },
+                    &config,
+                )
+                .await
+            }));
+        }
+
+        if !grouped.respiratory_metrics.is_empty() {
+            let respiratory_metrics = std::mem::take(&mut grouped.respiratory_metrics);
+            let pool = self.pool.clone();
+            let config = self.config.clone();
+            let chunk_size = config.respiratory_chunk_size;
+            tasks.push(tokio::spawn(async move {
+                Self::process_with_retry(
+                    "Respiratory",
+                    || {
+                        Self::insert_respiratory_metrics_chunked(
+                            &pool,
+                            user_id,
+                            respiratory_metrics.clone(),
+                            chunk_size,
+                        )
+                    },
+                    &config,
+                )
+                .await
+            }));
+        }
+
         if !workouts.is_empty() {
             let pool = self.pool.clone();
             let config = self.config.clone();
@@ -504,6 +566,36 @@ impl BatchProcessor {
             let (processed, failed, errors, retries) = Self::process_with_retry(
                 "Activity",
                 || self.insert_activities(user_id, activities.clone()),
+                &self.config,
+            )
+            .await;
+            result.processed_count += processed;
+            result.failed_count += failed;
+            result.errors.extend(errors);
+            result.retry_attempts += retries;
+        }
+
+        // Process body measurement metrics
+        if !grouped.body_measurements.is_empty() {
+            let body_measurements = std::mem::take(&mut grouped.body_measurements);
+            let (processed, failed, errors, retries) = Self::process_with_retry(
+                "BodyMeasurement",
+                || self.insert_body_measurements(user_id, body_measurements.clone()),
+                &self.config,
+            )
+            .await;
+            result.processed_count += processed;
+            result.failed_count += failed;
+            result.errors.extend(errors);
+            result.retry_attempts += retries;
+        }
+
+        // Process respiratory metrics
+        if !grouped.respiratory_metrics.is_empty() {
+            let respiratory_metrics = std::mem::take(&mut grouped.respiratory_metrics);
+            let (processed, failed, errors, retries) = Self::process_with_retry(
+                "Respiratory",
+                || self.insert_respiratory_metrics(user_id, respiratory_metrics.clone()),
                 &self.config,
             )
             .await;
@@ -693,6 +785,7 @@ impl BatchProcessor {
                     blood_pressure_duplicates: 0,
                     sleep_duplicates: 0,
                     activity_duplicates: 0,
+                    body_measurement_duplicates: 0,
                     temperature_duplicates: 0,
                     respiratory_duplicates: 0,
                     blood_glucose_duplicates: 0,
@@ -709,6 +802,7 @@ impl BatchProcessor {
             blood_pressure_duplicates: 0,
             sleep_duplicates: 0,
             activity_duplicates: 0,
+            body_measurement_duplicates: 0,
             temperature_duplicates: 0,
             respiratory_duplicates: 0,
             blood_glucose_duplicates: 0,
@@ -738,6 +832,11 @@ impl BatchProcessor {
         grouped.activities = self.deduplicate_activities(user_id, grouped.activities);
         stats.activity_duplicates = original_activity_count - grouped.activities.len();
 
+        // Deduplicate body measurement metrics
+        let original_body_measurement_count = grouped.body_measurements.len();
+        grouped.body_measurements = self.deduplicate_body_measurements(user_id, grouped.body_measurements);
+        stats.body_measurement_duplicates = original_body_measurement_count - grouped.body_measurements.len();
+
         // Deduplicate temperature metrics
         let original_temperature_count = grouped.temperature_metrics.len();
         grouped.temperature_metrics = self.deduplicate_temperature_metrics(user_id, grouped.temperature_metrics);
@@ -748,6 +847,11 @@ impl BatchProcessor {
         grouped.respiratory_metrics = self.deduplicate_respiratory_metrics(user_id, grouped.respiratory_metrics);
         stats.respiratory_duplicates = original_respiratory_count - grouped.respiratory_metrics.len();
 
+        // Deduplicate blood glucose metrics with CGM-specific deduplication
+        let original_glucose_count = grouped.blood_glucose.len();
+        grouped.blood_glucose = self.deduplicate_blood_glucose(user_id, grouped.blood_glucose);
+        stats.blood_glucose_duplicates = original_glucose_count - grouped.blood_glucose.len();
+
         // Deduplicate workout metrics
         let original_workout_count = grouped.workouts.len();
         grouped.workouts = self.deduplicate_workouts(user_id, grouped.workouts);
@@ -757,8 +861,10 @@ impl BatchProcessor {
             + stats.blood_pressure_duplicates
             + stats.sleep_duplicates
             + stats.activity_duplicates
+            + stats.body_measurement_duplicates
             + stats.temperature_duplicates
             + stats.respiratory_duplicates
+            + stats.blood_glucose_duplicates
             + stats.workout_duplicates;
 
         stats.deduplication_time_ms = start_time.elapsed().as_millis() as u64;
@@ -770,6 +876,7 @@ impl BatchProcessor {
                 blood_pressure_duplicates = stats.blood_pressure_duplicates,
                 sleep_duplicates = stats.sleep_duplicates,
                 activity_duplicates = stats.activity_duplicates,
+                body_measurement_duplicates = stats.body_measurement_duplicates,
                 temperature_duplicates = stats.temperature_duplicates,
                 respiratory_duplicates = stats.respiratory_duplicates,
                 workout_duplicates = stats.workout_duplicates,
@@ -881,6 +988,61 @@ impl BatchProcessor {
         deduplicated
     }
 
+    /// Deduplicate body measurement metrics using HashSet for O(1) lookups
+    /// Uses composite key: user_id + recorded_at + measurement_source for smart device differentiation
+    fn deduplicate_body_measurements(
+        &self,
+        user_id: Uuid,
+        metrics: Vec<crate::models::BodyMeasurementMetric>,
+    ) -> Vec<crate::models::BodyMeasurementMetric> {
+        let mut seen_keys = HashSet::new();
+        let mut deduplicated = Vec::new();
+
+        for metric in metrics {
+            let key = BodyMeasurementKey {
+                user_id,
+                recorded_at_millis: metric.recorded_at.timestamp_millis(),
+                measurement_source: metric.measurement_source.clone().unwrap_or_else(|| "manual".to_string()),
+            };
+
+            if seen_keys.insert(key) {
+                // First time seeing this key combination, keep the record
+                deduplicated.push(metric);
+            }
+            // Duplicate found - skip this record
+        }
+
+        deduplicated
+    }
+
+    /// Deduplicate temperature metrics using HashSet for O(1) lookups
+    /// Preserves order of first occurrence of each unique record
+    /// Uses (user_id, recorded_at, temperature_source) as composite key for source differentiation
+    fn deduplicate_temperature_metrics(
+        &self,
+        user_id: Uuid,
+        metrics: Vec<crate::models::TemperatureMetric>,
+    ) -> Vec<crate::models::TemperatureMetric> {
+        let mut seen_keys = HashSet::new();
+        let mut deduplicated = Vec::new();
+
+        for metric in metrics {
+            let key = TemperatureKey {
+                user_id,
+                recorded_at_millis: metric.recorded_at.timestamp_millis(),
+                temperature_source: metric.temperature_source.clone().unwrap_or_else(|| "unknown".to_string()),
+            };
+
+            if seen_keys.insert(key) {
+                // First time seeing this key, keep the record
+                deduplicated.push(metric);
+            }
+            // Duplicate found - skip this record
+        }
+
+        deduplicated
+    }
+
     /// Deduplicate workout metrics using HashSet for O(1) lookups  
     fn deduplicate_workouts(
         &self,
@@ -899,6 +1061,34 @@ impl BatchProcessor {
             if seen_keys.insert(key) {
                 deduplicated.push(workout);
             }
+        }
+
+        deduplicated
+    }
+
+    /// Deduplicate blood glucose metrics using HashSet for O(1) lookups with CGM-specific deduplication
+    /// Uses user_id + recorded_at + glucose_source for high-precision CGM data deduplication
+    /// Preserves order of first occurrence of each unique record
+    fn deduplicate_blood_glucose(
+        &self,
+        user_id: Uuid,
+        metrics: Vec<crate::models::BloodGlucoseMetric>,
+    ) -> Vec<crate::models::BloodGlucoseMetric> {
+        let mut seen_keys = HashSet::new();
+        let mut deduplicated = Vec::new();
+
+        for metric in metrics {
+            let key = BloodGlucoseKey {
+                user_id,
+                recorded_at_millis: metric.recorded_at.timestamp_millis(),
+                glucose_source: metric.glucose_source.clone(),
+            };
+
+            if seen_keys.insert(key) {
+                // First time seeing this key, keep the record
+                deduplicated.push(metric);
+            }
+            // Duplicate found - skip this record for CGM data integrity
         }
 
         deduplicated
@@ -983,6 +1173,21 @@ impl BatchProcessor {
             user_id,
             metrics,
             self.config.activity_chunk_size,
+        )
+        .await
+    }
+
+    /// Batch insert body measurement metrics
+    async fn insert_body_measurements(
+        &self,
+        user_id: Uuid,
+        metrics: Vec<crate::models::BodyMeasurementMetric>,
+    ) -> Result<usize, sqlx::Error> {
+        Self::insert_body_measurements_chunked(
+            &self.pool,
+            user_id,
+            metrics,
+            self.config.body_measurement_chunk_size,
         )
         .await
     }
@@ -1465,6 +1670,102 @@ impl BatchProcessor {
                 total_inserted = total_inserted,
                 "Workout chunk processed"
             );
+        }
+
+        Ok(total_inserted)
+    }
+
+    /// Batch insert respiratory metrics with ON CONFLICT handling
+    async fn insert_respiratory_metrics(
+        &self,
+        user_id: Uuid,
+        metrics: Vec<crate::models::RespiratoryMetric>,
+    ) -> Result<usize, sqlx::Error> {
+        Self::insert_respiratory_metrics_chunked(
+            &self.pool,
+            user_id,
+            metrics,
+            self.config.respiratory_chunk_size,
+        )
+        .await
+    }
+
+    /// Batch insert respiratory metrics in optimized chunks
+    async fn insert_respiratory_metrics_chunked(
+        pool: &PgPool,
+        user_id: Uuid,
+        metrics: Vec<crate::models::RespiratoryMetric>,
+        chunk_size: usize,
+    ) -> Result<usize, sqlx::Error> {
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        let chunks: Vec<&[crate::models::RespiratoryMetric]> = metrics.chunks(chunk_size).collect();
+        let mut total_inserted = 0;
+        let max_params_per_chunk = chunk_size * crate::config::RESPIRATORY_PARAMS_PER_RECORD;
+
+        info!(
+            metric_type = "respiratory",
+            total_records = metrics.len(),
+            chunk_count = chunks.len(),
+            chunk_size = chunk_size,
+            max_params_per_chunk = max_params_per_chunk,
+            "Processing respiratory metrics in chunks"
+        );
+
+        for (chunk_idx, chunk) in chunks.iter().enumerate() {
+            let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
+                "INSERT INTO respiratory_metrics (user_id, recorded_at, respiratory_rate, oxygen_saturation, forced_vital_capacity, forced_expiratory_volume_1, peak_expiratory_flow_rate, inhaler_usage, source_device) "
+            );
+
+            query_builder.push_values(chunk.iter(), |mut b, metric| {
+                b.push_bind(user_id)
+                    .push_bind(metric.recorded_at)
+                    .push_bind(metric.respiratory_rate)
+                    .push_bind(metric.oxygen_saturation)
+                    .push_bind(metric.forced_vital_capacity)
+                    .push_bind(metric.forced_expiratory_volume_1)
+                    .push_bind(metric.peak_expiratory_flow_rate)
+                    .push_bind(metric.inhaler_usage)
+                    .push_bind(&metric.source_device);
+            });
+
+            query_builder.push(" ON CONFLICT (user_id, recorded_at) DO UPDATE SET
+                respiratory_rate = COALESCE(EXCLUDED.respiratory_rate, respiratory_metrics.respiratory_rate),
+                oxygen_saturation = COALESCE(EXCLUDED.oxygen_saturation, respiratory_metrics.oxygen_saturation),
+                forced_vital_capacity = COALESCE(EXCLUDED.forced_vital_capacity, respiratory_metrics.forced_vital_capacity),
+                forced_expiratory_volume_1 = COALESCE(EXCLUDED.forced_expiratory_volume_1, respiratory_metrics.forced_expiratory_volume_1),
+                peak_expiratory_flow_rate = COALESCE(EXCLUDED.peak_expiratory_flow_rate, respiratory_metrics.peak_expiratory_flow_rate),
+                inhaler_usage = COALESCE(EXCLUDED.inhaler_usage, respiratory_metrics.inhaler_usage),
+                source_device = COALESCE(EXCLUDED.source_device, respiratory_metrics.source_device),
+                updated_at = NOW()");
+
+            let insert_result = query_builder.build().execute(pool).await;
+
+            match insert_result {
+                Ok(result) => {
+                    let rows_inserted = result.rows_affected() as usize;
+                    total_inserted += rows_inserted;
+                    info!(
+                        metric_type = "respiratory",
+                        chunk_idx = chunk_idx,
+                        chunk_size = chunk.len(),
+                        rows_inserted = rows_inserted,
+                        "Successfully inserted respiratory metrics chunk"
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        error = %e,
+                        metric_type = "respiratory",
+                        chunk_idx = chunk_idx,
+                        chunk_size = chunk.len(),
+                        "Failed to insert respiratory metrics chunk"
+                    );
+                    return Err(e);
+                }
+            }
         }
 
         Ok(total_inserted)

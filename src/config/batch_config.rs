@@ -10,6 +10,7 @@ pub const BLOOD_PRESSURE_PARAMS_PER_RECORD: usize = 6; // user_id, recorded_at, 
 pub const SLEEP_PARAMS_PER_RECORD: usize = 10; // user_id, sleep_start, sleep_end, duration_minutes, deep_sleep_minutes, rem_sleep_minutes, light_sleep_minutes, awake_minutes, efficiency, source_device
 pub const ACTIVITY_PARAMS_PER_RECORD: usize = 8; // user_id, recorded_at, step_count, distance_meters, active_energy_burned_kcal, basal_energy_burned_kcal, flights_climbed, source_device
 pub const BODY_MEASUREMENT_PARAMS_PER_RECORD: usize = 14; // user_id, recorded_at, body_weight_kg, body_mass_index, body_fat_percentage, lean_body_mass_kg, waist_circumference_cm, hip_circumference_cm, chest_circumference_cm, arm_circumference_cm, thigh_circumference_cm, body_temperature_celsius, basal_body_temperature_celsius, measurement_source, source_device
+pub const TEMPERATURE_PARAMS_PER_RECORD: usize = 10; // id, user_id, recorded_at, body_temperature, basal_body_temperature, apple_sleeping_wrist_temperature, water_temperature, temperature_source, source_device, created_at
 pub const RESPIRATORY_PARAMS_PER_RECORD: usize = 7; // user_id, recorded_at, respiratory_rate, oxygen_saturation, forced_vital_capacity, forced_expiratory_volume_1, peak_expiratory_flow_rate, inhaler_usage, source_device
 pub const WORKOUT_PARAMS_PER_RECORD: usize = 10; // id, user_id, workout_type, started_at, ended_at, total_energy_kcal, distance_meters, avg_heart_rate, max_heart_rate, source_device
 pub const BLOOD_GLUCOSE_PARAMS_PER_RECORD: usize = 8; // user_id, recorded_at, blood_glucose_mg_dl, measurement_context, medication_taken, insulin_delivery_units, glucose_source, source_device
@@ -29,6 +30,7 @@ pub struct BatchConfig {
     pub sleep_chunk_size: usize,      // 10 params per record -> max 6,553
     pub activity_chunk_size: usize,   // 8 params per record -> max 8,178
     pub body_measurement_chunk_size: usize, // 14 params per record -> max 4,681
+    pub temperature_chunk_size: usize, // 10 params per record -> max 6,553
     pub respiratory_chunk_size: usize, // 7 params per record -> max 9,362
     pub workout_chunk_size: usize,    // 10 params per record -> max 6,553
     pub blood_glucose_chunk_size: usize, // 8 params per record -> max 8,192
@@ -53,6 +55,7 @@ impl Default for BatchConfig {
             sleep_chunk_size: 6000, // 10 params: 65,535 ÷ 10 × 0.8 ≈ 6,000 (max ~60,000 params)
             activity_chunk_size: 6500, // 8 params: 65,535 ÷ 8 × 0.8 ≈ 6,500 (max ~52,000 params)
             body_measurement_chunk_size: 3500, // 14 params: 65,535 ÷ 14 × 0.8 ≈ 3,500 (max ~49,000 params)
+            temperature_chunk_size: 5000, // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000 (max ~50,000 params)
             respiratory_chunk_size: 7000, // 7 params: 65,535 ÷ 7 × 0.8 ≈ 7,000 (max ~49,000 params)
             workout_chunk_size: 5000, // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000 (max ~50,000 params)
             blood_glucose_chunk_size: 6500, // 8 params: 65,535 ÷ 8 × 0.8 ≈ 6,500 (max ~52,000 params)
@@ -112,6 +115,10 @@ impl BatchConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(3500),
+            temperature_chunk_size: env::var("BATCH_TEMPERATURE_CHUNK_SIZE")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(5000),
             respiratory_chunk_size: env::var("BATCH_RESPIRATORY_CHUNK_SIZE")
                 .ok()
                 .and_then(|v| v.parse().ok())

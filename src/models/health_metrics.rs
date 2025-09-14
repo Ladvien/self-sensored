@@ -1621,6 +1621,7 @@ impl FertilityMetric {
             21..=50 => "moderate_fertility",
             51..=80 => "high_fertility",
             81..=100 => "peak_fertility",
+            _ => "unknown_fertility", // Handle any values > 100 (shouldn't happen)
         }
     }
 

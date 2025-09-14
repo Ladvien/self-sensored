@@ -248,6 +248,19 @@ async fn main() -> std::io::Result<()> {
                         "/data/summary",
                         web::get().to(handlers::query::get_health_summary),
                     )
+                    // Reproductive Health Endpoints (HIPAA-Compliant)
+                    .route(
+                        "/ingest/reproductive-health",
+                        web::post().to(handlers::reproductive_health_handler::ingest_reproductive_health),
+                    )
+                    .route(
+                        "/data/menstrual",
+                        web::get().to(handlers::reproductive_health_handler::get_menstrual_data),
+                    )
+                    .route(
+                        "/data/fertility",
+                        web::get().to(handlers::reproductive_health_handler::get_fertility_data),
+                    )
                     // Environmental & Safety data endpoints
                     .route(
                         "/ingest/environmental",

@@ -188,7 +188,9 @@ pub async fn ingest_async_optimized_handler(
             sleep_chunk_size: 5000,
             activity_chunk_size: 7000,
             respiratory_chunk_size: 7000,
+            body_measurement_chunk_size: 3500,
             workout_chunk_size: 5000,
+            blood_glucose_chunk_size: 6500,
             enable_progress_tracking: false, // Disable for speed
             enable_intra_batch_deduplication: true,
             enable_dual_write_activity_metrics: false, // Disable for async endpoint to prioritize speed

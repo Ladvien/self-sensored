@@ -1,5 +1,21 @@
 -- Add missing health metrics tables for complete iOS Health data support
 
+-- Blood Glucose Metrics (Medical-Critical CGM Data)
+CREATE TABLE IF NOT EXISTS blood_glucose_metrics (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recorded_at TIMESTAMPTZ NOT NULL,
+    blood_glucose_mg_dl DOUBLE PRECISION NOT NULL,
+    measurement_context VARCHAR(50), -- 'fasting', 'post_meal', 'random', etc.
+    medication_taken BOOLEAN,
+    insulin_delivery_units DOUBLE PRECISION,
+    glucose_source VARCHAR(255), -- CGM device identifier
+    source_device VARCHAR(255),
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE(user_id, recorded_at, glucose_source)
+);
+
 -- 1. Nutrition Metrics (Macronutrients)
 CREATE TABLE IF NOT EXISTS nutrition_metrics (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
@@ -296,6 +312,8 @@ CREATE TABLE IF NOT EXISTS lab_results (
 );
 
 -- Create indexes for performance
+CREATE INDEX idx_blood_glucose_user_recorded ON blood_glucose_metrics(user_id, recorded_at DESC);
+CREATE INDEX idx_blood_glucose_user_source ON blood_glucose_metrics(user_id, glucose_source, recorded_at DESC);
 CREATE INDEX idx_nutrition_user_recorded ON nutrition_metrics(user_id, recorded_at DESC);
 CREATE INDEX idx_micronutrients_user_recorded ON micronutrients(user_id, recorded_at DESC);
 CREATE INDEX idx_body_metrics_user_recorded ON body_metrics(user_id, recorded_at DESC);
