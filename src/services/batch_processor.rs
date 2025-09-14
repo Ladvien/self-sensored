@@ -879,6 +879,7 @@ impl BatchProcessor {
                 body_measurement_duplicates = stats.body_measurement_duplicates,
                 temperature_duplicates = stats.temperature_duplicates,
                 respiratory_duplicates = stats.respiratory_duplicates,
+                blood_glucose_duplicates = stats.blood_glucose_duplicates,
                 workout_duplicates = stats.workout_duplicates,
                 total_duplicates = stats.total_duplicates,
                 deduplication_time_ms = stats.deduplication_time_ms,

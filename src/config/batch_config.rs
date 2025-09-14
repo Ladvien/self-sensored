@@ -171,6 +171,11 @@ impl BatchConfig {
                 BODY_MEASUREMENT_PARAMS_PER_RECORD,
             ),
             (
+                "temperature",
+                self.temperature_chunk_size,
+                TEMPERATURE_PARAMS_PER_RECORD,
+            ),
+            (
                 "respiratory",
                 self.respiratory_chunk_size,
                 RESPIRATORY_PARAMS_PER_RECORD,
