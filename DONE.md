@@ -1,4 +1,116 @@
 
+## ✅ STORY-016: Add Body Measurements API Handlers (Completed: 2025-09-14)
+
+**Epic**: Comprehensive Body Composition & Fitness Tracking
+**Priority**: P0 - Core Health Tracking (Weight, BMI, Body Composition)
+**Estimate**: 34 points
+**Status**: ✅ COMPLETED
+**Assigned to**: Swarm Agent (Claude Code)
+
+### Summary
+Implemented comprehensive body measurements API handlers with smart scale integration, BMI validation, body composition analysis, and fitness progress tracking. Added support for weight management, body fat monitoring, circumference measurements, and growth tracking with medical-grade validation and BMI consistency checks.
+
+### Completed Features
+
+#### 🏋️ **Smart Scale Integration**
+✅ **Multi-Metric Processing** - Process weight, BMI, body fat percentage, and lean body mass from smart scales simultaneously
+✅ **InBody Scale Support** - Full integration with bioelectric impedance analysis from professional body composition scales
+✅ **Withings Scale Integration** - Consumer smart scale data processing with measurement reliability tracking
+✅ **Body Composition Method Tracking** - Support for bioelectric impedance, hydrostatic, DEXA scan, and BodPod measurement methods
+✅ **Measurement Conditions** - Context tracking (fasted, post-meal, post-workout, morning, evening) for accurate interpretation
+✅ **Multi-Source Deduplication** - Handle measurements from multiple devices (smart scale, Apple Watch, manual entry)
+
+#### ⚖️ **Weight & BMI Management**
+✅ **Weight Tracking** - 20-500 kg range validation with trend analysis and weight change detection
+✅ **BMI Calculation & Validation** - Cross-validate BMI with weight/height relationships with 0.5 BMI unit tolerance
+✅ **BMI Category Classification** - Automatic underweight, normal, overweight, obese categorization
+✅ **Growth Tracking** - Height tracking over time for pediatric and adult health monitoring
+✅ **BMI Consistency Warnings** - Detect and log inconsistencies between provided and calculated BMI values
+✅ **Medical-Grade Validation** - Database-level constraints and application validation for all measurement ranges
+
+#### 🫀 **Body Composition Analysis**
+✅ **Body Fat Percentage Tracking** - 3-50% range validation with gender-aware fitness categories
+✅ **Body Fat Categories** - Essential fat, athletic, fitness, average, above average classification
+✅ **Lean Body Mass Monitoring** - Muscle mass tracking for fitness and health optimization
+✅ **Muscle-to-Fat Ratio Analysis** - Body recomposition tracking for fitness progress monitoring
+✅ **Body Composition Consistency** - Validate relationships between weight, body fat, and lean mass measurements
+✅ **Fitness Phase Integration** - Support for cutting, bulking, maintenance, rehabilitation tracking
+
+#### 📐 **Circumference Measurements**
+✅ **Waist Circumference Tracking** - Cardiovascular risk factor monitoring with medical reference ranges
+✅ **Hip Circumference Measurement** - Support for waist-to-hip ratio calculation and health assessment
+✅ **Comprehensive Body Measurements** - Chest, arm, thigh circumference tracking for complete body monitoring
+✅ **Measurement Validation** - 15-200 cm ranges with measurement method and reliability tracking
+✅ **Circumference Analysis** - Waist-to-hip ratio calculation with cardiovascular risk indicators
+✅ **Professional Measurement Integration** - Support for tape measure, medical device, and self-measurement tracking
+
+#### 🎯 **Fitness Progress Tracking**
+✅ **Progress Indicators** - Weight change, body composition trends, and fitness milestone tracking
+✅ **Body Recomposition Score** - 0-100 scale assessment of muscle gain and fat loss progress
+✅ **Fitness Phase Recommendations** - Personalized cutting, bulking, maintenance guidance
+✅ **Measurement Recommendations** - Best practices for consistent and accurate body measurements
+✅ **Historical Trend Analysis** - 30-day trends for weight, BMI, and body fat percentage changes
+✅ **Percentile Ranking** - Compare measurements against healthy population ranges
+
+#### 📱 **iOS HealthKit Integration**
+✅ **Comprehensive HealthKit Mapping** - Support for HKQuantityTypeIdentifierBodyMass, HKQuantityTypeIdentifierHeight, HKQuantityTypeIdentifierBodyFatPercentage, HKQuantityTypeIdentifierLeanBodyMass, HKQuantityTypeIdentifierWaistCircumference
+✅ **iOS Parsing Validation** - Range validation during iOS data conversion with detailed error logging
+✅ **Apple Watch Integration** - Body measurements from Apple Watch health data
+✅ **Multi-Source Attribution** - Proper device source tracking for iOS, smart scales, and manual measurements
+✅ **iOS Data Quality Assurance** - Invalid measurement detection and filtering during iOS data ingestion
+
+#### 🗄️ **Database Architecture**
+✅ **Body Measurements Table** - Comprehensive PostgreSQL schema with all measurement types and constraints
+✅ **Medical-Grade Constraints** - Database-level validation for all body measurement ranges
+✅ **BMI Consistency Triggers** - Automatic validation triggers to detect and log BMI calculation inconsistencies
+✅ **Body Fat Categorization Functions** - PostgreSQL functions for gender-aware body fat percentage classification
+✅ **Time-Series Indexing** - Optimized indexes for weight, BMI, and body fat trend queries
+✅ **Multi-Source Support** - Unique constraints supporting measurements from multiple devices per day
+
+#### ⚡ **Batch Processing & Performance**
+✅ **Body Measurements Batch Processing** - Chunked processing support (8,000 records per chunk, 8 parameters per record)
+✅ **Deduplication Strategy** - user_id + recorded_at + measurement_source composite key deduplication
+✅ **High-Performance Insertion** - Conflict resolution with ON CONFLICT DO UPDATE for measurement updates
+✅ **Memory Optimization** - Efficient processing of large body measurement datasets
+✅ **Progress Tracking** - Batch processing progress monitoring for bulk body measurement imports
+✅ **Error Handling & Recovery** - Comprehensive error handling with retry logic and partial success support
+
+#### 🧪 **Comprehensive Testing**
+✅ **Integration Test Suite** - 5 comprehensive test scenarios covering ingestion, validation, data retrieval, and analysis
+✅ **BMI Consistency Testing** - Validation of BMI calculation consistency checking and warning systems
+✅ **Smart Scale Simulation** - Test scenarios simulating InBody and Withings smart scale data processing
+✅ **Validation Range Testing** - Comprehensive testing of all measurement validation ranges
+✅ **Multi-Source Testing** - Body measurement deduplication and multi-device scenario testing
+✅ **Body Composition Analysis Testing** - Validation of fitness insights and body composition analysis generation
+
+#### 🔄 **API Endpoints**
+✅ **POST /api/v1/ingest/body-measurements** - Multi-metric body composition ingestion with smart scale support
+✅ **GET /api/v1/data/body-measurements** - Body measurement tracking with trend analysis and filtering options
+✅ **Advanced Query Filters** - Filter by measurement type (weight, BMI, body_fat), measurement source, date ranges
+✅ **Analysis Integration** - Optional body composition analysis and fitness insights in API responses
+✅ **Measurement Timeline** - Chronological body measurement data with trend direction analysis
+✅ **Smart Response Caching** - Optimized API responses with measurement summary and statistical analysis
+
+### Technical Implementation
+- **Handler**: `/src/handlers/body_measurements_handler.rs` - Complete ingestion and retrieval handlers
+- **Models**: Updated `BodyMeasurementMetric` struct with comprehensive measurement fields
+- **Database**: Added `body_measurements` table with medical constraints and BMI validation triggers
+- **Batch Processing**: Extended BatchProcessor with `process_body_measurements()` method
+- **iOS Integration**: Added body measurement parsing to iOS models with validation
+- **Testing**: Comprehensive integration test suite with 5 test scenarios
+
+### Medical Features
+- **BMI Calculation Validation**: Automatic cross-validation of BMI with weight/height relationships
+- **Body Fat Categories**: Gender-aware fitness categories (essential, athletic, fitness, average, above average)
+- **Cardiovascular Risk Assessment**: Waist-to-hip ratio analysis with risk indicator detection
+- **Medical-Grade Ranges**: All measurement validation based on medical and fitness industry standards
+- **Growth Tracking**: Height monitoring for pediatric and adult health assessment
+- **Professional Integration**: Support for medical device, smart scale, and manual measurement methods
+
+✅ **STORY-016 STATUS: COMPLETE** - Ready for production deployment with comprehensive body composition tracking
+
+---
+
 ## ✅ STORY-015: Add Respiratory Health API Handlers (Completed: 2025-09-14)
 
 **Epic**: Critical Respiratory Health Monitoring & Medical Emergency Detection
@@ -4726,5 +4838,88 @@ Update CLAUDE.md and .env.example to reflect the simplified schema with accurate
 ✅ Story moved from BACKLOG.md to DONE.md  
 
 **Result:** Activity metrics field name mapping fully aligned with simplified database schema. All database operations use correct column names, preventing SQL errors and ensuring data consistency.
+
+---
+
+## [STORY-024] Add Hygiene Events API Handlers ✅
+**Completed:** September 14, 2025 4:20 PM
+**Story Points:** 13
+**Assignee:** Hygiene Behavior Tracking Specialist Agent
+**Priority:** High
+
+### Acceptance Criteria:
+- ✅ Create `hygiene_handler.rs` with comprehensive hygiene event ingestion and retrieval endpoints
+- ✅ Implement POST /api/v1/ingest/hygiene with batch processing and validation
+- ✅ Implement GET /api/v1/data/hygiene with advanced filtering capabilities
+- ✅ Add HygieneMetric struct with WHO/CDC guideline compliance tracking
+- ✅ Create HygieneEventType enum with 10 hygiene activity types
+- ✅ Add comprehensive hygiene_events database table with public health features
+- ✅ Implement smart device integration (smart toothbrush, soap dispenser support)
+- ✅ Add public health crisis response tracking and compliance monitoring
+- ✅ Create habit tracking system with streak calculation and achievements
+- ✅ Add comprehensive integration test suite covering medical and device scenarios
+- ✅ Update HealthMetric enum and main.rs routing infrastructure
+
+### Implementation Details:
+- ✅ **Database Schema**: Advanced hygiene_events table with 21 fields including WHO compliance, smart device integration, crisis tracking
+- ✅ **HygieneEventType Enum**: 10 hygiene types (handwashing, toothbrushing, hand_sanitizer, face_washing, shower, bath, hair_washing, nail_care, oral_hygiene, skincare)
+- ✅ **Smart Device Integration**: Support for Oral-B, Philips Sonicare, smart soap dispensers with effectiveness scoring
+- ✅ **Public Health Features**: WHO handwashing (20+ sec), ADA toothbrushing (2+ min) compliance tracking
+- ✅ **Batch Processing**: Optimized chunking (21 params/record, 6000 record chunks) with deduplication
+- ✅ **Crisis Response**: Enhanced hygiene tracking during health emergencies with compliance levels
+- ✅ **Habit Tracking**: Automated streak calculation with database triggers and achievement system
+- ✅ **Medical Integration**: Medication adherence hygiene, medical condition context support
+- ✅ **Advanced Analytics**: Real-time compliance scoring, risk assessment, trend analysis
+
+### Files Created/Modified:
+- ✅ `database/schema.sql` - Added comprehensive hygiene_events table with advanced features
+- ✅ `src/handlers/hygiene_handler.rs` - Complete API implementation with public health integration
+- ✅ `src/models/enums.rs` - Added HygieneEventType enum with smart device mapping
+- ✅ `src/models/health_metrics.rs` - Added HygieneMetric struct with validation and compliance scoring
+- ✅ `src/services/batch_processor.rs` - Added hygiene events batch processing with deduplication
+- ✅ `src/handlers/mod.rs` - Added hygiene_handler module
+- ✅ `src/main.rs` - Added hygiene API routes
+- ✅ `tests/hygiene_events_integration_test.rs` - Comprehensive test suite (5 integration test scenarios)
+- ✅ `team_chat.md` - Updated with implementation completion summary
+
+### Technical Highlights:
+- **Database**: PostgreSQL schema with automated triggers for streak calculation, advanced indexing for performance
+- **API Design**: RESTful endpoints with comprehensive filtering (event_type, compliance, crisis_period)
+- **Validation**: Medical-grade validation with WHO/CDC guideline compliance checking
+- **Smart Devices**: Integration with IoT hygiene devices including effectiveness scoring and coaching
+- **Public Health**: Infection prevention risk scoring, health crisis response monitoring
+- **Behavioral Analytics**: Habit strength assessment (forming → ingrained), achievement unlock system
+- **Privacy**: HIPAA-aware data handling with configurable sensitivity levels
+
+### Public Health Impact:
+- **Infection Prevention**: Critical handwashing compliance monitoring for disease prevention
+- **Health Crisis Response**: Enhanced hygiene tracking during pandemics/outbreaks
+- **Behavioral Health**: Evidence-based habit formation tracking with gamification
+- **Smart City Integration**: IoT device data aggregation for population health insights
+
+### Testing Coverage:
+- ✅ Comprehensive ingestion with 50+ hygiene events (multiple event types)
+- ✅ Data retrieval with advanced filtering (compliance_only, crisis_period, event_type)
+- ✅ Validation and error handling (invalid event types, duration ranges, quality ratings)
+- ✅ Compliance analysis with WHO/CDC guideline adherence testing
+- ✅ Public health tracking with database compliance functions
+- ✅ Smart device integration with Oral-B and Philips Sonicare simulation
+
+**Dependencies:** Database schema foundation, batch processor infrastructure
+**Commit:** `27b0b28` - "feat: complete STORY-024 hygiene events API implementation"
+
+### Definition of Done:
+✅ Hygiene events API endpoints fully implemented and tested
+✅ WHO/CDC guideline compliance tracking operational
+✅ Smart device integration with effectiveness scoring
+✅ Public health crisis response monitoring
+✅ Habit tracking with streak calculation and achievements
+✅ Comprehensive test coverage with medical scenarios
+✅ Database schema with automated triggers and indexing
+✅ Documentation updated in team_chat.md
+✅ Code committed with comprehensive commit message
+✅ Story moved from BACKLOG.md to DONE.md
+
+**Result:** Production-ready hygiene behavior tracking API with comprehensive public health integration, smart device support, and evidence-based compliance monitoring. Supports critical infection prevention tracking and health crisis response with gamified habit formation features.
 
 ---
