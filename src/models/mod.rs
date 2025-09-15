@@ -35,6 +35,15 @@ impl<T> ApiResponse<T> {
         }
     }
 
+    pub fn success_with_message(data: T, message: String) -> Self {
+        Self {
+            success: true,
+            data: Some(data),
+            error: Some(message), // Using error field for informational message
+            timestamp: Utc::now(),
+        }
+    }
+
     pub fn error(message: String) -> Self {
         Self {
             success: false,

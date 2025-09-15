@@ -11,12 +11,7 @@ use crate::services::auth::AuthContext;
 use crate::services::background_processor::BackgroundProcessor;
 use crate::services::streaming_parser::parse_large_json_payload;
 
-/// Maximum payload size (200MB) - increased to handle large iOS exports
-const MAX_PAYLOAD_SIZE: usize = 200 * 1024 * 1024;
-/// Maximum number of metrics per request for synchronous processing
-const MAX_SYNC_METRICS: usize = 5_000;
-/// Large batch threshold - process asynchronously if above this
-const ASYNC_THRESHOLD: usize = 10_000;
+// All limits completely removed for personal health app - no restrictions
 
 /// Async health data ingest endpoint that returns immediately with job ID for large payloads
 /// Uses background processing to prevent Cloudflare 524 timeout errors
@@ -51,18 +46,7 @@ pub async fn ingest_async_handler(
     // Record data volume
     Metrics::record_data_volume("ingest", "received", payload_size as u64);
 
-    // Check payload size limit first
-    if payload_size > MAX_PAYLOAD_SIZE {
-        error!("Payload size {} exceeds limit", payload_size);
-        Metrics::record_error("payload_too_large", "/api/v1/ingest-async", "error");
-        return Ok(
-            HttpResponse::PayloadTooLarge().json(ApiResponse::<()>::error(format!(
-                "Payload size {} bytes exceeds maximum of {} MB",
-                payload_size,
-                MAX_PAYLOAD_SIZE / (1024 * 1024)
-            ))),
-        );
-    }
+    // No payload size restrictions for personal health app
 
     // Use enhanced JSON parsing with better error reporting
     let internal_payload = match parse_ios_payload_enhanced(&raw_payload, auth.user.id).await {
@@ -82,7 +66,7 @@ pub async fn ingest_async_handler(
     info!(
         user_id = %auth.user.id,
         total_metrics = total_metrics,
-        threshold = ASYNC_THRESHOLD,
+        threshold = "none",
         "Determining processing approach"
     );
 
@@ -104,7 +88,7 @@ pub async fn ingest_async_handler(
     };
 
     // Determine if we should process asynchronously
-    if total_metrics >= ASYNC_THRESHOLD {
+    // Always process asynchronously to avoid any timeouts
         // Process asynchronously - create background job and return immediately
         info!(
             user_id = %auth.user.id,

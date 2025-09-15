@@ -1,116 +1,29 @@
-# HEALTH EXPORT API - PROJECT BACKLOG
 
-## 🚨 CRITICAL COMPILATION BLOCKERS
 
-### **STORY-MASTER-001: DATA.md Compliance - Data Model Alignment (MASTER STORY)**
 
-**Status**: 🔥 CRITICAL - Blocking all compilation (56 errors)
-**Priority**: P0 - IMMEDIATE
-**Agent**: Data Model Alignment Specialist
-**Estimated Effort**: 5-8 hours
-**Complexity**: HIGH
 
-**Problem Statement:**
-Complete misalignment between DATA.md supported health data types, struct definitions in `src/models/health_metrics.rs`, database schema in `database/schema.sql`, and handler implementations. Current codebase has 56 compilation errors due to field mismatches, missing struct fields, and incompatible data model definitions.
 
-**DATA.md Reference Categories:**
-The following health data categories from DATA.md need alignment verification:
 
-#### ✅ ACTIVITY & FITNESS (Lines 20-34)
-- Step count, distance metrics, flights climbed
-- Specialized distance tracking (cycling, swimming, wheelchair, snow sports)
-- Apple Fitness metrics (exercise time, stand time, move time)
 
-#### ✅ ENERGY (Lines 35-37)
-- Active energy burned, basal energy burned
 
-#### ✅ HEART & CARDIOVASCULAR (Lines 38-53)
-- Heart rate, resting HR, walking HR average, HRV
-- Blood pressure (systolic, diastolic, correlation)
-- Heart events (high/low/irregular rhythm)
-- ECG recordings, VO2 Max, cardio fitness
 
-#### ✅ RESPIRATORY (Lines 54-60)
-- Respiratory rate, oxygen saturation
-- Forced vital capacity, FEV1, peak flow rate, inhaler usage
 
-#### ✅ BODY MEASUREMENTS (Lines 61-71)
-- Body weight, BMI, body fat percentage, lean mass, height
-- Waist circumference, body temperatures (body, basal, wrist, water)
 
-#### ✅ SLEEP (Lines 72-74)
-- Sleep analysis stages, sleep duration goals
 
-#### ✅ NUTRITION (Lines 75-114)
-- Hydration, macronutrients, vitamins, minerals
-- Comprehensive dietary tracking including caffeine
 
-#### ✅ BLOOD & METABOLIC (Lines 115-119)
-- Blood glucose, blood alcohol, insulin delivery
-- Peripheral perfusion index
 
-#### ✅ MINDFULNESS & MENTAL (Lines 120-122)
-- Mindful sessions, state of mind (iOS 17+)
 
-#### ✅ REPRODUCTIVE HEALTH (Lines 123-137)
-- Menstrual flow and cycle tracking
-- Fertility indicators (cervical mucus, ovulation tests, sexual activity)
-- Pregnancy and contraceptive tracking
 
-#### ✅ SYMPTOMS (Lines 138-177)
-- Comprehensive symptom tracking (cramps, bloating, headaches, fatigue, etc.)
-- Advanced symptom categories (mood changes, memory lapses, etc.)
 
-#### ✅ ENVIRONMENTAL & SAFETY (Lines 178-188)
-- Audio exposure (environmental and headphone)
-- UV exposure, time in daylight
-- Fall detection, hygiene events
 
-#### ✅ MOBILITY METRICS (Lines 189-202)
-- Walking metrics (speed, step length, asymmetry)
-- Stair climbing metrics, running dynamics
 
-#### ✅ CYCLING METRICS (Lines 203-207)
-- Cycling speed, power, cadence, functional threshold power
 
-#### ✅ UNDERWATER (Lines 208-209)
-- Underwater depth tracking
 
-#### ✅ CHARACTERISTICS (Lines 210-216)
-- Biological sex, blood type, date of birth
-- Fitzpatrick skin type, wheelchair use, activity move mode
 
-#### ❌ CLINICAL RECORDS (Lines 217-228)
-- **EXCLUDED**: Limited/no support in Health Auto Export
 
-#### ⚠️ SPECIALIZED (Lines 229-233)
-- **PARTIAL**: Uncertain support for newer iOS features
 
-#### ✅ WORKOUTS (Lines 234-237)
-- All workout types (70+ supported), GPS routes, activity summaries
 
-### **Root Cause Analysis:**
 
-1. **Struct Field Mismatches (HIGH PRIORITY)**:
-   - `EnvironmentalMetric` missing `environmental_audio_exposure_db` and `headphone_audio_exposure_db` fields
-   - Multiple structs missing fields expected by SQLx queries
-   - DateTime type inference issues in SQLx macros
-
-2. **Database Schema Gaps (HIGH PRIORITY)**:
-   - Missing tables for certain data types defined in health_metrics.rs
-   - Field type mismatches between schema and Rust structs
-   - Missing audio exposure metrics table architecture
-
-3. **Handler Implementation Errors (MEDIUM PRIORITY)**:
-   - Handlers querying non-existent fields
-   - AuthContext field access errors (`user_id` method missing)
-   - Metrics struct field access errors
-
-4. **Configuration Mismatches (MEDIUM PRIORITY)**:
-   - BatchConfig missing reproductive health fields
-   - Validation configuration incomplete
-
-### **Sub-Stories (Ordered by Compilation Impact):**
 
 #### **SUB-001: CRITICAL - EnvironmentalMetric Field Alignment**
 **Priority**: P0 - BLOCKING

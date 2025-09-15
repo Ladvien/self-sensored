@@ -15,10 +15,7 @@ use crate::models::{
 use crate::services::auth::AuthContext;
 use crate::services::batch_processor::{BatchProcessingResult, BatchProcessor};
 
-/// Maximum payload size (200MB) - increased to handle large iOS exports
-const MAX_PAYLOAD_SIZE: usize = 200 * 1024 * 1024;
-/// Maximum number of metrics per request (increased to handle full day exports)
-const MAX_METRICS_PER_REQUEST: usize = 200_000;
+// Payload size and metrics limits removed for personal health app use
 
 /// Custom extractor that logs raw JSON payload before deserialization
 pub struct LoggedJson<T>(pub T);
@@ -38,17 +35,7 @@ where
             let mut body = web::BytesMut::new();
             while let Some(chunk) = payload.next().await {
                 let chunk = chunk?;
-                // Check if adding this chunk would exceed the size limit
-                if body.len() + chunk.len() > MAX_PAYLOAD_SIZE {
-                    error!(
-                        "Payload size exceeds limit: {} bytes",
-                        body.len() + chunk.len()
-                    );
-                    return Err(actix_web::error::ErrorPayloadTooLarge(format!(
-                        "Payload exceeds maximum size of {} MB",
-                        MAX_PAYLOAD_SIZE / (1024 * 1024)
-                    )));
-                }
+                // No payload size limit for personal health app
                 body.extend_from_slice(&chunk);
             }
 
@@ -94,29 +81,29 @@ pub async fn ingest_handler(
 
     // Get payload size and log processing start
     let payload_size = raw_payload.len();
+    let payload_size_mb = payload_size as f64 / (1024.0 * 1024.0);
 
     info!(
         user_id = %auth.user.id,
         client_ip = %client_ip,
         payload_size = payload_size,
+        payload_size_mb = payload_size_mb,
         "Starting enhanced ingest processing"
     );
+
+    // Monitor for very large payloads
+    if payload_size_mb > 50.0 {
+        warn!(
+            user_id = %auth.user.id,
+            payload_size_mb = payload_size_mb,
+            "Processing very large payload - monitor for performance impact"
+        );
+    }
 
     // Record data volume
     Metrics::record_data_volume("ingest", "received", payload_size as u64);
 
-    // Check payload size limit first
-    if payload_size > MAX_PAYLOAD_SIZE {
-        error!("Payload size {} exceeds limit", payload_size);
-        Metrics::record_error("payload_too_large", "/api/v1/ingest", "error");
-        return Ok(
-            HttpResponse::PayloadTooLarge().json(ApiResponse::<()>::error(format!(
-                "Payload size {} bytes exceeds maximum of {} MB",
-                payload_size,
-                MAX_PAYLOAD_SIZE / (1024 * 1024)
-            ))),
-        );
-    }
+    // No payload size limit for personal health app
 
     // Use enhanced JSON parsing with better error reporting
     let internal_payload = match parse_ios_payload_enhanced(&raw_payload, auth.user.id).await {
@@ -144,17 +131,7 @@ pub async fn ingest_handler(
 
     // Validate payload constraints
     let total_metrics = internal_payload.data.metrics.len() + internal_payload.data.workouts.len();
-    if total_metrics > MAX_METRICS_PER_REQUEST {
-        error!(
-            "Too many metrics: {} exceeds limit of {}",
-            total_metrics, MAX_METRICS_PER_REQUEST
-        );
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
-                "Too many metrics: {total_metrics} exceeds limit of {MAX_METRICS_PER_REQUEST}"
-            ))),
-        );
-    }
+    // No metrics count limit for personal health app
 
     // Validate individual metrics and workouts
     let mut all_validation_errors = validate_metrics(&internal_payload.data.metrics);
@@ -253,7 +230,81 @@ pub async fn ingest_handler(
         }
     };
 
-    // Process the batch data
+    // Always process synchronously - no limits or thresholds for personal health app
+    let total_data_count = processed_payload.data.metrics.len() + processed_payload.data.workouts.len();
+
+    // Process all payloads synchronously - removed async threshold
+    if false { // Never async
+        info!(
+            user_id = %auth.user.id,
+            metric_count = processed_payload.data.metrics.len(),
+            workout_count = processed_payload.data.workouts.len(),
+            "Large payload detected, processing asynchronously to avoid timeout"
+        );
+
+        // Spawn background task to process the data
+        let pool_clone = pool.get_ref().clone();
+        let user_id = auth.user.id;
+        let raw_id_clone = raw_id;
+        let validation_errors = all_validation_errors.clone();
+
+        actix_web::rt::spawn(async move {
+            info!("Starting background processing for raw_id: {}", raw_id_clone);
+
+            // Process the batch data
+            let processor = BatchProcessor::new(pool_clone.clone());
+            let mut result = processor
+                .process_batch(user_id, processed_payload)
+                .await;
+
+            // Add validation errors to the processing result
+            if !validation_errors.is_empty() {
+                result.errors.extend(validation_errors);
+                result.failed_count += result.errors.len() - result.failed_count;
+            }
+
+            // Update raw ingestion record with processing results
+            if let Err(e) = update_processing_status(&pool_clone, raw_id_clone, &result).await {
+                error!(
+                    user_id = %user_id,
+                    raw_id = %raw_id_clone,
+                    error = %e,
+                    "Failed to update processing status in background"
+                );
+            }
+
+            info!(
+                user_id = %user_id,
+                raw_id = %raw_id_clone,
+                processed_count = result.processed_count,
+                failed_count = result.failed_count,
+                "Background processing completed"
+            );
+        });
+
+        // Return immediate response to avoid timeout
+        let response = IngestResponse {
+            success: true,
+            processed_count: total_data_count,
+            failed_count: 0,
+            processing_time_ms: start_time.elapsed().as_millis() as u64,
+            errors: vec![],
+        };
+
+        info!(
+            user_id = %auth.user.id,
+            raw_id = %raw_id,
+            "Accepted large payload for async processing"
+        );
+
+        // Return 202 Accepted for async processing
+        return Ok(HttpResponse::Accepted().json(ApiResponse::success_with_message(
+            response,
+            format!("Processing {} items asynchronously. Check raw_ingestion id {} for status.", total_data_count, raw_id)
+        )));
+    }
+
+    // For smaller payloads, process synchronously as before
     let processor = BatchProcessor::new(pool.get_ref().clone());
     let mut result = processor
         .process_batch(auth.user.id, processed_payload)

@@ -12,10 +12,7 @@ use crate::models::{
 use crate::services::auth::AuthContext;
 use crate::services::batch_processor::{BatchProcessingResult, BatchProcessor};
 
-/// Maximum payload size (100MB)
-const MAX_PAYLOAD_SIZE: usize = 100 * 1024 * 1024;
-/// Maximum number of metrics per request
-const MAX_METRICS_PER_REQUEST: usize = 10_000;
+// All payload and metrics limits removed for personal health app
 
 /// Optimized health data ingest endpoint with performance improvements
 /// Key optimizations:
@@ -32,17 +29,7 @@ pub async fn optimized_ingest_handler(
 ) -> Result<HttpResponse> {
     let start_time = Instant::now();
 
-    // Early size validation to avoid processing oversized payloads
-    if payload.len() > MAX_PAYLOAD_SIZE {
-        error!("Payload size {} exceeds limit", payload.len());
-        return Ok(
-            HttpResponse::PayloadTooLarge().json(ApiResponse::<()>::error(format!(
-                "Payload size {} bytes exceeds maximum of {} MB",
-                payload.len(),
-                MAX_PAYLOAD_SIZE / (1024 * 1024)
-            ))),
-        );
-    }
+    // No payload size limit for personal health app
 
     info!(
         user_id = %auth.user.id,
@@ -66,17 +53,7 @@ pub async fn optimized_ingest_handler(
 
     // Optimization 2: Validate payload constraints early
     let total_metrics = internal_payload.data.metrics.len() + internal_payload.data.workouts.len();
-    if total_metrics > MAX_METRICS_PER_REQUEST {
-        error!(
-            "Too many metrics: {} exceeds limit of {}",
-            total_metrics, MAX_METRICS_PER_REQUEST
-        );
-        return Ok(
-            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
-                "Too many metrics: {total_metrics} exceeds limit of {MAX_METRICS_PER_REQUEST}"
-            ))),
-        );
-    }
+    // No metrics count limit for personal health app
 
     // Optimization 3: Parallel validation using task-based parallelism
     let validation_result = validate_payload_parallel(&internal_payload).await;

@@ -60,6 +60,13 @@ async fn main() -> std::io::Result<()> {
         .parse::<usize>()
         .expect("MAX_PAYLOAD_SIZE_MB must be a valid number");
 
+    // Handle unlimited payload size (0 means unlimited)
+    let actual_payload_size = if max_payload_size_mb == 0 {
+        usize::MAX / (1024 * 1024) // Use max size in MB
+    } else {
+        max_payload_size_mb
+    };
+
     let connection_timeout_seconds = env::var("CONNECTION_TIMEOUT_SECONDS")
         .unwrap_or_else(|_| "30".to_string()) // 30s connection timeout
         .parse::<u64>()
@@ -89,10 +96,11 @@ async fn main() -> std::io::Result<()> {
         "Request timeout: {}s (DoS-protected)",
         request_timeout_seconds
     );
-    info!(
-        "Max payload size: {}MB (security-limited)",
-        max_payload_size_mb
-    );
+    if max_payload_size_mb == 0 {
+        info!("Max payload size: unlimited (personal health app)");
+    } else {
+        info!("Max payload size: {}MB (security-limited)", max_payload_size_mb);
+    }
     info!("Connection timeout: {}s", connection_timeout_seconds);
     info!(
         "Keep-alive timeout: {}s (Cloudflare-optimized)",
@@ -199,7 +207,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(user_characteristics_service.clone()))
             .app_data(web::Data::new(rate_limiter.clone()))
             // Security-limited payload size to prevent DoS attacks
-            .app_data(web::PayloadConfig::new(max_payload_size_mb * 1024 * 1024))
+            .app_data(web::PayloadConfig::new(actual_payload_size * 1024 * 1024))
             .wrap(configure_cors()) // CORS must be first for preflight requests
             .wrap(Compress::default()) // Add gzip compression
             .wrap(CompressionAndCaching) // Add caching headers

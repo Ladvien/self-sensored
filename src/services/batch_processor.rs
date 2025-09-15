@@ -208,6 +208,37 @@ impl BatchProcessor {
         self.failed_counter.store(0, Ordering::Relaxed);
     }
 
+    /// Check database connection pool health and availability
+    async fn check_pool_health(&self) -> Result<(), String> {
+        let pool_size = self.pool.size() as usize;
+        let idle_connections = self.pool.num_idle();
+        let active_connections = pool_size.saturating_sub(idle_connections);
+        let utilization = (active_connections as f64 / pool_size as f64) * 100.0;
+
+        debug!(
+            "Pool health: {}/{} active, utilization: {:.1}%",
+            active_connections, pool_size, utilization
+        );
+
+        // Warn if utilization is high
+        if utilization > 80.0 {
+            return Err(format!(
+                "High pool utilization: {:.1}% ({}/{})",
+                utilization, active_connections, pool_size
+            ));
+        }
+
+        // Check if we have enough available connections for batch processing
+        if idle_connections < 5 {
+            return Err(format!(
+                "Low idle connections: {} available, need at least 5 for efficient batch processing",
+                idle_connections
+            ));
+        }
+
+        Ok(())
+    }
+
     /// Process a batch of health data with comprehensive error handling
     #[instrument(skip(self, payload))]
     pub async fn process_batch(
@@ -217,6 +248,11 @@ impl BatchProcessor {
     ) -> BatchProcessingResult {
         let start_time = Instant::now();
         let initial_memory = self.estimate_memory_usage();
+
+        // Check connection pool health before processing
+        if let Err(pool_error) = self.check_pool_health().await {
+            warn!("Connection pool health issue: {}", pool_error);
+        }
 
         // Record batch processing start
         let total_metrics = payload.data.metrics.len() + payload.data.workouts.len();
@@ -971,9 +1007,11 @@ impl BatchProcessor {
 
     /// Estimate current memory usage (rough approximation)
     fn estimate_memory_usage(&self) -> f64 {
-        // This is a rough estimation - in production you'd use more sophisticated memory tracking
-        // For now, return 0 as we'd need additional dependencies for accurate memory tracking
-        0.0
+        // Use procfs or system calls for actual memory usage in production
+        // For now, use a rough heuristic based on active processing
+        let active_processing = self.processed_counter.load(Ordering::Relaxed) as f64;
+        // Estimate ~1KB per active metric being processed
+        active_processing * 0.001 // MB
     }
 
     /// Group metrics by type for efficient batch processing
