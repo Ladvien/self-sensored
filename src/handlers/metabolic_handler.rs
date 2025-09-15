@@ -114,9 +114,9 @@ pub struct CriticalGlucoseReading {
 /// Glucose severity levels
 #[derive(Debug, Serialize)]
 pub enum GlucoseSeverity {
-    Hypoglycemic,      // < 70 mg/dL
-    SevereHypoglycemic,// < 54 mg/dL
-    Hyperglycemic,     // > 250 mg/dL
+    Hypoglycemic,        // < 70 mg/dL
+    SevereHypoglycemic,  // < 54 mg/dL
+    Hyperglycemic,       // > 250 mg/dL
     SevereHyperglycemic, // > 400 mg/dL
 }
 
@@ -182,15 +182,15 @@ pub struct DateRange {
 
 /// Blood glucose data ingestion handler
 /// POST /api/v1/ingest/blood-glucose
-#[instrument(skip(pool, auth_context, payload, metrics))]
+#[instrument(skip(pool, auth_context, payload, _metrics))]
 pub async fn ingest_blood_glucose_handler(
     pool: web::Data<PgPool>,
     auth_context: AuthContext,
     payload: web::Json<Vec<BloodGlucoseIngestRequest>>,
-    metrics: web::Data<Metrics>,
+    _metrics: web::Data<Metrics>,
 ) -> ActixResult<HttpResponse> {
     let start_time = std::time::Instant::now();
-    let user_id = auth_context.user_id;
+    let user_id = auth_context.user.id;
 
     info!(
         user_id = %user_id,
@@ -199,11 +199,8 @@ pub async fn ingest_blood_glucose_handler(
     );
 
     // Increment metrics
-    metrics.ingest_requests_total.inc();
-    metrics
-        .ingest_metrics_total
-        .with_label_values(&["blood_glucose"])
-        .inc();
+    Metrics::record_ingest_request();
+    Metrics::record_metrics_processed("blood_glucose", 1, "request");
 
     let mut processed_count = 0;
     let mut failed_count = 0;
@@ -243,7 +240,7 @@ pub async fn ingest_blood_glucose_handler(
                         errors.push(BloodGlucoseProcessingError {
                             index,
                             error_type: "storage_error".to_string(),
-                            message: format!("Failed to store glucose reading: {}", e),
+                            message: format!("Failed to store glucose reading: {e}"),
                             glucose_value: Some(request.blood_glucose_mg_dl),
                             context: request.measurement_context.clone(),
                         });
@@ -273,10 +270,7 @@ pub async fn ingest_blood_glucose_handler(
     let processing_time = start_time.elapsed();
 
     // Update processing time metrics
-    metrics
-        .ingest_duration_seconds
-        .with_label_values(&["blood_glucose"])
-        .observe(processing_time.as_secs_f64());
+    Metrics::record_ingest_duration(processing_time, "blood_glucose");
 
     info!(
         user_id = %user_id,
@@ -300,15 +294,15 @@ pub async fn ingest_blood_glucose_handler(
 
 /// Metabolic data ingestion handler
 /// POST /api/v1/ingest/metabolic
-#[instrument(skip(pool, auth_context, payload, metrics))]
+#[instrument(skip(pool, auth_context, payload, _metrics))]
 pub async fn ingest_metabolic_handler(
     pool: web::Data<PgPool>,
     auth_context: AuthContext,
     payload: web::Json<Vec<MetabolicIngestRequest>>,
-    metrics: web::Data<Metrics>,
+    _metrics: web::Data<Metrics>,
 ) -> ActixResult<HttpResponse> {
     let start_time = std::time::Instant::now();
-    let user_id = auth_context.user_id;
+    let user_id = auth_context.user.id;
 
     info!(
         user_id = %user_id,
@@ -317,11 +311,8 @@ pub async fn ingest_metabolic_handler(
     );
 
     // Increment metrics
-    metrics.ingest_requests_total.inc();
-    metrics
-        .ingest_metrics_total
-        .with_label_values(&["metabolic"])
-        .inc();
+    Metrics::record_ingest_request();
+    Metrics::record_metrics_processed("metabolic", 1, "request");
 
     let mut processed_count = 0;
     let mut failed_count = 0;
@@ -359,8 +350,10 @@ pub async fn ingest_metabolic_handler(
                         errors.push(MetabolicProcessingError {
                             index,
                             error_type: "storage_error".to_string(),
-                            message: format!("Failed to store metabolic data: {}", e),
-                            metric_value: request.insulin_delivery_units.or(request.blood_alcohol_content),
+                            message: format!("Failed to store metabolic data: {e}"),
+                            metric_value: request
+                                .insulin_delivery_units
+                                .or(request.blood_alcohol_content),
                             metric_type: Some("metabolic".to_string()),
                         });
                     }
@@ -372,7 +365,9 @@ pub async fn ingest_metabolic_handler(
                     index,
                     error_type: "validation_error".to_string(),
                     message: validation_error,
-                    metric_value: request.insulin_delivery_units.or(request.blood_alcohol_content),
+                    metric_value: request
+                        .insulin_delivery_units
+                        .or(request.blood_alcohol_content),
                     metric_type: Some("metabolic".to_string()),
                 });
             }
@@ -382,10 +377,7 @@ pub async fn ingest_metabolic_handler(
     let processing_time = start_time.elapsed();
 
     // Update processing time metrics
-    metrics
-        .ingest_duration_seconds
-        .with_label_values(&["metabolic"])
-        .observe(processing_time.as_secs_f64());
+    Metrics::record_ingest_duration(processing_time, "metabolic");
 
     info!(
         user_id = %user_id,
@@ -408,14 +400,14 @@ pub async fn ingest_metabolic_handler(
 
 /// Blood glucose data retrieval handler
 /// GET /api/v1/data/blood-glucose
-#[instrument(skip(pool, auth_context, metrics))]
+#[instrument(skip(pool, auth_context, _metrics))]
 pub async fn get_blood_glucose_data_handler(
     pool: web::Data<PgPool>,
     auth_context: AuthContext,
     query: web::Query<MetabolicQueryParams>,
-    metrics: web::Data<Metrics>,
+    _metrics: web::Data<Metrics>,
 ) -> ActixResult<HttpResponse> {
-    let user_id = auth_context.user_id;
+    let user_id = auth_context.user.id;
 
     info!(
         user_id = %user_id,
@@ -426,10 +418,7 @@ pub async fn get_blood_glucose_data_handler(
     );
 
     // Increment query metrics
-    metrics
-        .query_requests_total
-        .with_label_values(&["blood_glucose"])
-        .inc();
+    Metrics::record_query_request("blood_glucose");
 
     match retrieve_blood_glucose_data(&pool, user_id, &query).await {
         Ok(glucose_data) => {
@@ -469,14 +458,14 @@ pub async fn get_blood_glucose_data_handler(
 
 /// Metabolic data retrieval handler
 /// GET /api/v1/data/metabolic
-#[instrument(skip(pool, auth_context, metrics))]
+#[instrument(skip(pool, auth_context, _metrics))]
 pub async fn get_metabolic_data_handler(
     pool: web::Data<PgPool>,
     auth_context: AuthContext,
     query: web::Query<MetabolicQueryParams>,
-    metrics: web::Data<Metrics>,
+    _metrics: web::Data<Metrics>,
 ) -> ActixResult<HttpResponse> {
-    let user_id = auth_context.user_id;
+    let user_id = auth_context.user.id;
 
     info!(
         user_id = %user_id,
@@ -486,10 +475,7 @@ pub async fn get_metabolic_data_handler(
     );
 
     // Increment query metrics
-    metrics
-        .query_requests_total
-        .with_label_values(&["metabolic"])
-        .inc();
+    Metrics::record_query_request("metabolic");
 
     match retrieve_metabolic_data(&pool, user_id, &query).await {
         Ok(metabolic_data) => {
@@ -543,21 +529,26 @@ fn validate_and_convert_glucose_request(
 
     // Validate insulin units if provided
     if let Some(insulin_units) = request.insulin_delivery_units {
-        if insulin_units < 0.0 || insulin_units > 100.0 {
+        if !(0.0..=100.0).contains(&insulin_units) {
             return Err(format!(
-                "Insulin delivery units {} is outside safe range (0-100 units)",
-                insulin_units
+                "Insulin delivery units {insulin_units} is outside safe range (0-100 units)"
             ));
         }
     }
 
     // Validate measurement context if provided
     if let Some(context) = &request.measurement_context {
-        let valid_contexts = ["fasting", "post_meal", "random", "bedtime", "pre_meal", "post_workout"];
+        let valid_contexts = [
+            "fasting",
+            "post_meal",
+            "random",
+            "bedtime",
+            "pre_meal",
+            "post_workout",
+        ];
         if !valid_contexts.contains(&context.as_str()) {
             return Err(format!(
-                "Invalid measurement context '{}'. Valid contexts: {:?}",
-                context, valid_contexts
+                "Invalid measurement context '{context}'. Valid contexts: {valid_contexts:?}"
             ));
         }
     }
@@ -583,20 +574,18 @@ fn validate_and_convert_metabolic_request(
 ) -> Result<MetabolicMetric, String> {
     // Validate blood alcohol content if provided (0.0-0.5%)
     if let Some(bac) = request.blood_alcohol_content {
-        if bac < 0.0 || bac > 0.5 {
+        if !(0.0..=0.5).contains(&bac) {
             return Err(format!(
-                "Blood alcohol content {} is outside valid range (0.0-0.5%)",
-                bac
+                "Blood alcohol content {bac} is outside valid range (0.0-0.5%)"
             ));
         }
     }
 
     // Validate insulin units if provided
     if let Some(insulin_units) = request.insulin_delivery_units {
-        if insulin_units < 0.0 || insulin_units > 100.0 {
+        if !(0.0..=100.0).contains(&insulin_units) {
             return Err(format!(
-                "Insulin delivery units {} is outside safe range (0-100 units)",
-                insulin_units
+                "Insulin delivery units {insulin_units} is outside safe range (0-100 units)"
             ));
         }
     }
@@ -606,8 +595,7 @@ fn validate_and_convert_metabolic_request(
         let valid_methods = ["pump", "pen", "syringe", "inhaler", "patch"];
         if !valid_methods.contains(&method.as_str()) {
             return Err(format!(
-                "Invalid delivery method '{}'. Valid methods: {:?}",
-                method, valid_methods
+                "Invalid delivery method '{method}'. Valid methods: {valid_methods:?}"
             ));
         }
     }
@@ -704,8 +692,8 @@ async fn retrieve_blood_glucose_data(
     let rows = sqlx::query_as!(
         BloodGlucoseMetric,
         r#"
-        SELECT id, user_id, recorded_at, blood_glucose_mg_dl, measurement_context,
-               medication_taken, insulin_delivery_units, glucose_source, source_device, created_at
+        SELECT id, user_id, recorded_at::timestamptz as "recorded_at!", blood_glucose_mg_dl, measurement_context,
+               medication_taken, insulin_delivery_units, glucose_source, source_device, created_at::timestamptz as "created_at!"
         FROM blood_glucose_metrics
         WHERE user_id = $1
         AND ($2::timestamptz IS NULL OR recorded_at >= $2)
@@ -737,8 +725,8 @@ async fn retrieve_metabolic_data(
     let rows = sqlx::query_as!(
         MetabolicMetric,
         r#"
-        SELECT id, user_id, recorded_at, blood_alcohol_content,
-               insulin_delivery_units, delivery_method, source_device, created_at
+        SELECT id, user_id, recorded_at::timestamptz as "recorded_at!", blood_alcohol_content,
+               insulin_delivery_units, delivery_method, source_device, created_at::timestamptz as "created_at!"
         FROM metabolic_metrics
         WHERE user_id = $1
         AND ($2::timestamptz IS NULL OR recorded_at >= $2)
@@ -759,7 +747,7 @@ async fn retrieve_metabolic_data(
 
 /// Check if glucose level is critical
 fn is_critical_glucose_level(glucose_mg_dl: f64) -> bool {
-    glucose_mg_dl < 70.0 || glucose_mg_dl > 400.0
+    !(70.0..=400.0).contains(&glucose_mg_dl)
 }
 
 /// Generate glucose analysis from processed values
@@ -785,17 +773,24 @@ fn generate_glucose_analysis(
     let sum: f64 = glucose_values.iter().sum();
     let average = sum / readings_count as f64;
     let min = glucose_values.iter().cloned().fold(f64::INFINITY, f64::min);
-    let max = glucose_values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let max = glucose_values
+        .iter()
+        .cloned()
+        .fold(f64::NEG_INFINITY, f64::max);
 
     // Time in range (70-180 mg/dL)
-    let in_range_count = glucose_values.iter().filter(|&&v| v >= 70.0 && v <= 180.0).count();
+    let in_range_count = glucose_values
+        .iter()
+        .filter(|&&v| (70.0..=180.0).contains(&v))
+        .count();
     let time_in_range_percentage = (in_range_count as f64 / readings_count as f64) * 100.0;
 
     // Coefficient of variation
     let variance = glucose_values
         .iter()
         .map(|&x| (x - average).powi(2))
-        .sum::<f64>() / readings_count as f64;
+        .sum::<f64>()
+        / readings_count as f64;
     let std_dev = variance.sqrt();
     let variability_coefficient = (std_dev / average) * 100.0;
 
@@ -844,7 +839,11 @@ fn generate_glucose_analysis(
     // Glucose category classification
     let fasting_readings: Vec<f64> = requests
         .iter()
-        .filter(|req| req.measurement_context.as_ref().map_or(false, |c| c == "fasting"))
+        .filter(|req| {
+            req.measurement_context
+                .as_ref()
+                .is_some_and(|c| c == "fasting")
+        })
         .map(|req| req.blood_glucose_mg_dl)
         .collect();
 

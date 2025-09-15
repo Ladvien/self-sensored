@@ -1,6 +1,6 @@
-use self_sensored::models::{HealthMetric, RespiratoryMetric};
-use self_sensored::config::ValidationConfig;
 use chrono::{DateTime, Utc};
+use self_sensored::config::ValidationConfig;
+use self_sensored::models::{HealthMetric, RespiratoryMetric};
 use uuid::Uuid;
 
 /// Respiratory metrics integration tests
@@ -28,18 +28,21 @@ mod respiratory_tests {
             id: Uuid::new_v4(),
             user_id,
             recorded_at,
-            respiratory_rate: Some(16),         // Normal: 12-20 BPM
-            oxygen_saturation: Some(98.0),      // Normal: 95-100%
-            forced_vital_capacity: Some(4.2),   // Normal: 3-5L
-            forced_expiratory_volume_1: Some(3.1), // Normal lung function
+            respiratory_rate: Some(16),             // Normal: 12-20 BPM
+            oxygen_saturation: Some(98.0),          // Normal: 95-100%
+            forced_vital_capacity: Some(4.2),       // Normal: 3-5L
+            forced_expiratory_volume_1: Some(3.1),  // Normal lung function
             peak_expiratory_flow_rate: Some(450.0), // Normal: 300-600 L/min
-            inhaler_usage: Some(2),             // Normal daily usage
+            inhaler_usage: Some(2),                 // Normal daily usage
             source_device: Some("Pulse Oximeter Pro".to_string()),
             created_at: Utc::now(),
         };
 
         assert!(normal_respiratory.validate_with_config(&config).is_ok());
-        assert!(!normal_respiratory.is_critical_condition(), "Normal values should not be critical");
+        assert!(
+            !normal_respiratory.is_critical_condition(),
+            "Normal values should not be critical"
+        );
     }
 
     /// Test critical SpO2 levels (<90% - medical emergency)
@@ -55,7 +58,7 @@ mod respiratory_tests {
             user_id,
             recorded_at,
             respiratory_rate: Some(18),
-            oxygen_saturation: Some(88.0),      // Critical: <90%
+            oxygen_saturation: Some(88.0), // Critical: <90%
             forced_vital_capacity: None,
             forced_expiratory_volume_1: None,
             peak_expiratory_flow_rate: None,
@@ -65,7 +68,10 @@ mod respiratory_tests {
         };
 
         assert!(critical_spo2.validate_with_config(&config).is_ok());
-        assert!(critical_spo2.is_critical_condition(), "SpO2 88% should trigger critical alert");
+        assert!(
+            critical_spo2.is_critical_condition(),
+            "SpO2 88% should trigger critical alert"
+        );
 
         // Test borderline low SpO2 (92% - concerning but not critical)
         let low_spo2 = RespiratoryMetric {
@@ -73,7 +79,7 @@ mod respiratory_tests {
             user_id,
             recorded_at,
             respiratory_rate: Some(16),
-            oxygen_saturation: Some(92.0),      // Low but not critical
+            oxygen_saturation: Some(92.0), // Low but not critical
             forced_vital_capacity: None,
             forced_expiratory_volume_1: None,
             peak_expiratory_flow_rate: None,
@@ -83,7 +89,10 @@ mod respiratory_tests {
         };
 
         assert!(low_spo2.validate_with_config(&config).is_ok());
-        assert!(!low_spo2.is_critical_condition(), "SpO2 92% should not be critical but concerning");
+        assert!(
+            !low_spo2.is_critical_condition(),
+            "SpO2 92% should not be critical but concerning"
+        );
     }
 
     /// Test abnormal respiratory rates (bradypnea and tachypnea)
@@ -98,7 +107,7 @@ mod respiratory_tests {
             id: Uuid::new_v4(),
             user_id,
             recorded_at,
-            respiratory_rate: Some(6),          // Critically low
+            respiratory_rate: Some(6), // Critically low
             oxygen_saturation: Some(95.0),
             forced_vital_capacity: None,
             forced_expiratory_volume_1: None,
@@ -109,14 +118,17 @@ mod respiratory_tests {
         };
 
         assert!(bradypnea.validate_with_config(&config).is_ok());
-        assert!(bradypnea.is_critical_condition(), "6 BPM should be critical bradypnea");
+        assert!(
+            bradypnea.is_critical_condition(),
+            "6 BPM should be critical bradypnea"
+        );
 
         // Test tachypnea (32 breaths/min - critically high)
         let tachypnea = RespiratoryMetric {
             id: Uuid::new_v4(),
             user_id,
             recorded_at,
-            respiratory_rate: Some(32),         // Critically high
+            respiratory_rate: Some(32), // Critically high
             oxygen_saturation: Some(96.0),
             forced_vital_capacity: None,
             forced_expiratory_volume_1: None,
@@ -127,7 +139,10 @@ mod respiratory_tests {
         };
 
         assert!(tachypnea.validate_with_config(&config).is_ok());
-        assert!(tachypnea.is_critical_condition(), "32 BPM should be critical tachypnea");
+        assert!(
+            tachypnea.is_critical_condition(),
+            "32 BPM should be critical tachypnea"
+        );
     }
 
     /// Test spirometry lung function assessment (asthma/COPD management)
@@ -144,8 +159,8 @@ mod respiratory_tests {
             recorded_at,
             respiratory_rate: Some(14),
             oxygen_saturation: Some(98.0),
-            forced_vital_capacity: Some(4.8),   // Good FVC
-            forced_expiratory_volume_1: Some(3.8), // Good FEV1
+            forced_vital_capacity: Some(4.8),       // Good FVC
+            forced_expiratory_volume_1: Some(3.8),  // Good FEV1
             peak_expiratory_flow_rate: Some(520.0), // Good PEFR
             inhaler_usage: None,
             source_device: Some("Home Spirometer".to_string()),
@@ -156,7 +171,10 @@ mod respiratory_tests {
 
         // Calculate FEV1/FVC ratio (should be >0.7 for normal)
         let fev1_fvc_ratio = 3.8 / 4.8; // = 0.79, which is normal
-        assert!(fev1_fvc_ratio > 0.7, "FEV1/FVC ratio should indicate normal lung function");
+        assert!(
+            fev1_fvc_ratio > 0.7,
+            "FEV1/FVC ratio should indicate normal lung function"
+        );
 
         // Test obstructive pattern (low FEV1/FVC ratio - asthma/COPD)
         let obstructive_pattern = RespiratoryMetric {
@@ -165,10 +183,10 @@ mod respiratory_tests {
             recorded_at,
             respiratory_rate: Some(18),
             oxygen_saturation: Some(94.0),
-            forced_vital_capacity: Some(4.0),   // Normal FVC
-            forced_expiratory_volume_1: Some(2.4), // Reduced FEV1
+            forced_vital_capacity: Some(4.0),       // Normal FVC
+            forced_expiratory_volume_1: Some(2.4),  // Reduced FEV1
             peak_expiratory_flow_rate: Some(280.0), // Reduced PEFR
-            inhaler_usage: Some(6),              // Higher inhaler usage
+            inhaler_usage: Some(6),                 // Higher inhaler usage
             source_device: Some("Clinical Spirometer".to_string()),
             created_at: Utc::now(),
         };
@@ -177,7 +195,10 @@ mod respiratory_tests {
 
         // Calculate FEV1/FVC ratio (2.4/4.0 = 0.6, indicating obstruction)
         let obstructive_ratio = 2.4 / 4.0; // = 0.6, indicating obstruction
-        assert!(obstructive_ratio < 0.7, "FEV1/FVC ratio should indicate obstructive pattern");
+        assert!(
+            obstructive_ratio < 0.7,
+            "FEV1/FVC ratio should indicate obstructive pattern"
+        );
     }
 
     /// Test excessive inhaler usage tracking (medication adherence monitoring)
@@ -197,7 +218,7 @@ mod respiratory_tests {
             forced_vital_capacity: None,
             forced_expiratory_volume_1: None,
             peak_expiratory_flow_rate: None,
-            inhaler_usage: Some(3),              // Normal usage
+            inhaler_usage: Some(3), // Normal usage
             source_device: Some("Smart Inhaler".to_string()),
             created_at: Utc::now(),
         };
@@ -214,7 +235,7 @@ mod respiratory_tests {
             forced_vital_capacity: None,
             forced_expiratory_volume_1: None,
             peak_expiratory_flow_rate: Some(250.0), // Reduced PEFR
-            inhaler_usage: Some(12),             // Excessive usage
+            inhaler_usage: Some(12),                // Excessive usage
             source_device: Some("Digital Inhaler Tracker".to_string()),
             created_at: Utc::now(),
         };
@@ -235,8 +256,8 @@ mod respiratory_tests {
             id: Uuid::new_v4(),
             user_id,
             recorded_at,
-            respiratory_rate: None,              // Apple Watch doesn't measure RR
-            oxygen_saturation: Some(96.0),       // SpO2 measurement
+            respiratory_rate: None,        // Apple Watch doesn't measure RR
+            oxygen_saturation: Some(96.0), // SpO2 measurement
             forced_vital_capacity: None,
             forced_expiratory_volume_1: None,
             peak_expiratory_flow_rate: None,
@@ -246,7 +267,10 @@ mod respiratory_tests {
         };
 
         assert!(apple_watch_spo2.validate_with_config(&config).is_ok());
-        assert!(!apple_watch_spo2.is_critical_condition(), "96% SpO2 should be acceptable");
+        assert!(
+            !apple_watch_spo2.is_critical_condition(),
+            "96% SpO2 should be acceptable"
+        );
 
         // Test Apple Watch detecting concerning SpO2 drop during sleep
         let concerning_sleep_spo2 = RespiratoryMetric {
@@ -254,7 +278,7 @@ mod respiratory_tests {
             user_id,
             recorded_at,
             respiratory_rate: None,
-            oxygen_saturation: Some(89.0),       // Sleep apnea concern
+            oxygen_saturation: Some(89.0), // Sleep apnea concern
             forced_vital_capacity: None,
             forced_expiratory_volume_1: None,
             peak_expiratory_flow_rate: None,
@@ -264,7 +288,10 @@ mod respiratory_tests {
         };
 
         assert!(concerning_sleep_spo2.validate_with_config(&config).is_ok());
-        assert!(concerning_sleep_spo2.is_critical_condition(), "89% SpO2 during sleep should be critical");
+        assert!(
+            concerning_sleep_spo2.is_critical_condition(),
+            "89% SpO2 during sleep should be critical"
+        );
     }
 
     /// Test COVID-19 monitoring scenario (SpO2 tracking for respiratory illness)
@@ -279,8 +306,8 @@ mod respiratory_tests {
             id: Uuid::new_v4(),
             user_id,
             recorded_at,
-            respiratory_rate: Some(24),          // Elevated (normal: 12-20)
-            oxygen_saturation: Some(91.0),       // Concerning (should be >95%)
+            respiratory_rate: Some(24),    // Elevated (normal: 12-20)
+            oxygen_saturation: Some(91.0), // Concerning (should be >95%)
             forced_vital_capacity: None,
             forced_expiratory_volume_1: None,
             peak_expiratory_flow_rate: None,
@@ -297,8 +324,8 @@ mod respiratory_tests {
             id: Uuid::new_v4(),
             user_id,
             recorded_at,
-            respiratory_rate: Some(28),          // High respiratory rate
-            oxygen_saturation: Some(87.0),       // Critical SpO2
+            respiratory_rate: Some(28),    // High respiratory rate
+            oxygen_saturation: Some(87.0), // Critical SpO2
             forced_vital_capacity: None,
             forced_expiratory_volume_1: None,
             peak_expiratory_flow_rate: None,
@@ -307,8 +334,13 @@ mod respiratory_tests {
             created_at: Utc::now(),
         };
 
-        assert!(severe_covid_respiratory.validate_with_config(&config).is_ok());
-        assert!(severe_covid_respiratory.is_critical_condition(), "Severe COVID respiratory symptoms should be critical");
+        assert!(severe_covid_respiratory
+            .validate_with_config(&config)
+            .is_ok());
+        assert!(
+            severe_covid_respiratory.is_critical_condition(),
+            "Severe COVID respiratory symptoms should be critical"
+        );
     }
 
     /// Test pulse oximeter device integration scenarios
@@ -323,7 +355,7 @@ mod respiratory_tests {
             id: Uuid::new_v4(),
             user_id,
             recorded_at,
-            respiratory_rate: None,              // Consumer devices typically only measure SpO2
+            respiratory_rate: None, // Consumer devices typically only measure SpO2
             oxygen_saturation: Some(97.5),
             forced_vital_capacity: None,
             forced_expiratory_volume_1: None,
@@ -340,7 +372,7 @@ mod respiratory_tests {
             id: Uuid::new_v4(),
             user_id,
             recorded_at,
-            respiratory_rate: Some(16),          // Medical devices may include RR
+            respiratory_rate: Some(16), // Medical devices may include RR
             oxygen_saturation: Some(98.2),
             forced_vital_capacity: None,
             forced_expiratory_volume_1: None,
@@ -426,12 +458,18 @@ mod respiratory_tests {
         }
 
         // Verify timeline consistency
-        assert_eq!(measurements.len(), 4, "Should have measurements from 4 different times/devices");
+        assert_eq!(
+            measurements.len(),
+            4,
+            "Should have measurements from 4 different times/devices"
+        );
 
         // Check that measurements are ordered chronologically
         for i in 1..measurements.len() {
-            assert!(measurements[i].recorded_at > measurements[i-1].recorded_at,
-                   "Measurements should be in chronological order");
+            assert!(
+                measurements[i].recorded_at > measurements[i - 1].recorded_at,
+                "Measurements should be in chronological order"
+            );
         }
     }
 
@@ -448,7 +486,7 @@ mod respiratory_tests {
             user_id,
             recorded_at,
             respiratory_rate: Some(16),
-            oxygen_saturation: Some(105.0),      // Impossible value >100%
+            oxygen_saturation: Some(105.0), // Impossible value >100%
             forced_vital_capacity: None,
             forced_expiratory_volume_1: None,
             peak_expiratory_flow_rate: None,
@@ -457,15 +495,17 @@ mod respiratory_tests {
             created_at: Utc::now(),
         };
 
-        assert!(invalid_spo2_high.validate_with_config(&config).is_err(),
-                "SpO2 >100% should be invalid");
+        assert!(
+            invalid_spo2_high.validate_with_config(&config).is_err(),
+            "SpO2 >100% should be invalid"
+        );
 
         // Test out of range respiratory rate (impossible value)
         let invalid_respiratory_rate = RespiratoryMetric {
             id: Uuid::new_v4(),
             user_id,
             recorded_at,
-            respiratory_rate: Some(100),         // Impossible respiratory rate
+            respiratory_rate: Some(100), // Impossible respiratory rate
             oxygen_saturation: Some(98.0),
             forced_vital_capacity: None,
             forced_expiratory_volume_1: None,
@@ -475,8 +515,12 @@ mod respiratory_tests {
             created_at: Utc::now(),
         };
 
-        assert!(invalid_respiratory_rate.validate_with_config(&config).is_err(),
-                "Respiratory rate of 100 BPM should be invalid");
+        assert!(
+            invalid_respiratory_rate
+                .validate_with_config(&config)
+                .is_err(),
+            "Respiratory rate of 100 BPM should be invalid"
+        );
 
         // Test negative inhaler usage (invalid)
         let invalid_inhaler_usage = RespiratoryMetric {
@@ -488,13 +532,15 @@ mod respiratory_tests {
             forced_vital_capacity: None,
             forced_expiratory_volume_1: None,
             peak_expiratory_flow_rate: None,
-            inhaler_usage: Some(-5),             // Negative usage is impossible
+            inhaler_usage: Some(-5), // Negative usage is impossible
             source_device: Some("Test Device".to_string()),
             created_at: Utc::now(),
         };
 
-        assert!(invalid_inhaler_usage.validate_with_config(&config).is_err(),
-                "Negative inhaler usage should be invalid");
+        assert!(
+            invalid_inhaler_usage.validate_with_config(&config).is_err(),
+            "Negative inhaler usage should be invalid"
+        );
     }
 
     /// Test comprehensive respiratory health metrics integration
@@ -509,21 +555,26 @@ mod respiratory_tests {
             id: Uuid::new_v4(),
             user_id,
             recorded_at,
-            respiratory_rate: Some(18),          // Slightly elevated
-            oxygen_saturation: Some(95.0),       // Lower end of normal
-            forced_vital_capacity: Some(4.1),    // Normal
-            forced_expiratory_volume_1: Some(2.9), // Slightly reduced
+            respiratory_rate: Some(18),             // Slightly elevated
+            oxygen_saturation: Some(95.0),          // Lower end of normal
+            forced_vital_capacity: Some(4.1),       // Normal
+            forced_expiratory_volume_1: Some(2.9),  // Slightly reduced
             peak_expiratory_flow_rate: Some(380.0), // Reduced (asthma indicator)
-            inhaler_usage: Some(6),              // Higher usage (asthma control)
+            inhaler_usage: Some(6),                 // Higher usage (asthma control)
             source_device: Some("Comprehensive Respiratory Monitor".to_string()),
             created_at: Utc::now(),
         };
 
-        assert!(comprehensive_respiratory.validate_with_config(&config).is_ok());
+        assert!(comprehensive_respiratory
+            .validate_with_config(&config)
+            .is_ok());
 
         // Calculate FEV1/FVC ratio for lung function assessment
         let fev1_fvc_ratio = 2.9 / 4.1; // ≈ 0.71, borderline normal
-        assert!(fev1_fvc_ratio > 0.7, "FEV1/FVC ratio should be just within normal limits");
+        assert!(
+            fev1_fvc_ratio > 0.7,
+            "FEV1/FVC ratio should be just within normal limits"
+        );
 
         // This patient profile suggests:
         // - Mild respiratory compromise (elevated RR, borderline SpO2)

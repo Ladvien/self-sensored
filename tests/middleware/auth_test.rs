@@ -3,7 +3,8 @@ use sqlx::PgPool;
 use std::env;
 
 use self_sensored::{
-    middleware::auth::{AuthMiddleware, AuthenticatedUser},
+    middleware::auth::AuthMiddleware,
+    services::auth::AuthContext,
     services::auth::AuthService,
 };
 
@@ -15,7 +16,7 @@ async fn get_test_pool() -> PgPool {
         .expect("Failed to connect to test database")
 }
 
-async fn test_handler(_user: AuthenticatedUser) -> Result<HttpResponse> {
+async fn test_handler(_auth_context: AuthContext) -> Result<HttpResponse> {
     Ok(HttpResponse::Ok().json(serde_json::json!({"status": "authenticated"})))
 }
 

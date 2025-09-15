@@ -340,6 +340,7 @@ impl BackgroundProcessor {
     }
 
     /// Update job progress
+    #[allow(dead_code)]
     async fn update_job_progress(
         pool: &PgPool,
         job_id: Uuid,

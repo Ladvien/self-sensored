@@ -127,6 +127,7 @@ pub async fn optimized_ingest_handler(
     let processing_time = start_time.elapsed().as_millis() as u64;
 
     // Wait for raw storage (but don't block response on it)
+    #[allow(clippy::collapsible_match)]
     if let Ok(join_result) =
         tokio::time::timeout(std::time::Duration::from_millis(100), raw_storage_task).await
     {

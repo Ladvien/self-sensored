@@ -21,7 +21,9 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 #[sqlx::test(migrations = "../migrations")]
-async fn test_extended_activity_metrics_ingestion(pool: PgPool) -> Result<(), Box<dyn std::error::Error>> {
+async fn test_extended_activity_metrics_ingestion(
+    pool: PgPool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let user = create_test_user(&pool).await?;
     let batch_processor = BatchProcessor::new(&pool);
 
@@ -30,7 +32,7 @@ async fn test_extended_activity_metrics_ingestion(pool: PgPool) -> Result<(), Bo
         id: Uuid::new_v4(),
         user_id: user.id,
         recorded_at: Utc::now() - Duration::hours(2),
-        step_count: Some(0), // No steps during cycling
+        step_count: Some(0),            // No steps during cycling
         distance_meters: Some(15000.0), // 15km total
         flights_climbed: Some(0),
         active_energy_burned_kcal: Some(450.0),
@@ -42,9 +44,9 @@ async fn test_extended_activity_metrics_ingestion(pool: PgPool) -> Result<(), Bo
         distance_downhill_snow_sports_meters: None,
         push_count: None,
         swimming_stroke_count: None,
-        nike_fuel_points: Some(750), // Nike+ integration
+        nike_fuel_points: Some(750),           // Nike+ integration
         apple_exercise_time_minutes: Some(45), // Apple Watch exercise ring
-        apple_stand_time_minutes: Some(8), // Achieved stand goal 8 hours
+        apple_stand_time_minutes: Some(8),     // Achieved stand goal 8 hours
         apple_move_time_minutes: Some(45),
         apple_stand_hour_achieved: Some(true),
         source_device: Some("Apple Watch Series 9".to_string()),
@@ -55,7 +57,7 @@ async fn test_extended_activity_metrics_ingestion(pool: PgPool) -> Result<(), Bo
         id: Uuid::new_v4(),
         user_id: user.id,
         recorded_at: Utc::now() - Duration::hours(1),
-        step_count: Some(0), // No steps during swimming
+        step_count: Some(0),           // No steps during swimming
         distance_meters: Some(2000.0), // 2km pool swimming
         flights_climbed: Some(0),
         active_energy_burned_kcal: Some(380.0),
@@ -80,9 +82,9 @@ async fn test_extended_activity_metrics_ingestion(pool: PgPool) -> Result<(), Bo
         id: Uuid::new_v4(),
         user_id: user.id,
         recorded_at: Utc::now(),
-        step_count: Some(0), // No steps for wheelchair user
+        step_count: Some(0),           // No steps for wheelchair user
         distance_meters: Some(8000.0), // 8km wheelchair distance
-        flights_climbed: Some(0), // No flights for wheelchair
+        flights_climbed: Some(0),      // No flights for wheelchair
         active_energy_burned_kcal: Some(320.0),
         basal_energy_burned_kcal: Some(110.0),
         // Specialized fields for accessibility
@@ -105,9 +107,9 @@ async fn test_extended_activity_metrics_ingestion(pool: PgPool) -> Result<(), Bo
         id: Uuid::new_v4(),
         user_id: user.id,
         recorded_at: Utc::now() - Duration::minutes(30),
-        step_count: Some(1200), // Some steps during downhill skiing
+        step_count: Some(1200),         // Some steps during downhill skiing
         distance_meters: Some(25000.0), // 25km downhill skiing
-        flights_climbed: Some(0), // Downhill only
+        flights_climbed: Some(0),       // Downhill only
         active_energy_burned_kcal: Some(680.0),
         basal_energy_burned_kcal: Some(150.0),
         // Specialized fields
@@ -127,11 +129,21 @@ async fn test_extended_activity_metrics_ingestion(pool: PgPool) -> Result<(), Bo
     };
 
     // Test batch processing with extended fields
-    let activities = vec![cycling_activity, swimming_activity, wheelchair_activity, snow_sports_activity];
-    let batch_result = batch_processor.process_activity_metrics(user.id, &activities).await?;
+    let activities = vec![
+        cycling_activity,
+        swimming_activity,
+        wheelchair_activity,
+        snow_sports_activity,
+    ];
+    let batch_result = batch_processor
+        .process_activity_metrics(user.id, &activities)
+        .await?;
 
     // Validate batch processing success
-    assert_eq!(batch_result, 4, "All 4 extended activity metrics should be inserted");
+    assert_eq!(
+        batch_result, 4,
+        "All 4 extended activity metrics should be inserted"
+    );
 
     // Verify data was stored correctly with specialized fields
     let stored_activities: Vec<ActivityMetric> = sqlx::query_as!(
@@ -154,28 +166,43 @@ async fn test_extended_activity_metrics_ingestion(pool: PgPool) -> Result<(), Bo
     assert_eq!(stored_activities.len(), 4);
 
     // Verify cycling activity specialized fields
-    let cycling = stored_activities.iter().find(|a| a.distance_cycling_meters.is_some()).unwrap();
+    let cycling = stored_activities
+        .iter()
+        .find(|a| a.distance_cycling_meters.is_some())
+        .unwrap();
     assert_eq!(cycling.distance_cycling_meters, Some(15000.0));
     assert_eq!(cycling.nike_fuel_points, Some(750));
     assert_eq!(cycling.apple_exercise_time_minutes, Some(45));
     assert_eq!(cycling.apple_stand_hour_achieved, Some(true));
 
     // Verify swimming activity specialized fields
-    let swimming = stored_activities.iter().find(|a| a.swimming_stroke_count.is_some()).unwrap();
+    let swimming = stored_activities
+        .iter()
+        .find(|a| a.swimming_stroke_count.is_some())
+        .unwrap();
     assert_eq!(swimming.distance_swimming_meters, Some(2000.0));
     assert_eq!(swimming.swimming_stroke_count, Some(1800));
     assert_eq!(swimming.apple_exercise_time_minutes, Some(30));
 
     // Verify wheelchair activity accessibility fields
-    let wheelchair = stored_activities.iter().find(|a| a.push_count.is_some()).unwrap();
+    let wheelchair = stored_activities
+        .iter()
+        .find(|a| a.push_count.is_some())
+        .unwrap();
     assert_eq!(wheelchair.distance_wheelchair_meters, Some(8000.0));
     assert_eq!(wheelchair.push_count, Some(2400));
     assert_eq!(wheelchair.step_count, Some(0)); // No steps for wheelchair user
     assert_eq!(wheelchair.apple_stand_time_minutes, None); // Not applicable
 
     // Verify snow sports activity specialized fields
-    let snow_sports = stored_activities.iter().find(|a| a.distance_downhill_snow_sports_meters.is_some()).unwrap();
-    assert_eq!(snow_sports.distance_downhill_snow_sports_meters, Some(25000.0));
+    let snow_sports = stored_activities
+        .iter()
+        .find(|a| a.distance_downhill_snow_sports_meters.is_some())
+        .unwrap();
+    assert_eq!(
+        snow_sports.distance_downhill_snow_sports_meters,
+        Some(25000.0)
+    );
     assert_eq!(snow_sports.apple_exercise_time_minutes, Some(90));
 
     cleanup_test_user(&pool, user.id).await?;
@@ -183,7 +210,9 @@ async fn test_extended_activity_metrics_ingestion(pool: PgPool) -> Result<(), Bo
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn test_activity_metrics_validation_extended_fields(pool: PgPool) -> Result<(), Box<dyn std::error::Error>> {
+async fn test_activity_metrics_validation_extended_fields(
+    pool: PgPool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let user = create_test_user(&pool).await?;
     let config = ValidationConfig::default();
 
@@ -263,7 +292,7 @@ async fn test_activity_metrics_validation_extended_fields(pool: PgPool) -> Resul
         distance_downhill_snow_sports_meters: None,
         push_count: Some(-500), // Negative push count
         swimming_stroke_count: None,
-        nike_fuel_points: Some(-100), // Negative Nike Fuel
+        nike_fuel_points: Some(-100),           // Negative Nike Fuel
         apple_exercise_time_minutes: Some(-30), // Negative exercise time
         apple_stand_time_minutes: Some(8),
         apple_move_time_minutes: Some(30),
@@ -289,12 +318,12 @@ async fn test_activity_metrics_validation_extended_fields(pool: PgPool) -> Resul
         distance_swimming_meters: None,
         distance_wheelchair_meters: None,
         distance_downhill_snow_sports_meters: None,
-        push_count: Some(60000), // Exceeds 50,000 limit
-        swimming_stroke_count: Some(150000), // Exceeds 100,000 limit
-        nike_fuel_points: Some(15000), // Exceeds 10,000 limit
+        push_count: Some(60000),                 // Exceeds 50,000 limit
+        swimming_stroke_count: Some(150000),     // Exceeds 100,000 limit
+        nike_fuel_points: Some(15000),           // Exceeds 10,000 limit
         apple_exercise_time_minutes: Some(1500), // Exceeds 1440 minutes (24 hours)
-        apple_stand_time_minutes: Some(1500), // Exceeds 1440 minutes
-        apple_move_time_minutes: Some(1500), // Exceeds 1440 minutes
+        apple_stand_time_minutes: Some(1500),    // Exceeds 1440 minutes
+        apple_move_time_minutes: Some(1500),     // Exceeds 1440 minutes
         apple_stand_hour_achieved: Some(false),
         source_device: Some("Test Device".to_string()),
         created_at: Utc::now(),
@@ -308,7 +337,9 @@ async fn test_activity_metrics_validation_extended_fields(pool: PgPool) -> Resul
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn test_wheelchair_user_activity_accessibility(pool: PgPool) -> Result<(), Box<dyn std::error::Error>> {
+async fn test_wheelchair_user_activity_accessibility(
+    pool: PgPool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let user = create_test_user(&pool).await?;
     let batch_processor = BatchProcessor::new(&pool);
 
@@ -413,8 +444,13 @@ async fn test_wheelchair_user_activity_accessibility(pool: PgPool) -> Result<(),
     ];
 
     // Process wheelchair accessibility metrics
-    let batch_result = batch_processor.process_activity_metrics(user.id, &wheelchair_activities).await?;
-    assert_eq!(batch_result, 2, "Both wheelchair activity metrics should be processed");
+    let batch_result = batch_processor
+        .process_activity_metrics(user.id, &wheelchair_activities)
+        .await?;
+    assert_eq!(
+        batch_result, 2,
+        "Both wheelchair activity metrics should be processed"
+    );
 
     // Verify wheelchair-specific metrics were stored
     let stored_activities: Vec<ActivityMetric> = sqlx::query_as!(
@@ -451,14 +487,18 @@ async fn test_wheelchair_user_activity_accessibility(pool: PgPool) -> Result<(),
     let wheelchair_activity = &wheelchair_activities[0];
 
     // Should pass validation with wheelchair user characteristics
-    assert!(wheelchair_activity.validate_with_characteristics(&config, Some(&wheelchair_characteristics)).is_ok());
+    assert!(wheelchair_activity
+        .validate_with_characteristics(&config, Some(&wheelchair_characteristics))
+        .is_ok());
 
     cleanup_test_user(&pool, user.id).await?;
     Ok(())
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn test_multi_sport_activity_tracking(pool: PgPool) -> Result<(), Box<dyn std::error::Error>> {
+async fn test_multi_sport_activity_tracking(
+    pool: PgPool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let user = create_test_user(&pool).await?;
     let batch_processor = BatchProcessor::new(&pool);
 
@@ -493,9 +533,9 @@ async fn test_multi_sport_activity_tracking(pool: PgPool) -> Result<(), Box<dyn 
             id: Uuid::new_v4(),
             user_id: user.id,
             recorded_at: Utc::now() - Duration::hours(6),
-            step_count: Some(150), // Minimal steps during cycling
+            step_count: Some(150),          // Minimal steps during cycling
             distance_meters: Some(25000.0), // 25km cycling
-            flights_climbed: Some(200), // Hills during cycling
+            flights_climbed: Some(200),     // Hills during cycling
             active_energy_burned_kcal: Some(650.0),
             basal_energy_burned_kcal: Some(180.0),
             distance_cycling_meters: Some(25000.0),
@@ -530,7 +570,7 @@ async fn test_multi_sport_activity_tracking(pool: PgPool) -> Result<(), Box<dyn 
             swimming_stroke_count: None,
             nike_fuel_points: Some(220),
             apple_exercise_time_minutes: Some(20), // Light exercise
-            apple_stand_time_minutes: Some(6), // Good stand hours
+            apple_stand_time_minutes: Some(6),     // Good stand hours
             apple_move_time_minutes: Some(45),
             apple_stand_hour_achieved: Some(true),
             source_device: Some("Apple Watch Series 9".to_string()),
@@ -539,8 +579,13 @@ async fn test_multi_sport_activity_tracking(pool: PgPool) -> Result<(), Box<dyn 
     ];
 
     // Process multi-sport day
-    let batch_result = batch_processor.process_activity_metrics(user.id, &multi_sport_activities).await?;
-    assert_eq!(batch_result, 3, "All three multi-sport activities should be processed");
+    let batch_result = batch_processor
+        .process_activity_metrics(user.id, &multi_sport_activities)
+        .await?;
+    assert_eq!(
+        batch_result, 3,
+        "All three multi-sport activities should be processed"
+    );
 
     // Query and analyze the multi-sport day data
     let stored_activities: Vec<ActivityMetric> = sqlx::query_as!(
@@ -563,40 +608,47 @@ async fn test_multi_sport_activity_tracking(pool: PgPool) -> Result<(), Box<dyn 
     assert_eq!(stored_activities.len(), 3);
 
     // Verify multi-sport day totals and specialized tracking
-    let total_distance: f64 = stored_activities.iter()
+    let total_distance: f64 = stored_activities
+        .iter()
         .filter_map(|a| a.distance_meters)
         .sum();
     assert_eq!(total_distance, 30500.0); // 1km + 25km + 4.5km
 
-    let total_active_energy: f64 = stored_activities.iter()
+    let total_active_energy: f64 = stored_activities
+        .iter()
         .filter_map(|a| a.active_energy_burned_kcal)
         .sum();
     assert_eq!(total_active_energy, 1080.0); // Sum of all activities
 
-    let total_exercise_time: i32 = stored_activities.iter()
+    let total_exercise_time: i32 = stored_activities
+        .iter()
         .filter_map(|a| a.apple_exercise_time_minutes)
         .sum();
     assert_eq!(total_exercise_time, 125); // 30 + 75 + 20
 
     // Verify sport-specific distances are tracked separately
-    let swimming_distance: f64 = stored_activities.iter()
+    let swimming_distance: f64 = stored_activities
+        .iter()
         .filter_map(|a| a.distance_swimming_meters)
         .sum();
     assert_eq!(swimming_distance, 1000.0);
 
-    let cycling_distance: f64 = stored_activities.iter()
+    let cycling_distance: f64 = stored_activities
+        .iter()
         .filter_map(|a| a.distance_cycling_meters)
         .sum();
     assert_eq!(cycling_distance, 25000.0);
 
     // Verify swimming stroke analytics
-    let total_strokes: i32 = stored_activities.iter()
+    let total_strokes: i32 = stored_activities
+        .iter()
         .filter_map(|a| a.swimming_stroke_count)
         .sum();
     assert_eq!(total_strokes, 900);
 
     // Verify Nike Fuel cross-platform tracking
-    let total_nike_fuel: i32 = stored_activities.iter()
+    let total_nike_fuel: i32 = stored_activities
+        .iter()
         .filter_map(|a| a.nike_fuel_points)
         .sum();
     assert_eq!(total_nike_fuel, 1070); // 850 + 220
@@ -606,7 +658,9 @@ async fn test_multi_sport_activity_tracking(pool: PgPool) -> Result<(), Box<dyn 
 }
 
 #[sqlx::test(migrations = "../migrations")]
-async fn test_apple_watch_activity_rings_integration(pool: PgPool) -> Result<(), Box<dyn std::error::Error>> {
+async fn test_apple_watch_activity_rings_integration(
+    pool: PgPool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let user = create_test_user(&pool).await?;
     let batch_processor = BatchProcessor::new(&pool);
 
@@ -630,8 +684,8 @@ async fn test_apple_watch_activity_rings_integration(pool: PgPool) -> Result<(),
             swimming_stroke_count: None,
             nike_fuel_points: None,
             apple_exercise_time_minutes: Some(30), // Exercise ring progress
-            apple_stand_time_minutes: Some(1), // Stand ring progress
-            apple_move_time_minutes: Some(30), // Move ring progress
+            apple_stand_time_minutes: Some(1),     // Stand ring progress
+            apple_move_time_minutes: Some(30),     // Move ring progress
             apple_stand_hour_achieved: Some(true), // Stand goal achieved this hour
             source_device: Some("Apple Watch Series 9".to_string()),
             created_at: Utc::now(),
@@ -654,8 +708,8 @@ async fn test_apple_watch_activity_rings_integration(pool: PgPool) -> Result<(),
             swimming_stroke_count: None,
             nike_fuel_points: None,
             apple_exercise_time_minutes: Some(15), // Additional exercise
-            apple_stand_time_minutes: Some(8), // Accumulated stand hours
-            apple_move_time_minutes: Some(45), // Total move time
+            apple_stand_time_minutes: Some(8),     // Accumulated stand hours
+            apple_move_time_minutes: Some(45),     // Total move time
             apple_stand_hour_achieved: Some(true), // Good standing throughout day
             source_device: Some("Apple Watch Series 9".to_string()),
             created_at: Utc::now(),
@@ -678,8 +732,8 @@ async fn test_apple_watch_activity_rings_integration(pool: PgPool) -> Result<(),
             swimming_stroke_count: None,
             nike_fuel_points: None,
             apple_exercise_time_minutes: Some(5), // Final exercise minutes
-            apple_stand_time_minutes: Some(12), // Full 12-hour stand goal
-            apple_move_time_minutes: Some(50), // Complete move goal
+            apple_stand_time_minutes: Some(12),   // Full 12-hour stand goal
+            apple_move_time_minutes: Some(50),    // Complete move goal
             apple_stand_hour_achieved: Some(true), // Perfect stand day
             source_device: Some("Apple Watch Series 9".to_string()),
             created_at: Utc::now(),
@@ -687,8 +741,13 @@ async fn test_apple_watch_activity_rings_integration(pool: PgPool) -> Result<(),
     ];
 
     // Process Apple Watch activity rings data
-    let batch_result = batch_processor.process_activity_metrics(user.id, &activity_rings_data).await?;
-    assert_eq!(batch_result, 3, "All Apple Watch activity ring metrics should be processed");
+    let batch_result = batch_processor
+        .process_activity_metrics(user.id, &activity_rings_data)
+        .await?;
+    assert_eq!(
+        batch_result, 3,
+        "All Apple Watch activity ring metrics should be processed"
+    );
 
     // Query Apple Watch specific metrics
     let apple_watch_activities: Vec<ActivityMetric> = sqlx::query_as!(
@@ -714,7 +773,8 @@ async fn test_apple_watch_activity_rings_integration(pool: PgPool) -> Result<(),
     let final_activity = &apple_watch_activities[2]; // Evening activity
 
     // Verify exercise ring (goal typically 30 minutes)
-    let total_exercise_time: i32 = apple_watch_activities.iter()
+    let total_exercise_time: i32 = apple_watch_activities
+        .iter()
         .filter_map(|a| a.apple_exercise_time_minutes)
         .sum();
     assert_eq!(total_exercise_time, 50); // 30 + 15 + 5 (exceeds 30-minute goal)
@@ -726,7 +786,8 @@ async fn test_apple_watch_activity_rings_integration(pool: PgPool) -> Result<(),
     assert_eq!(final_activity.apple_move_time_minutes, Some(50));
 
     // Verify consistent stand hour achievement
-    let stand_hours_achieved = apple_watch_activities.iter()
+    let stand_hours_achieved = apple_watch_activities
+        .iter()
         .filter(|a| a.apple_stand_hour_achieved == Some(true))
         .count();
     assert_eq!(stand_hours_achieved, 3); // All three periods achieved stand goals

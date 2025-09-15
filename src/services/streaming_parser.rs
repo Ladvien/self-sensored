@@ -269,13 +269,13 @@ mod tests {
     #[tokio::test]
     async fn test_streaming_parser_basic() {
         let json_data = r#"{"name": "test", "value": 42}"#;
-        let parser = StreamingJsonParser::new();
+        let _parser = StreamingJsonParser::new();
 
         // Simulate stream by chunking the data
-        let chunks = [
-            json_data[..10].as_bytes(),
-            json_data[10..20].as_bytes(),
-            json_data[20..].as_bytes(),
+        let _chunks = [
+            &json_data.as_bytes()[..10],
+            &json_data.as_bytes()[10..20],
+            &json_data.as_bytes()[20..],
         ];
 
         // TODO: Add actual stream test implementation
@@ -283,7 +283,7 @@ mod tests {
 
     #[test]
     fn test_json_structure_validation() {
-        let parser = StreamingJsonParser::new();
+        let _parser = StreamingJsonParser::new();
 
         // Valid JSON
         let valid_json = br#"{"name": "test", "nested": {"value": 42}}"#;

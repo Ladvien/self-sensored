@@ -279,28 +279,31 @@
 use actix_web::{web, HttpResponse, Result};
 use serde_json::json;
 use tracing::{error, info, warn};
-use uuid::Uuid;
 use validator::Validate;
 
-use crate::middleware::auth::{ApiKeyInfo, AuthenticatedUser};
+use crate::handlers::auth::ApiKeyInfo;
 use crate::models::user_characteristics::{UserCharacteristicsInput, UserCharacteristicsResponse};
 use crate::models::ApiResponse;
+use crate::services::auth::AuthContext;
 use crate::services::user_characteristics::UserCharacteristicsService;
 
 /// Get user characteristics
 pub async fn get_user_characteristics(
-    user: AuthenticatedUser,
+    user: AuthContext,
     characteristics_service: web::Data<UserCharacteristicsService>,
 ) -> Result<HttpResponse> {
     info!(
-        user_id = %user.user_id,
+        user_id = %user.user.id,
         "Getting user characteristics"
     );
 
-    match characteristics_service.get_with_personalization(user.user_id).await {
+    match characteristics_service
+        .get_with_personalization(user.user.id)
+        .await
+    {
         Ok(Some(response)) => {
             info!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 completeness_score = response.personalization.completeness_score,
                 "Retrieved user characteristics"
             );
@@ -309,7 +312,7 @@ pub async fn get_user_characteristics(
         }
         Ok(None) => {
             info!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 "No user characteristics found"
             );
 
@@ -319,47 +322,51 @@ pub async fn get_user_characteristics(
         }
         Err(e) => {
             error!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 error = %e,
                 "Failed to get user characteristics"
             );
 
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                "Failed to retrieve user characteristics".to_string(),
-            )))
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to retrieve user characteristics".to_string(),
+                )),
+            )
         }
     }
 }
 
 /// Create user characteristics
 pub async fn create_user_characteristics(
-    user: AuthenticatedUser,
+    user: AuthContext,
     input: web::Json<UserCharacteristicsInput>,
     characteristics_service: web::Data<UserCharacteristicsService>,
 ) -> Result<HttpResponse> {
     info!(
-        user_id = %user.user_id,
+        user_id = %user.user.id,
         "Creating user characteristics"
     );
 
     // Validate input
     if let Err(validation_errors) = input.validate() {
         warn!(
-            user_id = %user.user_id,
+            user_id = %user.user.id,
             errors = ?validation_errors,
             "User characteristics validation failed"
         );
 
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-            format!("Validation failed: {}", validation_errors),
-        )));
+        return Ok(
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
+                "Validation failed: {validation_errors}"
+            ))),
+        );
     }
 
     // Check if characteristics already exist
-    match characteristics_service.get_by_user_id(user.user_id).await {
+    match characteristics_service.get_by_user_id(user.user.id).await {
         Ok(Some(_)) => {
             warn!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 "Attempting to create characteristics that already exist"
             );
 
@@ -372,27 +379,35 @@ pub async fn create_user_characteristics(
         }
         Err(e) => {
             error!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 error = %e,
                 "Failed to check existing characteristics"
             );
 
-            return Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                "Failed to process request".to_string(),
-            )));
+            return Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to process request".to_string(),
+                )),
+            );
         }
     }
 
-    match characteristics_service.create(user.user_id, input.into_inner()).await {
+    match characteristics_service
+        .create(user.user.id, input.into_inner())
+        .await
+    {
         Ok(characteristics) => {
-            let personalization_info = crate::models::user_characteristics::PersonalizationInfo::from_characteristics(&characteristics);
+            let personalization_info =
+                crate::models::user_characteristics::PersonalizationInfo::from_characteristics(
+                    &characteristics,
+                );
             let response = UserCharacteristicsResponse {
                 characteristics,
                 personalization: personalization_info,
             };
 
             info!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 characteristics_id = %response.characteristics.id,
                 "Created user characteristics"
             );
@@ -401,52 +416,62 @@ pub async fn create_user_characteristics(
         }
         Err(e) => {
             error!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 error = %e,
                 "Failed to create user characteristics"
             );
 
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                "Failed to create user characteristics".to_string(),
-            )))
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to create user characteristics".to_string(),
+                )),
+            )
         }
     }
 }
 
 /// Update user characteristics
 pub async fn update_user_characteristics(
-    user: AuthenticatedUser,
+    user: AuthContext,
     input: web::Json<UserCharacteristicsInput>,
     characteristics_service: web::Data<UserCharacteristicsService>,
 ) -> Result<HttpResponse> {
     info!(
-        user_id = %user.user_id,
+        user_id = %user.user.id,
         "Updating user characteristics"
     );
 
     // Validate input
     if let Err(validation_errors) = input.validate() {
         warn!(
-            user_id = %user.user_id,
+            user_id = %user.user.id,
             errors = ?validation_errors,
             "User characteristics validation failed"
         );
 
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-            format!("Validation failed: {}", validation_errors),
-        )));
+        return Ok(
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
+                "Validation failed: {validation_errors}"
+            ))),
+        );
     }
 
-    match characteristics_service.update(user.user_id, input.into_inner()).await {
+    match characteristics_service
+        .update(user.user.id, input.into_inner())
+        .await
+    {
         Ok(Some(characteristics)) => {
-            let personalization_info = crate::models::user_characteristics::PersonalizationInfo::from_characteristics(&characteristics);
+            let personalization_info =
+                crate::models::user_characteristics::PersonalizationInfo::from_characteristics(
+                    &characteristics,
+                );
             let response = UserCharacteristicsResponse {
                 characteristics,
                 personalization: personalization_info,
             };
 
             info!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 characteristics_id = %response.characteristics.id,
                 "Updated user characteristics"
             );
@@ -455,7 +480,7 @@ pub async fn update_user_characteristics(
         }
         Ok(None) => {
             warn!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 "Attempting to update non-existent characteristics"
             );
 
@@ -465,52 +490,62 @@ pub async fn update_user_characteristics(
         }
         Err(e) => {
             error!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 error = %e,
                 "Failed to update user characteristics"
             );
 
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                "Failed to update user characteristics".to_string(),
-            )))
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to update user characteristics".to_string(),
+                )),
+            )
         }
     }
 }
 
 /// Create or update user characteristics (upsert)
 pub async fn upsert_user_characteristics(
-    user: AuthenticatedUser,
+    user: AuthContext,
     input: web::Json<UserCharacteristicsInput>,
     characteristics_service: web::Data<UserCharacteristicsService>,
 ) -> Result<HttpResponse> {
     info!(
-        user_id = %user.user_id,
+        user_id = %user.user.id,
         "Upserting user characteristics"
     );
 
     // Validate input
     if let Err(validation_errors) = input.validate() {
         warn!(
-            user_id = %user.user_id,
+            user_id = %user.user.id,
             errors = ?validation_errors,
             "User characteristics validation failed"
         );
 
-        return Ok(HttpResponse::BadRequest().json(ApiResponse::<()>::error(
-            format!("Validation failed: {}", validation_errors),
-        )));
+        return Ok(
+            HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
+                "Validation failed: {validation_errors}"
+            ))),
+        );
     }
 
-    match characteristics_service.upsert(user.user_id, input.into_inner()).await {
+    match characteristics_service
+        .upsert(user.user.id, input.into_inner())
+        .await
+    {
         Ok(characteristics) => {
-            let personalization_info = crate::models::user_characteristics::PersonalizationInfo::from_characteristics(&characteristics);
+            let personalization_info =
+                crate::models::user_characteristics::PersonalizationInfo::from_characteristics(
+                    &characteristics,
+                );
             let response = UserCharacteristicsResponse {
                 characteristics,
                 personalization: personalization_info,
             };
 
             info!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 characteristics_id = %response.characteristics.id,
                 "Upserted user characteristics"
             );
@@ -519,32 +554,34 @@ pub async fn upsert_user_characteristics(
         }
         Err(e) => {
             error!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 error = %e,
                 "Failed to upsert user characteristics"
             );
 
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                "Failed to process user characteristics".to_string(),
-            )))
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to process user characteristics".to_string(),
+                )),
+            )
         }
     }
 }
 
 /// Delete user characteristics
 pub async fn delete_user_characteristics(
-    user: AuthenticatedUser,
+    user: AuthContext,
     characteristics_service: web::Data<UserCharacteristicsService>,
 ) -> Result<HttpResponse> {
     info!(
-        user_id = %user.user_id,
+        user_id = %user.user.id,
         "Deleting user characteristics"
     );
 
-    match characteristics_service.delete(user.user_id).await {
+    match characteristics_service.delete(user.user.id).await {
         Ok(true) => {
             info!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 "Deleted user characteristics"
             );
 
@@ -555,7 +592,7 @@ pub async fn delete_user_characteristics(
         }
         Ok(false) => {
             warn!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 "Attempting to delete non-existent characteristics"
             );
 
@@ -565,32 +602,37 @@ pub async fn delete_user_characteristics(
         }
         Err(e) => {
             error!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 error = %e,
                 "Failed to delete user characteristics"
             );
 
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                "Failed to delete user characteristics".to_string(),
-            )))
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to delete user characteristics".to_string(),
+                )),
+            )
         }
     }
 }
 
 /// Mark user characteristics as verified
 pub async fn verify_user_characteristics(
-    user: AuthenticatedUser,
+    user: AuthContext,
     characteristics_service: web::Data<UserCharacteristicsService>,
 ) -> Result<HttpResponse> {
     info!(
-        user_id = %user.user_id,
+        user_id = %user.user.id,
         "Marking user characteristics as verified"
     );
 
-    match characteristics_service.update_last_verified(user.user_id).await {
+    match characteristics_service
+        .update_last_verified(user.user.id)
+        .await
+    {
         Ok(_) => {
             info!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 "Updated user characteristics verification timestamp"
             );
 
@@ -601,36 +643,41 @@ pub async fn verify_user_characteristics(
         }
         Err(e) => {
             error!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 error = %e,
                 "Failed to verify user characteristics"
             );
 
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                "Failed to verify user characteristics".to_string(),
-            )))
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to verify user characteristics".to_string(),
+                )),
+            )
         }
     }
 }
 
 /// Get personalized validation ranges for health metrics
 pub async fn get_validation_ranges(
-    user: AuthenticatedUser,
+    user: AuthContext,
     path: web::Path<String>,
     characteristics_service: web::Data<UserCharacteristicsService>,
 ) -> Result<HttpResponse> {
     let metric_type = path.into_inner();
 
     info!(
-        user_id = %user.user_id,
+        user_id = %user.user.id,
         metric_type = %metric_type,
         "Getting personalized validation ranges"
     );
 
-    match characteristics_service.get_validation_ranges(user.user_id, &metric_type).await {
+    match characteristics_service
+        .get_validation_ranges(user.user.id, &metric_type)
+        .await
+    {
         Ok(ranges) => {
             info!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 metric_type = %metric_type,
                 personalized = ranges.get("personalized").and_then(|v| v.as_bool()).unwrap_or(false),
                 "Retrieved validation ranges"
@@ -640,33 +687,38 @@ pub async fn get_validation_ranges(
         }
         Err(e) => {
             error!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 metric_type = %metric_type,
                 error = %e,
                 "Failed to get validation ranges"
             );
 
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                "Failed to get validation ranges".to_string(),
-            )))
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to get validation ranges".to_string(),
+                )),
+            )
         }
     }
 }
 
 /// Get UV protection recommendations
 pub async fn get_uv_recommendations(
-    user: AuthenticatedUser,
+    user: AuthContext,
     characteristics_service: web::Data<UserCharacteristicsService>,
 ) -> Result<HttpResponse> {
     info!(
-        user_id = %user.user_id,
+        user_id = %user.user.id,
         "Getting UV protection recommendations"
     );
 
-    match characteristics_service.get_uv_recommendations(user.user_id).await {
+    match characteristics_service
+        .get_uv_recommendations(user.user.id)
+        .await
+    {
         Ok(Some(recommendations)) => {
             info!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 "Retrieved UV recommendations"
             );
 
@@ -674,7 +726,7 @@ pub async fn get_uv_recommendations(
         }
         Ok(None) => {
             info!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 "No user characteristics found for UV recommendations"
             );
 
@@ -684,32 +736,37 @@ pub async fn get_uv_recommendations(
         }
         Err(e) => {
             error!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 error = %e,
                 "Failed to get UV recommendations"
             );
 
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                "Failed to get UV recommendations".to_string(),
-            )))
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to get UV recommendations".to_string(),
+                )),
+            )
         }
     }
 }
 
 /// Get activity personalization settings
 pub async fn get_activity_personalization(
-    user: AuthenticatedUser,
+    user: AuthContext,
     characteristics_service: web::Data<UserCharacteristicsService>,
 ) -> Result<HttpResponse> {
     info!(
-        user_id = %user.user_id,
+        user_id = %user.user.id,
         "Getting activity personalization settings"
     );
 
-    match characteristics_service.get_activity_personalization(user.user_id).await {
+    match characteristics_service
+        .get_activity_personalization(user.user.id)
+        .await
+    {
         Ok(Some(personalization)) => {
             info!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 "Retrieved activity personalization"
             );
 
@@ -717,44 +774,50 @@ pub async fn get_activity_personalization(
         }
         Ok(None) => {
             info!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 "No user characteristics found for activity personalization"
             );
 
             Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error(
-                "User characteristics not found. Please set your activity preferences first.".to_string(),
+                "User characteristics not found. Please set your activity preferences first."
+                    .to_string(),
             )))
         }
         Err(e) => {
             error!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 error = %e,
                 "Failed to get activity personalization"
             );
 
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                "Failed to get activity personalization".to_string(),
-            )))
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to get activity personalization".to_string(),
+                )),
+            )
         }
     }
 }
 
 /// Get personalized heart rate zones
 pub async fn get_heart_rate_zones(
-    user: AuthenticatedUser,
+    user: AuthContext,
     query: web::Query<HeartRateZoneQuery>,
     characteristics_service: web::Data<UserCharacteristicsService>,
 ) -> Result<HttpResponse> {
     info!(
-        user_id = %user.user_id,
+        user_id = %user.user.id,
         resting_hr = query.resting_hr,
         "Getting personalized heart rate zones"
     );
 
-    match characteristics_service.get_heart_rate_zones(user.user_id, query.resting_hr).await {
+    match characteristics_service
+        .get_heart_rate_zones(user.user.id, query.resting_hr)
+        .await
+    {
         Ok(Some(zones)) => {
             info!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 "Retrieved heart rate zones"
             );
 
@@ -762,42 +825,48 @@ pub async fn get_heart_rate_zones(
         }
         Ok(None) => {
             info!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 "No user characteristics found for heart rate zones"
             );
 
             Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error(
-                "User characteristics not found. Please set your age and biological sex first.".to_string(),
+                "User characteristics not found. Please set your age and biological sex first."
+                    .to_string(),
             )))
         }
         Err(e) => {
             error!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 error = %e,
                 "Failed to get heart rate zones"
             );
 
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                "Failed to get heart rate zones".to_string(),
-            )))
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to get heart rate zones".to_string(),
+                )),
+            )
         }
     }
 }
 
 /// Get emergency medical information
 pub async fn get_emergency_info(
-    user: AuthenticatedUser,
+    user: AuthContext,
     characteristics_service: web::Data<UserCharacteristicsService>,
 ) -> Result<HttpResponse> {
     info!(
-        user_id = %user.user_id,
+        user_id = %user.user.id,
         "Getting emergency medical information"
     );
 
-    match characteristics_service.get_emergency_info(user.user_id).await {
+    match characteristics_service
+        .get_emergency_info(user.user.id)
+        .await
+    {
         Ok(Some(info)) => {
             info!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 "Retrieved emergency information"
             );
 
@@ -805,24 +874,27 @@ pub async fn get_emergency_info(
         }
         Ok(None) => {
             info!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 "No user characteristics found for emergency information"
             );
 
             Ok(HttpResponse::NotFound().json(ApiResponse::<()>::error(
-                "User characteristics not found. Please set your medical information first.".to_string(),
+                "User characteristics not found. Please set your medical information first."
+                    .to_string(),
             )))
         }
         Err(e) => {
             error!(
-                user_id = %user.user_id,
+                user_id = %user.user.id,
                 error = %e,
                 "Failed to get emergency information"
             );
 
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                "Failed to get emergency information".to_string(),
-            )))
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to get emergency information".to_string(),
+                )),
+            )
         }
     }
 }
@@ -833,7 +905,10 @@ pub async fn get_aggregate_stats(
     characteristics_service: web::Data<UserCharacteristicsService>,
 ) -> Result<HttpResponse> {
     // Check if API key has admin permissions
-    if !api_key.permissions.as_array()
+    if !api_key
+        .permissions
+        .as_ref()
+        .and_then(|p| p.as_array())
         .map(|perms| perms.iter().any(|p| p.as_str() == Some("admin")))
         .unwrap_or(false)
     {
@@ -868,9 +943,11 @@ pub async fn get_aggregate_stats(
                 "Failed to get aggregate statistics"
             );
 
-            Ok(HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
-                "Failed to get aggregate statistics".to_string(),
-            )))
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to get aggregate statistics".to_string(),
+                )),
+            )
         }
     }
 }
@@ -891,23 +968,28 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
             .route("", web::patch().to(upsert_user_characteristics))
             .route("", web::delete().to(delete_user_characteristics))
             .route("/verify", web::post().to(verify_user_characteristics))
-            .route("/validation/{metric_type}", web::get().to(get_validation_ranges))
+            .route(
+                "/validation/{metric_type}",
+                web::get().to(get_validation_ranges),
+            )
             .route("/uv-recommendations", web::get().to(get_uv_recommendations))
-            .route("/activity-personalization", web::get().to(get_activity_personalization))
+            .route(
+                "/activity-personalization",
+                web::get().to(get_activity_personalization),
+            )
             .route("/heart-rate-zones", web::get().to(get_heart_rate_zones))
-            .route("/emergency-info", web::get().to(get_emergency_info))
+            .route("/emergency-info", web::get().to(get_emergency_info)),
     )
     .service(
-        web::scope("/v1/admin/characteristics")
-            .route("/stats", web::get().to(get_aggregate_stats))
+        web::scope("/v1/admin/characteristics").route("/stats", web::get().to(get_aggregate_stats)),
     );
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use actix_web::{test, web, App};
     use crate::models::enums::{ActivityMoveMode, BiologicalSex, BloodType, FitzpatrickSkinType};
+    use actix_web::test;
     use chrono::NaiveDate;
 
     // Helper function to create test input
@@ -927,14 +1009,14 @@ mod tests {
     }
 
     #[test]
-    fn test_input_validation() {
+    async fn test_input_validation() {
         let mut input = create_test_input();
 
         // Valid input should pass validation
         assert!(input.validate().is_ok());
 
         // Test invalid birth date (too many medical conditions)
-        input.medical_conditions = Some((0..60).map(|i| format!("Condition {}", i)).collect());
+        input.medical_conditions = Some((0..60).map(|i| format!("Condition {i}")).collect());
         assert!(input.validate().is_err());
     }
 

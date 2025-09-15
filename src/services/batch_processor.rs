@@ -7,13 +7,13 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Semaphore;
 use tokio::time::sleep;
-use tracing::{error, info, instrument, warn};
+use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::config::{
     BatchConfig, ACTIVITY_PARAMS_PER_RECORD, BLOOD_PRESSURE_PARAMS_PER_RECORD,
     BODY_MEASUREMENT_PARAMS_PER_RECORD, HEART_RATE_PARAMS_PER_RECORD, SAFE_PARAM_LIMIT,
-    SLEEP_PARAMS_PER_RECORD, TEMPERATURE_PARAMS_PER_RECORD, WORKOUT_PARAMS_PER_RECORD,
+    SLEEP_PARAMS_PER_RECORD, WORKOUT_PARAMS_PER_RECORD,
 };
 use crate::middleware::metrics::Metrics;
 use crate::models::{HealthMetric, IngestPayload, ProcessingError};
@@ -28,7 +28,7 @@ pub struct BatchProcessor {
 }
 
 /// Result of batch processing operation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct BatchProcessingResult {
     pub processed_count: usize,
     pub failed_count: usize,
@@ -41,7 +41,7 @@ pub struct BatchProcessingResult {
 }
 
 /// Statistics about deduplication during batch processing
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct DeduplicationStats {
     pub heart_rate_duplicates: usize,
     pub blood_pressure_duplicates: usize,
@@ -152,7 +152,7 @@ struct FertilityKey {
 }
 
 /// Progress tracking for chunked operations
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ChunkProgress {
     pub total_chunks: usize,
     pub completed_chunks: usize,
@@ -160,7 +160,7 @@ pub struct ChunkProgress {
 }
 
 /// Progress tracking for each metric type
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct MetricTypeProgress {
     pub total_records: usize,
     pub processed_records: usize,
@@ -525,7 +525,14 @@ impl BatchProcessor {
                 let _permit = semaphore.acquire().await.expect("Semaphore closed");
                 Self::process_with_retry(
                     "Nutrition",
-                    || Self::insert_nutrition_metrics_chunked(&pool, user_id, nutrition_metrics.clone(), chunk_size),
+                    || {
+                        Self::insert_nutrition_metrics_chunked(
+                            &pool,
+                            user_id,
+                            nutrition_metrics.clone(),
+                            chunk_size,
+                        )
+                    },
                     &config,
                 )
                 .await
@@ -543,7 +550,14 @@ impl BatchProcessor {
                 let _permit = semaphore.acquire().await.expect("Semaphore closed");
                 Self::process_with_retry(
                     "MenstrualHealth",
-                    || Self::insert_menstrual_metrics_chunked(&pool, user_id, menstrual_metrics.clone(), chunk_size),
+                    || {
+                        Self::insert_menstrual_metrics_chunked(
+                            &pool,
+                            user_id,
+                            menstrual_metrics.clone(),
+                            chunk_size,
+                        )
+                    },
                     &config,
                 )
                 .await
@@ -560,7 +574,14 @@ impl BatchProcessor {
                 let _permit = semaphore.acquire().await.expect("Semaphore closed");
                 Self::process_with_retry(
                     "FertilityTracking",
-                    || Self::insert_fertility_metrics_chunked(&pool, user_id, fertility_metrics.clone(), chunk_size),
+                    || {
+                        Self::insert_fertility_metrics_chunked(
+                            &pool,
+                            user_id,
+                            fertility_metrics.clone(),
+                            chunk_size,
+                        )
+                    },
                     &config,
                 )
                 .await
@@ -776,7 +797,14 @@ impl BatchProcessor {
             let menstrual_metrics = std::mem::take(&mut grouped.menstrual_metrics);
             let (processed, failed, errors, retries) = Self::process_with_retry(
                 "MenstrualHealth",
-                || Self::insert_menstrual_metrics_chunked(&self.pool, user_id, menstrual_metrics.clone(), self.config.menstrual_chunk_size),
+                || {
+                    Self::insert_menstrual_metrics_chunked(
+                        &self.pool,
+                        user_id,
+                        menstrual_metrics.clone(),
+                        self.config.menstrual_chunk_size,
+                    )
+                },
                 &self.config,
             )
             .await;
@@ -790,7 +818,14 @@ impl BatchProcessor {
             let fertility_metrics = std::mem::take(&mut grouped.fertility_metrics);
             let (processed, failed, errors, retries) = Self::process_with_retry(
                 "FertilityTracking",
-                || Self::insert_fertility_metrics_chunked(&self.pool, user_id, fertility_metrics.clone(), self.config.fertility_chunk_size),
+                || {
+                    Self::insert_fertility_metrics_chunked(
+                        &self.pool,
+                        user_id,
+                        fertility_metrics.clone(),
+                        self.config.fertility_chunk_size,
+                    )
+                },
                 &self.config,
             )
             .await;
@@ -963,7 +998,10 @@ impl BatchProcessor {
 
                 _ => {
                     // Handle other metric types not yet supported
-                    warn!("Metric type {} not yet supported in batch processing", metric.metric_type());
+                    warn!(
+                        "Metric type {} not yet supported in batch processing",
+                        metric.metric_type()
+                    );
                 }
             }
         }
@@ -1047,18 +1085,24 @@ impl BatchProcessor {
 
         // Deduplicate body measurement metrics
         let original_body_measurement_count = grouped.body_measurements.len();
-        grouped.body_measurements = self.deduplicate_body_measurements(user_id, grouped.body_measurements);
-        stats.body_measurement_duplicates = original_body_measurement_count - grouped.body_measurements.len();
+        grouped.body_measurements =
+            self.deduplicate_body_measurements(user_id, grouped.body_measurements);
+        stats.body_measurement_duplicates =
+            original_body_measurement_count - grouped.body_measurements.len();
 
         // Deduplicate temperature metrics
         let original_temperature_count = grouped.temperature_metrics.len();
-        grouped.temperature_metrics = self.deduplicate_temperature_metrics(user_id, grouped.temperature_metrics);
-        stats.temperature_duplicates = original_temperature_count - grouped.temperature_metrics.len();
+        grouped.temperature_metrics =
+            self.deduplicate_temperature_metrics(user_id, grouped.temperature_metrics);
+        stats.temperature_duplicates =
+            original_temperature_count - grouped.temperature_metrics.len();
 
         // Deduplicate respiratory metrics
         let original_respiratory_count = grouped.respiratory_metrics.len();
-        grouped.respiratory_metrics = self.deduplicate_respiratory_metrics(user_id, grouped.respiratory_metrics);
-        stats.respiratory_duplicates = original_respiratory_count - grouped.respiratory_metrics.len();
+        grouped.respiratory_metrics =
+            self.deduplicate_respiratory_metrics(user_id, grouped.respiratory_metrics);
+        stats.respiratory_duplicates =
+            original_respiratory_count - grouped.respiratory_metrics.len();
 
         // Deduplicate blood glucose metrics with CGM-specific deduplication
         let original_glucose_count = grouped.blood_glucose.len();
@@ -1072,11 +1116,13 @@ impl BatchProcessor {
 
         // Deduplicate reproductive health metrics (HIPAA-Compliant Privacy-First Processing)
         let original_menstrual_count = grouped.menstrual_metrics.len();
-        grouped.menstrual_metrics = self.deduplicate_menstrual_metrics(user_id, grouped.menstrual_metrics);
+        grouped.menstrual_metrics =
+            self.deduplicate_menstrual_metrics(user_id, grouped.menstrual_metrics);
         stats.menstrual_duplicates = original_menstrual_count - grouped.menstrual_metrics.len();
 
         let original_fertility_count = grouped.fertility_metrics.len();
-        grouped.fertility_metrics = self.deduplicate_fertility_metrics(user_id, grouped.fertility_metrics);
+        grouped.fertility_metrics =
+            self.deduplicate_fertility_metrics(user_id, grouped.fertility_metrics);
         stats.fertility_duplicates = original_fertility_count - grouped.fertility_metrics.len();
 
         stats.total_duplicates = stats.heart_rate_duplicates
@@ -1229,7 +1275,10 @@ impl BatchProcessor {
             let key = BodyMeasurementKey {
                 user_id,
                 recorded_at_millis: metric.recorded_at.timestamp_millis(),
-                measurement_source: metric.measurement_source.clone().unwrap_or_else(|| "manual".to_string()),
+                measurement_source: metric
+                    .measurement_source
+                    .clone()
+                    .unwrap_or_else(|| "manual".to_string()),
             };
 
             if seen_keys.insert(key) {
@@ -1257,7 +1306,10 @@ impl BatchProcessor {
             let key = TemperatureKey {
                 user_id,
                 recorded_at_millis: metric.recorded_at.timestamp_millis(),
-                temperature_source: metric.temperature_source.clone().unwrap_or_else(|| "unknown".to_string()),
+                temperature_source: metric
+                    .temperature_source
+                    .clone()
+                    .unwrap_or_else(|| "unknown".to_string()),
             };
 
             if seen_keys.insert(key) {
@@ -1508,6 +1560,7 @@ impl BatchProcessor {
     }
 
     /// Static version of insert_heart_rates for parallel processing with chunking
+    #[allow(dead_code)]
     async fn insert_heart_rates_static(
         pool: &PgPool,
         user_id: Uuid,
@@ -1596,6 +1649,7 @@ impl BatchProcessor {
     }
 
     /// Static version of insert_blood_pressures for parallel processing with chunking
+    #[allow(dead_code)]
     async fn insert_blood_pressures_static(
         pool: &PgPool,
         user_id: Uuid,
@@ -1685,6 +1739,7 @@ impl BatchProcessor {
     }
 
     /// Static version of insert_sleep_metrics for parallel processing with chunking
+    #[allow(dead_code)]
     async fn insert_sleep_metrics_static(
         pool: &PgPool,
         user_id: Uuid,
@@ -1794,6 +1849,7 @@ impl BatchProcessor {
     }
 
     /// Static version of insert_activities for parallel processing with chunking
+    #[allow(dead_code)]
     async fn insert_activities_static(
         pool: &PgPool,
         user_id: Uuid,
@@ -1892,6 +1948,7 @@ impl BatchProcessor {
     }
 
     /// Static version of insert_body_measurements for parallel processing with chunking
+    #[allow(dead_code)]
     async fn insert_body_measurements_static(
         pool: &PgPool,
         user_id: Uuid,
@@ -2003,6 +2060,7 @@ impl BatchProcessor {
     }
 
     /// Static version of insert_workouts for parallel processing with chunking
+    #[allow(dead_code)]
     async fn insert_workouts_static(
         pool: &PgPool,
         user_id: Uuid,
@@ -2219,7 +2277,8 @@ impl BatchProcessor {
             return Ok(0);
         }
 
-        let chunks: Vec<&[crate::models::BloodGlucoseMetric]> = metrics.chunks(chunk_size).collect();
+        let chunks: Vec<&[crate::models::BloodGlucoseMetric]> =
+            metrics.chunks(chunk_size).collect();
         let mut total_inserted = 0;
         let max_params_per_chunk = chunk_size * crate::config::BLOOD_GLUCOSE_PARAMS_PER_RECORD;
 
@@ -2265,7 +2324,8 @@ impl BatchProcessor {
                     total_inserted += rows_inserted;
 
                     // Log critical glucose levels for medical monitoring
-                    let critical_count = chunk.iter()
+                    let critical_count = chunk
+                        .iter()
                         .filter(|m| m.is_critical_glucose_level())
                         .count();
 
@@ -2548,22 +2608,24 @@ impl BatchProcessor {
                     // Medical monitoring: count fever cases and critical temperatures in this chunk
                     let fever_count = chunk
                         .iter()
-                        .filter(|metric| {
-                            metric.body_temperature.map_or(false, |temp| temp > 38.0)
-                        })
+                        .filter(|metric| metric.body_temperature.is_some_and(|temp| temp > 38.0))
                         .count();
 
                     let critical_count = chunk
                         .iter()
                         .filter(|metric| {
-                            metric.body_temperature.map_or(false, |temp| temp < 35.0 || temp > 40.0)
+                            metric
+                                .body_temperature
+                                .is_some_and(|temp| !(35.0..=40.0).contains(&temp))
                         })
                         .count();
 
                     let ovulation_indicators = chunk
                         .iter()
                         .filter(|metric| {
-                            metric.basal_body_temperature.map_or(false, |temp| temp > 36.5)
+                            metric
+                                .basal_body_temperature
+                                .is_some_and(|temp| temp > 36.5)
                         })
                         .count();
 
@@ -2646,7 +2708,7 @@ impl BatchProcessor {
                 builder
                     .push_bind(user_id)
                     .push_bind(metric.recorded_at)
-                    .push_bind(&metric.menstrual_flow)
+                    .push_bind(metric.menstrual_flow)
                     .push_bind(metric.spotting)
                     .push_bind(metric.cycle_day)
                     .push_bind(metric.cramps_severity)
@@ -2658,11 +2720,7 @@ impl BatchProcessor {
 
             query_builder.push(" ON CONFLICT (user_id, recorded_at) DO NOTHING");
 
-            let inserted = query_builder
-                .build()
-                .execute(pool)
-                .await?
-                .rows_affected() as usize;
+            let inserted = query_builder.build().execute(pool).await?.rows_affected() as usize;
 
             total_inserted += inserted;
 
@@ -2708,7 +2766,10 @@ impl BatchProcessor {
             chunk_count = chunks.len(),
             chunk_size = chunk_size,
             max_params_per_chunk = max_params_per_chunk,
-            highly_sensitive_records = metrics.iter().filter(|m| m.requires_enhanced_audit()).count(),
+            highly_sensitive_records = metrics
+                .iter()
+                .filter(|m| m.requires_enhanced_audit())
+                .count(),
             "Processing fertility tracking metrics in chunks with maximum privacy protection"
         );
 
@@ -2722,11 +2783,11 @@ impl BatchProcessor {
                     .push_bind(user_id)
                     .push_bind(metric.recorded_at)
                     .push_bind(metric.cervical_mucus_quality.as_ref())
-                    .push_bind(&metric.ovulation_test_result)
+                    .push_bind(metric.ovulation_test_result)
                     .push_bind(metric.sexual_activity)
-                    .push_bind(&metric.pregnancy_test_result)
+                    .push_bind(metric.pregnancy_test_result)
                     .push_bind(metric.basal_body_temperature)
-                    .push_bind(&metric.temperature_context)
+                    .push_bind(metric.temperature_context)
                     .push_bind(metric.cervix_firmness)
                     .push_bind(metric.cervix_position)
                     .push_bind(metric.lh_level)
@@ -2736,11 +2797,7 @@ impl BatchProcessor {
 
             query_builder.push(" ON CONFLICT (user_id, recorded_at) DO NOTHING");
 
-            let inserted = query_builder
-                .build()
-                .execute(pool)
-                .await?
-                .rows_affected() as usize;
+            let inserted = query_builder.build().execute(pool).await?.rows_affected() as usize;
 
             total_inserted += inserted;
 
@@ -2749,7 +2806,8 @@ impl BatchProcessor {
                 chunk_size = chunk.len(),
                 inserted = inserted,
                 total_inserted = total_inserted,
-                highly_sensitive_in_chunk = chunk.iter().filter(|m| m.requires_enhanced_audit()).count(),
+                highly_sensitive_in_chunk =
+                    chunk.iter().filter(|m| m.requires_enhanced_audit()).count(),
                 "Processed fertility tracking metrics chunk with maximum privacy protection"
             );
         }
@@ -2770,7 +2828,13 @@ impl BatchProcessor {
         user_id: Uuid,
         metrics: Vec<crate::models::TemperatureMetric>,
     ) -> Result<usize, sqlx::Error> {
-        Self::insert_temperature_metrics_chunked(&self.pool, user_id, metrics, self.config.temperature_chunk_size).await
+        Self::insert_temperature_metrics_chunked(
+            &self.pool,
+            user_id,
+            metrics,
+            self.config.temperature_chunk_size,
+        )
+        .await
     }
 
     /// Add a method to process temperature metrics for single metric type processing
@@ -2796,15 +2860,24 @@ impl BatchProcessor {
         let start_time = std::time::Instant::now();
 
         // Deduplicate temperature metrics
+        let original_count = metrics.len();
         let deduplicated_metrics = self.deduplicate_temperature_metrics(user_id, metrics);
-        let duplicates_removed = metrics.len() - deduplicated_metrics.len();
+        let duplicates_removed = original_count - deduplicated_metrics.len();
 
         // Process temperature metrics with retry
         let (processed, failed, errors, retries) = Self::process_with_retry(
             "Temperature",
-            || Self::insert_temperature_metrics_chunked(&self.pool, user_id, deduplicated_metrics.clone(), self.config.temperature_chunk_size),
+            || {
+                Self::insert_temperature_metrics_chunked(
+                    &self.pool,
+                    user_id,
+                    deduplicated_metrics.clone(),
+                    self.config.temperature_chunk_size,
+                )
+            },
             &self.config,
-        ).await;
+        )
+        .await;
 
         let duration = start_time.elapsed();
 
@@ -2827,6 +2900,11 @@ impl BatchProcessor {
                 blood_glucose_duplicates: 0,
                 nutrition_duplicates: 0,
                 workout_duplicates: 0,
+
+                // Reproductive Health Deduplication Stats (HIPAA-Compliant)
+                menstrual_duplicates: 0,
+                fertility_duplicates: 0,
+
                 total_duplicates: duplicates_removed,
                 deduplication_time_ms: 0, // We're not tracking this separately here
             }),
@@ -2862,11 +2940,17 @@ impl BatchProcessor {
         // Process body measurements with retry
         let (processed, failed, errors, retries) = Self::process_with_retry(
             "BodyMeasurements",
-            || Self::insert_body_measurements_chunked(&self.pool, user_id, deduplicated_metrics.clone(), self.config.body_measurement_chunk_size),
-            self.config.max_retries,
-            self.config.initial_backoff_ms,
-            self.config.max_backoff_ms,
-        ).await;
+            || {
+                Self::insert_body_measurements_chunked(
+                    &self.pool,
+                    user_id,
+                    deduplicated_metrics.clone(),
+                    self.config.body_measurement_chunk_size,
+                )
+            },
+            &self.config,
+        )
+        .await;
 
         let processing_time_ms = start_time.elapsed().as_millis() as u64;
 
@@ -2889,6 +2973,11 @@ impl BatchProcessor {
                 blood_glucose_duplicates: 0,
                 nutrition_duplicates: 0,
                 workout_duplicates: 0,
+
+                // Reproductive Health Deduplication Stats (HIPAA-Compliant)
+                menstrual_duplicates: 0,
+                fertility_duplicates: 0,
+
                 total_duplicates: duplicates_removed,
                 deduplication_time_ms: 0, // We're not tracking this separately here
             }),
@@ -2914,11 +3003,17 @@ impl BatchProcessor {
         // Process hygiene events with retry
         let (processed, failed, errors, retries) = Self::process_with_retry(
             "HygieneEvents",
-            || Self::insert_hygiene_events_chunked(&self.pool, user_id, deduplicated_metrics.clone(), 6000), // Conservative chunk size for hygiene events
-            self.config.max_retries,
-            self.config.initial_backoff_ms,
-            self.config.max_backoff_ms,
-        ).await;
+            || {
+                Self::insert_hygiene_events_chunked(
+                    &self.pool,
+                    user_id,
+                    deduplicated_metrics.clone(),
+                    6000,
+                )
+            }, // Conservative chunk size for hygiene events
+            &self.config,
+        )
+        .await;
 
         let processing_time_ms = start_time.elapsed().as_millis() as u64;
 
@@ -2941,6 +3036,8 @@ impl BatchProcessor {
                 blood_glucose_duplicates: 0,
                 nutrition_duplicates: 0,
                 workout_duplicates: 0,
+                menstrual_duplicates: 0,
+                fertility_duplicates: 0,
                 total_duplicates: duplicates_removed,
                 deduplication_time_ms: 0,
             }),
@@ -3034,13 +3131,13 @@ impl BatchProcessor {
                     compliance_motivation, health_crisis_enhanced, crisis_compliance_level,
                     daily_goal_progress, achievement_unlocked, medication_adherence_related,
                     medical_condition_context, data_sensitivity_level, source_device
-                ) "#
+                ) "#,
             );
 
             query_builder.push_values(chunk.iter(), |mut b, metric| {
                 b.push_bind(user_id)
                     .push_bind(metric.recorded_at)
-                    .push_bind(&metric.event_type)
+                    .push_bind(metric.event_type)
                     .push_bind(metric.duration_seconds)
                     .push_bind(metric.quality_rating)
                     .push_bind(metric.meets_who_guidelines)
@@ -3115,9 +3212,17 @@ impl BatchProcessor {
         // Process menstrual metrics with retry logic and privacy protection
         let (processed, failed, errors, retries) = Self::process_with_retry(
             "MenstrualHealth",
-            || Self::insert_menstrual_metrics_chunked(&self.pool, user_id, deduplicated_metrics.clone(), self.config.menstrual_chunk_size),
+            || {
+                Self::insert_menstrual_metrics_chunked(
+                    &self.pool,
+                    user_id,
+                    deduplicated_metrics.clone(),
+                    self.config.menstrual_chunk_size,
+                )
+            },
             &self.config,
-        ).await;
+        )
+        .await;
 
         let duration = start_time.elapsed();
 
@@ -3180,9 +3285,17 @@ impl BatchProcessor {
         // Process fertility metrics with retry logic and privacy-first handling
         let (processed, failed, errors, retries) = Self::process_with_retry(
             "FertilityTracking",
-            || Self::insert_fertility_metrics_chunked(&self.pool, user_id, deduplicated_metrics.clone(), self.config.fertility_chunk_size),
+            || {
+                Self::insert_fertility_metrics_chunked(
+                    &self.pool,
+                    user_id,
+                    deduplicated_metrics.clone(),
+                    self.config.fertility_chunk_size,
+                )
+            },
             &self.config,
-        ).await;
+        )
+        .await;
 
         let duration = start_time.elapsed();
 

@@ -1,6 +1,6 @@
-use chrono::{DateTime, Utc};
-use self_sensored::models::enums::{WorkoutType, WorkoutCategory};
-use self_sensored::models::health_metrics::{WorkoutData, WorkoutRoute, RoutePoint, RouteMetrics};
+use chrono::Utc;
+use self_sensored::models::enums::{WorkoutCategory, WorkoutType};
+use self_sensored::models::health_metrics::{RoutePoint, WorkoutData, WorkoutRoute};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -8,38 +8,95 @@ use uuid::Uuid;
 #[test]
 fn test_comprehensive_workout_types() {
     // Test base traditional activities
-    assert_eq!(WorkoutType::from_ios_string("running"), WorkoutType::Running);
-    assert_eq!(WorkoutType::from_ios_string("american_football"), WorkoutType::AmericanFootball);
-    assert_eq!(WorkoutType::from_ios_string("football"), WorkoutType::AmericanFootball);
-    assert_eq!(WorkoutType::from_ios_string("badminton"), WorkoutType::Badminton);
-    assert_eq!(WorkoutType::from_ios_string("basketball"), WorkoutType::Basketball);
-    assert_eq!(WorkoutType::from_ios_string("climbing"), WorkoutType::Climbing);
-    assert_eq!(WorkoutType::from_ios_string("rock_climbing"), WorkoutType::Climbing);
+    assert_eq!(
+        WorkoutType::from_ios_string("running"),
+        WorkoutType::Running
+    );
+    assert_eq!(
+        WorkoutType::from_ios_string("american_football"),
+        WorkoutType::AmericanFootball
+    );
+    assert_eq!(
+        WorkoutType::from_ios_string("football"),
+        WorkoutType::AmericanFootball
+    );
+    assert_eq!(
+        WorkoutType::from_ios_string("badminton"),
+        WorkoutType::Badminton
+    );
+    assert_eq!(
+        WorkoutType::from_ios_string("basketball"),
+        WorkoutType::Basketball
+    );
+    assert_eq!(
+        WorkoutType::from_ios_string("climbing"),
+        WorkoutType::Climbing
+    );
+    assert_eq!(
+        WorkoutType::from_ios_string("rock_climbing"),
+        WorkoutType::Climbing
+    );
 
     // Test iOS 10+ activities
     assert_eq!(WorkoutType::from_ios_string("hiit"), WorkoutType::Hiit);
-    assert_eq!(WorkoutType::from_ios_string("high_intensity_interval_training"), WorkoutType::Hiit);
-    assert_eq!(WorkoutType::from_ios_string("kickboxing"), WorkoutType::Kickboxing);
-    assert_eq!(WorkoutType::from_ios_string("downhill_skiing"), WorkoutType::DownhillSkiing);
-    assert_eq!(WorkoutType::from_ios_string("alpine_skiing"), WorkoutType::DownhillSkiing);
+    assert_eq!(
+        WorkoutType::from_ios_string("high_intensity_interval_training"),
+        WorkoutType::Hiit
+    );
+    assert_eq!(
+        WorkoutType::from_ios_string("kickboxing"),
+        WorkoutType::Kickboxing
+    );
+    assert_eq!(
+        WorkoutType::from_ios_string("downhill_skiing"),
+        WorkoutType::DownhillSkiing
+    );
+    assert_eq!(
+        WorkoutType::from_ios_string("alpine_skiing"),
+        WorkoutType::DownhillSkiing
+    );
 
     // Test iOS 11+ activities
     assert_eq!(WorkoutType::from_ios_string("tai_chi"), WorkoutType::TaiChi);
-    assert_eq!(WorkoutType::from_ios_string("mixed_cardio"), WorkoutType::MixedCardio);
-    assert_eq!(WorkoutType::from_ios_string("hand_cycling"), WorkoutType::HandCycling);
+    assert_eq!(
+        WorkoutType::from_ios_string("mixed_cardio"),
+        WorkoutType::MixedCardio
+    );
+    assert_eq!(
+        WorkoutType::from_ios_string("hand_cycling"),
+        WorkoutType::HandCycling
+    );
 
     // Test iOS 13+ activities
-    assert_eq!(WorkoutType::from_ios_string("disc_sports"), WorkoutType::DiscSports);
-    assert_eq!(WorkoutType::from_ios_string("frisbee"), WorkoutType::DiscSports);
-    assert_eq!(WorkoutType::from_ios_string("fitness_gaming"), WorkoutType::FitnessGaming);
+    assert_eq!(
+        WorkoutType::from_ios_string("disc_sports"),
+        WorkoutType::DiscSports
+    );
+    assert_eq!(
+        WorkoutType::from_ios_string("frisbee"),
+        WorkoutType::DiscSports
+    );
+    assert_eq!(
+        WorkoutType::from_ios_string("fitness_gaming"),
+        WorkoutType::FitnessGaming
+    );
 
     // Test legacy compatibility
-    assert_eq!(WorkoutType::from_ios_string("strength_training"), WorkoutType::StrengthTraining);
-    assert_eq!(WorkoutType::from_ios_string("weights"), WorkoutType::StrengthTraining);
+    assert_eq!(
+        WorkoutType::from_ios_string("strength_training"),
+        WorkoutType::StrengthTraining
+    );
+    assert_eq!(
+        WorkoutType::from_ios_string("weights"),
+        WorkoutType::StrengthTraining
+    );
     assert_eq!(WorkoutType::from_ios_string("sports"), WorkoutType::Sports);
 
     // Test unknown workout types default to Other
-    assert_eq!(WorkoutType::from_ios_string("unknown_activity"), WorkoutType::Other);
+    assert_eq!(
+        WorkoutType::from_ios_string("unknown_activity"),
+        WorkoutType::Other
+    );
     assert_eq!(WorkoutType::from_ios_string(""), WorkoutType::Other);
 }
 
@@ -49,72 +106,177 @@ fn test_workout_categorization() {
     // Test cardio category
     assert_eq!(WorkoutType::Running.category(), WorkoutCategory::Cardio);
     assert_eq!(WorkoutType::Cycling.category(), WorkoutCategory::Cardio);
-    assert_eq!(WorkoutType::Swimming.category(), WorkoutCategory::WaterSports);
+    assert_eq!(
+        WorkoutType::Swimming.category(),
+        WorkoutCategory::WaterSports
+    );
     assert_eq!(WorkoutType::Rowing.category(), WorkoutCategory::Cardio);
     assert_eq!(WorkoutType::Elliptical.category(), WorkoutCategory::Cardio);
 
     // Test strength training category
-    assert_eq!(WorkoutType::StrengthTraining.category(), WorkoutCategory::StrengthTraining);
-    assert_eq!(WorkoutType::TraditionalStrengthTraining.category(), WorkoutCategory::StrengthTraining);
-    assert_eq!(WorkoutType::FunctionalStrengthTraining.category(), WorkoutCategory::StrengthTraining);
+    assert_eq!(
+        WorkoutType::StrengthTraining.category(),
+        WorkoutCategory::StrengthTraining
+    );
+    assert_eq!(
+        WorkoutType::TraditionalStrengthTraining.category(),
+        WorkoutCategory::StrengthTraining
+    );
+    assert_eq!(
+        WorkoutType::FunctionalStrengthTraining.category(),
+        WorkoutCategory::StrengthTraining
+    );
 
     // Test team sports category
-    assert_eq!(WorkoutType::Basketball.category(), WorkoutCategory::TeamSports);
+    assert_eq!(
+        WorkoutType::Basketball.category(),
+        WorkoutCategory::TeamSports
+    );
     assert_eq!(WorkoutType::Soccer.category(), WorkoutCategory::TeamSports);
-    assert_eq!(WorkoutType::Volleyball.category(), WorkoutCategory::TeamSports);
-    assert_eq!(WorkoutType::AmericanFootball.category(), WorkoutCategory::TeamSports);
+    assert_eq!(
+        WorkoutType::Volleyball.category(),
+        WorkoutCategory::TeamSports
+    );
+    assert_eq!(
+        WorkoutType::AmericanFootball.category(),
+        WorkoutCategory::TeamSports
+    );
     assert_eq!(WorkoutType::Hockey.category(), WorkoutCategory::TeamSports);
 
     // Test individual sports category
-    assert_eq!(WorkoutType::Tennis.category(), WorkoutCategory::IndividualSports);
-    assert_eq!(WorkoutType::Golf.category(), WorkoutCategory::IndividualSports);
-    assert_eq!(WorkoutType::Boxing.category(), WorkoutCategory::IndividualSports);
-    assert_eq!(WorkoutType::MartialArts.category(), WorkoutCategory::IndividualSports);
+    assert_eq!(
+        WorkoutType::Tennis.category(),
+        WorkoutCategory::IndividualSports
+    );
+    assert_eq!(
+        WorkoutType::Golf.category(),
+        WorkoutCategory::IndividualSports
+    );
+    assert_eq!(
+        WorkoutType::Boxing.category(),
+        WorkoutCategory::IndividualSports
+    );
+    assert_eq!(
+        WorkoutType::MartialArts.category(),
+        WorkoutCategory::IndividualSports
+    );
 
     // Test fitness classes category
-    assert_eq!(WorkoutType::Yoga.category(), WorkoutCategory::FitnessClasses);
-    assert_eq!(WorkoutType::Pilates.category(), WorkoutCategory::FitnessClasses);
-    assert_eq!(WorkoutType::Hiit.category(), WorkoutCategory::FitnessClasses);
-    assert_eq!(WorkoutType::Barre.category(), WorkoutCategory::FitnessClasses);
-    assert_eq!(WorkoutType::Dance.category(), WorkoutCategory::FitnessClasses);
+    assert_eq!(
+        WorkoutType::Yoga.category(),
+        WorkoutCategory::FitnessClasses
+    );
+    assert_eq!(
+        WorkoutType::Pilates.category(),
+        WorkoutCategory::FitnessClasses
+    );
+    assert_eq!(
+        WorkoutType::Hiit.category(),
+        WorkoutCategory::FitnessClasses
+    );
+    assert_eq!(
+        WorkoutType::Barre.category(),
+        WorkoutCategory::FitnessClasses
+    );
+    assert_eq!(
+        WorkoutType::Dance.category(),
+        WorkoutCategory::FitnessClasses
+    );
 
     // Test water sports category
-    assert_eq!(WorkoutType::Swimming.category(), WorkoutCategory::WaterSports);
-    assert_eq!(WorkoutType::WaterPolo.category(), WorkoutCategory::WaterSports);
-    assert_eq!(WorkoutType::PaddleSports.category(), WorkoutCategory::WaterSports);
-    assert_eq!(WorkoutType::SurfingSports.category(), WorkoutCategory::WaterSports);
-    assert_eq!(WorkoutType::Sailing.category(), WorkoutCategory::WaterSports);
+    assert_eq!(
+        WorkoutType::Swimming.category(),
+        WorkoutCategory::WaterSports
+    );
+    assert_eq!(
+        WorkoutType::WaterPolo.category(),
+        WorkoutCategory::WaterSports
+    );
+    assert_eq!(
+        WorkoutType::PaddleSports.category(),
+        WorkoutCategory::WaterSports
+    );
+    assert_eq!(
+        WorkoutType::SurfingSports.category(),
+        WorkoutCategory::WaterSports
+    );
+    assert_eq!(
+        WorkoutType::Sailing.category(),
+        WorkoutCategory::WaterSports
+    );
 
     // Test winter sports category
-    assert_eq!(WorkoutType::SnowSports.category(), WorkoutCategory::WinterSports);
-    assert_eq!(WorkoutType::DownhillSkiing.category(), WorkoutCategory::WinterSports);
-    assert_eq!(WorkoutType::Snowboarding.category(), WorkoutCategory::WinterSports);
+    assert_eq!(
+        WorkoutType::SnowSports.category(),
+        WorkoutCategory::WinterSports
+    );
+    assert_eq!(
+        WorkoutType::DownhillSkiing.category(),
+        WorkoutCategory::WinterSports
+    );
+    assert_eq!(
+        WorkoutType::Snowboarding.category(),
+        WorkoutCategory::WinterSports
+    );
 
     // Test mind & body category
-    assert_eq!(WorkoutType::MindAndBody.category(), WorkoutCategory::MindAndBody);
+    assert_eq!(
+        WorkoutType::MindAndBody.category(),
+        WorkoutCategory::MindAndBody
+    );
     assert_eq!(WorkoutType::TaiChi.category(), WorkoutCategory::MindAndBody);
-    assert_eq!(WorkoutType::PreparationAndRecovery.category(), WorkoutCategory::MindAndBody);
+    assert_eq!(
+        WorkoutType::PreparationAndRecovery.category(),
+        WorkoutCategory::MindAndBody
+    );
 
     // Test accessibility category
-    assert_eq!(WorkoutType::WheelchairWalkPace.category(), WorkoutCategory::Accessibility);
-    assert_eq!(WorkoutType::WheelchairRunPace.category(), WorkoutCategory::Accessibility);
-    assert_eq!(WorkoutType::HandCycling.category(), WorkoutCategory::Accessibility);
+    assert_eq!(
+        WorkoutType::WheelchairWalkPace.category(),
+        WorkoutCategory::Accessibility
+    );
+    assert_eq!(
+        WorkoutType::WheelchairRunPace.category(),
+        WorkoutCategory::Accessibility
+    );
+    assert_eq!(
+        WorkoutType::HandCycling.category(),
+        WorkoutCategory::Accessibility
+    );
 
     // Test recreation category
     assert_eq!(WorkoutType::Play.category(), WorkoutCategory::Recreation);
     assert_eq!(WorkoutType::Fishing.category(), WorkoutCategory::Recreation);
-    assert_eq!(WorkoutType::FitnessGaming.category(), WorkoutCategory::Recreation);
-    assert_eq!(WorkoutType::DiscSports.category(), WorkoutCategory::Recreation);
+    assert_eq!(
+        WorkoutType::FitnessGaming.category(),
+        WorkoutCategory::Recreation
+    );
+    assert_eq!(
+        WorkoutType::DiscSports.category(),
+        WorkoutCategory::Recreation
+    );
 }
 
 /// Test workout type string formatting for database storage
 #[test]
 fn test_workout_type_formatting() {
-    assert_eq!(WorkoutType::AmericanFootball.to_string(), "american_football");
+    assert_eq!(
+        WorkoutType::AmericanFootball.to_string(),
+        "american_football"
+    );
     assert_eq!(WorkoutType::DownhillSkiing.to_string(), "downhill_skiing");
-    assert_eq!(WorkoutType::DanceInspiredTraining.to_string(), "dance_inspired_training");
-    assert_eq!(WorkoutType::MixedMetabolicCardioTraining.to_string(), "mixed_metabolic_cardio_training");
-    assert_eq!(WorkoutType::WheelchairRunPace.to_string(), "wheelchair_run_pace");
+    assert_eq!(
+        WorkoutType::DanceInspiredTraining.to_string(),
+        "dance_inspired_training"
+    );
+    assert_eq!(
+        WorkoutType::MixedMetabolicCardioTraining.to_string(),
+        "mixed_metabolic_cardio_training"
+    );
+    assert_eq!(
+        WorkoutType::WheelchairRunPace.to_string(),
+        "wheelchair_run_pace"
+    );
     assert_eq!(WorkoutType::FitnessGaming.to_string(), "fitness_gaming");
     assert_eq!(WorkoutType::Other.to_string(), "other");
 }
@@ -150,68 +312,58 @@ fn test_route_point_validation() {
     assert!(WorkoutRoute::validate_route_points(&empty_points).is_err());
 
     // Invalid latitude should fail
-    let invalid_lat_points = vec![
-        RoutePoint {
-            latitude: 91.0, // Invalid latitude
-            longitude: -74.0060,
-            timestamp: now,
-            altitude: None,
-            accuracy: None,
-            speed: None,
-        }
-    ];
+    let invalid_lat_points = vec![RoutePoint {
+        latitude: 91.0, // Invalid latitude
+        longitude: -74.0060,
+        timestamp: now,
+        altitude: None,
+        accuracy: None,
+        speed: None,
+    }];
     assert!(WorkoutRoute::validate_route_points(&invalid_lat_points).is_err());
 
     // Invalid longitude should fail
-    let invalid_lon_points = vec![
-        RoutePoint {
-            latitude: 40.7128,
-            longitude: 181.0, // Invalid longitude
-            timestamp: now,
-            altitude: None,
-            accuracy: None,
-            speed: None,
-        }
-    ];
+    let invalid_lon_points = vec![RoutePoint {
+        latitude: 40.7128,
+        longitude: 181.0, // Invalid longitude
+        timestamp: now,
+        altitude: None,
+        accuracy: None,
+        speed: None,
+    }];
     assert!(WorkoutRoute::validate_route_points(&invalid_lon_points).is_err());
 
     // Unrealistic altitude should fail
-    let invalid_alt_points = vec![
-        RoutePoint {
-            latitude: 40.7128,
-            longitude: -74.0060,
-            timestamp: now,
-            altitude: Some(10000.0), // Too high
-            accuracy: None,
-            speed: None,
-        }
-    ];
+    let invalid_alt_points = vec![RoutePoint {
+        latitude: 40.7128,
+        longitude: -74.0060,
+        timestamp: now,
+        altitude: Some(10000.0), // Too high
+        accuracy: None,
+        speed: None,
+    }];
     assert!(WorkoutRoute::validate_route_points(&invalid_alt_points).is_err());
 
     // Unrealistic speed should fail
-    let invalid_speed_points = vec![
-        RoutePoint {
-            latitude: 40.7128,
-            longitude: -74.0060,
-            timestamp: now,
-            altitude: None,
-            accuracy: None,
-            speed: Some(200.0), // Too fast (200 m/s = 447 mph)
-        }
-    ];
+    let invalid_speed_points = vec![RoutePoint {
+        latitude: 40.7128,
+        longitude: -74.0060,
+        timestamp: now,
+        altitude: None,
+        accuracy: None,
+        speed: Some(200.0), // Too fast (200 m/s = 447 mph)
+    }];
     assert!(WorkoutRoute::validate_route_points(&invalid_speed_points).is_err());
 
     // Invalid GPS accuracy should fail
-    let invalid_accuracy_points = vec![
-        RoutePoint {
-            latitude: 40.7128,
-            longitude: -74.0060,
-            timestamp: now,
-            altitude: None,
-            accuracy: Some(1500.0), // Too inaccurate
-            speed: None,
-        }
-    ];
+    let invalid_accuracy_points = vec![RoutePoint {
+        latitude: 40.7128,
+        longitude: -74.0060,
+        timestamp: now,
+        altitude: None,
+        accuracy: Some(1500.0), // Too inaccurate
+        speed: None,
+    }];
     assert!(WorkoutRoute::validate_route_points(&invalid_accuracy_points).is_err());
 
     // Out of order timestamps should fail
@@ -374,7 +526,10 @@ fn test_workout_data_structure() {
 
     // Test that workout data structure is properly formed
     assert_eq!(workout_data.workout_type, WorkoutType::Running);
-    assert_eq!(workout_data.workout_type.category(), WorkoutCategory::Cardio);
+    assert_eq!(
+        workout_data.workout_type.category(),
+        WorkoutCategory::Cardio
+    );
     assert!(workout_data.total_energy_kcal.is_some());
     assert!(workout_data.distance_meters.is_some());
 }
@@ -424,27 +579,66 @@ fn test_route_json_serialization() {
 #[test]
 fn test_multi_sport_scenarios() {
     // Test triathlon component sports
-    assert_eq!(WorkoutType::Swimming.category(), WorkoutCategory::WaterSports);
+    assert_eq!(
+        WorkoutType::Swimming.category(),
+        WorkoutCategory::WaterSports
+    );
     assert_eq!(WorkoutType::Cycling.category(), WorkoutCategory::Cardio);
     assert_eq!(WorkoutType::Running.category(), WorkoutCategory::Cardio);
 
     // Test winter sports diversity
-    assert_eq!(WorkoutType::DownhillSkiing.category(), WorkoutCategory::WinterSports);
-    assert_eq!(WorkoutType::CrossCountrySkiing.category(), WorkoutCategory::Cardio);
-    assert_eq!(WorkoutType::Snowboarding.category(), WorkoutCategory::WinterSports);
+    assert_eq!(
+        WorkoutType::DownhillSkiing.category(),
+        WorkoutCategory::WinterSports
+    );
+    assert_eq!(
+        WorkoutType::CrossCountrySkiing.category(),
+        WorkoutCategory::Cardio
+    );
+    assert_eq!(
+        WorkoutType::Snowboarding.category(),
+        WorkoutCategory::WinterSports
+    );
 
     // Test accessibility sports
-    assert_eq!(WorkoutType::WheelchairRunPace.category(), WorkoutCategory::Accessibility);
-    assert_eq!(WorkoutType::WheelchairWalkPace.category(), WorkoutCategory::Accessibility);
-    assert_eq!(WorkoutType::HandCycling.category(), WorkoutCategory::Accessibility);
+    assert_eq!(
+        WorkoutType::WheelchairRunPace.category(),
+        WorkoutCategory::Accessibility
+    );
+    assert_eq!(
+        WorkoutType::WheelchairWalkPace.category(),
+        WorkoutCategory::Accessibility
+    );
+    assert_eq!(
+        WorkoutType::HandCycling.category(),
+        WorkoutCategory::Accessibility
+    );
 
     // Test combat sports
-    assert_eq!(WorkoutType::Boxing.category(), WorkoutCategory::IndividualSports);
-    assert_eq!(WorkoutType::MartialArts.category(), WorkoutCategory::IndividualSports);
-    assert_eq!(WorkoutType::Wrestling.category(), WorkoutCategory::IndividualSports);
+    assert_eq!(
+        WorkoutType::Boxing.category(),
+        WorkoutCategory::IndividualSports
+    );
+    assert_eq!(
+        WorkoutType::MartialArts.category(),
+        WorkoutCategory::IndividualSports
+    );
+    assert_eq!(
+        WorkoutType::Wrestling.category(),
+        WorkoutCategory::IndividualSports
+    );
 
     // Test dance and fitness
-    assert_eq!(WorkoutType::Dance.category(), WorkoutCategory::FitnessClasses);
-    assert_eq!(WorkoutType::DanceInspiredTraining.category(), WorkoutCategory::FitnessClasses);
-    assert_eq!(WorkoutType::Barre.category(), WorkoutCategory::FitnessClasses);
+    assert_eq!(
+        WorkoutType::Dance.category(),
+        WorkoutCategory::FitnessClasses
+    );
+    assert_eq!(
+        WorkoutType::DanceInspiredTraining.category(),
+        WorkoutCategory::FitnessClasses
+    );
+    assert_eq!(
+        WorkoutType::Barre.category(),
+        WorkoutCategory::FitnessClasses
+    );
 }

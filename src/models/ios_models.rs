@@ -267,7 +267,7 @@ impl IosIngestPayload {
                     | "temperature" => {
                         if let Some(qty) = data_point.qty {
                             // Temperature should be in Celsius, validate range
-                            if qty >= -50.0 && qty <= 100.0 {
+                            if (-50.0..=100.0).contains(&qty) {
                                 let metric = crate::models::TemperatureMetric {
                                     id: uuid::Uuid::new_v4(),
                                     user_id,
@@ -298,10 +298,7 @@ impl IosIngestPayload {
                                     } else {
                                         None
                                     },
-                                    water_temperature: if ios_metric
-                                        .name
-                                        .to_lowercase()
-                                        .as_str()
+                                    water_temperature: if ios_metric.name.to_lowercase().as_str()
                                         == "water_temperature"
                                     {
                                         Some(qty)
@@ -329,6 +326,8 @@ impl IosIngestPayload {
                                     id: uuid::Uuid::new_v4(),
                                     user_id,
                                     recorded_at,
+                                    environmental_audio_exposure_db: None,
+                                    headphone_audio_exposure_db: None,
                                     uv_index: Some(qty),
                                     uv_exposure_minutes: None,
                                     time_in_daylight_minutes: None,
@@ -347,7 +346,8 @@ impl IosIngestPayload {
                                     source_device: data_point.source.clone(),
                                     created_at: Utc::now(),
                                 };
-                                internal_metrics.push(crate::models::HealthMetric::Environmental(metric));
+                                internal_metrics
+                                    .push(crate::models::HealthMetric::Environmental(metric));
                             }
                         }
                     }
@@ -358,6 +358,8 @@ impl IosIngestPayload {
                                     id: uuid::Uuid::new_v4(),
                                     user_id,
                                     recorded_at,
+                                    environmental_audio_exposure_db: None,
+                                    headphone_audio_exposure_db: None,
                                     uv_index: None,
                                     uv_exposure_minutes: None,
                                     time_in_daylight_minutes: Some(qty as i32),
@@ -376,7 +378,8 @@ impl IosIngestPayload {
                                     source_device: data_point.source.clone(),
                                     created_at: Utc::now(),
                                 };
-                                internal_metrics.push(crate::models::HealthMetric::Environmental(metric));
+                                internal_metrics
+                                    .push(crate::models::HealthMetric::Environmental(metric));
                             }
                         }
                     }
@@ -387,7 +390,8 @@ impl IosIngestPayload {
                                     .extra
                                     .get("duration_minutes")
                                     .and_then(|v| v.as_i64())
-                                    .unwrap_or(1) as i32;
+                                    .unwrap_or(1)
+                                    as i32;
 
                                 let audio_exposure_event = qty >= 85.0; // WHO safe listening threshold
 
@@ -402,7 +406,8 @@ impl IosIngestPayload {
                                     source_device: data_point.source.clone(),
                                     created_at: Utc::now(),
                                 };
-                                internal_metrics.push(crate::models::HealthMetric::AudioExposure(metric));
+                                internal_metrics
+                                    .push(crate::models::HealthMetric::AudioExposure(metric));
                             }
                         }
                     }
@@ -413,7 +418,8 @@ impl IosIngestPayload {
                                     .extra
                                     .get("duration_minutes")
                                     .and_then(|v| v.as_i64())
-                                    .unwrap_or(1) as i32;
+                                    .unwrap_or(1)
+                                    as i32;
 
                                 let audio_exposure_event = qty >= 85.0; // WHO safe listening threshold
 
@@ -428,7 +434,8 @@ impl IosIngestPayload {
                                     source_device: data_point.source.clone(),
                                     created_at: Utc::now(),
                                 };
-                                internal_metrics.push(crate::models::HealthMetric::AudioExposure(metric));
+                                internal_metrics
+                                    .push(crate::models::HealthMetric::AudioExposure(metric));
                             }
                         }
                     }
@@ -463,30 +470,52 @@ impl IosIngestPayload {
                                     source_device: data_point.source.clone(),
                                     created_at: Utc::now(),
                                 };
-                                internal_metrics.push(crate::models::HealthMetric::SafetyEvent(metric));
+                                internal_metrics
+                                    .push(crate::models::HealthMetric::SafetyEvent(metric));
                             }
                         }
                     }
                     // Body Measurements - Weight, BMI, Body Composition, Height, Circumferences
-                    "body_mass" | "weight" | "body_weight" | "body_mass_kg"
-                    | "body_mass_index" | "bmi"
-                    | "body_fat_percentage" | "body_fat"
-                    | "lean_body_mass" | "lean_body_mass_kg" | "muscle_mass"
-                    | "height" | "height_cm"
-                    | "waist_circumference" | "waist"
-                    | "hip_circumference" | "hip"
-                    | "chest_circumference" | "chest"
-                    | "arm_circumference" | "arm"
-                    | "thigh_circumference" | "thigh" => {
+                    "body_mass"
+                    | "weight"
+                    | "body_weight"
+                    | "body_mass_kg"
+                    | "body_mass_index"
+                    | "bmi"
+                    | "body_fat_percentage"
+                    | "body_fat"
+                    | "lean_body_mass"
+                    | "lean_body_mass_kg"
+                    | "muscle_mass"
+                    | "height"
+                    | "height_cm"
+                    | "waist_circumference"
+                    | "waist"
+                    | "hip_circumference"
+                    | "hip"
+                    | "chest_circumference"
+                    | "chest"
+                    | "arm_circumference"
+                    | "arm"
+                    | "thigh_circumference"
+                    | "thigh" => {
                         if let Some(qty) = data_point.qty {
                             // Validate body measurement ranges
                             let is_valid = match ios_metric.name.to_lowercase().as_str() {
-                                name if name.contains("weight") || name.contains("mass") => qty >= 20.0 && qty <= 500.0,
-                                name if name.contains("bmi") => qty >= 10.0 && qty <= 60.0,
-                                name if name.contains("fat") => qty >= 3.0 && qty <= 50.0,
-                                name if name.contains("height") => qty >= 50.0 && qty <= 250.0,
-                                name if name.contains("circumference") || name.contains("waist") || name.contains("hip") || name.contains("chest") => qty >= 15.0 && qty <= 200.0,
-                                _ => qty >= 0.0 && qty <= 1000.0, // General range
+                                name if name.contains("weight") || name.contains("mass") => {
+                                    (20.0..=500.0).contains(&qty)
+                                }
+                                name if name.contains("bmi") => (10.0..=60.0).contains(&qty),
+                                name if name.contains("fat") => (3.0..=50.0).contains(&qty),
+                                name if name.contains("height") => (50.0..=250.0).contains(&qty),
+                                name if name.contains("circumference")
+                                    || name.contains("waist")
+                                    || name.contains("hip")
+                                    || name.contains("chest") =>
+                                {
+                                    (15.0..=200.0).contains(&qty)
+                                }
+                                _ => (0.0..=1000.0).contains(&qty), // General range
                             };
 
                             if is_valid {
@@ -584,7 +613,8 @@ impl IosIngestPayload {
                                     source_device: data_point.source.clone(),
                                     created_at: Utc::now(),
                                 };
-                                internal_metrics.push(crate::models::HealthMetric::BodyMeasurement(metric));
+                                internal_metrics
+                                    .push(crate::models::HealthMetric::BodyMeasurement(metric));
                             } else {
                                 tracing::warn!(
                                     "Invalid body measurement value for {}: {} (outside valid range)",
@@ -606,7 +636,8 @@ impl IosIngestPayload {
                             || ios_metric.name.to_lowercase().contains("audio")
                             || ios_metric.name.to_lowercase().contains("sound")
                             || ios_metric.name.to_lowercase().contains("uv")
-                            || ios_metric.name.to_lowercase().contains("daylight") {
+                            || ios_metric.name.to_lowercase().contains("daylight")
+                        {
                             tracing::info!(
                                 "Potentially environmental metric not yet supported: '{}'",
                                 ios_metric.name

@@ -21,11 +21,11 @@ pub struct TemperatureIngestPayload {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct TemperatureIngestRequest {
     pub recorded_at: DateTime<Utc>,
-    pub body_temperature: Option<f64>,              // celsius (35-42�C range)
-    pub basal_body_temperature: Option<f64>,        // celsius (fertility tracking)
+    pub body_temperature: Option<f64>, // celsius (35-42�C range)
+    pub basal_body_temperature: Option<f64>, // celsius (fertility tracking)
     pub apple_sleeping_wrist_temperature: Option<f64>, // celsius (Apple Watch)
-    pub water_temperature: Option<f64>,             // celsius (environmental)
-    pub temperature_source: Option<String>,         // thermometer type
+    pub water_temperature: Option<f64>, // celsius (environmental)
+    pub temperature_source: Option<String>, // thermometer type
     pub source_device: Option<String>,
 }
 
@@ -165,7 +165,8 @@ pub async fn ingest_temperature_handler(
                     index,
                     error_type: "validation_error".to_string(),
                     message: error,
-                    temperature_value: temp_request.body_temperature
+                    temperature_value: temp_request
+                        .body_temperature
                         .or(temp_request.basal_body_temperature)
                         .or(temp_request.apple_sleeping_wrist_temperature)
                         .or(temp_request.water_temperature),
@@ -221,7 +222,11 @@ pub async fn ingest_temperature_handler(
                 "Temperature data ingestion completed successfully"
             );
 
-            Metrics::record_metrics_processed("temperature", result.processed_count as u64, "success");
+            Metrics::record_metrics_processed(
+                "temperature",
+                result.processed_count as u64,
+                "success",
+            );
 
             Ok(HttpResponse::Ok().json(TemperatureIngestResponse {
                 success: true,
@@ -277,7 +282,7 @@ pub async fn get_temperature_data_handler(
     let start_date = query.start_date.unwrap_or_else(|| {
         Utc::now() - chrono::Duration::days(30) // Default 30 days
     });
-    let end_date = query.end_date.unwrap_or_else(|| Utc::now());
+    let end_date = query.end_date.unwrap_or_else(Utc::now);
 
     if end_date <= start_date {
         return Ok(HttpResponse::BadRequest().json(serde_json::json!({
@@ -292,9 +297,12 @@ pub async fn get_temperature_data_handler(
             sqlx::query_as!(
                 TemperatureMetric,
                 r#"
-                SELECT id, user_id, recorded_at, body_temperature, basal_body_temperature,
+                SELECT id, user_id,
+                       recorded_at as "recorded_at!",
+                       body_temperature, basal_body_temperature,
                        apple_sleeping_wrist_temperature, water_temperature,
-                       temperature_source, source_device, created_at
+                       temperature_source, source_device,
+                       created_at as "created_at!"
                 FROM temperature_metrics
                 WHERE user_id = $1
                   AND recorded_at >= $2
@@ -303,7 +311,10 @@ pub async fn get_temperature_data_handler(
                 ORDER BY recorded_at DESC
                 LIMIT $4
                 "#,
-                user_id, start_date, end_date, limit as i64
+                user_id,
+                start_date,
+                end_date,
+                limit as i64
             )
             .fetch_all(pool.get_ref())
             .await
@@ -312,9 +323,12 @@ pub async fn get_temperature_data_handler(
             sqlx::query_as!(
                 TemperatureMetric,
                 r#"
-                SELECT id, user_id, recorded_at, body_temperature, basal_body_temperature,
+                SELECT id, user_id,
+                       recorded_at as "recorded_at!",
+                       body_temperature, basal_body_temperature,
                        apple_sleeping_wrist_temperature, water_temperature,
-                       temperature_source, source_device, created_at
+                       temperature_source, source_device,
+                       created_at as "created_at!"
                 FROM temperature_metrics
                 WHERE user_id = $1
                   AND recorded_at >= $2
@@ -323,7 +337,10 @@ pub async fn get_temperature_data_handler(
                 ORDER BY recorded_at DESC
                 LIMIT $4
                 "#,
-                user_id, start_date, end_date, limit as i64
+                user_id,
+                start_date,
+                end_date,
+                limit as i64
             )
             .fetch_all(pool.get_ref())
             .await
@@ -332,9 +349,12 @@ pub async fn get_temperature_data_handler(
             sqlx::query_as!(
                 TemperatureMetric,
                 r#"
-                SELECT id, user_id, recorded_at, body_temperature, basal_body_temperature,
+                SELECT id, user_id,
+                       recorded_at as "recorded_at!",
+                       body_temperature, basal_body_temperature,
                        apple_sleeping_wrist_temperature, water_temperature,
-                       temperature_source, source_device, created_at
+                       temperature_source, source_device,
+                       created_at as "created_at!"
                 FROM temperature_metrics
                 WHERE user_id = $1
                   AND recorded_at >= $2
@@ -343,7 +363,10 @@ pub async fn get_temperature_data_handler(
                 ORDER BY recorded_at DESC
                 LIMIT $4
                 "#,
-                user_id, start_date, end_date, limit as i64
+                user_id,
+                start_date,
+                end_date,
+                limit as i64
             )
             .fetch_all(pool.get_ref())
             .await
@@ -352,9 +375,12 @@ pub async fn get_temperature_data_handler(
             sqlx::query_as!(
                 TemperatureMetric,
                 r#"
-                SELECT id, user_id, recorded_at, body_temperature, basal_body_temperature,
+                SELECT id, user_id,
+                       recorded_at as "recorded_at!",
+                       body_temperature, basal_body_temperature,
                        apple_sleeping_wrist_temperature, water_temperature,
-                       temperature_source, source_device, created_at
+                       temperature_source, source_device,
+                       created_at as "created_at!"
                 FROM temperature_metrics
                 WHERE user_id = $1
                   AND recorded_at >= $2
@@ -363,7 +389,10 @@ pub async fn get_temperature_data_handler(
                 ORDER BY recorded_at DESC
                 LIMIT $4
                 "#,
-                user_id, start_date, end_date, limit as i64
+                user_id,
+                start_date,
+                end_date,
+                limit as i64
             )
             .fetch_all(pool.get_ref())
             .await
@@ -374,9 +403,12 @@ pub async fn get_temperature_data_handler(
                 sqlx::query_as!(
                     TemperatureMetric,
                     r#"
-                    SELECT id, user_id, recorded_at, body_temperature, basal_body_temperature,
+                    SELECT id, user_id,
+                           recorded_at as "recorded_at!",
+                           body_temperature, basal_body_temperature,
                            apple_sleeping_wrist_temperature, water_temperature,
-                           temperature_source, source_device, created_at
+                           temperature_source, source_device,
+                           created_at as "created_at!"
                     FROM temperature_metrics
                     WHERE user_id = $1
                       AND recorded_at >= $2
@@ -385,7 +417,11 @@ pub async fn get_temperature_data_handler(
                     ORDER BY recorded_at DESC
                     LIMIT $5
                     "#,
-                    user_id, start_date, end_date, source, limit as i64
+                    user_id,
+                    start_date,
+                    end_date,
+                    source,
+                    limit as i64
                 )
                 .fetch_all(pool.get_ref())
                 .await
@@ -393,9 +429,12 @@ pub async fn get_temperature_data_handler(
                 sqlx::query_as!(
                     TemperatureMetric,
                     r#"
-                    SELECT id, user_id, recorded_at, body_temperature, basal_body_temperature,
+                    SELECT id, user_id,
+                           recorded_at as "recorded_at!",
+                           body_temperature, basal_body_temperature,
                            apple_sleeping_wrist_temperature, water_temperature,
-                           temperature_source, source_device, created_at
+                           temperature_source, source_device,
+                           created_at as "created_at!"
                     FROM temperature_metrics
                     WHERE user_id = $1
                       AND recorded_at >= $2
@@ -403,7 +442,10 @@ pub async fn get_temperature_data_handler(
                     ORDER BY recorded_at DESC
                     LIMIT $4
                     "#,
-                    user_id, start_date, end_date, limit as i64
+                    user_id,
+                    start_date,
+                    end_date,
+                    limit as i64
                 )
                 .fetch_all(pool.get_ref())
                 .await
@@ -427,7 +469,8 @@ pub async fn get_temperature_data_handler(
     };
 
     // Get summary statistics
-    let summary = match get_temperature_summary(pool.get_ref(), user_id, start_date, end_date).await {
+    let summary = match get_temperature_summary(pool.get_ref(), user_id, start_date, end_date).await
+    {
         Ok(summary) => summary,
         Err(e) => {
             warn!(
@@ -449,7 +492,7 @@ pub async fn get_temperature_data_handler(
     let processing_time = start_time.elapsed();
 
     // Update metrics - use existing HTTP request metrics
-    Metrics::record_http_request("GET", "/api/v1/data/temperature", 200, processing_time);
+    Metrics::record_ingest_duration(processing_time, "success");
 
     info!(
         user_id = %user_id,
@@ -519,7 +562,9 @@ fn determine_temperature_type(request: &TemperatureIngestRequest) -> Option<Stri
 }
 
 /// Analyze temperature data for medical insights
-fn analyze_temperature_data(temperature_metrics: &[TemperatureIngestRequest]) -> TemperatureAnalysis {
+fn analyze_temperature_data(
+    temperature_metrics: &[TemperatureIngestRequest],
+) -> TemperatureAnalysis {
     let mut fever_episodes = 0;
     let mut ovulation_indicators = 0;
     let mut critical_temperatures = Vec::new();
@@ -590,7 +635,9 @@ fn calculate_temperature_range(temperatures: &[f64]) -> Option<TemperatureRange>
     }
 
     let min = temperatures.iter().fold(f64::INFINITY, |a, &b| a.min(b));
-    let max = temperatures.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+    let max = temperatures
+        .iter()
+        .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
     let sum: f64 = temperatures.iter().sum();
     let average = sum / temperatures.len() as f64;
 
@@ -620,7 +667,9 @@ async fn get_temperature_summary(
         FROM temperature_metrics
         WHERE user_id = $1 AND recorded_at >= $2 AND recorded_at <= $3
         "#,
-        user_id, start_date, end_date
+        user_id,
+        start_date,
+        end_date
     )
     .fetch_one(pool)
     .await?;
@@ -636,7 +685,9 @@ async fn get_temperature_summary(
           AND temperature_source IS NOT NULL
         ORDER BY temperature_source
         "#,
-        user_id, start_date, end_date
+        user_id,
+        start_date,
+        end_date
     )
     .fetch_all(pool)
     .await?;

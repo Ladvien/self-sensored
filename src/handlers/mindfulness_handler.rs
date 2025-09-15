@@ -1,8 +1,8 @@
 use actix_web::{web, HttpResponse, Result};
+use bigdecimal::FromPrimitive;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{types::BigDecimal, PgPool};
-use bigdecimal::FromPrimitive;
 use std::time::Duration;
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
@@ -514,7 +514,7 @@ async fn process_mindfulness_session(
     // Validate the metric
     metric
         .validate()
-        .map_err(|e| format!("Validation error: {}", e))?;
+        .map_err(|e| format!("Validation error: {e}"))?;
 
     // Insert into database
     sqlx::query!(
@@ -549,8 +549,12 @@ async fn process_mindfulness_session(
         metric.session_quality_rating,
         metric.mindful_minutes_today,
         metric.mindful_minutes_week,
-        metric.breathing_rate_breaths_per_min.and_then(BigDecimal::from_f64),
-        metric.heart_rate_variability_during_session.and_then(BigDecimal::from_f64),
+        metric
+            .breathing_rate_breaths_per_min
+            .and_then(BigDecimal::from_f64),
+        metric
+            .heart_rate_variability_during_session
+            .and_then(BigDecimal::from_f64),
         metric.focus_rating,
         metric.guided_session_instructor,
         metric.meditation_app,
@@ -562,7 +566,7 @@ async fn process_mindfulness_session(
     )
     .execute(pool)
     .await
-    .map_err(|e| format!("Database error: {}", e))?;
+    .map_err(|e| format!("Database error: {e}"))?;
 
     Ok(())
 }
@@ -579,7 +583,7 @@ async fn process_mental_health_data(
             // In a real implementation, you would use a proper encryption service
             // For now, we'll just mark that encryption is needed
             let key_id = Uuid::new_v4();
-            let encrypted_data = format!("ENCRYPTED:{}", private_notes); // Placeholder encryption
+            let encrypted_data = format!("ENCRYPTED:{private_notes}"); // Placeholder encryption
             (Some(encrypted_data), Some(key_id))
         } else {
             (None, None)
@@ -614,7 +618,7 @@ async fn process_mental_health_data(
     // Validate the metric
     metric
         .validate()
-        .map_err(|e| format!("Validation error: {}", e))?;
+        .map_err(|e| format!("Validation error: {e}"))?;
 
     // Insert into database with privacy protection
     sqlx::query!(
@@ -669,12 +673,13 @@ async fn process_mental_health_data(
     )
     .execute(pool)
     .await
-    .map_err(|e| format!("Database error: {}", e))?;
+    .map_err(|e| format!("Database error: {e}"))?;
 
     Ok(())
 }
 
 /// Fetch mindfulness sessions from database
+#[allow(dead_code)]
 async fn fetch_mindfulness_sessions(
     pool: &PgPool,
     user_id: Uuid,
@@ -714,6 +719,7 @@ async fn fetch_mindfulness_sessions(
 }
 
 /// Fetch mental health data with privacy filtering
+#[allow(dead_code)]
 async fn fetch_mental_health_data(
     pool: &PgPool,
     user_id: Uuid,

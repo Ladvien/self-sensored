@@ -2,8 +2,7 @@
 use anyhow::Result;
 use chrono::Utc;
 use serde_json::Value as JsonValue;
-use sqlx::{PgPool, types::BigDecimal};
-use std::str::FromStr;
+use sqlx::PgPool;
 use tracing::{info, warn};
 use uuid::Uuid;
 

@@ -450,7 +450,7 @@ fn check_critical_respiratory_conditions(
             alerts.push(RespiratoryAlert {
                 alert_type: "critical_spo2".to_string(),
                 severity: "emergency".to_string(),
-                message: format!("Critical SpO2 level detected: {:.1}%", spo2),
+                message: format!("Critical SpO2 level detected: {spo2:.1}%"),
                 value: Some(spo2),
                 medical_recommendation:
                     "Seek immediate medical attention. SpO2 below 90% indicates severe hypoxemia."
@@ -461,7 +461,7 @@ fn check_critical_respiratory_conditions(
             alerts.push(RespiratoryAlert {
                 alert_type: "low_spo2".to_string(),
                 severity: "warning".to_string(),
-                message: format!("Low SpO2 level detected: {:.1}%", spo2),
+                message: format!("Low SpO2 level detected: {spo2:.1}%"),
                 value: Some(spo2),
                 medical_recommendation: "Consider consulting healthcare provider if persistent."
                     .to_string(),
@@ -472,8 +472,8 @@ fn check_critical_respiratory_conditions(
 
     // Abnormal respiratory rates
     if let Some(rate) = metric.respiratory_rate {
-        if rate < 8 || rate > 30 {
-            let severity = if rate < 6 || rate > 35 {
+        if !(8..=30).contains(&rate) {
+            let severity = if !(6..=35).contains(&rate) {
                 "critical"
             } else {
                 "warning"
@@ -481,7 +481,7 @@ fn check_critical_respiratory_conditions(
             alerts.push(RespiratoryAlert {
                 alert_type: "abnormal_respiratory_rate".to_string(),
                 severity: severity.to_string(),
-                message: format!("Abnormal respiratory rate: {} breaths/min", rate),
+                message: format!("Abnormal respiratory rate: {rate} breaths/min"),
                 value: Some(rate as f64),
                 medical_recommendation:
                     "Monitor closely and consult healthcare provider if persistent.".to_string(),
@@ -496,7 +496,7 @@ fn check_critical_respiratory_conditions(
             alerts.push(RespiratoryAlert {
                 alert_type: "excessive_inhaler_usage".to_string(),
                 severity: "warning".to_string(),
-                message: format!("High inhaler usage detected: {} uses", inhaler_uses),
+                message: format!("High inhaler usage detected: {inhaler_uses} uses"),
                 value: Some(inhaler_uses as f64),
                 medical_recommendation: "Excessive inhaler use may indicate poor asthma control. Consider consulting your healthcare provider.".to_string(),
                 requires_immediate_attention: false,
@@ -555,7 +555,7 @@ fn analyze_respiratory_data(metrics: &[RespiratoryIngestRequest]) -> Respiratory
         // Respiratory rate analysis
         if let Some(rate) = metric.respiratory_rate {
             respiratory_rate_values.push(rate as f64);
-            if rate < 8 || rate > 30 {
+            if !(8..=30).contains(&rate) {
                 abnormal_respiratory_rate_detected = true;
             }
         }
@@ -707,7 +707,7 @@ async fn generate_respiratory_summary(
         average_spo2: summary.avg_spo2,
         average_respiratory_rate: summary.avg_respiratory_rate,
         total_inhaler_uses: summary.total_inhaler_uses.unwrap_or(0),
-        respiratory_sources: sources,
+        respiratory_sources: sources.into_iter().flatten().collect(),
         last_updated: summary.last_updated,
     })
 }
@@ -844,10 +844,10 @@ fn identify_critical_periods(metrics: &[RespiratoryMetric]) -> Vec<RespiratoryPe
     let mut current_period: Option<(DateTime<Utc>, Vec<&RespiratoryMetric>)> = None;
 
     for metric in metrics {
-        let is_critical = metric.oxygen_saturation.map_or(false, |spo2| spo2 < 90.0)
+        let is_critical = metric.oxygen_saturation.is_some_and(|spo2| spo2 < 90.0)
             || metric
                 .respiratory_rate
-                .map_or(false, |rate| rate < 8 || rate > 30);
+                .is_some_and(|rate| !(8..=30).contains(&rate));
 
         if is_critical {
             match &mut current_period {
@@ -888,8 +888,7 @@ fn identify_critical_periods(metrics: &[RespiratoryMetric]) -> Vec<RespiratoryPe
                     end_time: last_metric.recorded_at,
                     concern_type: concern_type.to_string(),
                     severity: if avg_spo2 < 85.0
-                        || avg_respiratory_rate < 6.0
-                        || avg_respiratory_rate > 35.0
+                        || !(6.0..=35.0).contains(&avg_respiratory_rate)
                     {
                         "critical"
                     } else {

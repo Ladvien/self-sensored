@@ -4,8 +4,8 @@ use serde_json::json;
 use uuid::Uuid;
 
 use self_sensored::handlers::metabolic_handler::{
-    ingest_blood_glucose_handler, ingest_metabolic_handler, get_blood_glucose_data_handler,
-    get_metabolic_data_handler, BloodGlucoseIngestRequest, MetabolicIngestRequest
+    get_blood_glucose_data_handler, get_metabolic_data_handler, ingest_blood_glucose_handler,
+    ingest_metabolic_handler, BloodGlucoseIngestRequest, MetabolicIngestRequest,
 };
 use self_sensored::middleware::metrics::Metrics;
 use self_sensored::models::health_metrics::{BloodGlucoseMetric, MetabolicMetric};
@@ -30,8 +30,12 @@ async fn test_blood_glucose_ingestion_comprehensive() {
         App::new()
             .app_data(web::Data::new(pool.clone()))
             .app_data(web::Data::new(Metrics::new()))
-            .route("/ingest/blood-glucose", web::post().to(ingest_blood_glucose_handler))
-    ).await;
+            .route(
+                "/ingest/blood-glucose",
+                web::post().to(ingest_blood_glucose_handler),
+            ),
+    )
+    .await;
 
     // Test comprehensive glucose data ingestion
     let glucose_data = vec![
@@ -129,8 +133,12 @@ async fn test_metabolic_data_ingestion_comprehensive() {
         App::new()
             .app_data(web::Data::new(pool.clone()))
             .app_data(web::Data::new(Metrics::new()))
-            .route("/ingest/metabolic", web::post().to(ingest_metabolic_handler))
-    ).await;
+            .route(
+                "/ingest/metabolic",
+                web::post().to(ingest_metabolic_handler),
+            ),
+    )
+    .await;
 
     // Test comprehensive metabolic data ingestion
     let metabolic_data = vec![
@@ -207,8 +215,12 @@ async fn test_blood_glucose_validation_errors() {
         App::new()
             .app_data(web::Data::new(pool.clone()))
             .app_data(web::Data::new(Metrics::new()))
-            .route("/ingest/blood-glucose", web::post().to(ingest_blood_glucose_handler))
-    ).await;
+            .route(
+                "/ingest/blood-glucose",
+                web::post().to(ingest_blood_glucose_handler),
+            ),
+    )
+    .await;
 
     // Test invalid glucose data
     let invalid_data = vec![
@@ -257,9 +269,20 @@ async fn test_blood_glucose_validation_errors() {
 
     // Check error messages
     let errors = body["errors"].as_array().unwrap();
-    assert!(errors[0]["message"].as_str().unwrap().contains("outside medical range"));
-    assert!(errors[1]["message"].as_str().unwrap().contains("outside medical range")
-            || errors[1]["message"].as_str().unwrap().contains("Invalid measurement context"));
+    assert!(errors[0]["message"]
+        .as_str()
+        .unwrap()
+        .contains("outside medical range"));
+    assert!(
+        errors[1]["message"]
+            .as_str()
+            .unwrap()
+            .contains("outside medical range")
+            || errors[1]["message"]
+                .as_str()
+                .unwrap()
+                .contains("Invalid measurement context")
+    );
 
     // Cleanup
     cleanup_test_user(&pool, user_id).await;
@@ -284,8 +307,12 @@ async fn test_metabolic_data_validation_errors() {
         App::new()
             .app_data(web::Data::new(pool.clone()))
             .app_data(web::Data::new(Metrics::new()))
-            .route("/ingest/metabolic", web::post().to(ingest_metabolic_handler))
-    ).await;
+            .route(
+                "/ingest/metabolic",
+                web::post().to(ingest_metabolic_handler),
+            ),
+    )
+    .await;
 
     // Test invalid metabolic data
     let invalid_data = vec![
@@ -327,9 +354,15 @@ async fn test_metabolic_data_validation_errors() {
 
     // Check for validation error messages
     let errors = body["errors"].as_array().unwrap();
-    assert!(errors.iter().any(|e| e["message"].as_str().unwrap().contains("outside valid range")));
-    assert!(errors.iter().any(|e| e["message"].as_str().unwrap().contains("outside safe range")
-            || e["message"].as_str().unwrap().contains("invalid")));
+    assert!(errors.iter().any(|e| e["message"]
+        .as_str()
+        .unwrap()
+        .contains("outside valid range")));
+    assert!(errors.iter().any(|e| e["message"]
+        .as_str()
+        .unwrap()
+        .contains("outside safe range")
+        || e["message"].as_str().unwrap().contains("invalid")));
 
     // Cleanup
     cleanup_test_user(&pool, user_id).await;
@@ -377,8 +410,12 @@ async fn test_blood_glucose_data_retrieval() {
         App::new()
             .app_data(web::Data::new(pool.clone()))
             .app_data(web::Data::new(Metrics::new()))
-            .route("/data/blood-glucose", web::get().to(get_blood_glucose_data_handler))
-    ).await;
+            .route(
+                "/data/blood-glucose",
+                web::get().to(get_blood_glucose_data_handler),
+            ),
+    )
+    .await;
 
     let req = test::TestRequest::get()
         .uri("/data/blood-glucose?limit=10")
@@ -444,8 +481,9 @@ async fn test_metabolic_data_retrieval() {
         App::new()
             .app_data(web::Data::new(pool.clone()))
             .app_data(web::Data::new(Metrics::new()))
-            .route("/data/metabolic", web::get().to(get_metabolic_data_handler))
-    ).await;
+            .route("/data/metabolic", web::get().to(get_metabolic_data_handler)),
+    )
+    .await;
 
     let req = test::TestRequest::get()
         .uri("/data/metabolic?limit=10")
@@ -491,8 +529,12 @@ async fn test_glucose_critical_level_detection() {
         App::new()
             .app_data(web::Data::new(pool.clone()))
             .app_data(web::Data::new(Metrics::new()))
-            .route("/ingest/blood-glucose", web::post().to(ingest_blood_glucose_handler))
-    ).await;
+            .route(
+                "/ingest/blood-glucose",
+                web::post().to(ingest_blood_glucose_handler),
+            ),
+    )
+    .await;
 
     // Test critical glucose levels
     let critical_data = vec![
@@ -544,11 +586,17 @@ async fn test_glucose_critical_level_detection() {
     // Verify critical reading recommendations
     let severe_hypo = &critical_readings[0];
     assert_eq!(severe_hypo["severity"], "SevereHypoglycemic");
-    assert!(severe_hypo["recommendation"].as_str().unwrap().contains("Immediate treatment"));
+    assert!(severe_hypo["recommendation"]
+        .as_str()
+        .unwrap()
+        .contains("Immediate treatment"));
 
     let severe_hyper = &critical_readings[1];
     assert_eq!(severe_hyper["severity"], "SevereHyperglycemic");
-    assert!(severe_hyper["recommendation"].as_str().unwrap().contains("immediate medical attention"));
+    assert!(severe_hyper["recommendation"]
+        .as_str()
+        .unwrap()
+        .contains("immediate medical attention"));
 
     // Cleanup
     cleanup_test_user(&pool, user_id).await;
@@ -561,9 +609,12 @@ async fn cleanup_test_user(pool: &sqlx::PgPool, user_id: Uuid) {
         .execute(pool)
         .await;
 
-    let _ = sqlx::query!("DELETE FROM blood_glucose_metrics WHERE user_id = $1", user_id)
-        .execute(pool)
-        .await;
+    let _ = sqlx::query!(
+        "DELETE FROM blood_glucose_metrics WHERE user_id = $1",
+        user_id
+    )
+    .execute(pool)
+    .await;
 
     let _ = sqlx::query!("DELETE FROM users WHERE id = $1", user_id)
         .execute(pool)

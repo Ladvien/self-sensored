@@ -189,7 +189,7 @@ async fn test_nutrition_validation_edge_cases() {
                 "recorded_at": Utc::now(),
                 "dietary_sodium": 15000.0,  // 15g sodium - dangerous
             }]
-        })
+        }),
     ];
 
     for (i, test_payload) in test_cases.iter().enumerate() {
@@ -202,32 +202,70 @@ async fn test_nutrition_validation_edge_cases() {
             user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
             dietary_water: nutrition_data.get("dietary_water").and_then(|v| v.as_f64()),
-            dietary_caffeine: nutrition_data.get("dietary_caffeine").and_then(|v| v.as_f64()),
-            dietary_energy_consumed: nutrition_data.get("dietary_energy_consumed").and_then(|v| v.as_f64()),
-            dietary_carbohydrates: nutrition_data.get("dietary_carbohydrates").and_then(|v| v.as_f64()),
-            dietary_protein: nutrition_data.get("dietary_protein").and_then(|v| v.as_f64()),
-            dietary_fat_total: nutrition_data.get("dietary_fat_total").and_then(|v| v.as_f64()),
-            dietary_fat_saturated: nutrition_data.get("dietary_fat_saturated").and_then(|v| v.as_f64()),
-            dietary_cholesterol: nutrition_data.get("dietary_cholesterol").and_then(|v| v.as_f64()),
-            dietary_sodium: nutrition_data.get("dietary_sodium").and_then(|v| v.as_f64()),
+            dietary_caffeine: nutrition_data
+                .get("dietary_caffeine")
+                .and_then(|v| v.as_f64()),
+            dietary_energy_consumed: nutrition_data
+                .get("dietary_energy_consumed")
+                .and_then(|v| v.as_f64()),
+            dietary_carbohydrates: nutrition_data
+                .get("dietary_carbohydrates")
+                .and_then(|v| v.as_f64()),
+            dietary_protein: nutrition_data
+                .get("dietary_protein")
+                .and_then(|v| v.as_f64()),
+            dietary_fat_total: nutrition_data
+                .get("dietary_fat_total")
+                .and_then(|v| v.as_f64()),
+            dietary_fat_saturated: nutrition_data
+                .get("dietary_fat_saturated")
+                .and_then(|v| v.as_f64()),
+            dietary_cholesterol: nutrition_data
+                .get("dietary_cholesterol")
+                .and_then(|v| v.as_f64()),
+            dietary_sodium: nutrition_data
+                .get("dietary_sodium")
+                .and_then(|v| v.as_f64()),
             dietary_fiber: nutrition_data.get("dietary_fiber").and_then(|v| v.as_f64()),
             dietary_sugar: nutrition_data.get("dietary_sugar").and_then(|v| v.as_f64()),
-            dietary_calcium: nutrition_data.get("dietary_calcium").and_then(|v| v.as_f64()),
+            dietary_calcium: nutrition_data
+                .get("dietary_calcium")
+                .and_then(|v| v.as_f64()),
             dietary_iron: nutrition_data.get("dietary_iron").and_then(|v| v.as_f64()),
-            dietary_magnesium: nutrition_data.get("dietary_magnesium").and_then(|v| v.as_f64()),
-            dietary_potassium: nutrition_data.get("dietary_potassium").and_then(|v| v.as_f64()),
-            dietary_vitamin_a: nutrition_data.get("dietary_vitamin_a").and_then(|v| v.as_f64()),
-            dietary_vitamin_c: nutrition_data.get("dietary_vitamin_c").and_then(|v| v.as_f64()),
-            dietary_vitamin_d: nutrition_data.get("dietary_vitamin_d").and_then(|v| v.as_f64()),
-            source_device: nutrition_data.get("source_device").and_then(|v| v.as_str().map(|s| s.to_string())),
+            dietary_magnesium: nutrition_data
+                .get("dietary_magnesium")
+                .and_then(|v| v.as_f64()),
+            dietary_potassium: nutrition_data
+                .get("dietary_potassium")
+                .and_then(|v| v.as_f64()),
+            dietary_vitamin_a: nutrition_data
+                .get("dietary_vitamin_a")
+                .and_then(|v| v.as_f64()),
+            dietary_vitamin_c: nutrition_data
+                .get("dietary_vitamin_c")
+                .and_then(|v| v.as_f64()),
+            dietary_vitamin_d: nutrition_data
+                .get("dietary_vitamin_d")
+                .and_then(|v| v.as_f64()),
+            source_device: nutrition_data
+                .get("source_device")
+                .and_then(|v| v.as_str().map(|s| s.to_string())),
             created_at: Utc::now(),
         };
 
         // Validate the metric - should fail
         let validation_result = test_metric.validate();
-        assert!(validation_result.is_err(), "Validation case {} should have failed", i + 1);
+        assert!(
+            validation_result.is_err(),
+            "Validation case {} should have failed",
+            i + 1
+        );
 
-        println!(" Validation case {} properly rejected: {}", i + 1, validation_result.unwrap_err());
+        println!(
+            " Validation case {} properly rejected: {}",
+            i + 1,
+            validation_result.unwrap_err()
+        );
     }
 
     println!(" Nutrition validation edge cases test passed!");
@@ -246,9 +284,9 @@ fn test_nutrition_analysis_patterns() {
         dietary_water: Some(2.0),
         dietary_caffeine: Some(100.0),
         dietary_energy_consumed: Some(2000.0),
-        dietary_carbohydrates: Some(250.0),  // 250g * 4 = 1000 calories (50%)
-        dietary_protein: Some(100.0),        // 100g * 4 = 400 calories (20%)
-        dietary_fat_total: Some(67.0),       // 67g * 9 = 603 calories (30%)
+        dietary_carbohydrates: Some(250.0), // 250g * 4 = 1000 calories (50%)
+        dietary_protein: Some(100.0),       // 100g * 4 = 400 calories (20%)
+        dietary_fat_total: Some(67.0),      // 67g * 9 = 603 calories (30%)
         dietary_fat_saturated: None,
         dietary_cholesterol: None,
         dietary_sodium: Some(2000.0),
@@ -269,12 +307,21 @@ fn test_nutrition_analysis_patterns() {
     let distribution = test_metric.macronutrient_distribution().unwrap();
 
     // Allow some rounding tolerance
-    assert!((distribution.carbohydrate_percent as i32 - 50).abs() <= 2,
-           "Carbs should be ~50%, got {}", distribution.carbohydrate_percent);
-    assert!((distribution.protein_percent as i32 - 20).abs() <= 2,
-           "Protein should be ~20%, got {}", distribution.protein_percent);
-    assert!((distribution.fat_percent as i32 - 30).abs() <= 2,
-           "Fat should be ~30%, got {}", distribution.fat_percent);
+    assert!(
+        (distribution.carbohydrate_percent as i32 - 50).abs() <= 2,
+        "Carbs should be ~50%, got {}",
+        distribution.carbohydrate_percent
+    );
+    assert!(
+        (distribution.protein_percent as i32 - 20).abs() <= 2,
+        "Protein should be ~20%, got {}",
+        distribution.protein_percent
+    );
+    assert!(
+        (distribution.fat_percent as i32 - 30).abs() <= 2,
+        "Fat should be ~30%, got {}",
+        distribution.fat_percent
+    );
 
     // Test hydration status
     assert_eq!(test_metric.hydration_status(), "adequate");
@@ -404,7 +451,10 @@ async fn test_nutrition_tracking_timeline() {
         .expect("Failed to insert test metric");
     }
 
-    println!(" Inserted {} nutrition metrics for timeline test", test_metrics.len());
+    println!(
+        " Inserted {} nutrition metrics for timeline test",
+        test_metrics.len()
+    );
 
     // Verify data was inserted
     let count = sqlx::query_scalar!(
@@ -478,8 +528,8 @@ impl Default for NutritionMetric {
 async fn test_nutrition_batch_processing() {
     use self_sensored::{
         config::BatchConfig,
+        models::{HealthMetric, IngestPayload},
         services::batch_processor::BatchProcessor,
-        models::{HealthMetric, IngestPayload}
     };
 
     // Skip if test database is not available
@@ -511,7 +561,7 @@ async fn test_nutrition_batch_processing() {
             recorded_at: base_time,
             dietary_water: Some(0.25 + (i as f64 * 0.001)), // Vary water intake
             dietary_caffeine: Some(if i % 3 == 0 { 50.0 } else { 0.0 }), // Some entries with caffeine
-            dietary_energy_consumed: Some(200.0 + (i as f64 * 0.1)), // Vary calories
+            dietary_energy_consumed: Some(200.0 + (i as f64 * 0.1)),     // Vary calories
             dietary_carbohydrates: Some(25.0 + (i as f64 * 0.01)),
             dietary_protein: Some(8.0 + (i as f64 * 0.005)),
             dietary_fat_total: Some(7.0 + (i as f64 * 0.003)),
@@ -542,10 +592,15 @@ async fn test_nutrition_batch_processing() {
             dietary_vitamin_e: Some(3.0 + (i as f64 * 0.001)),
             dietary_vitamin_k: Some(25.0 + (i as f64 * 0.002)),
             // Group first 100 entries as breakfast meal
-            meal_type: Some(if i < 100 { "breakfast".to_string() }
-                          else if i < 200 { "lunch".to_string() }
-                          else if i < 300 { "dinner".to_string() }
-                          else { "snack".to_string() }),
+            meal_type: Some(if i < 100 {
+                "breakfast".to_string()
+            } else if i < 200 {
+                "lunch".to_string()
+            } else if i < 300 {
+                "dinner".to_string()
+            } else {
+                "snack".to_string()
+            }),
             meal_id: Some(if i < 100 { meal_id } else { Uuid::new_v4() }),
             source_device: Some(format!("Test Device {}", i % 5)),
             created_at: Utc::now(),
@@ -575,9 +630,15 @@ async fn test_nutrition_batch_processing() {
     let processing_time = start_time.elapsed();
 
     // Verify results
-    assert!(result.processed_count > 0, "Should have processed nutrition metrics");
+    assert!(
+        result.processed_count > 0,
+        "Should have processed nutrition metrics"
+    );
     assert_eq!(result.failed_count, 0, "No metrics should have failed");
-    assert!(result.processing_time_ms > 0, "Processing time should be recorded");
+    assert!(
+        result.processing_time_ms > 0,
+        "Processing time should be recorded"
+    );
 
     println!(
         " Processed {} nutrition metrics in {:?} ({}ms recorded)",
@@ -586,7 +647,10 @@ async fn test_nutrition_batch_processing() {
 
     // Test chunking was used (should have multiple chunks for 2000 records with chunk size 1600)
     if let Some(progress) = result.chunk_progress {
-        assert!(progress.total_chunks > 1, "Should have used multiple chunks");
+        assert!(
+            progress.total_chunks > 1,
+            "Should have used multiple chunks"
+        );
         println!(" Used {} chunks for processing", progress.total_chunks);
     }
 
@@ -599,8 +663,14 @@ async fn test_nutrition_batch_processing() {
     .await
     .expect("Failed to count inserted metrics");
 
-    assert!(count.unwrap_or(0) > 1900, "Most metrics should have been inserted");
-    println!(" Database contains {} nutrition entries", count.unwrap_or(0));
+    assert!(
+        count.unwrap_or(0) > 1900,
+        "Most metrics should have been inserted"
+    );
+    println!(
+        " Database contains {} nutrition entries",
+        count.unwrap_or(0)
+    );
 
     // Test meal grouping - verify breakfast meal entries
     let breakfast_count = sqlx::query_scalar!(
@@ -611,8 +681,16 @@ async fn test_nutrition_batch_processing() {
     .await
     .expect("Failed to count breakfast metrics");
 
-    assert_eq!(breakfast_count.unwrap_or(0), 100, "Should have 100 breakfast entries with same meal_id");
-    println!(" Meal grouping: {} breakfast entries with meal_id {}", breakfast_count.unwrap_or(0), meal_id);
+    assert_eq!(
+        breakfast_count.unwrap_or(0),
+        100,
+        "Should have 100 breakfast entries with same meal_id"
+    );
+    println!(
+        " Meal grouping: {} breakfast entries with meal_id {}",
+        breakfast_count.unwrap_or(0),
+        meal_id
+    );
 
     // Test parallel vs sequential processing performance
     let sequential_start = std::time::Instant::now();
@@ -662,96 +740,130 @@ fn test_comprehensive_nutrition_validation() {
         id: Uuid::new_v4(),
         user_id: Uuid::new_v4(),
         recorded_at: Utc::now(),
-        dietary_water: Some(2.5), // Valid hydration
-        dietary_caffeine: Some(200.0), // Moderate caffeine
-        dietary_energy_consumed: Some(2200.0), // Reasonable calories
-        dietary_carbohydrates: Some(275.0), // Good carb intake
-        dietary_protein: Some(110.0), // High but reasonable protein
-        dietary_fat_total: Some(80.0), // Good fat intake
-        dietary_fat_saturated: Some(25.0), // Reasonable saturated fat
-        dietary_fat_monounsaturated: Some(35.0), // Healthy mono fat
-        dietary_fat_polyunsaturated: Some(20.0), // Good poly fat
-        dietary_cholesterol: Some(250.0), // Moderate cholesterol
-        dietary_sodium: Some(2000.0), // At recommended limit
-        dietary_fiber: Some(35.0), // High fiber - good
-        dietary_sugar: Some(60.0), // Moderate sugar
-        dietary_calcium: Some(1200.0), // Good calcium
-        dietary_iron: Some(18.0), // Good iron
-        dietary_magnesium: Some(420.0), // Good magnesium
-        dietary_potassium: Some(4000.0), // Excellent potassium
-        dietary_zinc: Some(12.0), // Good zinc
-        dietary_phosphorus: Some(1000.0), // Good phosphorus
-        dietary_vitamin_c: Some(120.0), // High vitamin C - good
-        dietary_vitamin_b1_thiamine: Some(1.5), // Good B1
+        dietary_water: Some(2.5),                 // Valid hydration
+        dietary_caffeine: Some(200.0),            // Moderate caffeine
+        dietary_energy_consumed: Some(2200.0),    // Reasonable calories
+        dietary_carbohydrates: Some(275.0),       // Good carb intake
+        dietary_protein: Some(110.0),             // High but reasonable protein
+        dietary_fat_total: Some(80.0),            // Good fat intake
+        dietary_fat_saturated: Some(25.0),        // Reasonable saturated fat
+        dietary_fat_monounsaturated: Some(35.0),  // Healthy mono fat
+        dietary_fat_polyunsaturated: Some(20.0),  // Good poly fat
+        dietary_cholesterol: Some(250.0),         // Moderate cholesterol
+        dietary_sodium: Some(2000.0),             // At recommended limit
+        dietary_fiber: Some(35.0),                // High fiber - good
+        dietary_sugar: Some(60.0),                // Moderate sugar
+        dietary_calcium: Some(1200.0),            // Good calcium
+        dietary_iron: Some(18.0),                 // Good iron
+        dietary_magnesium: Some(420.0),           // Good magnesium
+        dietary_potassium: Some(4000.0),          // Excellent potassium
+        dietary_zinc: Some(12.0),                 // Good zinc
+        dietary_phosphorus: Some(1000.0),         // Good phosphorus
+        dietary_vitamin_c: Some(120.0),           // High vitamin C - good
+        dietary_vitamin_b1_thiamine: Some(1.5),   // Good B1
         dietary_vitamin_b2_riboflavin: Some(1.8), // Good B2
-        dietary_vitamin_b3_niacin: Some(18.0), // Good B3
+        dietary_vitamin_b3_niacin: Some(18.0),    // Good B3
         dietary_vitamin_b6_pyridoxine: Some(2.0), // Good B6
         dietary_vitamin_b12_cobalamin: Some(3.0), // Good B12
-        dietary_folate: Some(450.0), // Good folate
-        dietary_biotin: Some(35.0), // Good biotin
-        dietary_pantothenic_acid: Some(6.0), // Good pantothenic acid
-        dietary_vitamin_a: Some(900.0), // Good vitamin A
-        dietary_vitamin_d: Some(800.0), // Good vitamin D
-        dietary_vitamin_e: Some(15.0), // Good vitamin E
-        dietary_vitamin_k: Some(120.0), // Good vitamin K
-        meal_type: Some("lunch".to_string()), // Valid meal type
+        dietary_folate: Some(450.0),              // Good folate
+        dietary_biotin: Some(35.0),               // Good biotin
+        dietary_pantothenic_acid: Some(6.0),      // Good pantothenic acid
+        dietary_vitamin_a: Some(900.0),           // Good vitamin A
+        dietary_vitamin_d: Some(800.0),           // Good vitamin D
+        dietary_vitamin_e: Some(15.0),            // Good vitamin E
+        dietary_vitamin_k: Some(120.0),           // Good vitamin K
+        meal_type: Some("lunch".to_string()),     // Valid meal type
         meal_id: Some(Uuid::new_v4()),
         source_device: Some("Comprehensive Test".to_string()),
         created_at: Utc::now(),
     };
 
     // Should pass validation
-    assert!(valid_metric.validate().is_ok(), "Comprehensive valid metric should pass validation");
+    assert!(
+        valid_metric.validate().is_ok(),
+        "Comprehensive valid metric should pass validation"
+    );
 
     // Test edge cases for new fields
     let mut edge_case_tests = vec![
         // Test monounsaturated fat edge case
-        ("High mono fat", NutritionMetric {
-            dietary_fat_monounsaturated: Some(600.0), // Over limit
-            ..valid_metric.clone()
-        }),
+        (
+            "High mono fat",
+            NutritionMetric {
+                dietary_fat_monounsaturated: Some(600.0), // Over limit
+                ..valid_metric.clone()
+            },
+        ),
         // Test polyunsaturated fat edge case
-        ("High poly fat", NutritionMetric {
-            dietary_fat_polyunsaturated: Some(600.0), // Over limit
-            ..valid_metric.clone()
-        }),
+        (
+            "High poly fat",
+            NutritionMetric {
+                dietary_fat_polyunsaturated: Some(600.0), // Over limit
+                ..valid_metric.clone()
+            },
+        ),
         // Test B vitamins edge cases
-        ("High B1", NutritionMetric {
-            dietary_vitamin_b1_thiamine: Some(150.0), // Way over limit
-            ..valid_metric.clone()
-        }),
-        ("High B12", NutritionMetric {
-            dietary_vitamin_b12_cobalamin: Some(3000.0), // Over limit
-            ..valid_metric.clone()
-        }),
+        (
+            "High B1",
+            NutritionMetric {
+                dietary_vitamin_b1_thiamine: Some(150.0), // Way over limit
+                ..valid_metric.clone()
+            },
+        ),
+        (
+            "High B12",
+            NutritionMetric {
+                dietary_vitamin_b12_cobalamin: Some(3000.0), // Over limit
+                ..valid_metric.clone()
+            },
+        ),
         // Test fat-soluble vitamin edge cases
-        ("High Vitamin E", NutritionMetric {
-            dietary_vitamin_e: Some(1500.0), // Over limit
-            ..valid_metric.clone()
-        }),
-        ("High Vitamin K", NutritionMetric {
-            dietary_vitamin_k: Some(6000.0), // Over limit
-            ..valid_metric.clone()
-        }),
+        (
+            "High Vitamin E",
+            NutritionMetric {
+                dietary_vitamin_e: Some(1500.0), // Over limit
+                ..valid_metric.clone()
+            },
+        ),
+        (
+            "High Vitamin K",
+            NutritionMetric {
+                dietary_vitamin_k: Some(6000.0), // Over limit
+                ..valid_metric.clone()
+            },
+        ),
         // Test meal type validation
-        ("Invalid meal type", NutritionMetric {
-            meal_type: Some("invalid_meal".to_string()), // Invalid
-            ..valid_metric.clone()
-        }),
+        (
+            "Invalid meal type",
+            NutritionMetric {
+                meal_type: Some("invalid_meal".to_string()), // Invalid
+                ..valid_metric.clone()
+            },
+        ),
         // Test mineral edge cases
-        ("High zinc", NutritionMetric {
-            dietary_zinc: Some(150.0), // Over limit
-            ..valid_metric.clone()
-        }),
-        ("High phosphorus", NutritionMetric {
-            dietary_phosphorus: Some(6000.0), // Over limit
-            ..valid_metric.clone()
-        }),
+        (
+            "High zinc",
+            NutritionMetric {
+                dietary_zinc: Some(150.0), // Over limit
+                ..valid_metric.clone()
+            },
+        ),
+        (
+            "High phosphorus",
+            NutritionMetric {
+                dietary_phosphorus: Some(6000.0), // Over limit
+                ..valid_metric.clone()
+            },
+        ),
     ];
 
     for (test_name, test_metric) in edge_case_tests.iter() {
         let result = test_metric.validate();
-        assert!(result.is_err(), "Test '{}' should fail validation", test_name);
+        assert!(
+            result.is_err(),
+            "Test '{}' should fail validation",
+            test_name
+        );
         println!(" {} properly rejected: {}", test_name, result.unwrap_err());
     }
 

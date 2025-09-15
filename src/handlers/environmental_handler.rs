@@ -93,7 +93,7 @@ pub async fn ingest_environmental_handler(
                 error!("Failed to store environmental metric: {}", e);
                 errors.push(ProcessingError {
                     metric_type: "Environmental".to_string(),
-                    error_message: format!("Storage error: {}", e),
+                    error_message: format!("Storage error: {e}"),
                     index: Some(index),
                 });
             }
@@ -183,7 +183,7 @@ pub async fn ingest_audio_exposure_handler(
                 error!("Failed to store audio exposure metric: {}", e);
                 errors.push(ProcessingError {
                     metric_type: "AudioExposure".to_string(),
-                    error_message: format!("Storage error: {}", e),
+                    error_message: format!("Storage error: {e}"),
                     index: Some(index),
                 });
             }
@@ -282,7 +282,7 @@ pub async fn ingest_safety_events_handler(
                 error!("Failed to store safety event metric: {}", e);
                 errors.push(ProcessingError {
                     metric_type: "SafetyEvent".to_string(),
-                    error_message: format!("Storage error: {}", e),
+                    error_message: format!("Storage error: {e}"),
                     index: Some(index),
                 });
             }
@@ -457,8 +457,8 @@ async fn store_safety_event_metric(
         user_id,
         metric.recorded_at,
         "anxiety" as _, // Map safety events to anxiety symptom as a temporary workaround
-        "mild" as _, // Default severity level
-        None::<i32>, // duration_minutes
+        "mild" as _,    // Default severity level
+        None::<i32>,    // duration_minutes
         metric.notes,
         None::<uuid::Uuid>, // episode_id
         metric.source_device,
@@ -483,12 +483,12 @@ async fn get_environmental_data(
         EnvironmentalMetric,
         r#"
         SELECT
-            id, user_id, recorded_at, uv_index, uv_exposure_minutes,
+            id, user_id, recorded_at::timestamptz as "recorded_at!", uv_index, uv_exposure_minutes,
             time_in_daylight_minutes, ambient_temperature_celsius,
             humidity_percent, air_pressure_hpa, altitude_meters,
             location_latitude, location_longitude,
             environmental_audio_exposure_db, headphone_audio_exposure_db,
-            source_device, created_at
+            source_device, created_at::timestamptz as "created_at!"
         FROM environmental_metrics
         WHERE user_id = $1 AND recorded_at BETWEEN $2 AND $3
         ORDER BY recorded_at DESC

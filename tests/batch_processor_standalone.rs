@@ -46,10 +46,19 @@ async fn test_batch_config_custom() {
         blood_pressure_chunk_size: 8000,
         sleep_chunk_size: 5000,
         activity_chunk_size: 7000,
+        body_measurement_chunk_size: 3000,
+        temperature_chunk_size: 8000,
+        respiratory_chunk_size: 7000,
         workout_chunk_size: 5000,
+        blood_glucose_chunk_size: 6500,
+        nutrition_chunk_size: 1600,
+        menstrual_chunk_size: 6500,
+        fertility_chunk_size: 4300,
         enable_progress_tracking: true,
         enable_intra_batch_deduplication: false,
-        enable_dual_write_activity_metrics: false, // Not needed for standalone testing
+        enable_dual_write_activity_metrics: false,
+        enable_reproductive_health_encryption: true,
+        reproductive_health_audit_logging: true,
     };
 
     assert_eq!(config.max_retries, 5);

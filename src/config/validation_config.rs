@@ -45,25 +45,25 @@ pub struct ValidationConfig {
     pub respiratory_rate_max: i32,
     pub oxygen_saturation_min: f64,
     pub oxygen_saturation_max: f64,
-    pub oxygen_saturation_critical: f64,    // Critical alert threshold
-    pub forced_vital_capacity_min: f64,     // FVC minimum
-    pub forced_vital_capacity_max: f64,     // FVC maximum
+    pub oxygen_saturation_critical: f64, // Critical alert threshold
+    pub forced_vital_capacity_min: f64,  // FVC minimum
+    pub forced_vital_capacity_max: f64,  // FVC maximum
     pub forced_expiratory_volume_1_min: f64, // FEV1 minimum
     pub forced_expiratory_volume_1_max: f64, // FEV1 maximum
     pub peak_expiratory_flow_rate_min: f64, // PEFR minimum
     pub peak_expiratory_flow_rate_max: f64, // PEFR maximum
-    pub inhaler_usage_max: i32,             // Maximum daily inhaler usage
+    pub inhaler_usage_max: i32,          // Maximum daily inhaler usage
 
     // Temperature Validation Thresholds (Medical-grade)
-    pub body_temperature_min: f32,          // Body temperature minimum (°C)
-    pub body_temperature_max: f32,          // Body temperature maximum (°C)
-    pub basal_body_temperature_min: f32,    // Basal temp minimum for fertility tracking
-    pub basal_body_temperature_max: f32,    // Basal temp maximum for fertility tracking
-    pub wrist_temperature_min: f32,         // Apple Watch wrist temp minimum
-    pub wrist_temperature_max: f32,         // Apple Watch wrist temp maximum
-    pub water_temperature_min: f32,         // Environmental water temp minimum
-    pub water_temperature_max: f32,         // Environmental water temp maximum
-    pub fever_threshold: f32,               // Fever threshold (38.0°C / 100.4°F)
+    pub body_temperature_min: f32, // Body temperature minimum (°C)
+    pub body_temperature_max: f32, // Body temperature maximum (°C)
+    pub basal_body_temperature_min: f32, // Basal temp minimum for fertility tracking
+    pub basal_body_temperature_max: f32, // Basal temp maximum for fertility tracking
+    pub wrist_temperature_min: f32, // Apple Watch wrist temp minimum
+    pub wrist_temperature_max: f32, // Apple Watch wrist temp maximum
+    pub water_temperature_min: f32, // Environmental water temp minimum
+    pub water_temperature_max: f32, // Environmental water temp maximum
+    pub fever_threshold: f32,      // Fever threshold (38.0°C / 100.4°F)
 
     // Body Measurements Validation Thresholds
     pub body_weight_min_kg: f64,           // Minimum body weight (20 kg)
@@ -76,24 +76,24 @@ pub struct ValidationConfig {
     pub body_temperature_max_celsius: f64, // Body temperature maximum for body metrics
 
     // Reproductive Health Validation Thresholds (HIPAA-Compliant Medical-Grade)
-    pub menstrual_cycle_day_min: i16,      // Minimum cycle day (1)
-    pub menstrual_cycle_day_max: i16,      // Maximum cycle day (45 for irregular cycles)
+    pub menstrual_cycle_day_min: i16,       // Minimum cycle day (1)
+    pub menstrual_cycle_day_max: i16,       // Maximum cycle day (45 for irregular cycles)
     pub menstrual_cramps_severity_min: i16, // Minimum cramps severity (0 - no pain)
     pub menstrual_cramps_severity_max: i16, // Maximum cramps severity (10 - severe pain)
-    pub menstrual_mood_rating_min: i16,    // Minimum mood rating (1 - terrible)
-    pub menstrual_mood_rating_max: i16,    // Maximum mood rating (5 - great)
-    pub menstrual_energy_level_min: i16,   // Minimum energy level (1 - exhausted)
-    pub menstrual_energy_level_max: i16,   // Maximum energy level (5 - energetic)
+    pub menstrual_mood_rating_min: i16,     // Minimum mood rating (1 - terrible)
+    pub menstrual_mood_rating_max: i16,     // Maximum mood rating (5 - great)
+    pub menstrual_energy_level_min: i16,    // Minimum energy level (1 - exhausted)
+    pub menstrual_energy_level_max: i16,    // Maximum energy level (5 - energetic)
 
     // Fertility Tracking Validation Thresholds (Medical-Grade)
-    pub fertility_basal_temp_min: f32,     // Minimum basal body temperature (35.0°C)
-    pub fertility_basal_temp_max: f32,     // Maximum basal body temperature (39.0°C)
+    pub fertility_basal_temp_min: f32, // Minimum basal body temperature (35.0°C)
+    pub fertility_basal_temp_max: f32, // Maximum basal body temperature (39.0°C)
     pub fertility_cervix_firmness_min: i16, // Minimum cervix firmness (1 - soft)
     pub fertility_cervix_firmness_max: i16, // Maximum cervix firmness (3 - firm)
     pub fertility_cervix_position_min: i16, // Minimum cervix position (1 - low)
     pub fertility_cervix_position_max: i16, // Maximum cervix position (3 - high)
-    pub fertility_lh_level_min: f64,       // Minimum LH level (0.0 mIU/mL)
-    pub fertility_lh_level_max: f64,       // Maximum LH level (100.0 mIU/mL)
+    pub fertility_lh_level_min: f64,   // Minimum LH level (0.0 mIU/mL)
+    pub fertility_lh_level_max: f64,   // Maximum LH level (100.0 mIU/mL)
 }
 
 impl Default for ValidationConfig {
@@ -137,59 +137,59 @@ impl Default for ValidationConfig {
             insulin_max_units: 100.0, // Maximum reasonable insulin dose
 
             // Respiratory validation (Medical-grade thresholds)
-            respiratory_rate_min: 5,      // Extreme bradypnea
-            respiratory_rate_max: 60,     // Extreme tachypnea
-            oxygen_saturation_min: 70.0,  // Severe hypoxemia
-            oxygen_saturation_max: 100.0, // Perfect saturation
-            oxygen_saturation_critical: 90.0, // Critical alert threshold
-            forced_vital_capacity_min: 1.0,   // Minimum FVC (severe restriction)
-            forced_vital_capacity_max: 8.0,   // Maximum FVC (very tall individuals)
-            forced_expiratory_volume_1_min: 0.5, // Minimum FEV1
+            respiratory_rate_min: 5,              // Extreme bradypnea
+            respiratory_rate_max: 60,             // Extreme tachypnea
+            oxygen_saturation_min: 70.0,          // Severe hypoxemia
+            oxygen_saturation_max: 100.0,         // Perfect saturation
+            oxygen_saturation_critical: 90.0,     // Critical alert threshold
+            forced_vital_capacity_min: 1.0,       // Minimum FVC (severe restriction)
+            forced_vital_capacity_max: 8.0,       // Maximum FVC (very tall individuals)
+            forced_expiratory_volume_1_min: 0.5,  // Minimum FEV1
             forced_expiratory_volume_1_max: 6.0,  // Maximum FEV1
             peak_expiratory_flow_rate_min: 50.0,  // Severe obstruction
             peak_expiratory_flow_rate_max: 800.0, // Elite athlete maximum
-            inhaler_usage_max: 50,        // Maximum daily inhaler usage
+            inhaler_usage_max: 50,                // Maximum daily inhaler usage
 
             // Temperature validation (Medical-grade thresholds)
-            body_temperature_min: 30.0,          // Severe hypothermia threshold
-            body_temperature_max: 45.0,          // Extreme hyperthermia threshold
-            basal_body_temperature_min: 35.0,    // Low basal temp for fertility tracking
-            basal_body_temperature_max: 39.0,    // High basal temp for fertility tracking
-            wrist_temperature_min: 30.0,         // Apple Watch wrist temp range
-            wrist_temperature_max: 45.0,         // Apple Watch wrist temp range
-            water_temperature_min: 0.0,          // Environmental water temp (ice)
-            water_temperature_max: 100.0,        // Environmental water temp (boiling)
-            fever_threshold: 38.0,               // Fever threshold (100.4°F)
+            body_temperature_min: 30.0, // Severe hypothermia threshold
+            body_temperature_max: 45.0, // Extreme hyperthermia threshold
+            basal_body_temperature_min: 35.0, // Low basal temp for fertility tracking
+            basal_body_temperature_max: 39.0, // High basal temp for fertility tracking
+            wrist_temperature_min: 30.0, // Apple Watch wrist temp range
+            wrist_temperature_max: 45.0, // Apple Watch wrist temp range
+            water_temperature_min: 0.0, // Environmental water temp (ice)
+            water_temperature_max: 100.0, // Environmental water temp (boiling)
+            fever_threshold: 38.0,      // Fever threshold (100.4°F)
 
             // Body measurements validation defaults
-            body_weight_min_kg: 20.0,           // Minimum reasonable body weight
-            body_weight_max_kg: 500.0,          // Maximum reasonable body weight
-            bmi_min: 15.0,                      // Minimum BMI (severe underweight)
-            bmi_max: 50.0,                      // Maximum BMI (severe obesity)
-            body_fat_min_percent: 3.0,          // Minimum body fat (essential fat)
-            body_fat_max_percent: 50.0,         // Maximum body fat (severe obesity)
+            body_weight_min_kg: 20.0,   // Minimum reasonable body weight
+            body_weight_max_kg: 500.0,  // Maximum reasonable body weight
+            bmi_min: 15.0,              // Minimum BMI (severe underweight)
+            bmi_max: 50.0,              // Maximum BMI (severe obesity)
+            body_fat_min_percent: 3.0,  // Minimum body fat (essential fat)
+            body_fat_max_percent: 50.0, // Maximum body fat (severe obesity)
             body_temperature_min_celsius: 30.0, // Body temperature minimum
             body_temperature_max_celsius: 45.0, // Body temperature maximum
 
             // Reproductive Health Validation Defaults (Medical-Grade HIPAA-Compliant)
-            menstrual_cycle_day_min: 1,          // First day of cycle
-            menstrual_cycle_day_max: 45,         // Maximum for very irregular cycles
-            menstrual_cramps_severity_min: 0,    // No pain
-            menstrual_cramps_severity_max: 10,   // Severe pain (0-10 medical scale)
-            menstrual_mood_rating_min: 1,        // Terrible mood
-            menstrual_mood_rating_max: 5,        // Great mood
-            menstrual_energy_level_min: 1,       // Exhausted
-            menstrual_energy_level_max: 5,       // Energetic
+            menstrual_cycle_day_min: 1,        // First day of cycle
+            menstrual_cycle_day_max: 45,       // Maximum for very irregular cycles
+            menstrual_cramps_severity_min: 0,  // No pain
+            menstrual_cramps_severity_max: 10, // Severe pain (0-10 medical scale)
+            menstrual_mood_rating_min: 1,      // Terrible mood
+            menstrual_mood_rating_max: 5,      // Great mood
+            menstrual_energy_level_min: 1,     // Exhausted
+            menstrual_energy_level_max: 5,     // Energetic
 
             // Fertility Tracking Validation Defaults (Medical-Grade)
-            fertility_basal_temp_min: 35.0,      // Low basal body temperature (°C)
-            fertility_basal_temp_max: 39.0,      // High basal body temperature (°C)
-            fertility_cervix_firmness_min: 1,    // Soft cervix
-            fertility_cervix_firmness_max: 3,    // Firm cervix
-            fertility_cervix_position_min: 1,    // Low cervix position
-            fertility_cervix_position_max: 3,    // High cervix position
-            fertility_lh_level_min: 0.0,         // Minimum LH level (mIU/mL)
-            fertility_lh_level_max: 100.0,       // Maximum LH level (mIU/mL)
+            fertility_basal_temp_min: 35.0, // Low basal body temperature (°C)
+            fertility_basal_temp_max: 39.0, // High basal body temperature (°C)
+            fertility_cervix_firmness_min: 1, // Soft cervix
+            fertility_cervix_firmness_max: 3, // Firm cervix
+            fertility_cervix_position_min: 1, // Low cervix position
+            fertility_cervix_position_max: 3, // High cervix position
+            fertility_lh_level_min: 0.0,    // Minimum LH level (mIU/mL)
+            fertility_lh_level_max: 100.0,  // Maximum LH level (mIU/mL)
         }
     }
 }
@@ -540,15 +540,22 @@ impl ValidationConfig {
         }
 
         if self.basal_body_temperature_min >= self.basal_body_temperature_max {
-            return Err("basal_body_temperature_min must be less than basal_body_temperature_max".to_string());
+            return Err(
+                "basal_body_temperature_min must be less than basal_body_temperature_max"
+                    .to_string(),
+            );
         }
 
         if self.wrist_temperature_min >= self.wrist_temperature_max {
-            return Err("wrist_temperature_min must be less than wrist_temperature_max".to_string());
+            return Err(
+                "wrist_temperature_min must be less than wrist_temperature_max".to_string(),
+            );
         }
 
         if self.water_temperature_min >= self.water_temperature_max {
-            return Err("water_temperature_min must be less than water_temperature_max".to_string());
+            return Err(
+                "water_temperature_min must be less than water_temperature_max".to_string(),
+            );
         }
 
         // Body measurements validation
@@ -565,7 +572,10 @@ impl ValidationConfig {
         }
 
         if self.body_temperature_min_celsius >= self.body_temperature_max_celsius {
-            return Err("body_temperature_min_celsius must be less than body_temperature_max_celsius".to_string());
+            return Err(
+                "body_temperature_min_celsius must be less than body_temperature_max_celsius"
+                    .to_string(),
+            );
         }
 
         // Blood glucose validation
@@ -579,7 +589,9 @@ impl ValidationConfig {
 
         // Reproductive Health Validation Consistency (HIPAA-Compliant Medical-Grade)
         if self.menstrual_cycle_day_min >= self.menstrual_cycle_day_max {
-            return Err("menstrual_cycle_day_min must be less than menstrual_cycle_day_max".to_string());
+            return Err(
+                "menstrual_cycle_day_min must be less than menstrual_cycle_day_max".to_string(),
+            );
         }
 
         if self.menstrual_cramps_severity_min > self.menstrual_cramps_severity_max {
@@ -587,7 +599,10 @@ impl ValidationConfig {
         }
 
         if self.menstrual_mood_rating_min > self.menstrual_mood_rating_max {
-            return Err("menstrual_mood_rating_min must be less than or equal to menstrual_mood_rating_max".to_string());
+            return Err(
+                "menstrual_mood_rating_min must be less than or equal to menstrual_mood_rating_max"
+                    .to_string(),
+            );
         }
 
         if self.menstrual_energy_level_min > self.menstrual_energy_level_max {
@@ -596,7 +611,9 @@ impl ValidationConfig {
 
         // Fertility Tracking Validation Consistency (Medical-Grade)
         if self.fertility_basal_temp_min >= self.fertility_basal_temp_max {
-            return Err("fertility_basal_temp_min must be less than fertility_basal_temp_max".to_string());
+            return Err(
+                "fertility_basal_temp_min must be less than fertility_basal_temp_max".to_string(),
+            );
         }
 
         if self.fertility_cervix_firmness_min > self.fertility_cervix_firmness_max {
@@ -608,7 +625,9 @@ impl ValidationConfig {
         }
 
         if self.fertility_lh_level_min >= self.fertility_lh_level_max {
-            return Err("fertility_lh_level_min must be less than fertility_lh_level_max".to_string());
+            return Err(
+                "fertility_lh_level_min must be less than fertility_lh_level_max".to_string(),
+            );
         }
 
         Ok(())

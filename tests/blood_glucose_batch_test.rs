@@ -1,6 +1,6 @@
+use chrono::Utc;
 use self_sensored::config::{BatchConfig, ValidationConfig};
-use self_sensored::models::{BloodGlucoseMetric, HealthMetric, IngestPayload, IngestData};
-use chrono::{DateTime, Utc};
+use self_sensored::models::{BloodGlucoseMetric, HealthMetric, IngestData, IngestPayload};
 use uuid::Uuid;
 
 /// Test blood glucose metric validation with medical-grade thresholds
@@ -174,7 +174,7 @@ fn test_blood_glucose_ingest_payload() {
     // Verify all metrics are blood glucose
     for metric in &payload.data.metrics {
         match metric {
-            HealthMetric::BloodGlucose(_) => {}, // Expected
+            HealthMetric::BloodGlucose(_) => {} // Expected
             _ => panic!("Expected BloodGlucose metric"),
         }
     }
@@ -235,7 +235,10 @@ fn test_cgm_high_frequency_processing() {
     let mut unique_timestamps = HashSet::new();
     for reading in &cgm_readings {
         let timestamp = reading.recorded_at.timestamp_millis();
-        assert!(unique_timestamps.insert(timestamp), "Duplicate timestamp found");
+        assert!(
+            unique_timestamps.insert(timestamp),
+            "Duplicate timestamp found"
+        );
     }
     assert_eq!(unique_timestamps.len(), 288);
 }
@@ -258,14 +261,14 @@ fn test_medical_critical_glucose_levels() {
 
     // Test different glucose categories
     let test_cases = [
-        (50.0, "hypoglycemic_critical", true),   // Emergency low
-        (70.0, "normal_fasting", false),         // Normal low end
-        (95.0, "normal_fasting", false),         // Normal fasting
-        (110.0, "pre_diabetic", false),          // Pre-diabetic
-        (140.0, "diabetic_controlled", false),   // Diabetic controlled
-        (200.0, "diabetic_high", false),         // High diabetic
-        (300.0, "diabetic_very_high", false),    // Very high
-        (450.0, "critical_emergency", true),     // Emergency high
+        (50.0, "hypoglycemic_critical", true), // Emergency low
+        (70.0, "normal_fasting", false),       // Normal low end
+        (95.0, "normal_fasting", false),       // Normal fasting
+        (110.0, "pre_diabetic", false),        // Pre-diabetic
+        (140.0, "diabetic_controlled", false), // Diabetic controlled
+        (200.0, "diabetic_high", false),       // High diabetic
+        (300.0, "diabetic_very_high", false),  // Very high
+        (450.0, "critical_emergency", true),   // Emergency high
     ];
 
     for (glucose_level, expected_category, expected_critical) in test_cases {
@@ -363,7 +366,10 @@ fn test_multi_device_cgm_deduplication() {
             reading.recorded_at.timestamp_millis(),
             reading.glucose_source.clone(),
         );
-        assert!(dedup_keys.insert(key), "Duplicate key found for different devices");
+        assert!(
+            dedup_keys.insert(key),
+            "Duplicate key found for different devices"
+        );
     }
 
     assert_eq!(dedup_keys.len(), 4); // All 4 devices should be unique
@@ -380,10 +386,16 @@ fn test_batch_parameter_limits_compliance() {
     let max_params = config.blood_glucose_chunk_size * BLOOD_GLUCOSE_PARAMS_PER_RECORD;
 
     // Must not exceed PostgreSQL parameter limit
-    assert!(max_params <= 65535, "Exceeds PostgreSQL parameter limit: {}", max_params);
+    assert!(
+        max_params <= 65535,
+        "Exceeds PostgreSQL parameter limit: {max_params}"
+    );
 
     // Should be reasonably efficient (using at least 75% of limit)
-    assert!(max_params >= 40000, "Chunk size too small, inefficient: {}", max_params);
+    assert!(
+        max_params >= 40000,
+        "Chunk size too small, inefficient: {max_params}"
+    );
 
     // Verify parameter count is correct
     assert_eq!(BLOOD_GLUCOSE_PARAMS_PER_RECORD, 8);

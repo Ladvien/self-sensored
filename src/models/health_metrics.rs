@@ -1,9 +1,8 @@
 use crate::config::ValidationConfig;
 use crate::models::enums::{
-    ActivityContext, WorkoutType, MeditationType, StateOfMind,
-    MenstrualFlow, CervicalMucusQuality, OvulationTestResult,
-    PregnancyTestResult, TemperatureContext, SymptomType, SymptomSeverity,
-    HygieneEventType, HeartRateEventType, CardiacEventSeverity,
+    ActivityContext, CardiacEventSeverity, CervicalMucusQuality, HeartRateEventType,
+    HygieneEventType, MeditationType, MenstrualFlow, OvulationTestResult, PregnancyTestResult,
+    StateOfMind, SymptomSeverity, SymptomType, TemperatureContext, WorkoutType,
 };
 use crate::models::user_characteristics::UserCharacteristics;
 use chrono::{DateTime, Utc};
@@ -22,10 +21,10 @@ pub struct HeartRateMetric {
     pub heart_rate_variability: Option<f64>,
 
     // Advanced Cardiovascular Metrics (STORY-011)
-    pub walking_heart_rate_average: Option<i16>,        // Average HR during walking activities (90-120 BPM normal)
-    pub heart_rate_recovery_one_minute: Option<i16>,    // HR recovery after 1 min post-exercise (18+ BPM decrease = good)
+    pub walking_heart_rate_average: Option<i16>, // Average HR during walking activities (90-120 BPM normal)
+    pub heart_rate_recovery_one_minute: Option<i16>, // HR recovery after 1 min post-exercise (18+ BPM decrease = good)
     pub atrial_fibrillation_burden_percentage: Option<Decimal>, // AFib burden as % (0.01-100.00%)
-    pub vo2_max_ml_kg_min: Option<Decimal>, // VO2 max in ml/kg/min (14.00-65.00 range)
+    pub vo2_max_ml_kg_min: Option<Decimal>,          // VO2 max in ml/kg/min (14.00-65.00 range)
 
     pub source_device: Option<String>,
     pub context: Option<ActivityContext>,
@@ -39,13 +38,13 @@ pub struct HeartRateEvent {
     pub user_id: uuid::Uuid,
     pub event_type: HeartRateEventType,
     pub event_occurred_at: DateTime<Utc>,
-    pub heart_rate_at_event: i16,                       // Heart rate when event occurred
-    pub event_duration_minutes: Option<i32>,            // Duration of the event in minutes
-    pub context: Option<ActivityContext>,                // Activity context when event occurred
-    pub source_device: Option<String>,                   // Device that detected the event
-    pub severity: CardiacEventSeverity,                  // Medical severity assessment
-    pub is_confirmed: bool,                              // Whether event was medically confirmed
-    pub notes: Option<String>,                           // Additional clinical notes or user observations
+    pub heart_rate_at_event: i16, // Heart rate when event occurred
+    pub event_duration_minutes: Option<i32>, // Duration of the event in minutes
+    pub context: Option<ActivityContext>, // Activity context when event occurred
+    pub source_device: Option<String>, // Device that detected the event
+    pub severity: CardiacEventSeverity, // Medical severity assessment
+    pub is_confirmed: bool,       // Whether event was medically confirmed
+    pub notes: Option<String>,    // Additional clinical notes or user observations
     pub created_at: DateTime<Utc>,
 }
 
@@ -156,12 +155,12 @@ pub struct RespiratoryMetric {
     pub id: uuid::Uuid,
     pub user_id: uuid::Uuid,
     pub recorded_at: DateTime<Utc>,
-    pub respiratory_rate: Option<i32>,              // breaths per minute (12-20 normal)
-    pub oxygen_saturation: Option<f64>,             // SpO2 percentage (90-100% normal, <90% critical)
-    pub forced_vital_capacity: Option<f64>,         // FVC in liters (3-5L normal)
-    pub forced_expiratory_volume_1: Option<f64>,    // FEV1 in liters (age/gender specific)
-    pub peak_expiratory_flow_rate: Option<f64>,     // PEFR in L/min (300-600 normal)
-    pub inhaler_usage: Option<i32>,                 // count of inhaler uses/puffs
+    pub respiratory_rate: Option<i32>, // breaths per minute (12-20 normal)
+    pub oxygen_saturation: Option<f64>, // SpO2 percentage (90-100% normal, <90% critical)
+    pub forced_vital_capacity: Option<f64>, // FVC in liters (3-5L normal)
+    pub forced_expiratory_volume_1: Option<f64>, // FEV1 in liters (age/gender specific)
+    pub peak_expiratory_flow_rate: Option<f64>, // PEFR in L/min (300-600 normal)
+    pub inhaler_usage: Option<i32>,    // count of inhaler uses/puffs
     pub source_device: Option<String>,
     pub created_at: DateTime<Utc>,
 }
@@ -183,11 +182,11 @@ pub struct BloodGlucoseMetric {
     pub id: uuid::Uuid,
     pub user_id: uuid::Uuid,
     pub recorded_at: DateTime<Utc>,
-    pub blood_glucose_mg_dl: f64,                       // Blood glucose in mg/dL (70-180 normal, diabetic ranges vary)
-    pub measurement_context: Option<String>,            // Store as string in DB: "fasting", "post_meal", etc.
-    pub medication_taken: Option<bool>,                 // Whether diabetes medication was taken
-    pub insulin_delivery_units: Option<f64>,           // Insulin delivery units (for atomic pairing)
-    pub glucose_source: Option<String>,                // CGM device identifier for deduplication
+    pub blood_glucose_mg_dl: f64, // Blood glucose in mg/dL (70-180 normal, diabetic ranges vary)
+    pub measurement_context: Option<String>, // Store as string in DB: "fasting", "post_meal", etc.
+    pub medication_taken: Option<bool>, // Whether diabetes medication was taken
+    pub insulin_delivery_units: Option<f64>, // Insulin delivery units (for atomic pairing)
+    pub glucose_source: Option<String>, // CGM device identifier for deduplication
     pub source_device: Option<String>,
     pub created_at: DateTime<Utc>,
 }
@@ -198,9 +197,9 @@ pub struct MetabolicMetric {
     pub id: uuid::Uuid,
     pub user_id: uuid::Uuid,
     pub recorded_at: DateTime<Utc>,
-    pub blood_alcohol_content: Option<f64>,    // Blood alcohol content percentage (0.0-0.5%)
-    pub insulin_delivery_units: Option<f64>,   // Insulin delivery units (0-100 units range)
-    pub delivery_method: Option<String>,       // "pump", "pen", "syringe", "inhaler", "patch"
+    pub blood_alcohol_content: Option<f64>, // Blood alcohol content percentage (0.0-0.5%)
+    pub insulin_delivery_units: Option<f64>, // Insulin delivery units (0-100 units range)
+    pub delivery_method: Option<String>,    // "pump", "pen", "syringe", "inhaler", "patch"
     pub source_device: Option<String>,
     pub created_at: DateTime<Utc>,
 }
@@ -277,9 +276,9 @@ pub struct RoutePoint {
     pub latitude: f64,
     pub longitude: f64,
     pub timestamp: DateTime<Utc>,
-    pub altitude: Option<f64>,  // meters above sea level
-    pub accuracy: Option<f64>,  // GPS accuracy in meters
-    pub speed: Option<f64>,     // speed in m/s at this point
+    pub altitude: Option<f64>, // meters above sea level
+    pub accuracy: Option<f64>, // GPS accuracy in meters
+    pub speed: Option<f64>,    // speed in m/s at this point
 }
 
 /// Workout with optional route data for comprehensive tracking
@@ -309,10 +308,8 @@ impl WorkoutRoute {
             let curr = &points[i];
 
             // Calculate distance using Haversine formula
-            let distance = haversine_distance(
-                prev.latitude, prev.longitude,
-                curr.latitude, curr.longitude
-            );
+            let distance =
+                haversine_distance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
             total_distance += distance;
 
             // Calculate elevation changes
@@ -357,30 +354,39 @@ impl WorkoutRoute {
         for (i, point) in points.iter().enumerate() {
             // Validate GPS coordinates
             if point.latitude < -90.0 || point.latitude > 90.0 {
-                return Err(format!("Invalid latitude {} at point {}", point.latitude, i));
+                return Err(format!(
+                    "Invalid latitude {} at point {}",
+                    point.latitude, i
+                ));
             }
             if point.longitude < -180.0 || point.longitude > 180.0 {
-                return Err(format!("Invalid longitude {} at point {}", point.longitude, i));
+                return Err(format!(
+                    "Invalid longitude {} at point {}",
+                    point.longitude, i
+                ));
             }
 
             // Validate altitude if present (reasonable bounds)
             if let Some(altitude) = point.altitude {
-                if altitude < -500.0 || altitude > 9000.0 { // Dead Sea to Everest range
-                    return Err(format!("Unrealistic altitude {} at point {}", altitude, i));
+                if !(-500.0..=9000.0).contains(&altitude) {
+                    // Dead Sea to Everest range
+                    return Err(format!("Unrealistic altitude {altitude} at point {i}"));
                 }
             }
 
             // Validate speed if present (reasonable bounds)
             if let Some(speed) = point.speed {
-                if speed < 0.0 || speed > 150.0 { // 0 to ~335 mph in m/s
-                    return Err(format!("Unrealistic speed {} m/s at point {}", speed, i));
+                if !(0.0..=150.0).contains(&speed) {
+                    // 0 to ~335 mph in m/s
+                    return Err(format!("Unrealistic speed {speed} m/s at point {i}"));
                 }
             }
 
             // Validate GPS accuracy if present
             if let Some(accuracy) = point.accuracy {
-                if accuracy < 0.0 || accuracy > 1000.0 { // 0 to 1km accuracy
-                    return Err(format!("Invalid GPS accuracy {} at point {}", accuracy, i));
+                if !(0.0..=1000.0).contains(&accuracy) {
+                    // 0 to 1km accuracy
+                    return Err(format!("Invalid GPS accuracy {accuracy} at point {i}"));
                 }
             }
         }
@@ -388,7 +394,11 @@ impl WorkoutRoute {
         // Validate timestamp ordering
         for i in 1..points.len() {
             if points[i].timestamp < points[i - 1].timestamp {
-                return Err(format!("Timestamps not in chronological order at points {} and {}", i - 1, i));
+                return Err(format!(
+                    "Timestamps not in chronological order at points {} and {}",
+                    i - 1,
+                    i
+                ));
             }
         }
 
@@ -419,8 +429,8 @@ fn haversine_distance(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
     let delta_lat = lat2_rad - lat1_rad;
     let delta_lon = lon2_rad - lon1_rad;
 
-    let a = (delta_lat / 2.0).sin().powi(2) +
-            lat1_rad.cos() * lat2_rad.cos() * (delta_lon / 2.0).sin().powi(2);
+    let a = (delta_lat / 2.0).sin().powi(2)
+        + lat1_rad.cos() * lat2_rad.cos() * (delta_lon / 2.0).sin().powi(2);
     let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
 
     EARTH_RADIUS * c
@@ -431,7 +441,7 @@ impl GpsCoordinate {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
         if !(config.latitude_min..=config.latitude_max).contains(&self.latitude) {
             return Err(format!(
                 "latitude {} is out of range ({} to {})",
@@ -458,7 +468,7 @@ impl WorkoutData {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
         if self.ended_at <= self.started_at {
             return Err("ended_at must be after started_at".to_string());
         }
@@ -544,13 +554,19 @@ pub struct EnvironmentalMetric {
     pub id: uuid::Uuid,
     pub user_id: uuid::Uuid,
     pub recorded_at: DateTime<Utc>,
+    // Audio exposure fields for hearing health monitoring
+    pub environmental_audio_exposure_db: Option<f64>,
+    pub headphone_audio_exposure_db: Option<f64>,
+    // UV exposure fields
     pub uv_index: Option<f64>,
     pub uv_exposure_minutes: Option<i32>,
     pub time_in_daylight_minutes: Option<i32>,
+    // Environmental conditions
     pub ambient_temperature_celsius: Option<f64>,
     pub humidity_percent: Option<f64>,
     pub air_pressure_hpa: Option<f64>,
     pub altitude_meters: Option<f64>,
+    // Location data
     pub location_latitude: Option<f64>,
     pub location_longitude: Option<f64>,
     pub source_device: Option<String>,
@@ -577,7 +593,7 @@ pub struct SafetyEventMetric {
     pub id: uuid::Uuid,
     pub user_id: uuid::Uuid,
     pub recorded_at: DateTime<Utc>,
-    pub event_type: String, // "fall_detected", "emergency_sos", etc.
+    pub event_type: String,          // "fall_detected", "emergency_sos", etc.
     pub severity_level: Option<i16>, // 1-5 severity scale
     pub location_latitude: Option<f64>,
     pub location_longitude: Option<f64>,
@@ -613,7 +629,7 @@ pub struct MindfulnessMetric {
     pub guided_session_instructor: Option<String>,
     pub meditation_app: Option<String>, // calm, headspace, insight_timer, apple_mindfulness
     pub background_sounds: Option<String>, // nature, rain, silence, music
-    pub location_type: Option<String>, // home, office, outdoors, studio
+    pub location_type: Option<String>,  // home, office, outdoors, studio
     pub session_notes: Option<String>,
 
     // Metadata
@@ -635,14 +651,14 @@ pub struct MentalHealthMetric {
     pub reflection_prompt: Option<String>,
 
     // General Mental Health Ratings (1-10 scale)
-    pub mood_rating: Option<i16>, // Overall mood
+    pub mood_rating: Option<i16>,   // Overall mood
     pub anxiety_level: Option<i16>, // Anxiety intensity
-    pub stress_level: Option<i16>, // Stress intensity
-    pub energy_level: Option<i16>, // Energy level
+    pub stress_level: Option<i16>,  // Stress intensity
+    pub energy_level: Option<i16>,  // Energy level
 
     // Clinical Screening Scores (when applicable)
     pub depression_screening_score: Option<i16>, // PHQ-9 style (0-27)
-    pub anxiety_screening_score: Option<i16>, // GAD-7 style (0-21)
+    pub anxiety_screening_score: Option<i16>,    // GAD-7 style (0-21)
 
     // Sleep Quality Impact
     pub sleep_quality_impact: Option<i16>, // 1-5 impact rating
@@ -697,11 +713,11 @@ pub struct FertilityMetric {
     pub temperature_context: TemperatureContext,
 
     // Additional fertility indicators
-    pub cervix_firmness: Option<i16>,  // 1=soft, 2=medium, 3=firm
-    pub cervix_position: Option<i16>,  // 1=low, 2=medium, 3=high
-    pub lh_level: Option<f64>,         // Luteinizing hormone level (mIU/mL)
+    pub cervix_firmness: Option<i16>, // 1=soft, 2=medium, 3=firm
+    pub cervix_position: Option<i16>, // 1=low, 2=medium, 3=high
+    pub lh_level: Option<f64>,        // Luteinizing hormone level (mIU/mL)
 
-    pub notes: Option<String>,         // Encrypted field
+    pub notes: Option<String>, // Encrypted field
     pub source_device: Option<String>,
     pub created_at: DateTime<Utc>,
 }
@@ -715,50 +731,50 @@ pub struct NutritionMetric {
     pub recorded_at: DateTime<Utc>,
 
     // Hydration & Stimulants
-    pub dietary_water: Option<f64>,                    // liters
-    pub dietary_caffeine: Option<f64>,                 // mg
+    pub dietary_water: Option<f64>,    // liters
+    pub dietary_caffeine: Option<f64>, // mg
 
     // Macronutrients (Core Energy)
-    pub dietary_energy_consumed: Option<f64>,          // calories
-    pub dietary_carbohydrates: Option<f64>,            // grams
-    pub dietary_protein: Option<f64>,                  // grams
-    pub dietary_fat_total: Option<f64>,                // grams
-    pub dietary_fat_saturated: Option<f64>,            // grams
-    pub dietary_fat_monounsaturated: Option<f64>,      // grams
-    pub dietary_fat_polyunsaturated: Option<f64>,      // grams
-    pub dietary_cholesterol: Option<f64>,              // mg
-    pub dietary_sodium: Option<f64>,                   // mg
-    pub dietary_fiber: Option<f64>,                    // grams
-    pub dietary_sugar: Option<f64>,                    // grams
+    pub dietary_energy_consumed: Option<f64>,     // calories
+    pub dietary_carbohydrates: Option<f64>,       // grams
+    pub dietary_protein: Option<f64>,             // grams
+    pub dietary_fat_total: Option<f64>,           // grams
+    pub dietary_fat_saturated: Option<f64>,       // grams
+    pub dietary_fat_monounsaturated: Option<f64>, // grams
+    pub dietary_fat_polyunsaturated: Option<f64>, // grams
+    pub dietary_cholesterol: Option<f64>,         // mg
+    pub dietary_sodium: Option<f64>,              // mg
+    pub dietary_fiber: Option<f64>,               // grams
+    pub dietary_sugar: Option<f64>,               // grams
 
     // Essential Minerals
-    pub dietary_calcium: Option<f64>,                  // mg
-    pub dietary_iron: Option<f64>,                     // mg
-    pub dietary_magnesium: Option<f64>,                // mg
-    pub dietary_potassium: Option<f64>,                // mg
-    pub dietary_zinc: Option<f64>,                     // mg
-    pub dietary_phosphorus: Option<f64>,               // mg
+    pub dietary_calcium: Option<f64>,    // mg
+    pub dietary_iron: Option<f64>,       // mg
+    pub dietary_magnesium: Option<f64>,  // mg
+    pub dietary_potassium: Option<f64>,  // mg
+    pub dietary_zinc: Option<f64>,       // mg
+    pub dietary_phosphorus: Option<f64>, // mg
 
     // Essential Vitamins (Water-soluble)
-    pub dietary_vitamin_c: Option<f64>,                // mg
-    pub dietary_vitamin_b1_thiamine: Option<f64>,      // mg
-    pub dietary_vitamin_b2_riboflavin: Option<f64>,    // mg
-    pub dietary_vitamin_b3_niacin: Option<f64>,        // mg
-    pub dietary_vitamin_b6_pyridoxine: Option<f64>,    // mg
-    pub dietary_vitamin_b12_cobalamin: Option<f64>,    // mcg
-    pub dietary_folate: Option<f64>,                   // mcg
-    pub dietary_biotin: Option<f64>,                   // mcg
-    pub dietary_pantothenic_acid: Option<f64>,         // mg
+    pub dietary_vitamin_c: Option<f64>,             // mg
+    pub dietary_vitamin_b1_thiamine: Option<f64>,   // mg
+    pub dietary_vitamin_b2_riboflavin: Option<f64>, // mg
+    pub dietary_vitamin_b3_niacin: Option<f64>,     // mg
+    pub dietary_vitamin_b6_pyridoxine: Option<f64>, // mg
+    pub dietary_vitamin_b12_cobalamin: Option<f64>, // mcg
+    pub dietary_folate: Option<f64>,                // mcg
+    pub dietary_biotin: Option<f64>,                // mcg
+    pub dietary_pantothenic_acid: Option<f64>,      // mg
 
     // Essential Vitamins (Fat-soluble)
-    pub dietary_vitamin_a: Option<f64>,                // mcg RAE
-    pub dietary_vitamin_d: Option<f64>,                // IU
-    pub dietary_vitamin_e: Option<f64>,                // mg
-    pub dietary_vitamin_k: Option<f64>,                // mcg
+    pub dietary_vitamin_a: Option<f64>, // mcg RAE
+    pub dietary_vitamin_d: Option<f64>, // IU
+    pub dietary_vitamin_e: Option<f64>, // mg
+    pub dietary_vitamin_k: Option<f64>, // mcg
 
     // Meal Context for atomic processing
-    pub meal_type: Option<String>,                     // breakfast, lunch, dinner, snack
-    pub meal_id: Option<uuid::Uuid>,                   // Group nutrients from same meal
+    pub meal_type: Option<String>,   // breakfast, lunch, dinner, snack
+    pub meal_id: Option<uuid::Uuid>, // Group nutrients from same meal
 
     // Metadata and source tracking
     pub source_device: Option<String>,
@@ -775,7 +791,7 @@ pub struct SymptomMetric {
     pub symptom_type: SymptomType,
     pub severity: SymptomSeverity,
     pub duration_minutes: Option<i32>, // Duration of symptom in minutes (can be very long for chronic symptoms)
-    pub notes: Option<String>, // Additional context about the symptom
+    pub notes: Option<String>,         // Additional context about the symptom
     pub episode_id: Option<uuid::Uuid>, // Link related symptoms in same illness episode
     pub source_device: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -784,6 +800,7 @@ pub struct SymptomMetric {
 /// Tagged union for all health metric types
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(tag = "type")]
+#[allow(clippy::large_enum_variant)]
 pub enum HealthMetric {
     HeartRate(HeartRateMetric),
     BloodPressure(BloodPressureMetric),
@@ -831,11 +848,25 @@ pub struct IngestResponse {
 }
 
 /// Individual processing error
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct ProcessingError {
     pub metric_type: String,
     pub error_message: String,
     pub index: Option<usize>,
+}
+
+impl std::fmt::Display for ProcessingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(index) = self.index {
+            write!(
+                f,
+                "{} error at index {}: {}",
+                self.metric_type, index, self.error_message
+            )
+        } else {
+            write!(f, "{} error: {}", self.metric_type, self.error_message)
+        }
+    }
 }
 
 /// Validation functions
@@ -844,7 +875,7 @@ impl HeartRateMetric {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
         if let Some(bpm) = self.heart_rate {
             if !(config.heart_rate_min..=config.heart_rate_max).contains(&bpm) {
                 return Err(format!(
@@ -874,8 +905,7 @@ impl HeartRateMetric {
             // Walking HR should be between 60-200 BPM (normal walking range with safety margins)
             if !(60..=200).contains(&walking_hr) {
                 return Err(format!(
-                    "walking_heart_rate_average {} is out of range (60-200 BPM)",
-                    walking_hr
+                    "walking_heart_rate_average {walking_hr} is out of range (60-200 BPM)"
                 ));
             }
         }
@@ -884,8 +914,7 @@ impl HeartRateMetric {
             // HR recovery should be 0-100 BPM decrease (18+ is considered good)
             if !(0..=100).contains(&hr_recovery) {
                 return Err(format!(
-                    "heart_rate_recovery_one_minute {} is out of range (0-100 BPM)",
-                    hr_recovery
+                    "heart_rate_recovery_one_minute {hr_recovery} is out of range (0-100 BPM)"
                 ));
             }
         }
@@ -896,8 +925,7 @@ impl HeartRateMetric {
             // AFib burden should be 0.0-100.0% (Apple Watch shows "2% or less" as minimum)
             if !(0.0..=100.0).contains(&burden_f64) {
                 return Err(format!(
-                    "atrial_fibrillation_burden_percentage {} is out of range (0.0-100.0%)",
-                    burden_f64
+                    "atrial_fibrillation_burden_percentage {burden_f64} is out of range (0.0-100.0%)"
                 ));
             }
         }
@@ -908,8 +936,7 @@ impl HeartRateMetric {
             // VO2 max should be 14.0-65.0 ml/kg/min (Apple Watch supported range)
             if !(14.0..=65.0).contains(&vo2_f64) {
                 return Err(format!(
-                    "vo2_max_ml_kg_min {} is out of range (14.0-65.0 ml/kg/min)",
-                    vo2_f64
+                    "vo2_max_ml_kg_min {vo2_f64} is out of range (14.0-65.0 ml/kg/min)"
                 ));
             }
         }
@@ -918,7 +945,11 @@ impl HeartRateMetric {
     }
 
     /// Personalized validation using user characteristics
-    pub fn validate_with_characteristics(&self, config: &ValidationConfig, characteristics: Option<&UserCharacteristics>) -> Result<(), String> {
+    pub fn validate_with_characteristics(
+        &self,
+        config: &ValidationConfig,
+        characteristics: Option<&UserCharacteristics>,
+    ) -> Result<(), String> {
         match characteristics {
             Some(chars) => {
                 let age = chars.age().unwrap_or(30);
@@ -944,7 +975,9 @@ impl HeartRateMetric {
 
                 if let Some(bpm) = self.heart_rate {
                     let max_hr = match self.context {
-                        Some(ActivityContext::Exercise) | Some(ActivityContext::Running) | Some(ActivityContext::Cycling) => adjusted_max_exercise,
+                        Some(ActivityContext::Exercise)
+                        | Some(ActivityContext::Running)
+                        | Some(ActivityContext::Cycling) => adjusted_max_exercise,
                         _ => adjusted_max_resting,
                     };
 
@@ -1004,16 +1037,14 @@ impl HeartRateEvent {
         if let Some(duration) = self.event_duration_minutes {
             if duration < 0 {
                 return Err(format!(
-                    "event_duration_minutes {} cannot be negative",
-                    duration
+                    "event_duration_minutes {duration} cannot be negative"
                 ));
             }
 
             // Maximum event duration: 24 hours for ultra-endurance scenarios
             if duration > 1440 {
                 return Err(format!(
-                    "event_duration_minutes {} exceeds maximum (1440 minutes = 24 hours)",
-                    duration
+                    "event_duration_minutes {duration} exceeds maximum (1440 minutes = 24 hours)"
                 ));
             }
         }
@@ -1028,7 +1059,7 @@ impl HeartRateEvent {
                         self.heart_rate_at_event
                     ));
                 }
-            },
+            }
             HeartRateEventType::Low => {
                 // Low HR events should have bradycardia range
                 if self.heart_rate_at_event > 60 {
@@ -1037,7 +1068,7 @@ impl HeartRateEvent {
                         self.heart_rate_at_event
                     ));
                 }
-            },
+            }
             HeartRateEventType::Afib => {
                 // AFib typically occurs at irregular elevated rates
                 if self.heart_rate_at_event < 60 {
@@ -1046,7 +1077,7 @@ impl HeartRateEvent {
                         self.heart_rate_at_event
                     ));
                 }
-            },
+            }
             _ => {
                 // Other event types (IRREGULAR, RAPID_INCREASE, SLOW_RECOVERY, EXERCISE_ANOMALY)
                 // are pattern-based and don't have strict HR thresholds
@@ -1064,7 +1095,7 @@ impl HeartRateEvent {
                         );
                     }
                 }
-            },
+            }
             CardiacEventSeverity::High => {
                 // High severity events lasting > 30 minutes should be confirmed
                 if let Some(duration) = self.event_duration_minutes {
@@ -1074,7 +1105,7 @@ impl HeartRateEvent {
                         );
                     }
                 }
-            },
+            }
             _ => {} // Low and Moderate severities have no duration constraints
         }
 
@@ -1082,7 +1113,11 @@ impl HeartRateEvent {
     }
 
     /// Validate with personalized user characteristics for age-adjusted thresholds
-    pub fn validate_with_characteristics(&self, config: &ValidationConfig, characteristics: Option<&UserCharacteristics>) -> Result<(), String> {
+    pub fn validate_with_characteristics(
+        &self,
+        config: &ValidationConfig,
+        characteristics: Option<&UserCharacteristics>,
+    ) -> Result<(), String> {
         // First run standard validation
         self.validate_with_config(config)?;
 
@@ -1102,13 +1137,13 @@ impl HeartRateEvent {
                             age, tachycardia_threshold, self.heart_rate_at_event
                         ));
                     }
-                },
+                }
                 HeartRateEventType::Low => {
                     // Age-adjusted bradycardia thresholds
                     let bradycardia_threshold = match age {
-                        age if age < 30 => 50,  // Younger adults: < 50 BPM
-                        age if age < 60 => 55,  // Middle-aged: < 55 BPM
-                        _ => 60,                // Older adults: < 60 BPM
+                        age if age < 30 => 50, // Younger adults: < 50 BPM
+                        age if age < 60 => 55, // Middle-aged: < 55 BPM
+                        _ => 60,               // Older adults: < 60 BPM
                     };
 
                     if self.heart_rate_at_event > bradycardia_threshold {
@@ -1117,7 +1152,7 @@ impl HeartRateEvent {
                             age, bradycardia_threshold, self.heart_rate_at_event
                         ));
                     }
-                },
+                }
                 _ => {} // Other event types don't require age adjustment
             }
         }
@@ -1168,11 +1203,11 @@ impl HeartRateEvent {
         // Duration modifier (longer events are more concerning)
         if let Some(duration) = self.event_duration_minutes {
             score += match duration {
-                d if d > 60 => 10,   // > 1 hour
-                d if d > 30 => 7,    // 30-60 minutes
-                d if d > 10 => 5,    // 10-30 minutes
-                d if d > 5 => 3,     // 5-10 minutes
-                _ => 0,              // < 5 minutes
+                d if d > 60 => 10, // > 1 hour
+                d if d > 30 => 7,  // 30-60 minutes
+                d if d > 10 => 5,  // 10-30 minutes
+                d if d > 5 => 3,   // 5-10 minutes
+                _ => 0,            // < 5 minutes
             };
         }
 
@@ -1186,7 +1221,7 @@ impl BloodPressureMetric {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
         // Medical ranges as specified in story requirements
         if self.systolic < config.systolic_min || self.systolic > config.systolic_max {
             return Err(format!(
@@ -1226,7 +1261,7 @@ impl SleepMetric {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
         if self.sleep_end <= self.sleep_start {
             return Err("sleep_end must be after sleep_start".to_string());
         }
@@ -1274,7 +1309,7 @@ impl SleepMetric {
 
         // Efficiency = (actual sleep time / time in bed) * 100
         let actual_sleep = self.duration_minutes.unwrap_or(total_duration as i32) as f32;
-        (actual_sleep / total_duration * 100.0).min(100.0).max(0.0)
+        (actual_sleep / total_duration * 100.0).clamp(0.0, 100.0)
     }
 
     /// Get the efficiency, calculating if not provided
@@ -1290,7 +1325,7 @@ impl ActivityMetric {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
         if let Some(step_count) = self.step_count {
             if step_count < config.step_count_min || step_count > config.step_count_max {
                 return Err(format!(
@@ -1363,8 +1398,7 @@ impl ActivityMetric {
             let swimming_distance_km = swimming_distance / 1000.0;
             if swimming_distance_km > 50.0 {
                 return Err(format!(
-                    "swimming distance {} km exceeds reasonable maximum of 50 km",
-                    swimming_distance_km
+                    "swimming distance {swimming_distance_km} km exceeds reasonable maximum of 50 km"
                 ));
             }
         }
@@ -1389,66 +1423,59 @@ impl ActivityMetric {
             let snow_sports_distance_km = snow_sports_distance / 1000.0;
             if snow_sports_distance_km > 100.0 {
                 return Err(format!(
-                    "downhill snow sports distance {} km exceeds reasonable maximum of 100 km",
-                    snow_sports_distance_km
+                    "downhill snow sports distance {snow_sports_distance_km} km exceeds reasonable maximum of 100 km"
                 ));
             }
         }
 
         // Validate accessibility metrics
         if let Some(push_count) = self.push_count {
-            if push_count < 0 || push_count > 50000 {
+            if !(0..=50000).contains(&push_count) {
                 return Err(format!(
-                    "push_count {} is out of range (0-50000)",
-                    push_count
+                    "push_count {push_count} is out of range (0-50000)"
                 ));
             }
         }
 
         // Validate swimming analytics
         if let Some(stroke_count) = self.swimming_stroke_count {
-            if stroke_count < 0 || stroke_count > 100000 {
+            if !(0..=100000).contains(&stroke_count) {
                 return Err(format!(
-                    "swimming_stroke_count {} is out of range (0-100000)",
-                    stroke_count
+                    "swimming_stroke_count {stroke_count} is out of range (0-100000)"
                 ));
             }
         }
 
         // Validate Nike Fuel points
         if let Some(fuel_points) = self.nike_fuel_points {
-            if fuel_points < 0 || fuel_points > 10000 {
+            if !(0..=10000).contains(&fuel_points) {
                 return Err(format!(
-                    "nike_fuel_points {} is out of range (0-10000)",
-                    fuel_points
+                    "nike_fuel_points {fuel_points} is out of range (0-10000)"
                 ));
             }
         }
 
         // Validate Apple Watch activity ring metrics
         if let Some(exercise_time) = self.apple_exercise_time_minutes {
-            if exercise_time < 0 || exercise_time > 1440 {
+            if !(0..=1440).contains(&exercise_time) {
                 return Err(format!(
-                    "apple_exercise_time_minutes {} is out of range (0-1440)",
-                    exercise_time
+                    "apple_exercise_time_minutes {exercise_time} is out of range (0-1440)"
                 ));
             }
         }
 
         if let Some(stand_time) = self.apple_stand_time_minutes {
-            if stand_time < 0 || stand_time > 1440 {
+            if !(0..=1440).contains(&stand_time) {
                 return Err(format!(
-                    "apple_stand_time_minutes {} is out of range (0-1440)",
-                    stand_time
+                    "apple_stand_time_minutes {stand_time} is out of range (0-1440)"
                 ));
             }
         }
 
         if let Some(move_time) = self.apple_move_time_minutes {
-            if move_time < 0 || move_time > 1440 {
+            if !(0..=1440).contains(&move_time) {
                 return Err(format!(
-                    "apple_move_time_minutes {} is out of range (0-1440)",
-                    move_time
+                    "apple_move_time_minutes {move_time} is out of range (0-1440)"
                 ));
             }
         }
@@ -1457,12 +1484,24 @@ impl ActivityMetric {
     }
 
     /// Personalized validation using user characteristics (wheelchair adaptations)
-    pub fn validate_with_characteristics(&self, config: &ValidationConfig, characteristics: Option<&UserCharacteristics>) -> Result<(), String> {
+    pub fn validate_with_characteristics(
+        &self,
+        config: &ValidationConfig,
+        characteristics: Option<&UserCharacteristics>,
+    ) -> Result<(), String> {
         match characteristics {
             Some(chars) => {
                 // Wheelchair users have different activity expectations
-                let step_max = if chars.wheelchair_use { 10000 } else { config.step_count_max };
-                let distance_max_km = if chars.wheelchair_use { 100.0 } else { config.distance_max_km };
+                let step_max = if chars.wheelchair_use {
+                    10000
+                } else {
+                    config.step_count_max
+                };
+                let distance_max_km = if chars.wheelchair_use {
+                    100.0
+                } else {
+                    config.distance_max_km
+                };
 
                 if let Some(step_count) = self.step_count {
                     // For wheelchair users, step count may be much lower or even zero
@@ -1470,17 +1509,14 @@ impl ActivityMetric {
                         // More lenient validation for wheelchair users
                         if step_count < 0 || step_count > step_max {
                             return Err(format!(
-                                "step_count {} is outside adapted range (0-{}) for wheelchair user",
-                                step_count, step_max
+                                "step_count {step_count} is outside adapted range (0-{step_max}) for wheelchair user"
                             ));
                         }
-                    } else {
-                        if step_count < config.step_count_min || step_count > step_max {
-                            return Err(format!(
-                                "step_count {} is out of range ({}-{})",
-                                step_count, config.step_count_min, step_max
-                            ));
-                        }
+                    } else if step_count < config.step_count_min || step_count > step_max {
+                        return Err(format!(
+                            "step_count {} is out of range ({}-{})",
+                            step_count, config.step_count_min, step_max
+                        ));
                     }
                 }
 
@@ -1493,7 +1529,11 @@ impl ActivityMetric {
                         return Err(format!(
                             "distance {} km exceeds {} maximum of {} km",
                             distance_km,
-                            if chars.wheelchair_use { "wheelchair-adapted" } else { "standard" },
+                            if chars.wheelchair_use {
+                                "wheelchair-adapted"
+                            } else {
+                                "standard"
+                            },
                             distance_max_km
                         ));
                     }
@@ -1531,8 +1571,7 @@ impl ActivityMetric {
                         // So we allow it but with a lower maximum
                         if flights > 100 {
                             return Err(format!(
-                                "flights_climbed {} seems unusually high for wheelchair user (max 100)",
-                                flights
+                                "flights_climbed {flights} seems unusually high for wheelchair user (max 100)"
                             ));
                         }
                     } else if !(0..=10000).contains(&flights) {
@@ -1557,7 +1596,7 @@ impl BodyMeasurementMetric {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
         // Body weight validation (20-500 kg range)
         if let Some(weight) = self.body_weight_kg {
             if weight < config.body_weight_min_kg || weight > config.body_weight_max_kg {
@@ -1590,10 +1629,9 @@ impl BodyMeasurementMetric {
 
         // Lean body mass validation
         if let Some(lean_mass) = self.lean_body_mass_kg {
-            if lean_mass < 10.0 || lean_mass > 200.0 {
+            if !(10.0..=200.0).contains(&lean_mass) {
                 return Err(format!(
-                    "lean_body_mass_kg {} is out of range (10-200)",
-                    lean_mass
+                    "lean_body_mass_kg {lean_mass} is out of range (10-200)"
                 ));
             }
 
@@ -1601,8 +1639,7 @@ impl BodyMeasurementMetric {
             if let Some(weight) = self.body_weight_kg {
                 if lean_mass > weight {
                     return Err(format!(
-                        "lean_body_mass_kg {} cannot exceed body_weight_kg {}",
-                        lean_mass, weight
+                        "lean_body_mass_kg {lean_mass} cannot exceed body_weight_kg {weight}"
                     ));
                 }
             }
@@ -1612,8 +1649,7 @@ impl BodyMeasurementMetric {
         if let Some(waist) = self.waist_circumference_cm {
             if waist <= 0.0 || waist > 300.0 {
                 return Err(format!(
-                    "waist_circumference_cm {} is out of range (0-300)",
-                    waist
+                    "waist_circumference_cm {waist} is out of range (0-300)"
                 ));
             }
         }
@@ -1621,15 +1657,16 @@ impl BodyMeasurementMetric {
         if let Some(hip) = self.hip_circumference_cm {
             if hip <= 0.0 || hip > 300.0 {
                 return Err(format!(
-                    "hip_circumference_cm {} is out of range (0-300)",
-                    hip
+                    "hip_circumference_cm {hip} is out of range (0-300)"
                 ));
             }
         }
 
         // Body temperature validation (if included)
         if let Some(temp) = self.body_temperature_celsius {
-            if temp < config.body_temperature_min_celsius || temp > config.body_temperature_max_celsius {
+            if temp < config.body_temperature_min_celsius
+                || temp > config.body_temperature_max_celsius
+            {
                 return Err(format!(
                     "body_temperature_celsius {} is out of range ({}-{})",
                     temp, config.body_temperature_min_celsius, config.body_temperature_max_celsius
@@ -1638,10 +1675,9 @@ impl BodyMeasurementMetric {
         }
 
         if let Some(basal_temp) = self.basal_body_temperature_celsius {
-            if basal_temp < 35.0 || basal_temp > 38.0 {
+            if !(35.0..=38.0).contains(&basal_temp) {
                 return Err(format!(
-                    "basal_body_temperature_celsius {} is out of range (35-38)",
-                    basal_temp
+                    "basal_body_temperature_celsius {basal_temp} is out of range (35-38)"
                 ));
             }
         }
@@ -1667,15 +1703,15 @@ impl BodyMeasurementMetric {
     /// Validate BMI consistency with weight/height if both are available
     pub fn validate_bmi_consistency(&self, height_cm: Option<f64>) -> Result<(), String> {
         if let (Some(reported_bmi), Some(weight), Some(height)) =
-            (self.body_mass_index, self.body_weight_kg, height_cm) {
+            (self.body_mass_index, self.body_weight_kg, height_cm)
+        {
             let calculated_bmi = self.calculate_bmi(height).unwrap_or(0.0);
             let bmi_difference = (reported_bmi - calculated_bmi).abs();
 
             // Allow 5% tolerance for BMI calculation differences
             if bmi_difference > (calculated_bmi * 0.05) {
                 return Err(format!(
-                    "BMI consistency check failed: reported BMI {} vs calculated BMI {:.2} (weight: {}kg, height: {}cm)",
-                    reported_bmi, calculated_bmi, weight, height
+                    "BMI consistency check failed: reported BMI {reported_bmi} vs calculated BMI {calculated_bmi:.2} (weight: {weight}kg, height: {height}cm)"
                 ));
             }
         }
@@ -1691,7 +1727,10 @@ impl BodyMeasurementMetric {
             self.body_mass_index.is_some(),
             self.body_fat_percentage.is_some(),
             self.lean_body_mass_kg.is_some(),
-        ].iter().filter(|&&x| x).count();
+        ]
+        .iter()
+        .filter(|&&x| x)
+        .count();
 
         has_weight && composition_count >= 2
     }
@@ -1702,7 +1741,7 @@ impl RespiratoryMetric {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
         // Respiratory rate validation
         if let Some(rate) = self.respiratory_rate {
             if rate < config.respiratory_rate_min || rate > config.respiratory_rate_max {
@@ -1745,10 +1784,14 @@ impl RespiratoryMetric {
 
         // Forced Expiratory Volume in 1 second (FEV1) validation
         if let Some(fev1) = self.forced_expiratory_volume_1 {
-            if fev1 < config.forced_expiratory_volume_1_min || fev1 > config.forced_expiratory_volume_1_max {
+            if fev1 < config.forced_expiratory_volume_1_min
+                || fev1 > config.forced_expiratory_volume_1_max
+            {
                 return Err(format!(
                     "forced_expiratory_volume_1 {} is out of range ({:.1}-{:.1} L)",
-                    fev1, config.forced_expiratory_volume_1_min, config.forced_expiratory_volume_1_max
+                    fev1,
+                    config.forced_expiratory_volume_1_min,
+                    config.forced_expiratory_volume_1_max
                 ));
             }
 
@@ -1756,10 +1799,9 @@ impl RespiratoryMetric {
             if let Some(fvc) = self.forced_vital_capacity {
                 if fvc > 0.0 {
                     let ratio = fev1 / fvc;
-                    if ratio < 0.3 || ratio > 1.0 {
+                    if !(0.3..=1.0).contains(&ratio) {
                         return Err(format!(
-                            "FEV1/FVC ratio {:.2} is out of normal range (0.3-1.0)",
-                            ratio
+                            "FEV1/FVC ratio {ratio:.2} is out of normal range (0.3-1.0)"
                         ));
                     }
 
@@ -1777,10 +1819,14 @@ impl RespiratoryMetric {
 
         // Peak Expiratory Flow Rate (PEFR) validation
         if let Some(pefr) = self.peak_expiratory_flow_rate {
-            if pefr < config.peak_expiratory_flow_rate_min || pefr > config.peak_expiratory_flow_rate_max {
+            if pefr < config.peak_expiratory_flow_rate_min
+                || pefr > config.peak_expiratory_flow_rate_max
+            {
                 return Err(format!(
                     "peak_expiratory_flow_rate {} is out of range ({:.0}-{:.0} L/min)",
-                    pefr, config.peak_expiratory_flow_rate_min, config.peak_expiratory_flow_rate_max
+                    pefr,
+                    config.peak_expiratory_flow_rate_min,
+                    config.peak_expiratory_flow_rate_max
                 ));
             }
         }
@@ -1821,7 +1867,7 @@ impl RespiratoryMetric {
 
         // Extreme respiratory rates
         if let Some(rate) = self.respiratory_rate {
-            if rate < 8 || rate > 30 {
+            if !(8..=30).contains(&rate) {
                 return true;
             }
         }
@@ -1842,10 +1888,11 @@ impl TemperatureMetric {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
         // Validate body temperature ranges (medical-grade validation)
         if let Some(temp) = self.body_temperature {
-            if !(config.body_temperature_min..=config.body_temperature_max).contains(&(temp as f32)) {
+            if !(config.body_temperature_min..=config.body_temperature_max).contains(&(temp as f32))
+            {
                 return Err(format!(
                     "body_temperature {}°C is out of range ({}°C-{}°C)",
                     temp, config.body_temperature_min, config.body_temperature_max
@@ -1855,7 +1902,9 @@ impl TemperatureMetric {
 
         // Validate basal body temperature for fertility tracking
         if let Some(temp) = self.basal_body_temperature {
-            if !(config.basal_body_temperature_min..=config.basal_body_temperature_max).contains(&(temp as f32)) {
+            if !(config.basal_body_temperature_min..=config.basal_body_temperature_max)
+                .contains(&(temp as f32))
+            {
                 return Err(format!(
                     "basal_body_temperature {}°C is out of range ({}°C-{}°C)",
                     temp, config.basal_body_temperature_min, config.basal_body_temperature_max
@@ -1865,7 +1914,9 @@ impl TemperatureMetric {
 
         // Validate Apple Watch wrist temperature
         if let Some(temp) = self.apple_sleeping_wrist_temperature {
-            if !(config.wrist_temperature_min..=config.wrist_temperature_max).contains(&(temp as f32)) {
+            if !(config.wrist_temperature_min..=config.wrist_temperature_max)
+                .contains(&(temp as f32))
+            {
                 return Err(format!(
                     "apple_sleeping_wrist_temperature {}°C is out of range ({}°C-{}°C)",
                     temp, config.wrist_temperature_min, config.wrist_temperature_max
@@ -1875,7 +1926,9 @@ impl TemperatureMetric {
 
         // Validate water temperature (environmental)
         if let Some(temp) = self.water_temperature {
-            if !(config.water_temperature_min..=config.water_temperature_max).contains(&(temp as f32)) {
+            if !(config.water_temperature_min..=config.water_temperature_max)
+                .contains(&(temp as f32))
+            {
                 return Err(format!(
                     "water_temperature {}°C is out of range ({}°C-{}°C)",
                     temp, config.water_temperature_min, config.water_temperature_max
@@ -1888,12 +1941,13 @@ impl TemperatureMetric {
 
     /// Check if temperature indicates fever (body temp > 38.0°C / 100.4°F)
     pub fn has_fever(&self) -> bool {
-        self.body_temperature.map_or(false, |temp| temp > 38.0)
+        self.body_temperature.is_some_and(|temp| temp > 38.0)
     }
 
     /// Check if basal body temperature indicates ovulation spike
     pub fn basal_temp_spike(&self, baseline_temp: f64) -> bool {
-        self.basal_body_temperature.map_or(false, |temp| temp > baseline_temp + 0.2)
+        self.basal_body_temperature
+            .is_some_and(|temp| temp > baseline_temp + 0.2)
     }
 
     /// Get primary temperature value for general monitoring
@@ -1909,54 +1963,66 @@ impl EnvironmentalMetric {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
         // Validate UV index range (0-11+ scale)
         if let Some(uv) = self.uv_index {
-            if uv < 0.0 || uv > 20.0 {
-                return Err(format!("uv_index {} is out of valid range (0-20)", uv));
+            if !(0.0..=20.0).contains(&uv) {
+                return Err(format!("uv_index {uv} is out of valid range (0-20)"));
             }
         }
 
         // Validate UV exposure time
         if let Some(exposure_min) = self.uv_exposure_minutes {
-            if exposure_min < 0 || exposure_min > 24 * 60 {
-                return Err(format!("uv_exposure_minutes {} is out of range (0-1440)", exposure_min));
+            if !(0..=24 * 60).contains(&exposure_min) {
+                return Err(format!(
+                    "uv_exposure_minutes {exposure_min} is out of range (0-1440)"
+                ));
             }
         }
 
         // Validate daylight time
         if let Some(daylight_min) = self.time_in_daylight_minutes {
-            if daylight_min < 0 || daylight_min > 24 * 60 {
-                return Err(format!("time_in_daylight_minutes {} is out of range (0-1440)", daylight_min));
+            if !(0..=24 * 60).contains(&daylight_min) {
+                return Err(format!(
+                    "time_in_daylight_minutes {daylight_min} is out of range (0-1440)"
+                ));
             }
         }
 
         // Validate temperature range (-50 to 60 Celsius)
         if let Some(temp) = self.ambient_temperature_celsius {
-            if temp < -50.0 || temp > 60.0 {
-                return Err(format!("ambient_temperature_celsius {} is out of range (-50 to 60)", temp));
+            if !(-50.0..=60.0).contains(&temp) {
+                return Err(format!(
+                    "ambient_temperature_celsius {temp} is out of range (-50 to 60)"
+                ));
             }
         }
 
         // Validate humidity percentage
         if let Some(humidity) = self.humidity_percent {
-            if humidity < 0.0 || humidity > 100.0 {
-                return Err(format!("humidity_percent {} is out of range (0-100)", humidity));
+            if !(0.0..=100.0).contains(&humidity) {
+                return Err(format!(
+                    "humidity_percent {humidity} is out of range (0-100)"
+                ));
             }
         }
 
         // Validate GPS coordinates if provided
         if let Some(lat) = self.location_latitude {
             if !(config.latitude_min..=config.latitude_max).contains(&lat) {
-                return Err(format!("location_latitude {} is out of range ({} to {})",
-                    lat, config.latitude_min, config.latitude_max));
+                return Err(format!(
+                    "location_latitude {} is out of range ({} to {})",
+                    lat, config.latitude_min, config.latitude_max
+                ));
             }
         }
 
         if let Some(lng) = self.location_longitude {
             if !(config.longitude_min..=config.longitude_max).contains(&lng) {
-                return Err(format!("location_longitude {} is out of range ({} to {})",
-                    lng, config.longitude_min, config.longitude_max));
+                return Err(format!(
+                    "location_longitude {} is out of range ({} to {})",
+                    lng, config.longitude_min, config.longitude_max
+                ));
             }
         }
 
@@ -1972,28 +2038,37 @@ impl AudioExposureMetric {
     pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
         // Validate environmental audio exposure (typical range 0-120 dB)
         if let Some(env_db) = self.environmental_audio_exposure_db {
-            if env_db < 0.0 || env_db > 150.0 {
-                return Err(format!("environmental_audio_exposure_db {} is out of range (0-150)", env_db));
+            if !(0.0..=150.0).contains(&env_db) {
+                return Err(format!(
+                    "environmental_audio_exposure_db {env_db} is out of range (0-150)"
+                ));
             }
         }
 
         // Validate headphone audio exposure (typical range 0-120 dB)
         if let Some(hp_db) = self.headphone_audio_exposure_db {
-            if hp_db < 0.0 || hp_db > 150.0 {
-                return Err(format!("headphone_audio_exposure_db {} is out of range (0-150)", hp_db));
+            if !(0.0..=150.0).contains(&hp_db) {
+                return Err(format!(
+                    "headphone_audio_exposure_db {hp_db} is out of range (0-150)"
+                ));
             }
         }
 
         // Validate exposure duration (must be positive, max 24 hours)
         if self.exposure_duration_minutes < 0 || self.exposure_duration_minutes > 24 * 60 {
-            return Err(format!("exposure_duration_minutes {} is out of range (0-1440)",
-                self.exposure_duration_minutes));
+            return Err(format!(
+                "exposure_duration_minutes {} is out of range (0-1440)",
+                self.exposure_duration_minutes
+            ));
         }
 
         // Check for dangerous audio levels (85+ dB for extended periods)
         if let Some(env_db) = self.environmental_audio_exposure_db {
             if env_db >= 85.0 && self.exposure_duration_minutes > 60 && !self.audio_exposure_event {
-                return Err("audio_exposure_event should be true for prolonged high-volume exposure".to_string());
+                return Err(
+                    "audio_exposure_event should be true for prolonged high-volume exposure"
+                        .to_string(),
+                );
             }
         }
 
@@ -2012,7 +2087,7 @@ impl SafetyEventMetric {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
         // Validate event type is not empty
         if self.event_type.is_empty() {
             return Err("event_type cannot be empty".to_string());
@@ -2021,28 +2096,33 @@ impl SafetyEventMetric {
         // Validate severity level if provided
         if let Some(severity) = self.severity_level {
             if !(1..=5).contains(&severity) {
-                return Err(format!("severity_level {} is out of range (1-5)", severity));
+                return Err(format!("severity_level {severity} is out of range (1-5)"));
             }
         }
 
         // Validate GPS coordinates if provided
         if let Some(lat) = self.location_latitude {
             if !(config.latitude_min..=config.latitude_max).contains(&lat) {
-                return Err(format!("location_latitude {} is out of range ({} to {})",
-                    lat, config.latitude_min, config.latitude_max));
+                return Err(format!(
+                    "location_latitude {} is out of range ({} to {})",
+                    lat, config.latitude_min, config.latitude_max
+                ));
             }
         }
 
         if let Some(lng) = self.location_longitude {
             if !(config.longitude_min..=config.longitude_max).contains(&lng) {
-                return Err(format!("location_longitude {} is out of range ({} to {})",
-                    lng, config.longitude_min, config.longitude_max));
+                return Err(format!(
+                    "location_longitude {} is out of range ({} to {})",
+                    lng, config.longitude_min, config.longitude_max
+                ));
             }
         }
 
         // Validate known event types
         match self.event_type.as_str() {
-            "fall_detected" | "emergency_sos" | "crash_detected" | "hard_fall" | "medical_emergency" => {},
+            "fall_detected" | "emergency_sos" | "crash_detected" | "hard_fall"
+            | "medical_emergency" => {}
             _ => {
                 // Allow unknown event types but log for monitoring
                 tracing::debug!("Unknown safety event type: {}", self.event_type);
@@ -2061,49 +2141,62 @@ impl MindfulnessMetric {
     pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
         // Validate session duration (reasonable meditation session lengths)
         if let Some(duration) = self.session_duration_minutes {
-            if duration < 1 || duration > 720 { // 1 minute to 12 hours max
-                return Err(format!("session_duration_minutes {} is out of range (1-720)", duration));
+            if !(1..=720).contains(&duration) {
+                // 1 minute to 12 hours max
+                return Err(format!(
+                    "session_duration_minutes {duration} is out of range (1-720)"
+                ));
             }
         }
 
         // Validate session quality rating
         if let Some(quality) = self.session_quality_rating {
             if !(1..=5).contains(&quality) {
-                return Err(format!("session_quality_rating {} is out of range (1-5)", quality));
+                return Err(format!(
+                    "session_quality_rating {quality} is out of range (1-5)"
+                ));
             }
         }
 
         // Validate focus rating
         if let Some(focus) = self.focus_rating {
             if !(1..=10).contains(&focus) {
-                return Err(format!("focus_rating {} is out of range (1-10)", focus));
+                return Err(format!("focus_rating {focus} is out of range (1-10)"));
             }
         }
 
         // Validate mindful minutes tracking
         if let Some(minutes) = self.mindful_minutes_today {
-            if minutes < 0 || minutes > 24 * 60 {
-                return Err(format!("mindful_minutes_today {} is out of range (0-1440)", minutes));
+            if !(0..=24 * 60).contains(&minutes) {
+                return Err(format!(
+                    "mindful_minutes_today {minutes} is out of range (0-1440)"
+                ));
             }
         }
 
         if let Some(minutes) = self.mindful_minutes_week {
-            if minutes < 0 || minutes > 7 * 24 * 60 {
-                return Err(format!("mindful_minutes_week {} is out of range (0-10080)", minutes));
+            if !(0..=7 * 24 * 60).contains(&minutes) {
+                return Err(format!(
+                    "mindful_minutes_week {minutes} is out of range (0-10080)"
+                ));
             }
         }
 
         // Validate breathing rate
         if let Some(breathing_rate) = self.breathing_rate_breaths_per_min {
-            if breathing_rate < 5.0 || breathing_rate > 40.0 {
-                return Err(format!("breathing_rate_breaths_per_min {} is out of range (5.0-40.0)", breathing_rate));
+            if !(5.0..=40.0).contains(&breathing_rate) {
+                return Err(format!(
+                    "breathing_rate_breaths_per_min {breathing_rate} is out of range (5.0-40.0)"
+                ));
             }
         }
 
         // Validate heart rate variability during session
         if let Some(hrv) = self.heart_rate_variability_during_session {
-            if hrv < 0.0 || hrv > 200.0 {
-                return Err(format!("heart_rate_variability_during_session {} is out of range (0.0-200.0)", hrv));
+            if !(0.0..=200.0).contains(&hrv) {
+                return Err(format!(
+                    "heart_rate_variability_during_session {hrv} is out of range (0.0-200.0)"
+                ));
             }
         }
 
@@ -2112,7 +2205,9 @@ impl MindfulnessMetric {
 
     /// Get meditation type as enum (convert from string)
     pub fn get_meditation_type(&self) -> Option<MeditationType> {
-        self.meditation_type.as_deref().map(MeditationType::from_ios_string)
+        self.meditation_type
+            .as_deref()
+            .map(MeditationType::from_ios_string)
     }
 
     /// Set meditation type from enum (convert to string)
@@ -2122,15 +2217,20 @@ impl MindfulnessMetric {
 
     /// Check if this is a high-quality meditation session
     pub fn is_high_quality_session(&self) -> bool {
-        self.session_quality_rating.map_or(false, |rating| rating >= 4) &&
-        self.focus_rating.map_or(false, |rating| rating >= 7)
+        self.session_quality_rating
+            .is_some_and(|rating| rating >= 4)
+            && self.focus_rating.is_some_and(|rating| rating >= 7)
     }
 
     /// Calculate session effectiveness score (0-100)
     pub fn effectiveness_score(&self) -> i16 {
         let quality_score = self.session_quality_rating.unwrap_or(3) * 20; // 1-5 -> 20-100
         let focus_score = self.focus_rating.unwrap_or(5) * 10; // 1-10 -> 10-100
-        let duration_bonus = if self.session_duration_minutes.unwrap_or(0) >= 10 { 10 } else { 0 };
+        let duration_bonus = if self.session_duration_minutes.unwrap_or(0) >= 10 {
+            10
+        } else {
+            0
+        };
 
         std::cmp::min(100, (quality_score + focus_score) / 2 + duration_bonus)
     }
@@ -2145,63 +2245,71 @@ impl MentalHealthMetric {
         // Validate iOS 17+ State of Mind valence
         if let Some(valence) = self.state_of_mind_valence {
             if !(-1.0..=1.0).contains(&valence) {
-                return Err(format!("state_of_mind_valence {} is out of range (-1.0 to 1.0)", valence));
+                return Err(format!(
+                    "state_of_mind_valence {valence} is out of range (-1.0 to 1.0)"
+                ));
             }
         }
 
         // Validate mood rating
         if let Some(mood) = self.mood_rating {
             if !(1..=10).contains(&mood) {
-                return Err(format!("mood_rating {} is out of range (1-10)", mood));
+                return Err(format!("mood_rating {mood} is out of range (1-10)"));
             }
         }
 
         // Validate anxiety level
         if let Some(anxiety) = self.anxiety_level {
             if !(1..=10).contains(&anxiety) {
-                return Err(format!("anxiety_level {} is out of range (1-10)", anxiety));
+                return Err(format!("anxiety_level {anxiety} is out of range (1-10)"));
             }
         }
 
         // Validate stress level
         if let Some(stress) = self.stress_level {
             if !(1..=10).contains(&stress) {
-                return Err(format!("stress_level {} is out of range (1-10)", stress));
+                return Err(format!("stress_level {stress} is out of range (1-10)"));
             }
         }
 
         // Validate energy level
         if let Some(energy) = self.energy_level {
             if !(1..=10).contains(&energy) {
-                return Err(format!("energy_level {} is out of range (1-10)", energy));
+                return Err(format!("energy_level {energy} is out of range (1-10)"));
             }
         }
 
         // Validate clinical screening scores
         if let Some(phq9) = self.depression_screening_score {
             if !(0..=27).contains(&phq9) {
-                return Err(format!("depression_screening_score {} is out of range (0-27)", phq9));
+                return Err(format!(
+                    "depression_screening_score {phq9} is out of range (0-27)"
+                ));
             }
         }
 
         if let Some(gad7) = self.anxiety_screening_score {
             if !(0..=21).contains(&gad7) {
-                return Err(format!("anxiety_screening_score {} is out of range (0-21)", gad7));
+                return Err(format!(
+                    "anxiety_screening_score {gad7} is out of range (0-21)"
+                ));
             }
         }
 
         // Validate sleep quality impact
         if let Some(sleep_impact) = self.sleep_quality_impact {
             if !(1..=5).contains(&sleep_impact) {
-                return Err(format!("sleep_quality_impact {} is out of range (1-5)", sleep_impact));
+                return Err(format!(
+                    "sleep_quality_impact {sleep_impact} is out of range (1-5)"
+                ));
             }
         }
 
         // Validate data sensitivity level
         if let Some(ref sensitivity) = self.data_sensitivity_level {
             match sensitivity.as_str() {
-                "high" | "medical" | "therapeutic" => {},
-                _ => return Err(format!("Invalid data_sensitivity_level: {}", sensitivity)),
+                "high" | "medical" | "therapeutic" => {}
+                _ => return Err(format!("Invalid data_sensitivity_level: {sensitivity}")),
             }
         }
 
@@ -2220,28 +2328,31 @@ impl MentalHealthMetric {
 
     /// Check if this metric indicates clinical concern (high depression/anxiety scores)
     pub fn indicates_clinical_concern(&self) -> bool {
-        self.depression_screening_score.map_or(false, |score| score >= 15) ||
-        self.anxiety_screening_score.map_or(false, |score| score >= 15)
+        self.depression_screening_score
+            .is_some_and(|score| score >= 15)
+            || self
+                .anxiety_screening_score
+                .is_some_and(|score| score >= 15)
     }
 
     /// Check if this is a positive mental health entry
     pub fn is_positive_entry(&self) -> bool {
-        let good_mood = self.mood_rating.map_or(false, |mood| mood >= 7);
-        let low_stress = self.stress_level.map_or(false, |stress| stress <= 4);
-        let low_anxiety = self.anxiety_level.map_or(false, |anxiety| anxiety <= 4);
-        let high_energy = self.energy_level.map_or(false, |energy| energy >= 6);
+        let good_mood = self.mood_rating.is_some_and(|mood| mood >= 7);
+        let low_stress = self.stress_level.is_some_and(|stress| stress <= 4);
+        let low_anxiety = self.anxiety_level.is_some_and(|anxiety| anxiety <= 4);
+        let high_energy = self.energy_level.is_some_and(|energy| energy >= 6);
 
         good_mood || (low_stress && low_anxiety && high_energy)
     }
 
     /// Calculate overall mental wellness score (0-100)
     pub fn wellness_score(&self) -> i16 {
-        let mood_score = self.mood_rating.map_or(50, |m| (m * 10)) as i16;
-        let stress_penalty = self.stress_level.map_or(0, |s| (10 - s) * 5) as i16;
-        let anxiety_penalty = self.anxiety_level.map_or(0, |a| (10 - a) * 5) as i16;
-        let energy_bonus = self.energy_level.map_or(0, |e| (e * 3)) as i16;
+        let mood_score = self.mood_rating.map_or(50, |m| (m * 10));
+        let stress_penalty = self.stress_level.map_or(0, |s| (10 - s) * 5);
+        let anxiety_penalty = self.anxiety_level.map_or(0, |a| (10 - a) * 5);
+        let energy_bonus = self.energy_level.map_or(0, |e| (e * 3));
 
-        std::cmp::max(0, std::cmp::min(100, mood_score + stress_penalty + anxiety_penalty + energy_bonus - 100))
+        (mood_score + stress_penalty + anxiety_penalty + energy_bonus - 100).clamp(0, 100)
     }
 
     /// Check if encrypted notes require decryption key
@@ -2266,8 +2377,7 @@ impl MenstrualMetric {
         if let Some(cycle_day) = self.cycle_day {
             if !(1..=40).contains(&cycle_day) {
                 return Err(format!(
-                    "cycle_day {} is out of range (1-40 days)",
-                    cycle_day
+                    "cycle_day {cycle_day} is out of range (1-40 days)"
                 ));
             }
         }
@@ -2276,8 +2386,7 @@ impl MenstrualMetric {
         if let Some(severity) = self.cramps_severity {
             if !(0..=10).contains(&severity) {
                 return Err(format!(
-                    "cramps_severity {} is out of range (0-10 pain scale)",
-                    severity
+                    "cramps_severity {severity} is out of range (0-10 pain scale)"
                 ));
             }
         }
@@ -2285,10 +2394,7 @@ impl MenstrualMetric {
         // Validate mood rating
         if let Some(mood) = self.mood_rating {
             if !(1..=5).contains(&mood) {
-                return Err(format!(
-                    "mood_rating {} is out of range (1-5 scale)",
-                    mood
-                ));
+                return Err(format!("mood_rating {mood} is out of range (1-5 scale)"));
             }
         }
 
@@ -2296,8 +2402,7 @@ impl MenstrualMetric {
         if let Some(energy) = self.energy_level {
             if !(1..=5).contains(&energy) {
                 return Err(format!(
-                    "energy_level {} is out of range (1-5 scale)",
-                    energy
+                    "energy_level {energy} is out of range (1-5 scale)"
                 ));
             }
         }
@@ -2344,8 +2449,7 @@ impl FertilityMetric {
         if let Some(temp) = self.basal_body_temperature {
             if !(35.0..=40.0).contains(&temp) {
                 return Err(format!(
-                    "basal_body_temperature {} is out of physiological range (35.0-40.0°C)",
-                    temp
+                    "basal_body_temperature {temp} is out of physiological range (35.0-40.0°C)"
                 ));
             }
 
@@ -2362,8 +2466,7 @@ impl FertilityMetric {
         if let Some(firmness) = self.cervix_firmness {
             if !(1..=3).contains(&firmness) {
                 return Err(format!(
-                    "cervix_firmness {} is out of range (1=soft, 2=medium, 3=firm)",
-                    firmness
+                    "cervix_firmness {firmness} is out of range (1=soft, 2=medium, 3=firm)"
                 ));
             }
         }
@@ -2372,8 +2475,7 @@ impl FertilityMetric {
         if let Some(position) = self.cervix_position {
             if !(1..=3).contains(&position) {
                 return Err(format!(
-                    "cervix_position {} is out of range (1=low, 2=medium, 3=high)",
-                    position
+                    "cervix_position {position} is out of range (1=low, 2=medium, 3=high)"
                 ));
             }
         }
@@ -2382,8 +2484,7 @@ impl FertilityMetric {
         if let Some(lh) = self.lh_level {
             if !(0.0..=200.0).contains(&lh) {
                 return Err(format!(
-                    "lh_level {} is out of physiological range (0.0-200.0 mIU/mL)",
-                    lh
+                    "lh_level {lh} is out of physiological range (0.0-200.0 mIU/mL)"
                 ));
             }
         }
@@ -2392,10 +2493,14 @@ impl FertilityMetric {
         if let Some(lh) = self.lh_level {
             match self.ovulation_test_result {
                 OvulationTestResult::Peak if lh < 20.0 => {
-                    return Err("Peak ovulation test result inconsistent with low LH level".to_string());
+                    return Err(
+                        "Peak ovulation test result inconsistent with low LH level".to_string()
+                    );
                 }
                 OvulationTestResult::Negative if lh > 40.0 => {
-                    return Err("Negative ovulation test inconsistent with high LH level".to_string());
+                    return Err(
+                        "Negative ovulation test inconsistent with high LH level".to_string()
+                    );
                 }
                 _ => {} // Other combinations are acceptable
             }
@@ -2481,9 +2586,11 @@ impl BloodGlucoseMetric {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
         // Medical-critical blood glucose validation (70-180 mg/dL normal, diabetic ranges vary)
-        if !(config.blood_glucose_min..=config.blood_glucose_max).contains(&(self.blood_glucose_mg_dl as f32)) {
+        if !(config.blood_glucose_min..=config.blood_glucose_max)
+            .contains(&(self.blood_glucose_mg_dl as f32))
+        {
             return Err(format!(
                 "blood_glucose {} mg/dL is out of safe range ({}-{} mg/dL)",
                 self.blood_glucose_mg_dl, config.blood_glucose_min, config.blood_glucose_max
@@ -2514,7 +2621,7 @@ impl BloodGlucoseMetric {
     /// Get glucose level category for medical interpretation
     pub fn glucose_category(&self) -> &'static str {
         match self.blood_glucose_mg_dl as i32 {
-            0..=69 => "hypoglycemic_critical", // Dangerous low
+            0..=69 => "hypoglycemic_critical",  // Dangerous low
             70..=99 => "normal_fasting",        // Normal fasting range
             100..=125 => "pre_diabetic",        // Pre-diabetic range
             126..=180 => "diabetic_controlled", // Diabetic but controlled
@@ -2530,7 +2637,7 @@ impl HealthMetric {
         self.validate_with_config(&ValidationConfig::default())
     }
 
-    pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
+    pub fn validate_with_config(&self, config: &ValidationConfig) -> Result<(), String> {
         match self {
             HealthMetric::HeartRate(metric) => metric.validate_with_config(config),
             HealthMetric::BloodPressure(metric) => metric.validate_with_config(config),
@@ -2589,7 +2696,6 @@ pub struct MacronutrientDistribution {
     pub fat_percent: u8,
 }
 
-
 /// Symptom analysis summary for health insights
 #[derive(Debug, Serialize, Clone)]
 pub struct SymptomAnalysis {
@@ -2603,7 +2709,6 @@ pub struct SymptomAnalysis {
     pub recommendations: Vec<String>,
 }
 
-
 impl NutritionMetric {
     pub fn validate(&self) -> Result<(), String> {
         self.validate_with_config(&ValidationConfig::default())
@@ -2612,293 +2717,261 @@ impl NutritionMetric {
     pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
         // Validate hydration & stimulants
         if let Some(water) = self.dietary_water {
-            if water < 0.0 || water > 10.0 {
+            if !(0.0..=10.0).contains(&water) {
                 return Err(format!(
-                    "dietary_water {} liters is out of reasonable range (0-10 L/day)",
-                    water
+                    "dietary_water {water} liters is out of reasonable range (0-10 L/day)"
                 ));
             }
         }
 
         if let Some(caffeine) = self.dietary_caffeine {
-            if caffeine < 0.0 || caffeine > 1000.0 {
+            if !(0.0..=1000.0).contains(&caffeine) {
                 return Err(format!(
-                    "dietary_caffeine {} mg is out of reasonable range (0-1000 mg/day)",
-                    caffeine
+                    "dietary_caffeine {caffeine} mg is out of reasonable range (0-1000 mg/day)"
                 ));
             }
         }
 
         // Validate macronutrients (core energy)
         if let Some(energy) = self.dietary_energy_consumed {
-            if energy < 0.0 || energy > 10000.0 {
+            if !(0.0..=10000.0).contains(&energy) {
                 return Err(format!(
-                    "dietary_energy_consumed {} calories is out of reasonable range (0-10000 cal/day)",
-                    energy
+                    "dietary_energy_consumed {energy} calories is out of reasonable range (0-10000 cal/day)"
                 ));
             }
         }
 
         if let Some(carbs) = self.dietary_carbohydrates {
-            if carbs < 0.0 || carbs > 2000.0 {
+            if !(0.0..=2000.0).contains(&carbs) {
                 return Err(format!(
-                    "dietary_carbohydrates {} grams is out of reasonable range (0-2000 g/day)",
-                    carbs
+                    "dietary_carbohydrates {carbs} grams is out of reasonable range (0-2000 g/day)"
                 ));
             }
         }
 
         if let Some(protein) = self.dietary_protein {
-            if protein < 0.0 || protein > 1000.0 {
+            if !(0.0..=1000.0).contains(&protein) {
                 return Err(format!(
-                    "dietary_protein {} grams is out of reasonable range (0-1000 g/day)",
-                    protein
+                    "dietary_protein {protein} grams is out of reasonable range (0-1000 g/day)"
                 ));
             }
         }
 
         if let Some(fat) = self.dietary_fat_total {
-            if fat < 0.0 || fat > 1000.0 {
+            if !(0.0..=1000.0).contains(&fat) {
                 return Err(format!(
-                    "dietary_fat_total {} grams is out of reasonable range (0-1000 g/day)",
-                    fat
+                    "dietary_fat_total {fat} grams is out of reasonable range (0-1000 g/day)"
                 ));
             }
         }
 
         if let Some(saturated_fat) = self.dietary_fat_saturated {
-            if saturated_fat < 0.0 || saturated_fat > 500.0 {
+            if !(0.0..=500.0).contains(&saturated_fat) {
                 return Err(format!(
-                    "dietary_fat_saturated {} grams is out of reasonable range (0-500 g/day)",
-                    saturated_fat
+                    "dietary_fat_saturated {saturated_fat} grams is out of reasonable range (0-500 g/day)"
                 ));
             }
         }
 
         if let Some(mono_fat) = self.dietary_fat_monounsaturated {
-            if mono_fat < 0.0 || mono_fat > 500.0 {
+            if !(0.0..=500.0).contains(&mono_fat) {
                 return Err(format!(
-                    "dietary_fat_monounsaturated {} grams is out of reasonable range (0-500 g/day)",
-                    mono_fat
+                    "dietary_fat_monounsaturated {mono_fat} grams is out of reasonable range (0-500 g/day)"
                 ));
             }
         }
 
         if let Some(poly_fat) = self.dietary_fat_polyunsaturated {
-            if poly_fat < 0.0 || poly_fat > 500.0 {
+            if !(0.0..=500.0).contains(&poly_fat) {
                 return Err(format!(
-                    "dietary_fat_polyunsaturated {} grams is out of reasonable range (0-500 g/day)",
-                    poly_fat
+                    "dietary_fat_polyunsaturated {poly_fat} grams is out of reasonable range (0-500 g/day)"
                 ));
             }
         }
 
         if let Some(cholesterol) = self.dietary_cholesterol {
-            if cholesterol < 0.0 || cholesterol > 2000.0 {
+            if !(0.0..=2000.0).contains(&cholesterol) {
                 return Err(format!(
-                    "dietary_cholesterol {} mg is out of reasonable range (0-2000 mg/day)",
-                    cholesterol
+                    "dietary_cholesterol {cholesterol} mg is out of reasonable range (0-2000 mg/day)"
                 ));
             }
         }
 
         if let Some(sodium) = self.dietary_sodium {
-            if sodium < 0.0 || sodium > 10000.0 {
+            if !(0.0..=10000.0).contains(&sodium) {
                 return Err(format!(
-                    "dietary_sodium {} mg is out of reasonable range (0-10000 mg/day)",
-                    sodium
+                    "dietary_sodium {sodium} mg is out of reasonable range (0-10000 mg/day)"
                 ));
             }
         }
 
         if let Some(fiber) = self.dietary_fiber {
-            if fiber < 0.0 || fiber > 200.0 {
+            if !(0.0..=200.0).contains(&fiber) {
                 return Err(format!(
-                    "dietary_fiber {} grams is out of reasonable range (0-200 g/day)",
-                    fiber
+                    "dietary_fiber {fiber} grams is out of reasonable range (0-200 g/day)"
                 ));
             }
         }
 
         if let Some(sugar) = self.dietary_sugar {
-            if sugar < 0.0 || sugar > 1000.0 {
+            if !(0.0..=1000.0).contains(&sugar) {
                 return Err(format!(
-                    "dietary_sugar {} grams is out of reasonable range (0-1000 g/day)",
-                    sugar
+                    "dietary_sugar {sugar} grams is out of reasonable range (0-1000 g/day)"
                 ));
             }
         }
 
         // Validate essential minerals
         if let Some(calcium) = self.dietary_calcium {
-            if calcium < 0.0 || calcium > 5000.0 {
+            if !(0.0..=5000.0).contains(&calcium) {
                 return Err(format!(
-                    "dietary_calcium {} mg is out of reasonable range (0-5000 mg/day)",
-                    calcium
+                    "dietary_calcium {calcium} mg is out of reasonable range (0-5000 mg/day)"
                 ));
             }
         }
 
         if let Some(iron) = self.dietary_iron {
-            if iron < 0.0 || iron > 100.0 {
+            if !(0.0..=100.0).contains(&iron) {
                 return Err(format!(
-                    "dietary_iron {} mg is out of reasonable range (0-100 mg/day)",
-                    iron
+                    "dietary_iron {iron} mg is out of reasonable range (0-100 mg/day)"
                 ));
             }
         }
 
         if let Some(magnesium) = self.dietary_magnesium {
-            if magnesium < 0.0 || magnesium > 2000.0 {
+            if !(0.0..=2000.0).contains(&magnesium) {
                 return Err(format!(
-                    "dietary_magnesium {} mg is out of reasonable range (0-2000 mg/day)",
-                    magnesium
+                    "dietary_magnesium {magnesium} mg is out of reasonable range (0-2000 mg/day)"
                 ));
             }
         }
 
         if let Some(potassium) = self.dietary_potassium {
-            if potassium < 0.0 || potassium > 10000.0 {
+            if !(0.0..=10000.0).contains(&potassium) {
                 return Err(format!(
-                    "dietary_potassium {} mg is out of reasonable range (0-10000 mg/day)",
-                    potassium
+                    "dietary_potassium {potassium} mg is out of reasonable range (0-10000 mg/day)"
                 ));
             }
         }
 
         if let Some(zinc) = self.dietary_zinc {
-            if zinc < 0.0 || zinc > 100.0 {
+            if !(0.0..=100.0).contains(&zinc) {
                 return Err(format!(
-                    "dietary_zinc {} mg is out of reasonable range (0-100 mg/day)",
-                    zinc
+                    "dietary_zinc {zinc} mg is out of reasonable range (0-100 mg/day)"
                 ));
             }
         }
 
         if let Some(phosphorus) = self.dietary_phosphorus {
-            if phosphorus < 0.0 || phosphorus > 5000.0 {
+            if !(0.0..=5000.0).contains(&phosphorus) {
                 return Err(format!(
-                    "dietary_phosphorus {} mg is out of reasonable range (0-5000 mg/day)",
-                    phosphorus
+                    "dietary_phosphorus {phosphorus} mg is out of reasonable range (0-5000 mg/day)"
                 ));
             }
         }
 
         // Validate water-soluble vitamins
         if let Some(vitamin_c) = self.dietary_vitamin_c {
-            if vitamin_c < 0.0 || vitamin_c > 5000.0 {
+            if !(0.0..=5000.0).contains(&vitamin_c) {
                 return Err(format!(
-                    "dietary_vitamin_c {} mg is out of reasonable range (0-5000 mg/day)",
-                    vitamin_c
+                    "dietary_vitamin_c {vitamin_c} mg is out of reasonable range (0-5000 mg/day)"
                 ));
             }
         }
 
         if let Some(b1) = self.dietary_vitamin_b1_thiamine {
-            if b1 < 0.0 || b1 > 100.0 {
+            if !(0.0..=100.0).contains(&b1) {
                 return Err(format!(
-                    "dietary_vitamin_b1_thiamine {} mg is out of reasonable range (0-100 mg/day)",
-                    b1
+                    "dietary_vitamin_b1_thiamine {b1} mg is out of reasonable range (0-100 mg/day)"
                 ));
             }
         }
 
         if let Some(b2) = self.dietary_vitamin_b2_riboflavin {
-            if b2 < 0.0 || b2 > 100.0 {
+            if !(0.0..=100.0).contains(&b2) {
                 return Err(format!(
-                    "dietary_vitamin_b2_riboflavin {} mg is out of reasonable range (0-100 mg/day)",
-                    b2
+                    "dietary_vitamin_b2_riboflavin {b2} mg is out of reasonable range (0-100 mg/day)"
                 ));
             }
         }
 
         if let Some(b3) = self.dietary_vitamin_b3_niacin {
-            if b3 < 0.0 || b3 > 1000.0 {
+            if !(0.0..=1000.0).contains(&b3) {
                 return Err(format!(
-                    "dietary_vitamin_b3_niacin {} mg is out of reasonable range (0-1000 mg/day)",
-                    b3
+                    "dietary_vitamin_b3_niacin {b3} mg is out of reasonable range (0-1000 mg/day)"
                 ));
             }
         }
 
         if let Some(b6) = self.dietary_vitamin_b6_pyridoxine {
-            if b6 < 0.0 || b6 > 200.0 {
+            if !(0.0..=200.0).contains(&b6) {
                 return Err(format!(
-                    "dietary_vitamin_b6_pyridoxine {} mg is out of reasonable range (0-200 mg/day)",
-                    b6
+                    "dietary_vitamin_b6_pyridoxine {b6} mg is out of reasonable range (0-200 mg/day)"
                 ));
             }
         }
 
         if let Some(b12) = self.dietary_vitamin_b12_cobalamin {
-            if b12 < 0.0 || b12 > 2000.0 {
+            if !(0.0..=2000.0).contains(&b12) {
                 return Err(format!(
-                    "dietary_vitamin_b12_cobalamin {} mcg is out of reasonable range (0-2000 mcg/day)",
-                    b12
+                    "dietary_vitamin_b12_cobalamin {b12} mcg is out of reasonable range (0-2000 mcg/day)"
                 ));
             }
         }
 
         if let Some(folate) = self.dietary_folate {
-            if folate < 0.0 || folate > 5000.0 {
+            if !(0.0..=5000.0).contains(&folate) {
                 return Err(format!(
-                    "dietary_folate {} mcg is out of reasonable range (0-5000 mcg/day)",
-                    folate
+                    "dietary_folate {folate} mcg is out of reasonable range (0-5000 mcg/day)"
                 ));
             }
         }
 
         if let Some(biotin) = self.dietary_biotin {
-            if biotin < 0.0 || biotin > 5000.0 {
+            if !(0.0..=5000.0).contains(&biotin) {
                 return Err(format!(
-                    "dietary_biotin {} mcg is out of reasonable range (0-5000 mcg/day)",
-                    biotin
+                    "dietary_biotin {biotin} mcg is out of reasonable range (0-5000 mcg/day)"
                 ));
             }
         }
 
         if let Some(pantothenic) = self.dietary_pantothenic_acid {
-            if pantothenic < 0.0 || pantothenic > 100.0 {
+            if !(0.0..=100.0).contains(&pantothenic) {
                 return Err(format!(
-                    "dietary_pantothenic_acid {} mg is out of reasonable range (0-100 mg/day)",
-                    pantothenic
+                    "dietary_pantothenic_acid {pantothenic} mg is out of reasonable range (0-100 mg/day)"
                 ));
             }
         }
 
         // Validate fat-soluble vitamins
         if let Some(vitamin_a) = self.dietary_vitamin_a {
-            if vitamin_a < 0.0 || vitamin_a > 10000.0 {
+            if !(0.0..=10000.0).contains(&vitamin_a) {
                 return Err(format!(
-                    "dietary_vitamin_a {} mcg is out of reasonable range (0-10000 mcg/day)",
-                    vitamin_a
+                    "dietary_vitamin_a {vitamin_a} mcg is out of reasonable range (0-10000 mcg/day)"
                 ));
             }
         }
 
         if let Some(vitamin_d) = self.dietary_vitamin_d {
-            if vitamin_d < 0.0 || vitamin_d > 10000.0 {
+            if !(0.0..=10000.0).contains(&vitamin_d) {
                 return Err(format!(
-                    "dietary_vitamin_d {} IU is out of reasonable range (0-10000 IU/day)",
-                    vitamin_d
+                    "dietary_vitamin_d {vitamin_d} IU is out of reasonable range (0-10000 IU/day)"
                 ));
             }
         }
 
         if let Some(vitamin_e) = self.dietary_vitamin_e {
-            if vitamin_e < 0.0 || vitamin_e > 1000.0 {
+            if !(0.0..=1000.0).contains(&vitamin_e) {
                 return Err(format!(
-                    "dietary_vitamin_e {} mg is out of reasonable range (0-1000 mg/day)",
-                    vitamin_e
+                    "dietary_vitamin_e {vitamin_e} mg is out of reasonable range (0-1000 mg/day)"
                 ));
             }
         }
 
         if let Some(vitamin_k) = self.dietary_vitamin_k {
-            if vitamin_k < 0.0 || vitamin_k > 5000.0 {
+            if !(0.0..=5000.0).contains(&vitamin_k) {
                 return Err(format!(
-                    "dietary_vitamin_k {} mcg is out of reasonable range (0-5000 mcg/day)",
-                    vitamin_k
+                    "dietary_vitamin_k {vitamin_k} mcg is out of reasonable range (0-5000 mcg/day)"
                 ));
             }
         }
@@ -2920,12 +2993,13 @@ impl NutritionMetric {
 
     /// Check if this is a high-hydration reading
     pub fn is_high_hydration(&self) -> bool {
-        self.dietary_water.map_or(false, |water| water > 3.0) // >3L per day
+        self.dietary_water.is_some_and(|water| water > 3.0) // >3L per day
     }
 
     /// Check if this exceeds recommended daily caffeine intake
     pub fn exceeds_caffeine_limit(&self) -> bool {
-        self.dietary_caffeine.map_or(false, |caffeine| caffeine > 400.0) // >400mg/day
+        self.dietary_caffeine
+            .is_some_and(|caffeine| caffeine > 400.0) // >400mg/day
     }
 
     /// Calculate approximate macronutrient calorie distribution
@@ -2948,7 +3022,7 @@ impl NutritionMetric {
 
     /// Check if sodium intake is excessive (>2300mg recommended daily limit)
     pub fn has_excessive_sodium(&self) -> bool {
-        self.dietary_sodium.map_or(false, |sodium| sodium > 2300.0)
+        self.dietary_sodium.is_some_and(|sodium| sodium > 2300.0)
     }
 
     /// Get hydration status based on water intake
@@ -2967,15 +3041,17 @@ impl NutritionMetric {
     pub fn is_balanced_meal(&self) -> bool {
         if let Some(distribution) = self.macronutrient_distribution() {
             // Balanced meal: 45-65% carbs, 10-35% protein, 20-35% fat
-            distribution.carbohydrate_percent >= 45 && distribution.carbohydrate_percent <= 65 &&
-            distribution.protein_percent >= 10 && distribution.protein_percent <= 35 &&
-            distribution.fat_percent >= 20 && distribution.fat_percent <= 35
+            distribution.carbohydrate_percent >= 45
+                && distribution.carbohydrate_percent <= 65
+                && distribution.protein_percent >= 10
+                && distribution.protein_percent <= 35
+                && distribution.fat_percent >= 20
+                && distribution.fat_percent <= 35
         } else {
             false
         }
     }
 }
-
 
 /// Symptom Metric Validation and Analysis
 impl SymptomMetric {
@@ -2996,8 +3072,7 @@ impl SymptomMetric {
             let max_duration_minutes = 14 * 24 * 60; // 2 weeks in minutes
             if duration > max_duration_minutes {
                 return Err(format!(
-                    "symptom duration {} minutes is unreasonably long (max {} minutes = 2 weeks)",
-                    duration, max_duration_minutes
+                    "symptom duration {duration} minutes is unreasonably long (max {max_duration_minutes} minutes = 2 weeks)"
                 ));
             }
         }
@@ -3064,11 +3139,16 @@ impl SymptomMetric {
             let hours = duration as f64 / 60.0;
             match self.symptom_type {
                 // Persistent pain over 24 hours
-                SymptomType::AbdominalCramps | SymptomType::Headache | SymptomType::BackPain |
-                SymptomType::MusclePain | SymptomType::JointPain => hours > 24.0,
+                SymptomType::AbdominalCramps
+                | SymptomType::Headache
+                | SymptomType::BackPain
+                | SymptomType::MusclePain
+                | SymptomType::JointPain => hours > 24.0,
 
                 // Respiratory symptoms over 12 hours
-                SymptomType::Coughing | SymptomType::ShortnessOfBreath | SymptomType::Wheezing => hours > 12.0,
+                SymptomType::Coughing | SymptomType::ShortnessOfBreath | SymptomType::Wheezing => {
+                    hours > 12.0
+                }
 
                 // Digestive symptoms over 48 hours
                 SymptomType::Nausea | SymptomType::Vomiting | SymptomType::Diarrhea => hours > 48.0,
@@ -3118,29 +3198,30 @@ impl SymptomMetric {
                 if self.severity >= SymptomSeverity::Moderate {
                     recommendations.push("Avoid strenuous activity".to_string());
                 }
-            },
+            }
             "digestive" => {
                 recommendations.push("Stay hydrated".to_string());
                 recommendations.push("Consider bland diet".to_string());
                 recommendations.push("Monitor for dehydration signs".to_string());
-            },
+            }
             "pain" => {
                 recommendations.push("Rest affected area if possible".to_string());
                 recommendations.push("Consider pain management strategies".to_string());
-                if self.duration_minutes.map_or(false, |d| d > 720) { // >12 hours
+                if self.duration_minutes.is_some_and(|d| d > 720) {
+                    // >12 hours
                     recommendations.push("Track pain patterns".to_string());
                 }
-            },
+            }
             "neurological" => {
                 recommendations.push("Ensure adequate rest".to_string());
                 recommendations.push("Monitor cognitive symptoms".to_string());
                 recommendations.push("Consider stress management".to_string());
-            },
+            }
             "cardiovascular" => {
                 recommendations.push("Monitor vital signs".to_string());
                 recommendations.push("Avoid strenuous activity".to_string());
                 recommendations.push("Consider cardiac evaluation".to_string());
-            },
+            }
             _ => {
                 recommendations.push("Monitor symptom progression".to_string());
                 recommendations.push("Rest and self-care".to_string());
@@ -3150,8 +3231,10 @@ impl SymptomMetric {
         // Duration-based recommendations
         if let Some(duration) = self.duration_minutes {
             let hours = duration as f64 / 60.0;
-            if hours > 72.0 { // >3 days
-                recommendations.push("Consider medical evaluation for persistent symptoms".to_string());
+            if hours > 72.0 {
+                // >3 days
+                recommendations
+                    .push("Consider medical evaluation for persistent symptoms".to_string());
             }
         }
 
@@ -3179,7 +3262,6 @@ impl SymptomMetric {
     }
 }
 
-
 impl MetabolicMetric {
     pub fn validate(&self) -> Result<(), String> {
         self.validate_with_config(&ValidationConfig::default())
@@ -3188,20 +3270,18 @@ impl MetabolicMetric {
     pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
         // Validate blood alcohol content if provided (0.0-0.5%)
         if let Some(bac) = self.blood_alcohol_content {
-            if bac < 0.0 || bac > 0.5 {
+            if !(0.0..=0.5).contains(&bac) {
                 return Err(format!(
-                    "blood_alcohol_content {} is outside valid range (0.0-0.5%)",
-                    bac
+                    "blood_alcohol_content {bac} is outside valid range (0.0-0.5%)"
                 ));
             }
         }
 
         // Validate insulin units if provided
         if let Some(insulin_units) = self.insulin_delivery_units {
-            if insulin_units < 0.0 || insulin_units > 100.0 {
+            if !(0.0..=100.0).contains(&insulin_units) {
                 return Err(format!(
-                    "insulin_delivery_units {} is outside safe range (0-100 units)",
-                    insulin_units
+                    "insulin_delivery_units {insulin_units} is outside safe range (0-100 units)"
                 ));
             }
         }
@@ -3211,8 +3291,7 @@ impl MetabolicMetric {
             let valid_methods = ["pump", "pen", "syringe", "inhaler", "patch"];
             if !valid_methods.contains(&method.as_str()) {
                 return Err(format!(
-                    "delivery_method '{}' is invalid. Valid methods: {:?}",
-                    method, valid_methods
+                    "delivery_method '{method}' is invalid. Valid methods: {valid_methods:?}"
                 ));
             }
         }
@@ -3222,18 +3301,19 @@ impl MetabolicMetric {
 
     /// Check if blood alcohol content indicates intoxication (>0.08%)
     pub fn indicates_intoxication(&self) -> bool {
-        self.blood_alcohol_content.map_or(false, |bac| bac > 0.08)
+        self.blood_alcohol_content.is_some_and(|bac| bac > 0.08)
     }
 
     /// Check if this is a significant insulin delivery (>10 units)
     pub fn is_significant_insulin_delivery(&self) -> bool {
-        self.insulin_delivery_units.map_or(false, |units| units > 10.0)
+        self.insulin_delivery_units
+            .is_some_and(|units| units > 10.0)
     }
 
     /// Get alcohol impairment level based on BAC
     pub fn alcohol_impairment_level(&self) -> &'static str {
         match self.blood_alcohol_content {
-            Some(bac) if bac == 0.0 => "sober",
+            Some(0.0) => "sober",
             Some(bac) if bac < 0.05 => "minimal",
             Some(bac) if bac < 0.08 => "impaired",
             Some(bac) if bac < 0.15 => "intoxicated",
@@ -3295,60 +3375,55 @@ impl HygieneMetric {
     pub fn validate_with_config(&self, _config: &ValidationConfig) -> Result<(), String> {
         // Validate duration if provided
         if let Some(duration) = self.duration_seconds {
-            if duration < 1 || duration > 7200 { // 1 second to 2 hours
+            if !(1..=7200).contains(&duration) {
+                // 1 second to 2 hours
                 return Err(format!(
-                    "duration_seconds {} is outside valid range (1-7200 seconds)",
-                    duration
+                    "duration_seconds {duration} is outside valid range (1-7200 seconds)"
                 ));
             }
         }
 
         // Validate quality rating if provided
         if let Some(quality) = self.quality_rating {
-            if quality < 1 || quality > 5 {
+            if !(1..=5).contains(&quality) {
                 return Err(format!(
-                    "quality_rating {} is outside valid range (1-5)",
-                    quality
+                    "quality_rating {quality} is outside valid range (1-5)"
                 ));
             }
         }
 
         // Validate frequency compliance rating if provided
         if let Some(freq_rating) = self.frequency_compliance_rating {
-            if freq_rating < 1 || freq_rating > 5 {
+            if !(1..=5).contains(&freq_rating) {
                 return Err(format!(
-                    "frequency_compliance_rating {} is outside valid range (1-5)",
-                    freq_rating
+                    "frequency_compliance_rating {freq_rating} is outside valid range (1-5)"
                 ));
             }
         }
 
         // Validate device effectiveness score if provided
         if let Some(effectiveness) = self.device_effectiveness_score {
-            if effectiveness < 0.0 || effectiveness > 100.0 {
+            if !(0.0..=100.0).contains(&effectiveness) {
                 return Err(format!(
-                    "device_effectiveness_score {} is outside valid range (0.0-100.0%)",
-                    effectiveness
+                    "device_effectiveness_score {effectiveness} is outside valid range (0.0-100.0%)"
                 ));
             }
         }
 
         // Validate crisis compliance level if provided
         if let Some(crisis_level) = self.crisis_compliance_level {
-            if crisis_level < 1 || crisis_level > 5 {
+            if !(1..=5).contains(&crisis_level) {
                 return Err(format!(
-                    "crisis_compliance_level {} is outside valid range (1-5)",
-                    crisis_level
+                    "crisis_compliance_level {crisis_level} is outside valid range (1-5)"
                 ));
             }
         }
 
         // Validate daily goal progress if provided
         if let Some(progress) = self.daily_goal_progress {
-            if progress < 0 || progress > 200 {
+            if !(0..=200).contains(&progress) {
                 return Err(format!(
-                    "daily_goal_progress {} is outside valid range (0-200%)",
-                    progress
+                    "daily_goal_progress {progress} is outside valid range (0-200%)"
                 ));
             }
         }
@@ -3358,8 +3433,7 @@ impl HygieneMetric {
             let valid_levels = ["standard", "medical", "crisis_tracking"];
             if !valid_levels.contains(&sensitivity.as_str()) {
                 return Err(format!(
-                    "data_sensitivity_level '{}' is invalid. Valid levels: {:?}",
-                    sensitivity, valid_levels
+                    "data_sensitivity_level '{sensitivity}' is invalid. Valid levels: {valid_levels:?}"
                 ));
             }
         }
@@ -3445,13 +3519,13 @@ impl HygieneMetric {
             3..=6 => "developing",
             7..=20 => "established",
             21..=65 => "strong",
-            _ => "ingrained"
+            _ => "ingrained",
         }
     }
 
     /// Check if hygiene event requires medical attention context
     pub fn requires_medical_context(&self) -> bool {
-        self.medication_adherence_related.unwrap_or(false) ||
-        self.medical_condition_context.is_some()
+        self.medication_adherence_related.unwrap_or(false)
+            || self.medical_condition_context.is_some()
     }
 }

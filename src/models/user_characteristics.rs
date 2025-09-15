@@ -71,8 +71,8 @@ impl UserCharacteristics {
     pub fn age(&self) -> Option<u32> {
         self.date_of_birth.map(|dob| {
             let today = chrono::Utc::now().date_naive();
-            let age = today.years_since(dob).unwrap_or(0) as u32;
-            age
+            
+            today.years_since(dob).unwrap_or(0)
         })
     }
 
@@ -113,7 +113,10 @@ impl UserCharacteristics {
     /// Check if emergency information is available
     pub fn has_emergency_info(&self) -> bool {
         !self.emergency_contact_info.is_null()
-            && self.emergency_contact_info.as_object().map_or(false, |obj| !obj.is_empty())
+            && self
+                .emergency_contact_info
+                .as_object()
+                .is_some_and(|obj| !obj.is_empty())
     }
 
     /// Check if medical conditions may affect health metric validation
@@ -128,7 +131,8 @@ impl UserCharacteristics {
         let resting = resting_hr.unwrap_or(60);
 
         // Apply biological sex adjustment
-        let adjusted_max_hr = (max_hr as f64 * self.biological_sex.get_heart_rate_adjustment()) as u16;
+        let adjusted_max_hr =
+            (max_hr as f64 * self.biological_sex.get_heart_rate_adjustment()) as u16;
 
         serde_json::json!({
             "max_heart_rate": adjusted_max_hr,
@@ -233,52 +237,65 @@ pub struct UserCharacteristicsInput {
 impl UserCharacteristicsInput {
     /// Convert from iOS Health Auto Export format
     pub fn from_ios_data(data: &JsonValue) -> Result<Self, String> {
-        let characteristics = data.get("characteristics")
+        let characteristics = data
+            .get("characteristics")
             .or_else(|| data.get("user_characteristics"))
             .or_else(|| data.get("profile"))
             .ok_or("No characteristics data found")?;
 
         Ok(Self {
-            biological_sex: characteristics.get("biological_sex")
+            biological_sex: characteristics
+                .get("biological_sex")
                 .or_else(|| characteristics.get("sex"))
                 .and_then(|v| v.as_str())
                 .map(BiologicalSex::from_ios_string),
 
-            date_of_birth: characteristics.get("date_of_birth")
+            date_of_birth: characteristics
+                .get("date_of_birth")
                 .or_else(|| characteristics.get("birthdate"))
                 .and_then(|v| v.as_str())
                 .and_then(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d").ok()),
 
-            blood_type: characteristics.get("blood_type")
+            blood_type: characteristics
+                .get("blood_type")
                 .and_then(|v| v.as_str())
                 .map(BloodType::from_ios_string),
 
-            fitzpatrick_skin_type: characteristics.get("fitzpatrick_skin_type")
+            fitzpatrick_skin_type: characteristics
+                .get("fitzpatrick_skin_type")
                 .or_else(|| characteristics.get("skin_type"))
                 .and_then(|v| v.as_str())
                 .map(FitzpatrickSkinType::from_ios_string),
 
-            wheelchair_use: characteristics.get("wheelchair_use")
+            wheelchair_use: characteristics
+                .get("wheelchair_use")
                 .and_then(|v| v.as_bool()),
 
-            activity_move_mode: characteristics.get("activity_move_mode")
+            activity_move_mode: characteristics
+                .get("activity_move_mode")
                 .or_else(|| characteristics.get("move_mode"))
                 .and_then(|v| v.as_str())
                 .map(ActivityMoveMode::from_ios_string),
 
             emergency_contact_info: characteristics.get("emergency_contacts").cloned(),
 
-            medical_conditions: characteristics.get("medical_conditions")
+            medical_conditions: characteristics
+                .get("medical_conditions")
                 .and_then(|v| v.as_array())
-                .map(|arr| arr.iter()
-                    .filter_map(|v| v.as_str().map(String::from))
-                    .collect()),
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                }),
 
-            medications: characteristics.get("medications")
+            medications: characteristics
+                .get("medications")
                 .and_then(|v| v.as_array())
-                .map(|arr| arr.iter()
-                    .filter_map(|v| v.as_str().map(String::from))
-                    .collect()),
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                }),
 
             data_sharing_preferences: characteristics.get("data_sharing").cloned(),
         })
@@ -430,7 +447,7 @@ mod tests {
         characteristics.date_of_birth = Some(birth_date);
 
         let age = characteristics.age().unwrap();
-        assert!(age >= 24 && age <= 26); // Account for date variations
+        assert!((24..=26).contains(&age)); // Account for date variations
     }
 
     #[test]
@@ -511,8 +528,14 @@ mod tests {
 
         assert_eq!(input.biological_sex.unwrap(), BiologicalSex::Female);
         assert_eq!(input.blood_type.unwrap(), BloodType::APositive);
-        assert_eq!(input.fitzpatrick_skin_type.unwrap(), FitzpatrickSkinType::Type3);
+        assert_eq!(
+            input.fitzpatrick_skin_type.unwrap(),
+            FitzpatrickSkinType::Type3
+        );
         assert!(!input.wheelchair_use.unwrap());
-        assert_eq!(input.activity_move_mode.unwrap(), ActivityMoveMode::ActiveEnergy);
+        assert_eq!(
+            input.activity_move_mode.unwrap(),
+            ActivityMoveMode::ActiveEnergy
+        );
     }
 }

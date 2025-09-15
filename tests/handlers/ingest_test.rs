@@ -13,7 +13,7 @@ use self_sensored::{
         IosIngestPayload, IosIngestData, IosMetric, IosMetricData, IosWorkout,
         enums::{ActivityContext, WorkoutType}
     },
-    services::auth::{AuthContext, AuthenticatedUser},
+    services::auth::{AuthContext, User as AuthUser, ApiKey as AuthApiKey},
     db::models::{User, ApiKey},
 };
 
@@ -417,22 +417,25 @@ impl TestFixtures {
         let api_key_id = Uuid::new_v4();
         
         AuthContext {
-            user: AuthenticatedUser {
+            user: AuthUser {
                 id: user_id,
-                username: "test_user".to_string(),
-                email: Some("test@example.com".to_string()),
-                is_active: true,
-                created_at: Utc::now(),
+                email: "test@example.com".to_string(),
+                apple_health_id: None,
+                created_at: Some(Utc::now()),
+                updated_at: Some(Utc::now()),
+                is_active: Some(true),
+                metadata: None,
             },
-            api_key: ApiKey {
+            api_key: AuthApiKey {
                 id: api_key_id,
                 user_id,
-                name: "Test API Key".to_string(),
-                key_hash: "test_hash".to_string(),
-                is_active: true,
+                name: Some("Test API Key".to_string()),
+                created_at: Some(Utc::now()),
                 last_used_at: Some(Utc::now()),
-                created_at: Utc::now(),
                 expires_at: None,
+                is_active: Some(true),
+                permissions: None,
+                rate_limit_per_hour: None,
             },
         }
     }

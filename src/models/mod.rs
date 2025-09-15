@@ -15,7 +15,6 @@ pub use background_jobs::*;
 pub use enums::*;
 pub use health_metrics::*;
 pub use ios_models::*;
-pub use user_characteristics::*;
 
 /// API response wrapper
 #[derive(Debug, Serialize, Deserialize)]

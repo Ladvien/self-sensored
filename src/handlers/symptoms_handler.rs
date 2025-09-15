@@ -6,10 +6,9 @@ use std::time::Instant;
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
-use crate::config::ValidationConfig;
 use crate::middleware::metrics::Metrics;
-use crate::models::health_metrics::{SymptomMetric, SymptomAnalysis};
-use crate::models::enums::{SymptomType, SymptomSeverity};
+use crate::models::enums::{SymptomSeverity, SymptomType};
+use crate::models::health_metrics::SymptomMetric;
 use crate::services::auth::AuthContext;
 
 /// Symptom data ingestion payload
@@ -227,7 +226,7 @@ pub async fn ingest_symptoms_handler(
                 errors.push(SymptomProcessingError {
                     index,
                     error_type: "DatabaseError".to_string(),
-                    message: format!("Storage failed: {}", e),
+                    message: format!("Storage failed: {e}"),
                     symptom_type: Some(symptom_request.symptom_type),
                     severity: Some(symptom_request.severity),
                 });
@@ -286,65 +285,70 @@ pub async fn get_symptoms_handler(
 
     // Build query based on parameters
     let limit = query.limit.unwrap_or(100).min(1000); // Max 1000 symptoms per request
-    let mut conditions = vec!["user_id = $1".to_string()];
-    let mut params: Vec<&(dyn sqlx::Encode<sqlx::Postgres> + sqlx::Type<sqlx::Postgres> + Sync)> = vec![&auth.user.id];
-    let mut param_count = 1;
+
+    let mut query_builder = sqlx::QueryBuilder::new(
+        "SELECT id, user_id, recorded_at, symptom_type, severity, duration_minutes, notes, episode_id, source_device, created_at
+         FROM symptoms WHERE user_id = "
+    );
+    query_builder.push_bind(auth.user.id);
+
+    let mut count_query_builder =
+        sqlx::QueryBuilder::new("SELECT COUNT(*) FROM symptoms WHERE user_id = ");
+    count_query_builder.push_bind(auth.user.id);
 
     if let Some(start_date) = &query.start_date {
-        param_count += 1;
-        conditions.push(format!("recorded_at >= ${}", param_count));
-        params.push(start_date);
+        query_builder
+            .push(" AND recorded_at >= ")
+            .push_bind(start_date);
+        count_query_builder
+            .push(" AND recorded_at >= ")
+            .push_bind(start_date);
     }
 
     if let Some(end_date) = &query.end_date {
-        param_count += 1;
-        conditions.push(format!("recorded_at <= ${}", param_count));
-        params.push(end_date);
+        query_builder
+            .push(" AND recorded_at <= ")
+            .push_bind(end_date);
+        count_query_builder
+            .push(" AND recorded_at <= ")
+            .push_bind(end_date);
     }
 
     if let Some(symptom_type) = &query.symptom_type {
-        param_count += 1;
-        conditions.push(format!("symptom_type = ${}", param_count));
-        params.push(symptom_type);
+        query_builder
+            .push(" AND symptom_type = ")
+            .push_bind(symptom_type);
+        count_query_builder
+            .push(" AND symptom_type = ")
+            .push_bind(symptom_type);
     }
 
     if let Some(severity) = &query.severity {
-        param_count += 1;
-        conditions.push(format!("severity = ${}", param_count));
-        params.push(severity);
+        query_builder.push(" AND severity = ").push_bind(severity);
+        count_query_builder
+            .push(" AND severity = ")
+            .push_bind(severity);
     }
 
     if let Some(episode_id) = &query.episode_id {
-        param_count += 1;
-        conditions.push(format!("episode_id = ${}", param_count));
-        params.push(episode_id);
+        query_builder
+            .push(" AND episode_id = ")
+            .push_bind(episode_id);
+        count_query_builder
+            .push(" AND episode_id = ")
+            .push_bind(episode_id);
     }
 
-    let where_clause = if conditions.is_empty() {
-        String::new()
-    } else {
-        format!("WHERE {}", conditions.join(" AND "))
-    };
-
-    // Build the query
-    let query_sql = format!(
-        "SELECT id, user_id, recorded_at, symptom_type, severity, duration_minutes, notes, episode_id, source_device, created_at
-         FROM symptoms
-         {}
-         ORDER BY recorded_at DESC
-         LIMIT {}",
-        where_clause, limit
-    );
+    query_builder
+        .push(" ORDER BY recorded_at DESC LIMIT ")
+        .push_bind(limit);
 
     // Execute query
-    let mut query_builder = sqlx::query_as::<_, SymptomMetric>(&query_sql);
-
-    // Add parameters to the query
-    for param in params {
-        query_builder = query_builder.bind(param);
-    }
-
-    let symptoms = match query_builder.fetch_all(&**pool).await {
+    let symptoms = match query_builder
+        .build_query_as::<SymptomMetric>()
+        .fetch_all(&**pool)
+        .await
+    {
         Ok(symptoms) => symptoms,
         Err(e) => {
             error!("Failed to fetch symptoms: {}", e);
@@ -355,19 +359,21 @@ pub async fn get_symptoms_handler(
     };
 
     // Get total count
-    let count_query = format!(
-        "SELECT COUNT(*) as count FROM symptoms {}",
-        where_clause
-    );
+    let total_count = match count_query_builder
+        .build_query_scalar::<i64>()
+        .fetch_one(&**pool)
+        .await
+    {
+        Ok(count) => count,
+        Err(e) => {
+            error!("Failed to fetch symptom count: {}", e);
+            return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                "error": "Failed to retrieve symptom count"
+            })));
+        }
+    };
 
-    let mut count_query_builder = sqlx::query_scalar::<_, i64>(&count_query);
-
-    // Add parameters for count query
-    for param in params {
-        count_query_builder = count_query_builder.bind(param);
-    }
-
-    let total_count = count_query_builder.fetch_one(&**pool).await.unwrap_or(0);
+    // This line is now handled above in the match statement
 
     // Generate analysis and filter emergency symptoms
     let emergency_symptoms: Vec<SymptomMetric> = symptoms
@@ -408,16 +414,13 @@ pub async fn get_symptoms_handler(
 }
 
 /// Store a symptom metric in the database
-async fn store_symptom_metric(
-    pool: &PgPool,
-    symptom: &SymptomMetric,
-) -> Result<(), sqlx::Error> {
+async fn store_symptom_metric(pool: &PgPool, symptom: &SymptomMetric) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
         INSERT INTO symptoms (
             id, user_id, recorded_at, symptom_type, severity,
             duration_minutes, notes, episode_id, source_device, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        ) VALUES ($1, $2, $3, $4::symptom_type, $5::symptom_severity, $6, $7, $8, $9, $10)
         ON CONFLICT (user_id, recorded_at, symptom_type)
         DO UPDATE SET
             severity = EXCLUDED.severity,
@@ -429,8 +432,8 @@ async fn store_symptom_metric(
         symptom.id,
         symptom.user_id,
         symptom.recorded_at,
-        symptom.symptom_type as SymptomType,
-        symptom.severity as SymptomSeverity,
+        symptom.symptom_type as _,
+        symptom.severity as _,
         symptom.duration_minutes,
         symptom.notes,
         symptom.episode_id,
@@ -526,7 +529,8 @@ fn generate_symptom_summary(symptoms: &[SymptomMetric]) -> SymptomSummary {
     }
 
     // Find most common symptom
-    let mut symptom_counts: std::collections::HashMap<SymptomType, usize> = std::collections::HashMap::new();
+    let mut symptom_counts: std::collections::HashMap<SymptomType, usize> =
+        std::collections::HashMap::new();
     let mut total_severity = 0;
     let mut emergency_count = 0;
     let mut chronic_count = 0;
@@ -541,7 +545,8 @@ fn generate_symptom_summary(symptoms: &[SymptomMetric]) -> SymptomSummary {
 
         // Check for chronic symptoms (>1 week duration)
         if let Some(duration) = symptom.duration_minutes {
-            if duration > 7 * 24 * 60 { // 1 week in minutes
+            if duration > 7 * 24 * 60 {
+                // 1 week in minutes
                 chronic_count += 1;
             }
         }
@@ -570,12 +575,16 @@ fn generate_symptom_summary(symptoms: &[SymptomMetric]) -> SymptomSummary {
 
 /// Generate episode patterns for illness tracking
 fn generate_episode_patterns(symptoms: &[SymptomMetric]) -> Vec<EpisodePattern> {
-    let mut episodes: std::collections::HashMap<Uuid, Vec<&SymptomMetric>> = std::collections::HashMap::new();
+    let mut episodes: std::collections::HashMap<Uuid, Vec<&SymptomMetric>> =
+        std::collections::HashMap::new();
 
     // Group symptoms by episode
     for symptom in symptoms {
         if let Some(episode_id) = symptom.episode_id {
-            episodes.entry(episode_id).or_insert_with(Vec::new).push(symptom);
+            episodes
+                .entry(episode_id)
+                .or_default()
+                .push(symptom);
         }
     }
 
@@ -601,10 +610,8 @@ fn generate_episode_patterns(symptoms: &[SymptomMetric]) -> Vec<EpisodePattern> 
             let duration_hours = (max_time - min_time).num_minutes() as f64 / 60.0;
 
             // Get primary symptoms (most severe or most frequent)
-            let mut primary_symptoms: Vec<SymptomType> = episode_symptoms
-                .iter()
-                .map(|s| s.symptom_type)
-                .collect();
+            let mut primary_symptoms: Vec<SymptomType> =
+                episode_symptoms.iter().map(|s| s.symptom_type).collect();
             primary_symptoms.sort();
             primary_symptoms.dedup();
             primary_symptoms.truncate(3); // Top 3 primary symptoms
@@ -613,7 +620,8 @@ fn generate_episode_patterns(symptoms: &[SymptomMetric]) -> Vec<EpisodePattern> 
             let avg_severity: f64 = episode_symptoms
                 .iter()
                 .map(|s| s.severity.to_numeric_score() as f64)
-                .sum::<f64>() / symptom_count as f64;
+                .sum::<f64>()
+                / symptom_count as f64;
 
             let severity_pattern = match avg_severity {
                 s if s <= 2.0 => "mild_episode".to_string(),

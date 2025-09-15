@@ -390,7 +390,7 @@ pub async fn ingest_nutrition_data(
                 errors.push(NutritionProcessingError {
                     index: 0,
                     error_type: "batch_processing_error".to_string(),
-                    message: format!("Failed to process nutrition data: {}", e),
+                    message: format!("Failed to process nutrition data: {e}"),
                     nutrient_name: None,
                     nutrient_value: None,
                 });
@@ -440,9 +440,9 @@ pub async fn get_nutrition_data(
     );
 
     // Build query with optional filters
-    let mut sql_query = "SELECT * FROM nutrition_metrics WHERE user_id = $1".to_string();
+    let sql_query = "SELECT * FROM nutrition_metrics WHERE user_id = $1".to_string();
     let mut query_builder = sqlx::QueryBuilder::new(&sql_query);
-    query_builder.push_bind(&user_id);
+    query_builder.push_bind(user_id);
 
     // Add date range filters
     if let Some(start_date) = &query.start_date {
@@ -487,7 +487,7 @@ pub async fn get_nutrition_data(
     let total_count = match sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM nutrition_metrics WHERE user_id = $1",
     )
-    .bind(&user_id)
+    .bind(user_id)
     .fetch_one(pool.get_ref())
     .await
     {
@@ -548,7 +548,7 @@ pub async fn get_hydration_data(
     let mut query_builder = sqlx::QueryBuilder::new(
         "SELECT recorded_at, dietary_water, dietary_caffeine, source_device FROM nutrition_metrics WHERE user_id = "
     );
-    query_builder.push_bind(&user_id);
+    query_builder.push_bind(user_id);
 
     if let Some(start_date) = &query.start_date {
         query_builder.push(" AND recorded_at >= ");
@@ -652,52 +652,52 @@ async fn insert_nutrition_metrics_batch(
         );
 
         query_builder.push_values(chunk.iter(), |mut b, metric| {
-            b.push_bind(&metric.id)
-                .push_bind(&metric.user_id)
-                .push_bind(&metric.recorded_at)
+            b.push_bind(metric.id)
+                .push_bind(metric.user_id)
+                .push_bind(metric.recorded_at)
                 // Hydration & Stimulants
-                .push_bind(&metric.dietary_water)
-                .push_bind(&metric.dietary_caffeine)
+                .push_bind(metric.dietary_water)
+                .push_bind(metric.dietary_caffeine)
                 // Macronutrients (Core Energy)
-                .push_bind(&metric.dietary_energy_consumed)
-                .push_bind(&metric.dietary_carbohydrates)
-                .push_bind(&metric.dietary_protein)
-                .push_bind(&metric.dietary_fat_total)
-                .push_bind(&metric.dietary_fat_saturated)
-                .push_bind(&metric.dietary_fat_monounsaturated)
-                .push_bind(&metric.dietary_fat_polyunsaturated)
-                .push_bind(&metric.dietary_cholesterol)
-                .push_bind(&metric.dietary_sodium)
-                .push_bind(&metric.dietary_fiber)
-                .push_bind(&metric.dietary_sugar)
+                .push_bind(metric.dietary_energy_consumed)
+                .push_bind(metric.dietary_carbohydrates)
+                .push_bind(metric.dietary_protein)
+                .push_bind(metric.dietary_fat_total)
+                .push_bind(metric.dietary_fat_saturated)
+                .push_bind(metric.dietary_fat_monounsaturated)
+                .push_bind(metric.dietary_fat_polyunsaturated)
+                .push_bind(metric.dietary_cholesterol)
+                .push_bind(metric.dietary_sodium)
+                .push_bind(metric.dietary_fiber)
+                .push_bind(metric.dietary_sugar)
                 // Essential Minerals
-                .push_bind(&metric.dietary_calcium)
-                .push_bind(&metric.dietary_iron)
-                .push_bind(&metric.dietary_magnesium)
-                .push_bind(&metric.dietary_potassium)
-                .push_bind(&metric.dietary_zinc)
-                .push_bind(&metric.dietary_phosphorus)
+                .push_bind(metric.dietary_calcium)
+                .push_bind(metric.dietary_iron)
+                .push_bind(metric.dietary_magnesium)
+                .push_bind(metric.dietary_potassium)
+                .push_bind(metric.dietary_zinc)
+                .push_bind(metric.dietary_phosphorus)
                 // Essential Vitamins (Water-soluble)
-                .push_bind(&metric.dietary_vitamin_c)
-                .push_bind(&metric.dietary_vitamin_b1_thiamine)
-                .push_bind(&metric.dietary_vitamin_b2_riboflavin)
-                .push_bind(&metric.dietary_vitamin_b3_niacin)
-                .push_bind(&metric.dietary_vitamin_b6_pyridoxine)
-                .push_bind(&metric.dietary_vitamin_b12_cobalamin)
-                .push_bind(&metric.dietary_folate)
-                .push_bind(&metric.dietary_biotin)
-                .push_bind(&metric.dietary_pantothenic_acid)
+                .push_bind(metric.dietary_vitamin_c)
+                .push_bind(metric.dietary_vitamin_b1_thiamine)
+                .push_bind(metric.dietary_vitamin_b2_riboflavin)
+                .push_bind(metric.dietary_vitamin_b3_niacin)
+                .push_bind(metric.dietary_vitamin_b6_pyridoxine)
+                .push_bind(metric.dietary_vitamin_b12_cobalamin)
+                .push_bind(metric.dietary_folate)
+                .push_bind(metric.dietary_biotin)
+                .push_bind(metric.dietary_pantothenic_acid)
                 // Essential Vitamins (Fat-soluble)
-                .push_bind(&metric.dietary_vitamin_a)
-                .push_bind(&metric.dietary_vitamin_d)
-                .push_bind(&metric.dietary_vitamin_e)
-                .push_bind(&metric.dietary_vitamin_k)
+                .push_bind(metric.dietary_vitamin_a)
+                .push_bind(metric.dietary_vitamin_d)
+                .push_bind(metric.dietary_vitamin_e)
+                .push_bind(metric.dietary_vitamin_k)
                 // Meal Context for atomic processing
                 .push_bind(&metric.meal_type)
-                .push_bind(&metric.meal_id)
+                .push_bind(metric.meal_id)
                 // Metadata and source tracking
                 .push_bind(&metric.source_device)
-                .push_bind(&metric.created_at);
+                .push_bind(metric.created_at);
         });
 
         // Add ON CONFLICT handling for deduplication
@@ -1005,7 +1005,7 @@ fn generate_daily_aggregations(metrics: &[NutritionMetric]) -> Vec<DailyNutritio
         let date_key = metric.recorded_at.date_naive().to_string();
         daily_metrics
             .entry(date_key)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(metric);
     }
 

@@ -16,9 +16,9 @@
 use actix_web::{web, HttpRequest, HttpResponse, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::types::ipnetwork::IpNetwork;
 use sqlx::{PgPool, Row};
 use std::net::IpAddr;
-use sqlx::types::ipnetwork::IpNetwork;
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
@@ -204,7 +204,7 @@ pub async fn ingest_reproductive_health(
                 }
                 Err(e) => {
                     menstrual_failed += 1;
-                    errors.push(format!("Menstrual data index {}: {}", index, e));
+                    errors.push(format!("Menstrual data index {index}: {e}"));
 
                     warn!(
                         user_id = %auth.user.id,
@@ -225,12 +225,13 @@ pub async fn ingest_reproductive_health(
                     fertility_processed += 1;
 
                     // Determine privacy level based on data content
+                    #[allow(clippy::if_same_then_else)]
                     let privacy_level = if data.sexual_activity.is_some() {
                         "highly_sensitive"
                     } else if data
                         .pregnancy_test_result
                         .as_ref()
-                        .map_or(false, |p| *p != PregnancyTestResult::NotTested)
+                        .is_some_and(|p| *p != PregnancyTestResult::NotTested)
                     {
                         "highly_sensitive"
                     } else {
@@ -256,7 +257,7 @@ pub async fn ingest_reproductive_health(
                 }
                 Err(e) => {
                     fertility_failed += 1;
-                    errors.push(format!("Fertility data index {}: {}", index, e));
+                    errors.push(format!("Fertility data index {index}: {e}"));
 
                     warn!(
                         user_id = %auth.user.id,
@@ -308,7 +309,7 @@ pub async fn get_menstrual_data(
     log_reproductive_health_audit(
         &pool,
         &auth.user.id,
-        auth.api_key.as_ref().map(|k| &k.id),
+        Some(&auth.api_key.id),
         "access",
         "menstrual_health",
         "menstrual_data",
@@ -330,7 +331,7 @@ pub async fn get_menstrual_data(
          cramps_severity, mood_rating, energy_level, source_device, created_at
          FROM menstrual_health WHERE user_id = ",
     );
-    query_builder.push_bind(&auth.user.id);
+    query_builder.push_bind(auth.user.id);
 
     if let Some(start_date) = query.start_date {
         query_builder.push(" AND recorded_at >= ");
@@ -396,7 +397,7 @@ pub async fn get_menstrual_data(
             let count_result = sqlx::query_scalar::<_, i64>(
                 "SELECT COUNT(*) FROM menstrual_health WHERE user_id = $1",
             )
-            .bind(&auth.user.id)
+            .bind(auth.user.id)
             .fetch_one(&**pool)
             .await
             .unwrap_or(0);
@@ -450,7 +451,7 @@ pub async fn get_fertility_data(
     log_reproductive_health_audit(
         &pool,
         &auth.user.id,
-        auth.api_key.as_ref().map(|k| &k.id),
+        Some(&auth.api_key.id),
         "access",
         "fertility_tracking",
         if include_sensitive {
@@ -481,7 +482,7 @@ pub async fn get_fertility_data(
          cervix_firmness, cervix_position, lh_level, source_device, created_at
          FROM fertility_tracking WHERE user_id = ",
     );
-    query_builder.push_bind(&auth.user.id);
+    query_builder.push_bind(auth.user.id);
 
     if let Some(start_date) = query.start_date {
         query_builder.push(" AND recorded_at >= ");
@@ -557,7 +558,7 @@ pub async fn get_fertility_data(
             let count_result = sqlx::query_scalar::<_, i64>(
                 "SELECT COUNT(*) FROM fertility_tracking WHERE user_id = $1",
             )
-            .bind(&auth.user.id)
+            .bind(auth.user.id)
             .fetch_one(&**pool)
             .await
             .unwrap_or(0);
@@ -628,7 +629,7 @@ async fn process_menstrual_data(
     // Validate the metric
     metric
         .validate()
-        .map_err(|e| format!("Validation failed: {}", e))?;
+        .map_err(|e| format!("Validation failed: {e}"))?;
 
     // Insert into database with upsert (ON CONFLICT)
     sqlx::query!(
@@ -653,7 +654,7 @@ async fn process_menstrual_data(
         metric.recorded_at,
         metric.menstrual_flow as _,
         metric.spotting,
-        metric.cycle_day,
+        metric.cycle_day.map(|v| v as i32),
         metric.cramps_severity.map(|v| v as i32),
         metric.mood_rating.map(|v| v as i32),
         metric.energy_level.map(|v| v as i32),
@@ -663,7 +664,7 @@ async fn process_menstrual_data(
     )
     .execute(pool)
     .await
-    .map_err(|e| format!("Database insert failed: {}", e))?;
+    .map_err(|e| format!("Database insert failed: {e}"))?;
 
     Ok(())
 }
@@ -702,7 +703,7 @@ async fn process_fertility_data(
     // Validate the metric
     metric
         .validate()
-        .map_err(|e| format!("Validation failed: {}", e))?;
+        .map_err(|e| format!("Validation failed: {e}"))?;
 
     // Insert into database with upsert (ON CONFLICT)
     sqlx::query!(
@@ -744,12 +745,13 @@ async fn process_fertility_data(
     )
     .execute(pool)
     .await
-    .map_err(|e| format!("Database insert failed: {}", e))?;
+    .map_err(|e| format!("Database insert failed: {e}"))?;
 
     Ok(())
 }
 
 /// Log reproductive health audit trail (HIPAA Compliance)
+#[allow(clippy::too_many_arguments)]
 async fn log_reproductive_health_audit(
     pool: &PgPool,
     user_id: &Uuid,

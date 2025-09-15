@@ -131,7 +131,8 @@ async fn main() -> std::io::Result<()> {
     info!("AuthService initialized");
 
     // Create UserCharacteristicsService
-    let user_characteristics_service = services::user_characteristics::UserCharacteristicsService::new(pool.clone());
+    let user_characteristics_service =
+        services::user_characteristics::UserCharacteristicsService::new(pool.clone());
     info!("UserCharacteristicsService initialized");
 
     // Create RateLimiter service
@@ -256,7 +257,8 @@ async fn main() -> std::io::Result<()> {
                     // Reproductive Health Endpoints (HIPAA-Compliant)
                     .route(
                         "/ingest/reproductive-health",
-                        web::post().to(handlers::reproductive_health_handler::ingest_reproductive_health),
+                        web::post()
+                            .to(handlers::reproductive_health_handler::ingest_reproductive_health),
                     )
                     .route(
                         "/data/menstrual",
@@ -269,19 +271,23 @@ async fn main() -> std::io::Result<()> {
                     // Environmental & Safety data endpoints
                     .route(
                         "/ingest/environmental",
-                        web::post().to(handlers::environmental_handler::ingest_environmental_handler),
+                        web::post()
+                            .to(handlers::environmental_handler::ingest_environmental_handler),
                     )
                     .route(
                         "/ingest/audio-exposure",
-                        web::post().to(handlers::environmental_handler::ingest_audio_exposure_handler),
+                        web::post()
+                            .to(handlers::environmental_handler::ingest_audio_exposure_handler),
                     )
                     .route(
                         "/ingest/safety-events",
-                        web::post().to(handlers::environmental_handler::ingest_safety_events_handler),
+                        web::post()
+                            .to(handlers::environmental_handler::ingest_safety_events_handler),
                     )
                     .route(
                         "/data/environmental",
-                        web::get().to(handlers::environmental_handler::get_environmental_data_handler),
+                        web::get()
+                            .to(handlers::environmental_handler::get_environmental_data_handler),
                     )
                     // Temperature metrics endpoints
                     .route(
@@ -304,11 +310,13 @@ async fn main() -> std::io::Result<()> {
                     // Body measurements endpoints (weight, BMI, body composition)
                     .route(
                         "/ingest/body-measurements",
-                        web::post().to(handlers::body_measurements_handler::ingest_body_measurements),
+                        web::post()
+                            .to(handlers::body_measurements_handler::ingest_body_measurements),
                     )
                     .route(
                         "/data/body-measurements",
-                        web::get().to(handlers::body_measurements_handler::get_body_measurements_data),
+                        web::get()
+                            .to(handlers::body_measurements_handler::get_body_measurements_data),
                     )
                     // Respiratory health endpoints (SpO2, breathing rate, lung function)
                     .route(
@@ -378,39 +386,54 @@ async fn main() -> std::io::Result<()> {
                     // User Characteristics endpoints for personalized health tracking
                     .route(
                         "/user/characteristics",
-                        web::get().to(handlers::user_characteristics_handler::get_user_characteristics),
+                        web::get()
+                            .to(handlers::user_characteristics_handler::get_user_characteristics),
                     )
                     .route(
                         "/user/characteristics",
-                        web::post().to(handlers::user_characteristics_handler::create_user_characteristics),
+                        web::post().to(
+                            handlers::user_characteristics_handler::create_user_characteristics,
+                        ),
                     )
                     .route(
                         "/user/characteristics",
-                        web::put().to(handlers::user_characteristics_handler::update_user_characteristics),
+                        web::put().to(
+                            handlers::user_characteristics_handler::update_user_characteristics,
+                        ),
                     )
                     .route(
                         "/user/characteristics",
-                        web::patch().to(handlers::user_characteristics_handler::upsert_user_characteristics),
+                        web::patch().to(
+                            handlers::user_characteristics_handler::upsert_user_characteristics,
+                        ),
                     )
                     .route(
                         "/user/characteristics",
-                        web::delete().to(handlers::user_characteristics_handler::delete_user_characteristics),
+                        web::delete().to(
+                            handlers::user_characteristics_handler::delete_user_characteristics,
+                        ),
                     )
                     .route(
                         "/user/characteristics/verify",
-                        web::post().to(handlers::user_characteristics_handler::verify_user_characteristics),
+                        web::post().to(
+                            handlers::user_characteristics_handler::verify_user_characteristics,
+                        ),
                     )
                     .route(
                         "/user/characteristics/validation/{metric_type}",
-                        web::get().to(handlers::user_characteristics_handler::get_validation_ranges),
+                        web::get()
+                            .to(handlers::user_characteristics_handler::get_validation_ranges),
                     )
                     .route(
                         "/user/characteristics/uv-recommendations",
-                        web::get().to(handlers::user_characteristics_handler::get_uv_recommendations),
+                        web::get()
+                            .to(handlers::user_characteristics_handler::get_uv_recommendations),
                     )
                     .route(
                         "/user/characteristics/activity-personalization",
-                        web::get().to(handlers::user_characteristics_handler::get_activity_personalization),
+                        web::get().to(
+                            handlers::user_characteristics_handler::get_activity_personalization,
+                        ),
                     )
                     .route(
                         "/user/characteristics/heart-rate-zones",
@@ -455,7 +478,9 @@ async fn main() -> std::io::Result<()> {
                             )
                             .route(
                                 "/characteristics/stats",
-                                web::get().to(handlers::user_characteristics_handler::get_aggregate_stats),
+                                web::get().to(
+                                    handlers::user_characteristics_handler::get_aggregate_stats,
+                                ),
                             ),
                     ),
             )

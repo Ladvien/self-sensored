@@ -1,7 +1,7 @@
-use self_sensored::models::{HealthMetric, SymptomMetric, SymptomAnalysis};
-use self_sensored::models::enums::{SymptomType, SymptomSeverity};
+use chrono::Utc;
 use self_sensored::config::ValidationConfig;
-use chrono::{DateTime, Utc};
+use self_sensored::models::enums::{SymptomSeverity, SymptomType};
+use self_sensored::models::SymptomMetric;
 use uuid::Uuid;
 
 /// Symptoms tracking integration tests
@@ -71,8 +71,12 @@ mod symptom_tests {
         assert_eq!(chest_pain.get_category(), "cardiovascular");
 
         let recommendations = chest_pain.generate_recommendations();
-        assert!(recommendations.iter().any(|r| r.contains("immediate medical attention")));
-        assert!(recommendations.iter().any(|r| r.contains("emergency services")));
+        assert!(recommendations
+            .iter()
+            .any(|r| r.contains("immediate medical attention")));
+        assert!(recommendations
+            .iter()
+            .any(|r| r.contains("emergency services")));
     }
 
     /// Test respiratory symptom assessment
@@ -161,8 +165,12 @@ mod symptom_tests {
 
         let recommendations = fatigue.generate_recommendations();
         assert!(recommendations.iter().any(|r| r.contains("adequate rest")));
-        assert!(recommendations.iter().any(|r| r.contains("cognitive symptoms")));
-        assert!(recommendations.iter().any(|r| r.contains("medical evaluation"))); // Due to 1 week duration
+        assert!(recommendations
+            .iter()
+            .any(|r| r.contains("cognitive symptoms")));
+        assert!(recommendations
+            .iter()
+            .any(|r| r.contains("medical evaluation"))); // Due to 1 week duration
     }
 
     /// Test pain symptom severity tracking
@@ -190,8 +198,12 @@ mod symptom_tests {
         assert_eq!(back_pain.get_category(), "pain");
 
         let recommendations = back_pain.generate_recommendations();
-        assert!(recommendations.iter().any(|r| r.contains("Rest affected area")));
-        assert!(recommendations.iter().any(|r| r.contains("pain management")));
+        assert!(recommendations
+            .iter()
+            .any(|r| r.contains("Rest affected area")));
+        assert!(recommendations
+            .iter()
+            .any(|r| r.contains("pain management")));
     }
 
     /// Test reproductive health symptoms
@@ -219,7 +231,9 @@ mod symptom_tests {
         assert!(!cramps.requires_medical_attention()); // 8 hours not long enough for cramps
 
         let recommendations = cramps.generate_recommendations();
-        assert!(recommendations.iter().any(|r| r.contains("Rest affected area")));
+        assert!(recommendations
+            .iter()
+            .any(|r| r.contains("Rest affected area")));
     }
 
     /// Test episode-based symptom grouping
@@ -333,7 +347,7 @@ mod symptom_tests {
             user_id,
             recorded_at,
             symptom_type: SymptomType::ChestTightnessOrPain, // Critical symptom type
-            severity: SymptomSeverity::None, // Invalid for critical symptom
+            severity: SymptomSeverity::None,                 // Invalid for critical symptom
             duration_minutes: Some(30),
             notes: None,
             episode_id: None,
@@ -350,22 +364,52 @@ mod symptom_tests {
     #[tokio::test]
     async fn test_ios_symptom_parsing() {
         // Test various iOS symptom string formats
-        assert_eq!(SymptomType::from_ios_string("headache"), Some(SymptomType::Headache));
-        assert_eq!(SymptomType::from_ios_string("head_ache"), Some(SymptomType::Headache));
-        assert_eq!(SymptomType::from_ios_string("HEADACHE"), Some(SymptomType::Headache));
+        assert_eq!(
+            SymptomType::from_ios_string("headache"),
+            Some(SymptomType::Headache)
+        );
+        assert_eq!(
+            SymptomType::from_ios_string("head_ache"),
+            Some(SymptomType::Headache)
+        );
+        assert_eq!(
+            SymptomType::from_ios_string("HEADACHE"),
+            Some(SymptomType::Headache)
+        );
 
         // Test respiratory symptoms
-        assert_eq!(SymptomType::from_ios_string("shortness_of_breath"), Some(SymptomType::ShortnessOfBreath));
-        assert_eq!(SymptomType::from_ios_string("shortnessofbreath"), Some(SymptomType::ShortnessOfBreath));
-        assert_eq!(SymptomType::from_ios_string("dyspnea"), Some(SymptomType::ShortnessOfBreath));
+        assert_eq!(
+            SymptomType::from_ios_string("shortness_of_breath"),
+            Some(SymptomType::ShortnessOfBreath)
+        );
+        assert_eq!(
+            SymptomType::from_ios_string("shortnessofbreath"),
+            Some(SymptomType::ShortnessOfBreath)
+        );
+        assert_eq!(
+            SymptomType::from_ios_string("dyspnea"),
+            Some(SymptomType::ShortnessOfBreath)
+        );
 
         // Test digestive symptoms
-        assert_eq!(SymptomType::from_ios_string("throwing_up"), Some(SymptomType::Vomiting));
-        assert_eq!(SymptomType::from_ios_string("loose_stools"), Some(SymptomType::Diarrhea));
+        assert_eq!(
+            SymptomType::from_ios_string("throwing_up"),
+            Some(SymptomType::Vomiting)
+        );
+        assert_eq!(
+            SymptomType::from_ios_string("loose_stools"),
+            Some(SymptomType::Diarrhea)
+        );
 
         // Test pain symptoms
-        assert_eq!(SymptomType::from_ios_string("stomach_pain"), Some(SymptomType::AbdominalCramps));
-        assert_eq!(SymptomType::from_ios_string("muscle_ache"), Some(SymptomType::MusclePain));
+        assert_eq!(
+            SymptomType::from_ios_string("stomach_pain"),
+            Some(SymptomType::AbdominalCramps)
+        );
+        assert_eq!(
+            SymptomType::from_ios_string("muscle_ache"),
+            Some(SymptomType::MusclePain)
+        );
 
         // Test unknown symptom
         assert_eq!(SymptomType::from_ios_string("unknown_symptom"), None);
@@ -375,22 +419,55 @@ mod symptom_tests {
     #[tokio::test]
     async fn test_ios_severity_parsing() {
         // Test numeric severity scores
-        assert_eq!(SymptomSeverity::from_severity_score(Some(0)), SymptomSeverity::None);
-        assert_eq!(SymptomSeverity::from_severity_score(Some(2)), SymptomSeverity::Mild);
-        assert_eq!(SymptomSeverity::from_severity_score(Some(5)), SymptomSeverity::Moderate);
-        assert_eq!(SymptomSeverity::from_severity_score(Some(7)), SymptomSeverity::Severe);
-        assert_eq!(SymptomSeverity::from_severity_score(Some(10)), SymptomSeverity::Critical);
+        assert_eq!(
+            SymptomSeverity::from_severity_score(Some(0)),
+            SymptomSeverity::None
+        );
+        assert_eq!(
+            SymptomSeverity::from_severity_score(Some(2)),
+            SymptomSeverity::Mild
+        );
+        assert_eq!(
+            SymptomSeverity::from_severity_score(Some(5)),
+            SymptomSeverity::Moderate
+        );
+        assert_eq!(
+            SymptomSeverity::from_severity_score(Some(7)),
+            SymptomSeverity::Severe
+        );
+        assert_eq!(
+            SymptomSeverity::from_severity_score(Some(10)),
+            SymptomSeverity::Critical
+        );
 
         // Test string severity parsing
-        assert_eq!(SymptomSeverity::from_ios_string("mild"), SymptomSeverity::Mild);
-        assert_eq!(SymptomSeverity::from_ios_string("MODERATE"), SymptomSeverity::Moderate);
-        assert_eq!(SymptomSeverity::from_ios_string("severe"), SymptomSeverity::Severe);
-        assert_eq!(SymptomSeverity::from_ios_string("emergency"), SymptomSeverity::Critical);
+        assert_eq!(
+            SymptomSeverity::from_ios_string("mild"),
+            SymptomSeverity::Mild
+        );
+        assert_eq!(
+            SymptomSeverity::from_ios_string("MODERATE"),
+            SymptomSeverity::Moderate
+        );
+        assert_eq!(
+            SymptomSeverity::from_ios_string("severe"),
+            SymptomSeverity::Severe
+        );
+        assert_eq!(
+            SymptomSeverity::from_ios_string("emergency"),
+            SymptomSeverity::Critical
+        );
 
         // Test numeric string values
         assert_eq!(SymptomSeverity::from_ios_string("3"), SymptomSeverity::Mild);
-        assert_eq!(SymptomSeverity::from_ios_string("6"), SymptomSeverity::Moderate);
-        assert_eq!(SymptomSeverity::from_ios_string("9"), SymptomSeverity::Critical);
+        assert_eq!(
+            SymptomSeverity::from_ios_string("6"),
+            SymptomSeverity::Moderate
+        );
+        assert_eq!(
+            SymptomSeverity::from_ios_string("9"),
+            SymptomSeverity::Critical
+        );
     }
 
     /// Test symptom urgency level calculation
@@ -483,6 +560,8 @@ mod symptom_tests {
         assert!(chronic_pain.requires_medical_attention()); // Chronic pain requires attention
 
         let recommendations = chronic_pain.generate_recommendations();
-        assert!(recommendations.iter().any(|r| r.contains("medical evaluation for persistent symptoms")));
+        assert!(recommendations
+            .iter()
+            .any(|r| r.contains("medical evaluation for persistent symptoms")));
     }
 }

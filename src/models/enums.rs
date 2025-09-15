@@ -149,7 +149,7 @@ pub enum WorkoutType {
 
     // Legacy/Other (for backwards compatibility)
     StrengthTraining, // alias for TraditionalStrengthTraining
-    Sports, // generic sports category
+    Sports,           // generic sports category
     Other,
 }
 
@@ -176,7 +176,9 @@ impl WorkoutType {
             // Base Traditional Activities
             "americanfootball" | "american_football" => Self::AmericanFootball,
             "archery" => Self::Archery,
-            "australianfootball" | "australian_football" | "aussie_rules" => Self::AustralianFootball,
+            "australianfootball" | "australian_football" | "aussie_rules" => {
+                Self::AustralianFootball
+            }
             "badminton" => Self::Badminton,
             "baseball" => Self::Baseball,
             "basketball" => Self::Basketball,
@@ -192,7 +194,9 @@ impl WorkoutType {
             "equestriansports" | "equestrian_sports" | "horseback" => Self::EquestrianSports,
             "fencing" => Self::Fencing,
             "fishing" => Self::Fishing,
-            "functionalstrengthtraining" | "functional_strength_training" => Self::FunctionalStrengthTraining,
+            "functionalstrengthtraining" | "functional_strength_training" => {
+                Self::FunctionalStrengthTraining
+            }
             "golf" => Self::Golf,
             "gymnastics" => Self::Gymnastics,
             "handball" => Self::Handball,
@@ -202,10 +206,14 @@ impl WorkoutType {
             "lacrosse" => Self::Lacrosse,
             "martialarts" | "martial_arts" => Self::MartialArts,
             "mindandbody" | "mind_and_body" => Self::MindAndBody,
-            "mixedmetaboliccardiotraining" | "mixed_metabolic_cardio_training" => Self::MixedMetabolicCardioTraining,
+            "mixedmetaboliccardiotraining" | "mixed_metabolic_cardio_training" => {
+                Self::MixedMetabolicCardioTraining
+            }
             "paddlesports" | "paddle_sports" | "kayak" | "canoe" => Self::PaddleSports,
             "play" => Self::Play,
-            "preparationandrecovery" | "preparation_and_recovery" | "warmup" | "cooldown" => Self::PreparationAndRecovery,
+            "preparationandrecovery" | "preparation_and_recovery" | "warmup" | "cooldown" => {
+                Self::PreparationAndRecovery
+            }
             "racquetball" => Self::Racquetball,
             "rowing" => Self::Rowing,
             "rugby" => Self::Rugby,
@@ -222,7 +230,9 @@ impl WorkoutType {
             "tabletennis" | "table_tennis" | "ping_pong" => Self::TableTennis,
             "tennis" => Self::Tennis,
             "trackandfield" | "track_and_field" => Self::TrackAndField,
-            "traditionalstrengthtraining" | "traditional_strength_training" => Self::TraditionalStrengthTraining,
+            "traditionalstrengthtraining" | "traditional_strength_training" => {
+                Self::TraditionalStrengthTraining
+            }
             "volleyball" => Self::Volleyball,
             "walking" | "walk" => Self::Walking,
             "waterfitness" | "water_fitness" | "aqua_fitness" => Self::WaterFitness,
@@ -267,45 +277,104 @@ impl WorkoutType {
     pub fn category(&self) -> WorkoutCategory {
         match self {
             // Cardio Activities
-            Self::Running | Self::Walking | Self::Cycling | Self::Rowing | Self::Elliptical |
-            Self::StairClimbing | Self::Stairs | Self::JumpRope | Self::CrossCountrySkiing | Self::Hiking => WorkoutCategory::Cardio,
+            Self::Running
+            | Self::Walking
+            | Self::Cycling
+            | Self::Rowing
+            | Self::Elliptical
+            | Self::StairClimbing
+            | Self::Stairs
+            | Self::JumpRope
+            | Self::CrossCountrySkiing
+            | Self::Hiking => WorkoutCategory::Cardio,
 
             // Strength Training
-            Self::StrengthTraining | Self::TraditionalStrengthTraining | Self::FunctionalStrengthTraining => WorkoutCategory::StrengthTraining,
+            Self::StrengthTraining
+            | Self::TraditionalStrengthTraining
+            | Self::FunctionalStrengthTraining => WorkoutCategory::StrengthTraining,
 
             // Team Sports
-            Self::AmericanFootball | Self::Basketball | Self::Soccer | Self::Hockey | Self::Volleyball |
-            Self::Baseball | Self::Softball | Self::AustralianFootball | Self::Handball | Self::Rugby |
-            Self::WaterPolo | Self::Lacrosse => WorkoutCategory::TeamSports,
+            Self::AmericanFootball
+            | Self::Basketball
+            | Self::Soccer
+            | Self::Hockey
+            | Self::Volleyball
+            | Self::Baseball
+            | Self::Softball
+            | Self::AustralianFootball
+            | Self::Handball
+            | Self::Rugby
+            | Self::WaterPolo
+            | Self::Lacrosse => WorkoutCategory::TeamSports,
 
             // Individual Sports
-            Self::Tennis | Self::Golf | Self::Boxing | Self::Wrestling | Self::Fencing | Self::MartialArts |
-            Self::Badminton | Self::TableTennis | Self::Squash | Self::Racquetball | Self::Archery |
-            Self::Climbing | Self::TrackAndField => WorkoutCategory::IndividualSports,
+            Self::Tennis
+            | Self::Golf
+            | Self::Boxing
+            | Self::Wrestling
+            | Self::Fencing
+            | Self::MartialArts
+            | Self::Badminton
+            | Self::TableTennis
+            | Self::Squash
+            | Self::Racquetball
+            | Self::Archery
+            | Self::Climbing
+            | Self::TrackAndField => WorkoutCategory::IndividualSports,
 
             // Fitness Classes
-            Self::Yoga | Self::Pilates | Self::Hiit | Self::Barre | Self::CoreTraining | Self::Flexibility |
-            Self::StepTraining | Self::Kickboxing | Self::Dance | Self::DanceInspiredTraining => WorkoutCategory::FitnessClasses,
+            Self::Yoga
+            | Self::Pilates
+            | Self::Hiit
+            | Self::Barre
+            | Self::CoreTraining
+            | Self::Flexibility
+            | Self::StepTraining
+            | Self::Kickboxing
+            | Self::Dance
+            | Self::DanceInspiredTraining => WorkoutCategory::FitnessClasses,
 
             // Water Sports
-            Self::Swimming | Self::WaterSports | Self::PaddleSports | Self::WaterFitness | Self::SurfingSports |
-            Self::Sailing => WorkoutCategory::WaterSports,
+            Self::Swimming
+            | Self::WaterSports
+            | Self::PaddleSports
+            | Self::WaterFitness
+            | Self::SurfingSports
+            | Self::Sailing => WorkoutCategory::WaterSports,
 
             // Winter Sports
-            Self::SnowSports | Self::DownhillSkiing | Self::Snowboarding => WorkoutCategory::WinterSports,
+            Self::SnowSports | Self::DownhillSkiing | Self::Snowboarding => {
+                WorkoutCategory::WinterSports
+            }
 
             // Mind & Body
-            Self::MindAndBody | Self::TaiChi | Self::PreparationAndRecovery => WorkoutCategory::MindAndBody,
+            Self::MindAndBody | Self::TaiChi | Self::PreparationAndRecovery => {
+                WorkoutCategory::MindAndBody
+            }
 
             // Accessibility
-            Self::WheelchairWalkPace | Self::WheelchairRunPace | Self::HandCycling => WorkoutCategory::Accessibility,
+            Self::WheelchairWalkPace | Self::WheelchairRunPace | Self::HandCycling => {
+                WorkoutCategory::Accessibility
+            }
 
             // Recreation
-            Self::Play | Self::Fishing | Self::Hunting | Self::Bowling | Self::FitnessGaming | Self::DiscSports => WorkoutCategory::Recreation,
+            Self::Play
+            | Self::Fishing
+            | Self::Hunting
+            | Self::Bowling
+            | Self::FitnessGaming
+            | Self::DiscSports => WorkoutCategory::Recreation,
 
             // Mixed/Other
-            Self::CrossTraining | Self::MixedCardio | Self::MixedMetabolicCardioTraining | Self::Gymnastics |
-            Self::EquestrianSports | Self::SkatingSpots | Self::Curling | Self::Sports | Self::Other => WorkoutCategory::Mixed,
+            Self::CrossTraining
+            | Self::MixedCardio
+            | Self::MixedMetabolicCardioTraining
+            | Self::Gymnastics
+            | Self::EquestrianSports
+            | Self::SkatingSpots
+            | Self::Curling
+            | Self::Sports
+            | Self::Other => WorkoutCategory::Mixed,
         }
     }
 }
@@ -809,7 +878,9 @@ impl fmt::Display for StateOfMind {
 // ============================================================================
 
 /// Comprehensive symptom type enumeration for illness tracking and health monitoring
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Type)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Type,
+)]
 #[sqlx(type_name = "symptom_type", rename_all = "snake_case")]
 #[serde(rename_all = "snake_case")]
 pub enum SymptomType {
@@ -888,7 +959,12 @@ pub enum SymptomType {
 impl SymptomType {
     /// Convert from iOS HealthKit symptom strings
     pub fn from_ios_string(s: &str) -> Option<Self> {
-        match s.to_lowercase().replace("-", "_").replace(" ", "_").as_str() {
+        match s
+            .to_lowercase()
+            .replace("-", "_")
+            .replace(" ", "_")
+            .as_str()
+        {
             // Pain symptoms
             "abdominal_cramps" | "abdominalcramps" | "stomach_pain" => Some(Self::AbdominalCramps),
             "headache" | "head_ache" => Some(Self::Headache),
@@ -903,7 +979,9 @@ impl SymptomType {
 
             // Respiratory symptoms
             "coughing" | "cough" => Some(Self::Coughing),
-            "shortness_of_breath" | "shortnessofbreath" | "dyspnea" => Some(Self::ShortnessOfBreath),
+            "shortness_of_breath" | "shortnessofbreath" | "dyspnea" => {
+                Some(Self::ShortnessOfBreath)
+            }
             "wheezing" => Some(Self::Wheezing),
             "congestion" | "nasal_congestion" => Some(Self::Congestion),
             "runny_nose" | "runnynose" | "rhinorrhea" => Some(Self::RunnyNose),
@@ -919,15 +997,21 @@ impl SymptomType {
             "constipation" => Some(Self::Constipation),
             "heartburn" | "acid_reflux" => Some(Self::Heartburn),
             "loss_of_appetite" | "lossofappetite" | "no_appetite" => Some(Self::LossOfAppetite),
-            "excessive_hunger" | "excessivehunger" | "increased_appetite" => Some(Self::ExcessiveHunger),
+            "excessive_hunger" | "excessivehunger" | "increased_appetite" => {
+                Some(Self::ExcessiveHunger)
+            }
 
             // Neurological symptoms
             "dizziness" | "dizzy" => Some(Self::Dizziness),
             "fatigue" | "tired" | "exhaustion" => Some(Self::Fatigue),
             "mood_changes" | "moodchanges" => Some(Self::MoodChanges),
-            "sleep_disturbances" | "sleepdisturbances" | "insomnia" => Some(Self::SleepDisturbances),
+            "sleep_disturbances" | "sleepdisturbances" | "insomnia" => {
+                Some(Self::SleepDisturbances)
+            }
             "memory_issues" | "memoryissues" | "forgetfulness" => Some(Self::MemoryIssues),
-            "concentration_problems" | "concentrationproblems" | "brain_fog" => Some(Self::ConcentrationProblems),
+            "concentration_problems" | "concentrationproblems" | "brain_fog" => {
+                Some(Self::ConcentrationProblems)
+            }
             "anxiety" | "anxious" => Some(Self::Anxiety),
             "depression" | "depressed" | "sad" => Some(Self::Depression),
             "irritability" | "irritable" => Some(Self::Irritability),
@@ -936,8 +1020,12 @@ impl SymptomType {
             "palpitations" | "heart_palpitations" => Some(Self::Palpitations),
             "rapid_heart_rate" | "rapidheartrate" | "tachycardia" => Some(Self::RapidHeartRate),
             "chest_pain" | "chestpain" => Some(Self::ChestPain),
-            "high_blood_pressure" | "highbloodpressure" | "hypertension" => Some(Self::HighBloodPressure),
-            "cold_hands_or_feet" | "coldhandsorfeet" | "cold_extremities" => Some(Self::ColdHandsOrFeet),
+            "high_blood_pressure" | "highbloodpressure" | "hypertension" => {
+                Some(Self::HighBloodPressure)
+            }
+            "cold_hands_or_feet" | "coldhandsorfeet" | "cold_extremities" => {
+                Some(Self::ColdHandsOrFeet)
+            }
 
             // Reproductive/Hormonal symptoms
             "hot_flashes" | "hotflashes" | "hot_flash" => Some(Self::HotFlashes),
@@ -967,36 +1055,81 @@ impl SymptomType {
     /// Get symptom category for grouping
     pub fn get_category(&self) -> &'static str {
         match self {
-            Self::AbdominalCramps | Self::Headache | Self::BreastPain | Self::PelvicPain
-            | Self::ChestTightnessOrPain | Self::BackPain | Self::MusclePain | Self::JointPain
-            | Self::ToothPain | Self::EyePain => "pain",
+            Self::AbdominalCramps
+            | Self::Headache
+            | Self::BreastPain
+            | Self::PelvicPain
+            | Self::ChestTightnessOrPain
+            | Self::BackPain
+            | Self::MusclePain
+            | Self::JointPain
+            | Self::ToothPain
+            | Self::EyePain => "pain",
 
-            Self::Coughing | Self::ShortnessOfBreath | Self::Wheezing | Self::Congestion
-            | Self::RunnyNose | Self::Sneezing | Self::SoreThroat | Self::ChestCongestion => "respiratory",
+            Self::Coughing
+            | Self::ShortnessOfBreath
+            | Self::Wheezing
+            | Self::Congestion
+            | Self::RunnyNose
+            | Self::Sneezing
+            | Self::SoreThroat
+            | Self::ChestCongestion => "respiratory",
 
-            Self::Bloating | Self::Nausea | Self::Vomiting | Self::Diarrhea | Self::Constipation
-            | Self::Heartburn | Self::LossOfAppetite | Self::ExcessiveHunger => "digestive",
+            Self::Bloating
+            | Self::Nausea
+            | Self::Vomiting
+            | Self::Diarrhea
+            | Self::Constipation
+            | Self::Heartburn
+            | Self::LossOfAppetite
+            | Self::ExcessiveHunger => "digestive",
 
-            Self::Dizziness | Self::Fatigue | Self::MoodChanges | Self::SleepDisturbances
-            | Self::MemoryIssues | Self::ConcentrationProblems | Self::Anxiety
-            | Self::Depression | Self::Irritability => "neurological",
+            Self::Dizziness
+            | Self::Fatigue
+            | Self::MoodChanges
+            | Self::SleepDisturbances
+            | Self::MemoryIssues
+            | Self::ConcentrationProblems
+            | Self::Anxiety
+            | Self::Depression
+            | Self::Irritability => "neurological",
 
-            Self::Palpitations | Self::RapidHeartRate | Self::ChestPain | Self::HighBloodPressure
+            Self::Palpitations
+            | Self::RapidHeartRate
+            | Self::ChestPain
+            | Self::HighBloodPressure
             | Self::ColdHandsOrFeet => "cardiovascular",
 
-            Self::HotFlashes | Self::NightSweats | Self::BreastTenderness | Self::VaginalDryness
-            | Self::IrregularPeriods | Self::HeavyPeriods | Self::MoodSwings => "reproductive_hormonal",
+            Self::HotFlashes
+            | Self::NightSweats
+            | Self::BreastTenderness
+            | Self::VaginalDryness
+            | Self::IrregularPeriods
+            | Self::HeavyPeriods
+            | Self::MoodSwings => "reproductive_hormonal",
 
-            Self::Fever | Self::Chills | Self::Sweating | Self::WeightGain | Self::WeightLoss
-            | Self::HairLoss | Self::DrySkin | Self::Rash | Self::Itching | Self::Swelling => "general_systemic",
+            Self::Fever
+            | Self::Chills
+            | Self::Sweating
+            | Self::WeightGain
+            | Self::WeightLoss
+            | Self::HairLoss
+            | Self::DrySkin
+            | Self::Rash
+            | Self::Itching
+            | Self::Swelling => "general_systemic",
         }
     }
 
     /// Check if symptom indicates potential medical emergency
     pub fn is_critical(&self) -> bool {
-        matches!(self,
-            Self::ChestTightnessOrPain | Self::ShortnessOfBreath | Self::ChestPain
-            | Self::RapidHeartRate | Self::HighBloodPressure
+        matches!(
+            self,
+            Self::ChestTightnessOrPain
+                | Self::ShortnessOfBreath
+                | Self::ChestPain
+                | Self::RapidHeartRate
+                | Self::HighBloodPressure
         )
     }
 }
@@ -1164,9 +1297,9 @@ impl BiologicalSex {
     /// Get personalized heart rate ranges based on biological sex
     pub fn get_heart_rate_adjustment(&self) -> f64 {
         match self {
-            Self::Male => 1.0,     // Baseline
-            Self::Female => 1.05,  // Slightly higher resting HR typically
-            Self::NotSet => 1.0,   // Use baseline
+            Self::Male => 1.0,    // Baseline
+            Self::Female => 1.05, // Slightly higher resting HR typically
+            Self::NotSet => 1.0,  // Use baseline
         }
     }
 
@@ -1205,7 +1338,13 @@ pub enum BloodType {
 
 impl BloodType {
     pub fn from_ios_string(s: &str) -> Self {
-        match s.to_uppercase().replace(" ", "").replace("+", "_POSITIVE").replace("-", "_NEGATIVE").as_str() {
+        match s
+            .to_uppercase()
+            .replace(" ", "")
+            .replace("+", "_POSITIVE")
+            .replace("-", "_NEGATIVE")
+            .as_str()
+        {
             "A+" | "A_POSITIVE" | "APOSITIVE" => Self::APositive,
             "A-" | "A_NEGATIVE" | "ANEGATIVE" => Self::ANegative,
             "B+" | "B_POSITIVE" | "BPOSITIVE" => Self::BPositive,
@@ -1236,13 +1375,36 @@ impl BloodType {
     /// Get compatible donor blood types
     pub fn get_compatible_donors(&self) -> Vec<BloodType> {
         match self {
-            Self::APositive => vec![Self::APositive, Self::ANegative, Self::OPositive, Self::ONegative],
+            Self::APositive => vec![
+                Self::APositive,
+                Self::ANegative,
+                Self::OPositive,
+                Self::ONegative,
+            ],
             Self::ANegative => vec![Self::ANegative, Self::ONegative],
-            Self::BPositive => vec![Self::BPositive, Self::BNegative, Self::OPositive, Self::ONegative],
+            Self::BPositive => vec![
+                Self::BPositive,
+                Self::BNegative,
+                Self::OPositive,
+                Self::ONegative,
+            ],
             Self::BNegative => vec![Self::BNegative, Self::ONegative],
-            Self::AbPositive => vec![Self::APositive, Self::ANegative, Self::BPositive, Self::BNegative,
-                                     Self::AbPositive, Self::AbNegative, Self::OPositive, Self::ONegative],
-            Self::AbNegative => vec![Self::ANegative, Self::BNegative, Self::AbNegative, Self::ONegative],
+            Self::AbPositive => vec![
+                Self::APositive,
+                Self::ANegative,
+                Self::BPositive,
+                Self::BNegative,
+                Self::AbPositive,
+                Self::AbNegative,
+                Self::OPositive,
+                Self::ONegative,
+            ],
+            Self::AbNegative => vec![
+                Self::ANegative,
+                Self::BNegative,
+                Self::AbNegative,
+                Self::ONegative,
+            ],
             Self::OPositive => vec![Self::OPositive, Self::ONegative],
             Self::ONegative => vec![Self::ONegative],
             Self::NotSet => vec![], // No compatibility info if unknown
@@ -1302,10 +1464,10 @@ impl FitzpatrickSkinType {
     /// Get recommended SPF level
     pub fn get_recommended_spf(&self) -> u8 {
         match self {
-            Self::Type1 | Self::Type2 => 30, // High protection
-            Self::Type3 => 20,               // Moderate protection
+            Self::Type1 | Self::Type2 => 30,               // High protection
+            Self::Type3 => 20,                             // Moderate protection
             Self::Type4 | Self::Type5 | Self::Type6 => 15, // Basic protection
-            Self::NotSet => 30,              // Default to high protection
+            Self::NotSet => 30,                            // Default to high protection
         }
     }
 
@@ -1439,16 +1601,27 @@ pub enum HygieneEventType {
 impl HygieneEventType {
     /// Convert from iOS HealthKit or device strings
     pub fn from_ios_string(s: &str) -> Option<Self> {
-        match s.to_lowercase().replace("-", "_").replace(" ", "_").as_str() {
+        match s
+            .to_lowercase()
+            .replace("-", "_")
+            .replace(" ", "_")
+            .as_str()
+        {
             "handwashing" | "hand_washing" | "wash_hands" => Some(Self::Handwashing),
-            "toothbrushing" | "tooth_brushing" | "brush_teeth" | "dental_hygiene" => Some(Self::Toothbrushing),
-            "hand_sanitizer" | "handsanitizer" | "sanitizer" | "alcohol_rub" => Some(Self::HandSanitizer),
+            "toothbrushing" | "tooth_brushing" | "brush_teeth" | "dental_hygiene" => {
+                Some(Self::Toothbrushing)
+            }
+            "hand_sanitizer" | "handsanitizer" | "sanitizer" | "alcohol_rub" => {
+                Some(Self::HandSanitizer)
+            }
             "face_washing" | "facewashing" | "wash_face" => Some(Self::FaceWashing),
             "shower" | "showering" => Some(Self::Shower),
             "bath" | "bathing" | "taking_bath" => Some(Self::Bath),
             "hair_washing" | "hairwashing" | "wash_hair" | "shampoo" => Some(Self::HairWashing),
             "nail_care" | "nailcare" | "nail_hygiene" | "trim_nails" => Some(Self::NailCare),
-            "oral_hygiene" | "oralhygiene" | "mouth_care" | "dental_care" => Some(Self::OralHygiene),
+            "oral_hygiene" | "oralhygiene" | "mouth_care" | "dental_care" => {
+                Some(Self::OralHygiene)
+            }
             "skincare" | "skin_care" | "moisturize" | "skin_hygiene" => Some(Self::Skincare),
             _ => None,
         }
@@ -1457,32 +1630,32 @@ impl HygieneEventType {
     /// Get WHO/CDC recommended duration for the hygiene event (in seconds)
     pub fn get_recommended_duration(&self) -> Option<u32> {
         match self {
-            Self::Handwashing => Some(20),        // WHO: 20+ seconds
-            Self::Toothbrushing => Some(120),     // ADA: 2+ minutes
-            Self::HandSanitizer => Some(15),      // CDC: 15+ seconds until dry
-            Self::FaceWashing => Some(30),        // General recommendation
-            Self::Shower => Some(300),            // 5 minutes average
-            Self::Bath => Some(900),              // 15 minutes average
-            Self::HairWashing => Some(60),        // 1 minute average
-            Self::NailCare => Some(180),          // 3 minutes for proper care
-            Self::OralHygiene => Some(180),       // 3 minutes including flossing
-            Self::Skincare => Some(120),          // 2 minutes for routine
+            Self::Handwashing => Some(20),    // WHO: 20+ seconds
+            Self::Toothbrushing => Some(120), // ADA: 2+ minutes
+            Self::HandSanitizer => Some(15),  // CDC: 15+ seconds until dry
+            Self::FaceWashing => Some(30),    // General recommendation
+            Self::Shower => Some(300),        // 5 minutes average
+            Self::Bath => Some(900),          // 15 minutes average
+            Self::HairWashing => Some(60),    // 1 minute average
+            Self::NailCare => Some(180),      // 3 minutes for proper care
+            Self::OralHygiene => Some(180),   // 3 minutes including flossing
+            Self::Skincare => Some(120),      // 2 minutes for routine
         }
     }
 
     /// Get recommended daily frequency for the hygiene event
     pub fn get_recommended_daily_frequency(&self) -> u32 {
         match self {
-            Self::Handwashing => 8,               // Multiple times throughout day
-            Self::Toothbrushing => 2,             // Morning and night
-            Self::HandSanitizer => 6,             // As needed supplement to handwashing
-            Self::FaceWashing => 2,               // Morning and night
-            Self::Shower => 1,                    // Once daily
-            Self::Bath => 0,                      // Optional, not daily requirement
-            Self::HairWashing => 0,               // Varies by hair type, not daily
-            Self::NailCare => 0,                  // Weekly, not daily
-            Self::OralHygiene => 1,               // Once daily (beyond toothbrushing)
-            Self::Skincare => 2,                  // Morning and night
+            Self::Handwashing => 8,   // Multiple times throughout day
+            Self::Toothbrushing => 2, // Morning and night
+            Self::HandSanitizer => 6, // As needed supplement to handwashing
+            Self::FaceWashing => 2,   // Morning and night
+            Self::Shower => 1,        // Once daily
+            Self::Bath => 0,          // Optional, not daily requirement
+            Self::HairWashing => 0,   // Varies by hair type, not daily
+            Self::NailCare => 0,      // Weekly, not daily
+            Self::OralHygiene => 1,   // Once daily (beyond toothbrushing)
+            Self::Skincare => 2,      // Morning and night
         }
     }
 
@@ -1504,16 +1677,24 @@ impl HygieneEventType {
 
     /// Check if this hygiene event supports public health monitoring
     pub fn supports_public_health_tracking(&self) -> bool {
-        matches!(self,
-            Self::Handwashing | Self::HandSanitizer | Self::Toothbrushing |
-            Self::FaceWashing | Self::OralHygiene
+        matches!(
+            self,
+            Self::Handwashing
+                | Self::HandSanitizer
+                | Self::Toothbrushing
+                | Self::FaceWashing
+                | Self::OralHygiene
         )
     }
 
     /// Get smart device integration types that might track this event
     pub fn get_smart_device_types(&self) -> Vec<&'static str> {
         match self {
-            Self::Handwashing => vec!["smart_soap_dispenser", "smart_faucet", "hand_hygiene_sensor"],
+            Self::Handwashing => vec![
+                "smart_soap_dispenser",
+                "smart_faucet",
+                "hand_hygiene_sensor",
+            ],
             Self::Toothbrushing => vec!["smart_toothbrush", "oral_b_connect", "philips_sonicare"],
             Self::HandSanitizer => vec!["smart_dispenser", "alcohol_sensor"],
             Self::FaceWashing => vec!["smart_mirror", "facial_cleansing_device"],
@@ -1522,7 +1703,11 @@ impl HygieneEventType {
             Self::HairWashing => vec!["smart_shampoo_dispenser", "hair_care_device"],
             Self::NailCare => vec!["nail_care_kit", "manicure_timer"],
             Self::OralHygiene => vec!["water_flosser", "mouthwash_dispenser"],
-            Self::Skincare => vec!["skincare_device", "moisturizer_dispenser", "facial_cleansing_brush"],
+            Self::Skincare => vec![
+                "skincare_device",
+                "moisturizer_dispenser",
+                "facial_cleansing_brush",
+            ],
         }
     }
 }
@@ -1547,7 +1732,10 @@ impl fmt::Display for HygieneEventType {
 
 // Heart Rate Event Type ENUM (STORY-011)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[sqlx(type_name = "heart_rate_event_type", rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(
+    type_name = "heart_rate_event_type",
+    rename_all = "SCREAMING_SNAKE_CASE"
+)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum HeartRateEventType {
     High,            // Dangerously high heart rate (tachycardia)
@@ -1567,10 +1755,10 @@ impl HeartRateEventType {
                 // Age-adjusted maximum HR thresholds for tachycardia
                 let max_hr = user_age.map(|age| 220 - age as i16).unwrap_or(180);
                 (Some((max_hr as f64 * 0.85) as i16), Some(300)) // 85% of max HR to 300 BPM
-            },
+            }
             Self::Low => (Some(30), Some(50)), // Bradycardia: 30-50 BPM
-            Self::Irregular => (None, None), // Pattern-based, not threshold
-            Self::Afib => (None, None), // Pattern-based AFib detection
+            Self::Irregular => (None, None),   // Pattern-based, not threshold
+            Self::Afib => (None, None),        // Pattern-based AFib detection
             Self::RapidIncrease => (None, None), // Rate of change based
             Self::SlowRecovery => (None, None), // Recovery rate based
             Self::ExerciseAnomaly => (None, None), // Exercise context based
@@ -1621,7 +1809,10 @@ impl fmt::Display for HeartRateEventType {
 
 // Cardiac Event Severity ENUM (STORY-011)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Type)]
-#[sqlx(type_name = "cardiac_event_severity", rename_all = "SCREAMING_SNAKE_CASE")]
+#[sqlx(
+    type_name = "cardiac_event_severity",
+    rename_all = "SCREAMING_SNAKE_CASE"
+)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum CardiacEventSeverity {
     Low,      // Mild concern, monitoring recommended

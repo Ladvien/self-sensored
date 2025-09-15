@@ -1,6 +1,6 @@
-use self_sensored::models::{HealthMetric, TemperatureMetric};
+use chrono::Utc;
 use self_sensored::config::ValidationConfig;
-use chrono::{DateTime, Utc};
+use self_sensored::models::{HealthMetric, TemperatureMetric};
 use uuid::Uuid;
 
 /// Temperature metrics integration tests
@@ -76,7 +76,10 @@ mod temperature_tests {
             created_at: Utc::now(),
         };
 
-        assert!(high_fever_temp.has_fever(), "40.0�C should be detected as high fever");
+        assert!(
+            high_fever_temp.has_fever(),
+            "40.0�C should be detected as high fever"
+        );
     }
 
     /// Test basal body temperature for fertility tracking
@@ -104,7 +107,10 @@ mod temperature_tests {
 
         // Test ovulation spike detection (0.3�C increase)
         let baseline_temp = 36.2;
-        assert!(basal_temp.basal_temp_spike(baseline_temp), "Should detect ovulation spike");
+        assert!(
+            basal_temp.basal_temp_spike(baseline_temp),
+            "Should detect ovulation spike"
+        );
 
         // Test with higher basal temperature (ovulation)
         let ovulation_temp = TemperatureMetric {
@@ -120,8 +126,10 @@ mod temperature_tests {
             created_at: Utc::now(),
         };
 
-        assert!(ovulation_temp.basal_temp_spike(baseline_temp),
-                "36.6�C should indicate ovulation spike from 36.2�C baseline");
+        assert!(
+            ovulation_temp.basal_temp_spike(baseline_temp),
+            "36.6�C should indicate ovulation spike from 36.2�C baseline"
+        );
     }
 
     /// Test Apple Watch wrist temperature monitoring
@@ -201,10 +209,10 @@ mod temperature_tests {
             id: Uuid::new_v4(),
             user_id,
             recorded_at,
-            body_temperature: Some(37.1), // Slight fever
-            basal_body_temperature: Some(36.8), // Elevated basal (ovulation)
+            body_temperature: Some(37.1),                 // Slight fever
+            basal_body_temperature: Some(36.8),           // Elevated basal (ovulation)
             apple_sleeping_wrist_temperature: Some(34.5), // Wrist temp
-            water_temperature: Some(22.0), // Room temp water
+            water_temperature: Some(22.0),                // Room temp water
             temperature_source: Some("comprehensive_measurement".to_string()),
             source_device: Some("Health Monitoring System".to_string()),
             created_at: Utc::now(),
@@ -338,8 +346,8 @@ mod temperature_tests {
     /// Test temperature batch processing functionality
     #[tokio::test]
     async fn test_temperature_batch_processing() {
-        use self_sensored::services::batch_processor::{BatchProcessor, BatchProcessingResult};
-        use self_sensored::config::BatchConfig;
+        
+        
 
         // Create test temperature metrics for batch processing
         let user_id = Uuid::new_v4();
@@ -362,7 +370,7 @@ mod temperature_tests {
                 id: Uuid::new_v4(),
                 user_id,
                 recorded_at: recorded_at + chrono::Duration::minutes(30),
-                body_temperature: Some(36.8), // Normal
+                body_temperature: Some(36.8),       // Normal
                 basal_body_temperature: Some(36.6), // Ovulation spike
                 apple_sleeping_wrist_temperature: None,
                 water_temperature: None,
@@ -393,13 +401,16 @@ mod temperature_tests {
                 temperature_source: Some("pool_thermometer".to_string()),
                 source_device: Some("Fitbit Sense".to_string()),
                 created_at: Utc::now(),
-            }
+            },
         ];
 
         // Validate each metric
         let config = ValidationConfig::default();
         for metric in &test_metrics {
-            assert!(metric.validate_with_config(&config).is_ok(), "Temperature metric should be valid");
+            assert!(
+                metric.validate_with_config(&config).is_ok(),
+                "Temperature metric should be valid"
+            );
         }
 
         // Test fever detection
@@ -408,7 +419,10 @@ mod temperature_tests {
 
         // Test ovulation detection
         let fertility_metric = &test_metrics[1];
-        assert!(fertility_metric.basal_temp_spike(36.2), "Should detect ovulation spike");
+        assert!(
+            fertility_metric.basal_temp_spike(36.2),
+            "Should detect ovulation spike"
+        );
 
         // Test Apple Watch wrist temperature
         let wrist_metric = &test_metrics[2];
@@ -428,7 +442,8 @@ mod temperature_tests {
         let mut continuous_metrics = Vec::new();
 
         // Simulate Apple Watch wrist temperature readings every 5 minutes during sleep
-        for i in 0..96 { // 8 hours * 12 readings per hour (every 5 minutes)
+        for i in 0..96 {
+            // 8 hours * 12 readings per hour (every 5 minutes)
             let temp_variation = (i as f64 / 96.0) * 2.0 - 1.0; // ±1°C variation
             let wrist_temp = 33.8 + temp_variation + (i as f64 * 0.01); // Slight temp drift
 
@@ -451,13 +466,22 @@ mod temperature_tests {
         // Validate all continuous readings
         let config = ValidationConfig::default();
         for metric in &continuous_metrics {
-            assert!(metric.validate_with_config(&config).is_ok(),
-                    "Continuous temperature reading should be valid");
+            assert!(
+                metric.validate_with_config(&config).is_ok(),
+                "Continuous temperature reading should be valid"
+            );
         }
 
         // Test chunk size optimization for high-frequency data
-        assert_eq!(continuous_metrics.len(), 96, "Should have 96 readings for 8-hour sleep");
-        assert!(continuous_metrics.len() < 8000, "Batch should be well under chunk size limit");
+        assert_eq!(
+            continuous_metrics.len(),
+            96,
+            "Should have 96 readings for 8-hour sleep"
+        );
+        assert!(
+            continuous_metrics.len() < 8000,
+            "Batch should be well under chunk size limit"
+        );
     }
 
     /// Test fertility cycle pattern validation with basal temperature trends
@@ -465,7 +489,7 @@ mod temperature_tests {
     async fn test_fertility_cycle_pattern_validation() {
         use chrono::Duration;
         let user_id = Uuid::new_v4();
-        let mut cycle_day = 1;
+        let cycle_day = 1;
         let mut cycle_metrics = Vec::new();
         let mut base_date = Utc::now() - Duration::days(28); // Start of cycle
 
@@ -496,18 +520,27 @@ mod temperature_tests {
 
         // Validate fertility pattern detection
         let baseline_temp = 36.2;
-        let ovulation_days: Vec<_> = cycle_metrics.iter()
+        let ovulation_days: Vec<_> = cycle_metrics
+            .iter()
             .filter(|m| m.basal_temp_spike(baseline_temp))
             .collect();
 
-        assert!(ovulation_days.len() >= 3, "Should detect ovulation period (days 14-16)");
-        assert!(ovulation_days.len() <= 5, "Ovulation detection should be precise");
+        assert!(
+            ovulation_days.len() >= 3,
+            "Should detect ovulation period (days 14-16)"
+        );
+        assert!(
+            ovulation_days.len() <= 5,
+            "Ovulation detection should be precise"
+        );
 
         // Test batch processing with fertility data
         let config = ValidationConfig::default();
         for metric in &cycle_metrics {
-            assert!(metric.validate_with_config(&config).is_ok(),
-                    "Fertility cycle temperature should be valid");
+            assert!(
+                metric.validate_with_config(&config).is_ok(),
+                "Fertility cycle temperature should be valid"
+            );
         }
     }
 
@@ -516,22 +549,49 @@ mod temperature_tests {
     async fn test_high_volume_multi_source_temperature_batch() {
         use chrono::Duration;
         let user_id = Uuid::new_v4();
-        let mut start_time = Utc::now() - Duration::hours(24);
+        let start_time = Utc::now() - Duration::hours(24);
         let mut high_volume_metrics = Vec::new();
 
         // Simulate 24 hours of multi-source temperature data
         for hour in 0..24 {
-            for source_reading in 0..20 { // 20 readings per hour from various sources
-                let timestamp = start_time + Duration::hours(hour) + Duration::minutes(source_reading * 3);
+            for source_reading in 0..20 {
+                // 20 readings per hour from various sources
+                let timestamp =
+                    start_time + Duration::hours(hour) + Duration::minutes(source_reading * 3);
 
                 // Alternate between different temperature sources
-                let (body_temp, basal_temp, wrist_temp, water_temp, source) = match source_reading % 4 {
-                    0 => (Some(36.5 + (hour as f64 * 0.1)), None, None, None, "body_thermometer"),
-                    1 => (None, Some(36.3 + (hour as f64 * 0.05)), None, None, "fertility_tracker"),
-                    2 => (None, None, Some(33.8 + (hour as f64 * 0.02)), None, "apple_watch"),
-                    3 => (None, None, None, Some(20.0 + (hour as f64 * 0.5)), "environmental_sensor"),
-                    _ => (Some(36.5), None, None, None, "unknown"),
-                };
+                let (body_temp, basal_temp, wrist_temp, water_temp, source) =
+                    match source_reading % 4 {
+                        0 => (
+                            Some(36.5 + (hour as f64 * 0.1)),
+                            None,
+                            None,
+                            None,
+                            "body_thermometer",
+                        ),
+                        1 => (
+                            None,
+                            Some(36.3 + (hour as f64 * 0.05)),
+                            None,
+                            None,
+                            "fertility_tracker",
+                        ),
+                        2 => (
+                            None,
+                            None,
+                            Some(33.8 + (hour as f64 * 0.02)),
+                            None,
+                            "apple_watch",
+                        ),
+                        3 => (
+                            None,
+                            None,
+                            None,
+                            Some(20.0 + (hour as f64 * 0.5)),
+                            "environmental_sensor",
+                        ),
+                        _ => (Some(36.5), None, None, None, "unknown"),
+                    };
 
                 high_volume_metrics.push(TemperatureMetric {
                     id: Uuid::new_v4(),
@@ -549,8 +609,15 @@ mod temperature_tests {
         }
 
         // Test high-volume processing (480 readings - simulates continuous monitoring)
-        assert_eq!(high_volume_metrics.len(), 480, "Should have 480 multi-source readings");
-        assert!(high_volume_metrics.len() < 8000, "Should be under optimized chunk size");
+        assert_eq!(
+            high_volume_metrics.len(),
+            480,
+            "Should have 480 multi-source readings"
+        );
+        assert!(
+            high_volume_metrics.len() < 8000,
+            "Should be under optimized chunk size"
+        );
 
         // Validate all high-volume readings
         let config = ValidationConfig::default();
@@ -558,8 +625,10 @@ mod temperature_tests {
         let mut ovulation_indicators = 0;
 
         for metric in &high_volume_metrics {
-            assert!(metric.validate_with_config(&config).is_ok(),
-                    "High-volume temperature reading should be valid");
+            assert!(
+                metric.validate_with_config(&config).is_ok(),
+                "High-volume temperature reading should be valid"
+            );
 
             if metric.has_fever() {
                 fever_count += 1;
@@ -573,12 +642,18 @@ mod temperature_tests {
         // Medical pattern analysis
         println!("High-volume batch processing results:");
         println!("  Total readings: {}", high_volume_metrics.len());
-        println!("  Fever episodes detected: {}", fever_count);
-        println!("  Ovulation indicators: {}", ovulation_indicators);
+        println!("  Fever episodes detected: {fever_count}");
+        println!("  Ovulation indicators: {ovulation_indicators}");
 
         // Performance assertions
-        assert!(fever_count < 50, "Fever detection should be reasonable for 24h period");
-        assert!(ovulation_indicators < 100, "Ovulation indicators should be selective");
+        assert!(
+            fever_count < 50,
+            "Fever detection should be reasonable for 24h period"
+        );
+        assert!(
+            ovulation_indicators < 100,
+            "Ovulation indicators should be selective"
+        );
     }
 
     /// Test temperature data analysis functions
@@ -653,7 +728,7 @@ mod temperature_tests {
                 temperature_source: Some("fertility_tracker".to_string()),
                 source_device: Some("Femometer Vinca II".to_string()),
                 created_at: Utc::now(),
-            }
+            },
         ];
 
         // Validate all scenarios
@@ -661,29 +736,54 @@ mod temperature_tests {
         for (i, metric) in test_scenarios.iter().enumerate() {
             assert!(
                 metric.validate_with_config(&config).is_ok(),
-                "Test scenario {} should be valid", i + 1
+                "Test scenario {} should be valid",
+                i + 1
             );
         }
 
         // Test specific medical conditions detection
 
         // Fever detection
-        assert!(!test_scenarios[0].has_fever(), "Normal temp should not be fever");
-        assert!(test_scenarios[1].has_fever(), "38.5°C should be detected as fever");
-        assert!(test_scenarios[2].has_fever(), "40.2°C should be detected as fever");
-        assert!(!test_scenarios[3].has_fever(), "Hypothermia should not be classified as fever");
+        assert!(
+            !test_scenarios[0].has_fever(),
+            "Normal temp should not be fever"
+        );
+        assert!(
+            test_scenarios[1].has_fever(),
+            "38.5°C should be detected as fever"
+        );
+        assert!(
+            test_scenarios[2].has_fever(),
+            "40.2°C should be detected as fever"
+        );
+        assert!(
+            !test_scenarios[3].has_fever(),
+            "Hypothermia should not be classified as fever"
+        );
 
         // Primary temperature selection
         assert_eq!(test_scenarios[0].primary_temperature(), Some(36.8));
         assert_eq!(test_scenarios[4].primary_temperature(), Some(36.8)); // Basal temp
 
         // Temperature source tracking
-        assert_eq!(test_scenarios[1].temperature_source.as_ref().unwrap(), "fever_thermometer");
-        assert_eq!(test_scenarios[4].temperature_source.as_ref().unwrap(), "fertility_tracker");
+        assert_eq!(
+            test_scenarios[1].temperature_source.as_ref().unwrap(),
+            "fever_thermometer"
+        );
+        assert_eq!(
+            test_scenarios[4].temperature_source.as_ref().unwrap(),
+            "fertility_tracker"
+        );
 
         // Ovulation spike detection (basal temp > 36.5°C)
-        assert!(test_scenarios[4].basal_temp_spike(36.2), "Should detect ovulation spike");
-        assert!(!test_scenarios[0].basal_temp_spike(36.2), "Normal basal temp shouldn't indicate spike");
+        assert!(
+            test_scenarios[4].basal_temp_spike(36.2),
+            "Should detect ovulation spike"
+        );
+        assert!(
+            !test_scenarios[0].basal_temp_spike(36.2),
+            "Normal basal temp shouldn't indicate spike"
+        );
     }
 
     /// Test temperature metric creation and field validation
@@ -711,7 +811,9 @@ mod temperature_tests {
         assert_eq!(comprehensive_temp.primary_temperature(), Some(37.0));
         assert!(comprehensive_temp.body_temperature.is_some());
         assert!(comprehensive_temp.basal_body_temperature.is_some());
-        assert!(comprehensive_temp.apple_sleeping_wrist_temperature.is_some());
+        assert!(comprehensive_temp
+            .apple_sleeping_wrist_temperature
+            .is_some());
         assert!(comprehensive_temp.water_temperature.is_some());
 
         // Test creating temperature metric with only body temperature

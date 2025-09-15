@@ -1,6 +1,7 @@
-use actix_web::{web, HttpRequest, HttpResponse, Result};
+use actix_web::{web, FromRequest, HttpMessage, HttpRequest, HttpResponse, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::pin::Pin;
 use uuid::Uuid;
 
 use crate::services::auth::AuthContext;
@@ -395,4 +396,32 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
             .route("/keys", web::delete().to(revoke_api_key))
             .route("/rate-limit", web::get().to(get_rate_limit_status)),
     );
+}
+
+impl FromRequest for ApiKeyInfo {
+    type Error = actix_web::Error;
+    type Future = Pin<Box<dyn futures_util::Future<Output = Result<Self, Self::Error>>>>;
+
+    fn from_request(req: &HttpRequest, _: &mut actix_web::dev::Payload) -> Self::Future {
+        let req = req.clone();
+        Box::pin(async move {
+            let auth_context = req
+                .extensions()
+                .get::<AuthContext>()
+                .cloned()
+                .ok_or_else(|| actix_web::error::ErrorUnauthorized("Authentication required"))?;
+
+            Ok(ApiKeyInfo {
+                id: auth_context.api_key.id,
+                name: auth_context
+                    .api_key
+                    .name
+                    .unwrap_or_else(|| "Unnamed".to_string()),
+                created_at: auth_context.api_key.created_at,
+                expires_at: auth_context.api_key.expires_at,
+                permissions: auth_context.api_key.permissions,
+                is_active: auth_context.api_key.is_active,
+            })
+        })
+    }
 }
