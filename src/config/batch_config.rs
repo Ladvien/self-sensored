@@ -1,14 +1,14 @@
 use std::env;
 
 /// PostgreSQL parameter limit constants for batch processing optimization
-pub const POSTGRESQL_MAX_PARAMS: usize = 65535; // PostgreSQL absolute maximum
+const _POSTGRESQL_MAX_PARAMS: usize = 65535; // PostgreSQL absolute maximum
 pub const SAFE_PARAM_LIMIT: usize = 52428; // 80% of max for safety margin
 
 /// Parameter counts per metric type for chunk size calculations
 pub const HEART_RATE_PARAMS_PER_RECORD: usize = 10; // user_id, recorded_at, heart_rate, resting_heart_rate, heart_rate_variability, walking_heart_rate_average, heart_rate_recovery_one_minute, atrial_fibrillation_burden_percentage, vo2_max_ml_kg_min, context, source_device
 pub const BLOOD_PRESSURE_PARAMS_PER_RECORD: usize = 6; // user_id, recorded_at, systolic, diastolic, pulse, source_device
 pub const SLEEP_PARAMS_PER_RECORD: usize = 10; // user_id, sleep_start, sleep_end, duration_minutes, deep_sleep_minutes, rem_sleep_minutes, light_sleep_minutes, awake_minutes, efficiency, source_device
-pub const ACTIVITY_PARAMS_PER_RECORD: usize = 8; // user_id, recorded_at, step_count, distance_meters, active_energy_burned_kcal, basal_energy_burned_kcal, flights_climbed, source_device
+pub const ACTIVITY_PARAMS_PER_RECORD: usize = 19; // user_id, recorded_at, step_count, distance_meters, active_energy_burned_kcal, basal_energy_burned_kcal, flights_climbed, distance_cycling_meters, distance_swimming_meters, distance_wheelchair_meters, distance_downhill_snow_sports_meters, push_count, swimming_stroke_count, nike_fuel_points, apple_exercise_time_minutes, apple_stand_time_minutes, apple_move_time_minutes, apple_stand_hour_achieved, source_device
 pub const BODY_MEASUREMENT_PARAMS_PER_RECORD: usize = 16; // user_id, recorded_at, body_weight_kg, body_mass_index, body_fat_percentage, lean_body_mass_kg, height_cm, waist_circumference_cm, hip_circumference_cm, chest_circumference_cm, arm_circumference_cm, thigh_circumference_cm, body_temperature_celsius, basal_body_temperature_celsius, measurement_source, source_device
 pub const TEMPERATURE_PARAMS_PER_RECORD: usize = 8; // user_id, recorded_at, body_temperature, basal_body_temperature, apple_sleeping_wrist_temperature, water_temperature, temperature_source, source_device
 pub const RESPIRATORY_PARAMS_PER_RECORD: usize = 7; // user_id, recorded_at, respiratory_rate, oxygen_saturation, forced_vital_capacity, forced_expiratory_volume_1, peak_expiratory_flow_rate, inhaler_usage, source_device
@@ -135,7 +135,7 @@ impl BatchConfig {
             activity_chunk_size: env::var("BATCH_ACTIVITY_CHUNK_SIZE")
                 .ok()
                 .and_then(|v| v.parse().ok())
-                .unwrap_or(6500),
+                .unwrap_or(2700), // 19 params: 65,535 ÷ 19 × 0.8 ≈ 2,700 (max ~51,300 params)
             body_measurement_chunk_size: env::var("BATCH_BODY_MEASUREMENT_CHUNK_SIZE")
                 .ok()
                 .and_then(|v| v.parse().ok())

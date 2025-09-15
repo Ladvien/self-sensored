@@ -124,9 +124,19 @@ pub async fn ingest_handler(
         Err(parse_error) => {
             error!("Enhanced JSON parse error: {}", parse_error);
             Metrics::record_error("enhanced_json_parse", "/api/v1/ingest", "error");
+
+            // Save corrupted payload to raw_ingestions for recovery
+            if let Err(save_err) =
+                save_corrupted_payload(&pool, &auth, &raw_payload, &parse_error.to_string()).await
+            {
+                error!("Failed to save corrupted payload: {}", save_err);
+            } else {
+                info!("Corrupted payload saved to raw_ingestions for later recovery");
+            }
+
             return Ok(
                 HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
-                    "JSON parsing error: {parse_error}"
+                    "JSON parsing error: {parse_error}. Payload has been saved for later recovery."
                 ))),
             );
         }
@@ -407,6 +417,60 @@ async fn store_raw_payload(
     )
     .fetch_one(pool)
     .await?;
+
+    Ok(result.id)
+}
+
+/// Save corrupted payload to raw_ingestions for later recovery
+async fn save_corrupted_payload(
+    pool: &PgPool,
+    auth: &AuthContext,
+    raw_payload: &web::Bytes,
+    error_message: &str,
+) -> Result<Uuid, sqlx::Error> {
+    // Calculate SHA256 hash of raw payload
+    let payload_hash = format!("{:x}", Sha256::digest(raw_payload.as_ref()));
+    let payload_size = raw_payload.len() as i32;
+
+    // Create a JSON object with the raw text and error information
+    let raw_json = serde_json::json!({
+        "raw_text": String::from_utf8_lossy(raw_payload),
+        "parse_error": error_message,
+        "corrupted": true,
+        "timestamp": chrono::Utc::now(),
+    });
+
+    let result = sqlx::query!(
+        r#"
+        INSERT INTO raw_ingestions (
+            user_id,
+            payload_hash,
+            payload_size_bytes,
+            raw_payload,
+            processing_status,
+            processing_errors
+        )
+        VALUES ($1, $2, $3, $4, 'error', $5)
+        RETURNING id
+        "#,
+        auth.user.id,
+        payload_hash,
+        payload_size,
+        raw_json,
+        serde_json::json!([{
+            "error_type": "json_parse_error",
+            "error_message": error_message,
+            "severity": "critical",
+            "timestamp": chrono::Utc::now(),
+        }])
+    )
+    .fetch_one(pool)
+    .await?;
+
+    info!(
+        "Saved corrupted payload to raw_ingestions: id={}, size={} bytes",
+        result.id, payload_size
+    );
 
     Ok(result.id)
 }

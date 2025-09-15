@@ -190,7 +190,7 @@ BATCH_MEMORY_LIMIT_MB=500.0
 BATCH_HEART_RATE_CHUNK_SIZE=8000      # 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000
 BATCH_BLOOD_PRESSURE_CHUNK_SIZE=8000  # 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000  
 BATCH_SLEEP_CHUNK_SIZE=6000           # 10 params: 65,535 ÷ 10 × 0.8 ≈ 6,000
-BATCH_ACTIVITY_CHUNK_SIZE=6500        # 8 params: 65,535 ÷ 8 × 0.8 ≈ 6,500
+BATCH_ACTIVITY_CHUNK_SIZE=2700        # 19 params: 65,535 ÷ 19 × 0.8 ≈ 2,700
 BATCH_WORKOUT_CHUNK_SIZE=5000         # 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000
 
 BATCH_ENABLE_PROGRESS_TRACKING=true   # Track progress for large batches
@@ -268,7 +268,7 @@ metric.validate_with_config(&validation_config)?;
 - **Heart Rate**: 7 params (user_id, recorded_at, heart_rate, resting_heart_rate, heart_rate_variability, context, source_device)
 - **Blood Pressure**: 6 params (user_id, recorded_at, systolic, diastolic, pulse, source_device)
 - **Sleep**: 9 params (user_id, sleep_start, sleep_end, duration_minutes, deep_sleep_minutes, rem_sleep_minutes, light_sleep_minutes, awake_minutes, efficiency, source_device)
-- **Activity**: 7 params (user_id, recorded_at, step_count, distance_meters, flights_climbed, active_energy_burned_kcal, basal_energy_burned_kcal, source_device)
+- **Activity**: 19 params (user_id, recorded_at, step_count, distance_meters, active_energy_burned_kcal, basal_energy_burned_kcal, flights_climbed, distance_cycling_meters, distance_swimming_meters, distance_wheelchair_meters, distance_downhill_snow_sports_meters, push_count, swimming_stroke_count, nike_fuel_points, apple_exercise_time_minutes, apple_stand_time_minutes, apple_move_time_minutes, apple_stand_hour_achieved, source_device)
 - **Workout**: 10 params (user_id, workout_type, started_at, ended_at, total_energy_kcal, active_energy_kcal, distance_meters, avg_heart_rate, max_heart_rate, source_device)
 
 **Chunking Benefits:**

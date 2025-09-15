@@ -13,6 +13,6 @@ fn main() {
     // Hash the API key
     let hash = argon2.hash_password(api_key.as_bytes(), &salt).unwrap();
 
-    println!("API Key: {}", api_key);
-    println!("Hash: {}", hash.to_string());
+    println!("API Key: {api_key}");
+    println!("Hash: {hash}");
 }
