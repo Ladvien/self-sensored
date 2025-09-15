@@ -13,18 +13,21 @@
 /// - POST /api/v1/ingest/reproductive-health - Ingest reproductive health data
 /// - GET /api/v1/data/menstrual - Query menstrual health data
 /// - GET /api/v1/data/fertility - Query fertility tracking data (enhanced privacy)
-
 use actix_web::{web, HttpRequest, HttpResponse, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Row};
 use std::net::IpAddr;
+use sqlx::types::ipnetwork::IpNetwork;
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::models::{
-    enums::{MenstrualFlow, CervicalMucusQuality, OvulationTestResult, PregnancyTestResult, TemperatureContext},
-    MenstrualMetric, FertilityMetric,
+    enums::{
+        CervicalMucusQuality, MenstrualFlow, OvulationTestResult, PregnancyTestResult,
+        TemperatureContext,
+    },
+    FertilityMetric, MenstrualMetric,
 };
 use crate::services::auth::AuthContext;
 
@@ -55,14 +58,14 @@ pub struct FertilityIngestData {
     pub recorded_at: DateTime<Utc>,
     pub cervical_mucus_quality: Option<CervicalMucusQuality>,
     pub ovulation_test_result: Option<OvulationTestResult>,
-    pub sexual_activity: Option<bool>,        // Privacy-protected field
+    pub sexual_activity: Option<bool>, // Privacy-protected field
     pub pregnancy_test_result: Option<PregnancyTestResult>,
     pub basal_body_temperature: Option<f64>, // Celsius
     pub temperature_context: Option<TemperatureContext>,
-    pub cervix_firmness: Option<i16>,  // 1=soft, 2=medium, 3=firm
-    pub cervix_position: Option<i16>,  // 1=low, 2=medium, 3=high
-    pub lh_level: Option<f64>,         // Luteinizing hormone level (mIU/mL)
-    pub notes: Option<String>,         // Encrypted field
+    pub cervix_firmness: Option<i16>, // 1=soft, 2=medium, 3=firm
+    pub cervix_position: Option<i16>, // 1=low, 2=medium, 3=high
+    pub lh_level: Option<f64>,        // Luteinizing hormone level (mIU/mL)
+    pub notes: Option<String>,        // Encrypted field
     pub source_device: Option<String>,
 }
 
@@ -128,8 +131,8 @@ pub struct PrivacyProtectedFertilityMetric {
     pub pregnancy_test_result: PregnancyTestResult,
     pub basal_body_temperature: Option<f64>,
     pub temperature_context: TemperatureContext,
-    pub fertility_probability: u8,        // Calculated fertility score
-    pub fertility_status: String,         // "low_fertility", "peak_fertility", etc.
+    pub fertility_probability: u8, // Calculated fertility score
+    pub fertility_status: String,  // "low_fertility", "peak_fertility", etc.
     pub source_device: Option<String>,
     pub created_at: DateTime<Utc>,
     // Note: Sexual activity and private notes are excluded for privacy
@@ -196,7 +199,8 @@ pub async fn ingest_reproductive_health(
                             .and_then(|h| h.to_str().ok())
                             .unwrap_or("unknown"),
                         "sensitive",
-                    ).await;
+                    )
+                    .await;
                 }
                 Err(e) => {
                     menstrual_failed += 1;
@@ -223,9 +227,11 @@ pub async fn ingest_reproductive_health(
                     // Determine privacy level based on data content
                     let privacy_level = if data.sexual_activity.is_some() {
                         "highly_sensitive"
-                    } else if data.pregnancy_test_result
+                    } else if data
+                        .pregnancy_test_result
                         .as_ref()
-                        .map_or(false, |p| *p != PregnancyTestResult::NotTested) {
+                        .map_or(false, |p| *p != PregnancyTestResult::NotTested)
+                    {
                         "highly_sensitive"
                     } else {
                         "sensitive"
@@ -245,7 +251,8 @@ pub async fn ingest_reproductive_health(
                             .and_then(|h| h.to_str().ok())
                             .unwrap_or("unknown"),
                         privacy_level,
-                    ).await;
+                    )
+                    .await;
                 }
                 Err(e) => {
                     fertility_failed += 1;
@@ -311,7 +318,8 @@ pub async fn get_menstrual_data(
             .and_then(|h| h.to_str().ok())
             .unwrap_or("unknown"),
         "sensitive",
-    ).await;
+    )
+    .await;
 
     let limit = query.limit.unwrap_or(100).min(500); // Max 500 records for privacy
     let offset = query.offset.unwrap_or(0);
@@ -320,7 +328,7 @@ pub async fn get_menstrual_data(
     let mut query_builder = sqlx::QueryBuilder::new(
         "SELECT id, user_id, recorded_at, menstrual_flow, spotting, cycle_day,
          cramps_severity, mood_rating, energy_level, source_device, created_at
-         FROM menstrual_health WHERE user_id = "
+         FROM menstrual_health WHERE user_id = ",
     );
     query_builder.push_bind(&auth.user.id);
 
@@ -386,7 +394,7 @@ pub async fn get_menstrual_data(
 
             // Get total count
             let count_result = sqlx::query_scalar::<_, i64>(
-                "SELECT COUNT(*) FROM menstrual_health WHERE user_id = $1"
+                "SELECT COUNT(*) FROM menstrual_health WHERE user_id = $1",
             )
             .bind(&auth.user.id)
             .fetch_one(&**pool)
@@ -445,14 +453,23 @@ pub async fn get_fertility_data(
         auth.api_key.as_ref().map(|k| &k.id),
         "access",
         "fertility_tracking",
-        if include_sensitive { "fertility_data_with_sexual_activity" } else { "fertility_data" },
+        if include_sensitive {
+            "fertility_data_with_sexual_activity"
+        } else {
+            "fertility_data"
+        },
         &client_ip,
         req.headers()
             .get("user-agent")
             .and_then(|h| h.to_str().ok())
             .unwrap_or("unknown"),
-        if include_sensitive { "highly_sensitive" } else { "sensitive" },
-    ).await;
+        if include_sensitive {
+            "highly_sensitive"
+        } else {
+            "sensitive"
+        },
+    )
+    .await;
 
     let limit = query.limit.unwrap_or(100).min(200); // Lower limit for fertility data
     let offset = query.offset.unwrap_or(0);
@@ -462,7 +479,7 @@ pub async fn get_fertility_data(
         "SELECT id, user_id, recorded_at, cervical_mucus_quality, ovulation_test_result,
          pregnancy_test_result, basal_body_temperature, temperature_context,
          cervix_firmness, cervix_position, lh_level, source_device, created_at
-         FROM fertility_tracking WHERE user_id = "
+         FROM fertility_tracking WHERE user_id = ",
     );
     query_builder.push_bind(&auth.user.id);
 
@@ -538,7 +555,7 @@ pub async fn get_fertility_data(
 
             // Get total count
             let count_result = sqlx::query_scalar::<_, i64>(
-                "SELECT COUNT(*) FROM fertility_tracking WHERE user_id = $1"
+                "SELECT COUNT(*) FROM fertility_tracking WHERE user_id = $1",
             )
             .bind(&auth.user.id)
             .fetch_one(&**pool)
@@ -552,7 +569,12 @@ pub async fn get_fertility_data(
                     start_date: start_date.unwrap_or(Utc::now()),
                     end_date: end_date.unwrap_or(Utc::now()),
                 },
-                privacy_level: if include_sensitive { "highly_sensitive" } else { "sensitive" }.to_string(),
+                privacy_level: if include_sensitive {
+                    "highly_sensitive"
+                } else {
+                    "sensitive"
+                }
+                .to_string(),
                 audit_logged: true,
                 sexual_activity_included: false, // Never included in API responses
             };
@@ -604,7 +626,9 @@ async fn process_menstrual_data(
     };
 
     // Validate the metric
-    metric.validate().map_err(|e| format!("Validation failed: {}", e))?;
+    metric
+        .validate()
+        .map_err(|e| format!("Validation failed: {}", e))?;
 
     // Insert into database with upsert (ON CONFLICT)
     sqlx::query!(
@@ -630,9 +654,9 @@ async fn process_menstrual_data(
         metric.menstrual_flow as _,
         metric.spotting,
         metric.cycle_day,
-        metric.cramps_severity,
-        metric.mood_rating,
-        metric.energy_level,
+        metric.cramps_severity.map(|v| v as i32),
+        metric.mood_rating.map(|v| v as i32),
+        metric.energy_level.map(|v| v as i32),
         metric.notes,
         metric.source_device,
         metric.created_at
@@ -656,11 +680,17 @@ async fn process_fertility_data(
         user_id: *user_id,
         recorded_at: data.recorded_at,
         cervical_mucus_quality: data.cervical_mucus_quality,
-        ovulation_test_result: data.ovulation_test_result.unwrap_or(OvulationTestResult::NotTested),
+        ovulation_test_result: data
+            .ovulation_test_result
+            .unwrap_or(OvulationTestResult::NotTested),
         sexual_activity: data.sexual_activity,
-        pregnancy_test_result: data.pregnancy_test_result.unwrap_or(PregnancyTestResult::NotTested),
+        pregnancy_test_result: data
+            .pregnancy_test_result
+            .unwrap_or(PregnancyTestResult::NotTested),
         basal_body_temperature: data.basal_body_temperature,
-        temperature_context: data.temperature_context.unwrap_or(TemperatureContext::Basal),
+        temperature_context: data
+            .temperature_context
+            .unwrap_or(TemperatureContext::Basal),
         cervix_firmness: data.cervix_firmness,
         cervix_position: data.cervix_position,
         lh_level: data.lh_level,
@@ -670,7 +700,9 @@ async fn process_fertility_data(
     };
 
     // Validate the metric
-    metric.validate().map_err(|e| format!("Validation failed: {}", e))?;
+    metric
+        .validate()
+        .map_err(|e| format!("Validation failed: {}", e))?;
 
     // Insert into database with upsert (ON CONFLICT)
     sqlx::query!(
@@ -703,8 +735,8 @@ async fn process_fertility_data(
         metric.pregnancy_test_result as _,
         metric.basal_body_temperature,
         metric.temperature_context as _,
-        metric.cervix_firmness,
-        metric.cervix_position,
+        metric.cervix_firmness.map(|v| v as i32),
+        metric.cervix_position.map(|v| v as i32),
         metric.lh_level,
         metric.notes,
         metric.source_device,
@@ -729,7 +761,7 @@ async fn log_reproductive_health_audit(
     user_agent: &str,
     privacy_level: &str,
 ) {
-    let ip_addr: Option<IpAddr> = ip_address.parse().ok();
+    let ip_addr: Option<IpNetwork> = ip_address.parse::<IpAddr>().ok().map(|addr| addr.into());
 
     match sqlx::query!(
         r#"
@@ -749,7 +781,7 @@ async fn log_reproductive_health_audit(
     .execute(pool)
     .await
     {
-        Ok(_) => {},
+        Ok(_) => {}
         Err(e) => {
             error!(
                 user_id = %user_id,

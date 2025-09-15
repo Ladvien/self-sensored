@@ -189,11 +189,19 @@ pub async fn ingest_async_optimized_handler(
             activity_chunk_size: 7000,
             respiratory_chunk_size: 7000,
             body_measurement_chunk_size: 3500,
+            temperature_chunk_size: 8000,
             workout_chunk_size: 5000,
             blood_glucose_chunk_size: 6500,
+            nutrition_chunk_size: 1600,
+            // Reproductive Health Batch Processing (Privacy-Optimized for Large Batches)
+            menstrual_chunk_size: 6500, // 8 params: optimized for high-frequency tracking
+            fertility_chunk_size: 4300, // 12 params: privacy-optimized chunks
             enable_progress_tracking: false, // Disable for speed
             enable_intra_batch_deduplication: true,
             enable_dual_write_activity_metrics: false, // Disable for async endpoint to prioritize speed
+            // Privacy and Security Configuration for Reproductive Health
+            enable_reproductive_health_encryption: true, // Always enable encryption for sensitive data
+            reproductive_health_audit_logging: true,     // Always enable audit logging
         }
     } else {
         BatchConfig::default()

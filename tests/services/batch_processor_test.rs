@@ -8,7 +8,10 @@ use self_sensored::models::{
     ActivityMetric, BloodPressureMetric, BodyMeasurementMetric, HealthMetric, HeartRateMetric, IngestData,
     IngestPayload, RespiratoryMetric, SleepMetric, WorkoutData,
     // Reproductive Health Metrics (HIPAA-Compliant Testing)
-    MenstrualMetric, FertilityMetric, MenstrualFlow, CervicalMucusQuality, OverulationTestResult,
+    MenstrualMetric, FertilityMetric,
+};
+use self_sensored::models::enums::{
+    MenstrualFlow, CervicalMucusQuality, OvulationTestResult,
     PregnancyTestResult, TemperatureContext,
 };
 use self_sensored::services::batch_processor::{BatchConfig, BatchProcessor, ProcessingStatus};
@@ -49,6 +52,9 @@ async fn cleanup_test_data(pool: &PgPool, user_id: Uuid) {
         "body_measurements",
         "respiratory_metrics",
         "workouts",
+        // Reproductive Health Tables (HIPAA-Compliant Test Cleanup)
+        "menstrual_health",
+        "fertility_tracking",
         "users"
     ];
     
@@ -1356,6 +1362,151 @@ async fn test_fertility_tracking_batch_processing() {
     assert!(count_result.is_ok(), "Should be able to count fertility tracking records");
     let record_count = count_result.unwrap().unwrap_or(0) as usize;
     assert_eq!(record_count, 14, "Database should contain all 14 fertility tracking records");
+
+    cleanup_test_data(&pool, user_id).await;
+}
+
+/// Test large batch processing with reproductive health data to verify PostgreSQL parameter limits
+#[tokio::test]
+async fn test_reproductive_health_large_batch_parameter_limits() {
+    let pool = create_test_pool().await;
+    let user_id = create_test_user(&pool).await;
+
+    // Test with customized batch configuration for parameter limit validation
+    let config = BatchConfig {
+        max_retries: 3,
+        initial_backoff_ms: 100,
+        max_backoff_ms: 5000,
+        enable_parallel_processing: true,
+        chunk_size: 1000,
+        memory_limit_mb: 500.0,
+        heart_rate_chunk_size: 8000,
+        blood_pressure_chunk_size: 8000,
+        sleep_chunk_size: 6000,
+        activity_chunk_size: 6500,
+        body_measurement_chunk_size: 3000,
+        temperature_chunk_size: 8000,
+        respiratory_chunk_size: 7000,
+        workout_chunk_size: 5000,
+        blood_glucose_chunk_size: 6500,
+        nutrition_chunk_size: 1600,
+        // Test reproductive health chunk sizes near PostgreSQL parameter limits
+        menstrual_chunk_size: 6500, // 8 params: 6500 * 8 = 52,000 (under 65,535 limit)
+        fertility_chunk_size: 4300, // 12 params: 4300 * 12 = 51,600 (under 65,535 limit)
+        enable_progress_tracking: true,
+        enable_intra_batch_deduplication: true,
+        enable_dual_write_activity_metrics: false,
+        enable_reproductive_health_encryption: true,
+        reproductive_health_audit_logging: true,
+    };
+
+    // Validate configuration against PostgreSQL limits
+    assert!(config.validate().is_ok(), "Configuration should respect PostgreSQL parameter limits");
+
+    let processor = BatchProcessor::with_config(pool.clone(), config.clone());
+
+    // Create large batches of reproductive health data to test chunking
+    let base_time = Utc::now();
+    let mut menstrual_metrics = Vec::new();
+    let mut fertility_metrics = Vec::new();
+
+    // Create 7000 menstrual metrics (larger than chunk size to test chunking)
+    for i in 0..7000 {
+        let recorded_at = base_time + chrono::Duration::minutes(i);
+        menstrual_metrics.push(HealthMetric::Menstrual(MenstrualMetric {
+            id: Uuid::new_v4(),
+            user_id,
+            recorded_at,
+            menstrual_flow: if i % 4 == 0 { MenstrualFlow::Heavy } else { MenstrualFlow::Light },
+            spotting: i % 3 == 0,
+            cycle_day: Some(((i % 28) + 1) as i16),
+            cramps_severity: Some(((i % 10) + 1) as i16),
+            mood_rating: Some(((i % 5) + 1) as i16),
+            energy_level: Some(((i % 5) + 1) as i16),
+            notes: Some(format!("Test menstrual note {}", i)),
+            source_device: Some("iPhone".to_string()),
+            created_at: recorded_at,
+        }));
+    }
+
+    // Create 5000 fertility metrics (larger than chunk size to test chunking)
+    for i in 0..5000 {
+        let recorded_at = base_time + chrono::Duration::minutes(i);
+        fertility_metrics.push(HealthMetric::Fertility(FertilityMetric {
+            id: Uuid::new_v4(),
+            user_id,
+            recorded_at,
+            cervical_mucus_quality: if i % 3 == 0 { Some(CervicalMucusQuality::Creamy) } else { None },
+            ovulation_test_result: if i % 10 == 0 { OvulationTestResult::Peak } else { OvulationTestResult::Low },
+            sexual_activity: Some(i % 7 == 0), // Privacy-protected field
+            pregnancy_test_result: PregnancyTestResult::NotTested,
+            basal_body_temperature: Some(36.5 + (i as f64 * 0.01)),
+            temperature_context: TemperatureContext::Basal,
+            cervix_firmness: Some(((i % 3) + 1) as i16),
+            cervix_position: Some(((i % 3) + 1) as i16),
+            lh_level: Some(i as f64 * 0.1),
+            notes: Some(format!("Test fertility note {}", i)),
+            source_device: Some("iPhone".to_string()),
+            created_at: recorded_at,
+        }));
+    }
+
+    let mut all_metrics = menstrual_metrics;
+    all_metrics.extend(fertility_metrics);
+
+    let payload = IngestPayload {
+        data: IngestData {
+            metrics: all_metrics,
+            workouts: vec![],
+        },
+    };
+
+    let start_time = Instant::now();
+    let result = processor.process_batch(user_id, payload).await;
+    let processing_time = start_time.elapsed();
+
+    // Verify batch processing succeeded
+    assert!(result.processed_count > 0, "Should process reproductive health metrics");
+    assert_eq!(result.failed_count, 0, "Should not have any failed metrics");
+    assert!(result.errors.is_empty(), "Should not have any processing errors");
+
+    // Performance requirements: Process 12,000 metrics in < 10 seconds
+    assert!(processing_time < Duration::from_secs(10),
+        "Large batch processing should complete within 10 seconds, took {:?}", processing_time);
+
+    println!("Processed {} reproductive health metrics in {:?}",
+        result.processed_count, processing_time);
+
+    // Verify deduplication statistics if enabled
+    if let Some(dedup_stats) = result.deduplication_stats {
+        println!("Deduplication stats: menstrual={}, fertility={}, total={}",
+            dedup_stats.menstrual_duplicates,
+            dedup_stats.fertility_duplicates,
+            dedup_stats.total_duplicates);
+    }
+
+    // Verify data was stored correctly
+    let menstrual_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM menstrual_health WHERE user_id = $1"
+    )
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .expect("Should count menstrual records");
+
+    let fertility_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM fertility_tracking WHERE user_id = $1"
+    )
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .expect("Should count fertility records");
+
+    assert!(menstrual_count > 0, "Should have stored menstrual metrics");
+    assert!(fertility_count > 0, "Should have stored fertility metrics");
+
+    println!("Stored {} menstrual metrics and {} fertility metrics",
+        menstrual_count, fertility_count);
 
     cleanup_test_data(&pool, user_id).await;
 }

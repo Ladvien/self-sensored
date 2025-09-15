@@ -5,7 +5,7 @@ pub const POSTGRESQL_MAX_PARAMS: usize = 65535; // PostgreSQL absolute maximum
 pub const SAFE_PARAM_LIMIT: usize = 52428; // 80% of max for safety margin
 
 /// Parameter counts per metric type for chunk size calculations
-pub const HEART_RATE_PARAMS_PER_RECORD: usize = 6; // user_id, recorded_at, heart_rate, resting_heart_rate, context, source_device
+pub const HEART_RATE_PARAMS_PER_RECORD: usize = 10; // user_id, recorded_at, heart_rate, resting_heart_rate, heart_rate_variability, walking_heart_rate_average, heart_rate_recovery_one_minute, atrial_fibrillation_burden_percentage, vo2_max_ml_kg_min, context, source_device
 pub const BLOOD_PRESSURE_PARAMS_PER_RECORD: usize = 6; // user_id, recorded_at, systolic, diastolic, pulse, source_device
 pub const SLEEP_PARAMS_PER_RECORD: usize = 10; // user_id, sleep_start, sleep_end, duration_minutes, deep_sleep_minutes, rem_sleep_minutes, light_sleep_minutes, awake_minutes, efficiency, source_device
 pub const ACTIVITY_PARAMS_PER_RECORD: usize = 8; // user_id, recorded_at, step_count, distance_meters, active_energy_burned_kcal, basal_energy_burned_kcal, flights_climbed, source_device
@@ -42,8 +42,8 @@ pub struct BatchConfig {
     pub nutrition_chunk_size: usize,  // 32 params per record -> max 2,047
 
     // Reproductive Health Batch Processing (HIPAA-Compliant with Privacy Controls)
-    pub menstrual_chunk_size: usize,  // 8 params per record -> max 8,192
-    pub fertility_chunk_size: usize,  // 12 params per record -> max 5,461
+    pub menstrual_chunk_size: usize, // 8 params per record -> max 8,192
+    pub fertility_chunk_size: usize, // 12 params per record -> max 5,461
 
     pub enable_progress_tracking: bool, // Track progress for large batches
     pub enable_intra_batch_deduplication: bool, // Enable deduplication within batches
@@ -65,7 +65,7 @@ impl Default for BatchConfig {
             chunk_size: 1000,
             memory_limit_mb: 500.0,
             // Safe chunk sizes (80% of theoretical max for reliability)
-            heart_rate_chunk_size: 8000, // 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000 (max ~48,000 params)
+            heart_rate_chunk_size: 4200, // 10 params: 65,535 ÷ 10 × 0.8 ≈ 4,200 (max ~42,000 params) - Updated for expanded cardiovascular metrics
             blood_pressure_chunk_size: 8000, // 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000 (max ~48,000 params)
             sleep_chunk_size: 6000, // 10 params: 65,535 ÷ 10 × 0.8 ≈ 6,000 (max ~60,000 params)
             activity_chunk_size: 6500, // 8 params: 65,535 ÷ 8 × 0.8 ≈ 6,500 (max ~52,000 params)
@@ -86,7 +86,7 @@ impl Default for BatchConfig {
 
             // Privacy and Security Defaults for Reproductive Health
             enable_reproductive_health_encryption: true, // Enable encryption by default for sensitive data
-            reproductive_health_audit_logging: true, // Enable enhanced audit logging by default
+            reproductive_health_audit_logging: true,     // Enable enhanced audit logging by default
         }
     }
 }
@@ -123,7 +123,7 @@ impl BatchConfig {
             heart_rate_chunk_size: env::var("BATCH_HEART_RATE_CHUNK_SIZE")
                 .ok()
                 .and_then(|v| v.parse().ok())
-                .unwrap_or(8000),
+                .unwrap_or(4200), // Updated for expanded cardiovascular metrics (10 params)
             blood_pressure_chunk_size: env::var("BATCH_BLOOD_PRESSURE_CHUNK_SIZE")
                 .ok()
                 .and_then(|v| v.parse().ok())

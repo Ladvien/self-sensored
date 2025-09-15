@@ -9,7 +9,6 @@ use crate::config::ValidationConfig;
 use crate::middleware::metrics::Metrics;
 use crate::models::health_metrics::RespiratoryMetric;
 use crate::services::auth::AuthContext;
-use crate::services::batch_processor::BatchProcessor;
 
 /// Respiratory data ingestion payload
 #[derive(Debug, Deserialize, Serialize)]
@@ -21,12 +20,12 @@ pub struct RespiratoryIngestPayload {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct RespiratoryIngestRequest {
     pub recorded_at: DateTime<Utc>,
-    pub respiratory_rate: Option<i32>,              // breaths per minute (12-20 normal)
-    pub oxygen_saturation: Option<f64>,             // SpO2 percentage (90-100% normal, <90% critical)
-    pub forced_vital_capacity: Option<f64>,         // FVC in liters (spirometry)
-    pub forced_expiratory_volume_1: Option<f64>,    // FEV1 in liters (age/gender specific)
-    pub peak_expiratory_flow_rate: Option<f64>,     // PEFR in L/min (asthma monitoring)
-    pub inhaler_usage: Option<i32>,                 // count of inhaler uses/puffs
+    pub respiratory_rate: Option<i32>, // breaths per minute (12-20 normal)
+    pub oxygen_saturation: Option<f64>, // SpO2 percentage (90-100% normal, <90% critical)
+    pub forced_vital_capacity: Option<f64>, // FVC in liters (spirometry)
+    pub forced_expiratory_volume_1: Option<f64>, // FEV1 in liters (age/gender specific)
+    pub peak_expiratory_flow_rate: Option<f64>, // PEFR in L/min (asthma monitoring)
+    pub inhaler_usage: Option<i32>,    // count of inhaler uses/puffs
     pub source_device: Option<String>,
 }
 
@@ -205,7 +204,7 @@ pub async fn ingest_respiratory_handler(
                     critical_alerts.extend(alerts);
                 }
                 respiratory_metrics.push(metric);
-            },
+            }
             Err(error) => {
                 processing_errors.push(RespiratoryProcessingError {
                     index,
@@ -220,7 +219,8 @@ pub async fn ingest_respiratory_handler(
     }
 
     // Batch process respiratory metrics using direct database insertion
-    let batch_result = insert_respiratory_metrics_batch(pool.get_ref(), user_id, respiratory_metrics).await;
+    let batch_result =
+        insert_respiratory_metrics_batch(pool.get_ref(), user_id, respiratory_metrics).await;
 
     let processing_time = start_time.elapsed();
 
@@ -309,7 +309,9 @@ pub async fn query_respiratory_handler(
 
     // Set default date range if not provided (last 30 days)
     let end_date = query.end_date.unwrap_or_else(Utc::now);
-    let start_date = query.start_date.unwrap_or_else(|| end_date - chrono::Duration::days(30));
+    let start_date = query
+        .start_date
+        .unwrap_or_else(|| end_date - chrono::Duration::days(30));
     let limit = query.limit.unwrap_or(1000).min(10000) as i64;
 
     // Build query based on parameters
@@ -317,7 +319,7 @@ pub async fn query_respiratory_handler(
         "SELECT id, user_id, recorded_at, respiratory_rate, oxygen_saturation,
          forced_vital_capacity, forced_expiratory_volume_1, peak_expiratory_flow_rate,
          inhaler_usage, source_device, created_at
-         FROM respiratory_metrics WHERE user_id = "
+         FROM respiratory_metrics WHERE user_id = ",
     );
     query_builder.push_bind(user_id);
     query_builder.push(" AND recorded_at BETWEEN ");
@@ -330,13 +332,13 @@ pub async fn query_respiratory_handler(
         match metric_type.as_str() {
             "spo2" => {
                 query_builder.push(" AND oxygen_saturation IS NOT NULL");
-            },
+            }
             "respiratory_rate" => {
                 query_builder.push(" AND respiratory_rate IS NOT NULL");
-            },
+            }
             "spirometry" => {
                 query_builder.push(" AND (forced_vital_capacity IS NOT NULL OR forced_expiratory_volume_1 IS NOT NULL OR peak_expiratory_flow_rate IS NOT NULL)");
-            },
+            }
             _ => {} // No additional filter for unknown types
         }
     }
@@ -350,23 +352,30 @@ pub async fn query_respiratory_handler(
     query_builder.push(" ORDER BY recorded_at DESC LIMIT ");
     query_builder.push_bind(limit);
 
-    match query_builder.build_query_as::<RespiratoryMetric>().fetch_all(pool.get_ref()).await {
+    match query_builder
+        .build_query_as::<RespiratoryMetric>()
+        .fetch_all(pool.get_ref())
+        .await
+    {
         Ok(respiratory_metrics) => {
             // Generate summary statistics
-            let summary = match generate_respiratory_summary(pool.get_ref(), user_id, start_date, end_date).await {
-                Ok(summary) => summary,
-                Err(e) => {
-                    error!(
-                        user_id = %user_id,
-                        error = %e,
-                        "Failed to generate respiratory summary"
-                    );
-                    return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
-                        "error": "summary_generation_failed",
-                        "message": "Failed to generate respiratory data summary"
-                    })));
-                }
-            };
+            let summary =
+                match generate_respiratory_summary(pool.get_ref(), user_id, start_date, end_date)
+                    .await
+                {
+                    Ok(summary) => summary,
+                    Err(e) => {
+                        error!(
+                            user_id = %user_id,
+                            error = %e,
+                            "Failed to generate respiratory summary"
+                        );
+                        return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
+                            "error": "summary_generation_failed",
+                            "message": "Failed to generate respiratory data summary"
+                        })));
+                    }
+                };
 
             // Generate timeline analysis if sufficient data
             let timeline_analysis = if respiratory_metrics.len() > 5 {
@@ -430,7 +439,9 @@ fn convert_to_respiratory_metric(
 }
 
 /// Check for critical respiratory conditions requiring immediate attention
-fn check_critical_respiratory_conditions(metric: &RespiratoryMetric) -> Option<Vec<RespiratoryAlert>> {
+fn check_critical_respiratory_conditions(
+    metric: &RespiratoryMetric,
+) -> Option<Vec<RespiratoryAlert>> {
     let mut alerts = Vec::new();
 
     // Critical SpO2 levels (< 90%)
@@ -441,7 +452,9 @@ fn check_critical_respiratory_conditions(metric: &RespiratoryMetric) -> Option<V
                 severity: "emergency".to_string(),
                 message: format!("Critical SpO2 level detected: {:.1}%", spo2),
                 value: Some(spo2),
-                medical_recommendation: "Seek immediate medical attention. SpO2 below 90% indicates severe hypoxemia.".to_string(),
+                medical_recommendation:
+                    "Seek immediate medical attention. SpO2 below 90% indicates severe hypoxemia."
+                        .to_string(),
                 requires_immediate_attention: true,
             });
         } else if spo2 < 95.0 {
@@ -450,7 +463,8 @@ fn check_critical_respiratory_conditions(metric: &RespiratoryMetric) -> Option<V
                 severity: "warning".to_string(),
                 message: format!("Low SpO2 level detected: {:.1}%", spo2),
                 value: Some(spo2),
-                medical_recommendation: "Consider consulting healthcare provider if persistent.".to_string(),
+                medical_recommendation: "Consider consulting healthcare provider if persistent."
+                    .to_string(),
                 requires_immediate_attention: false,
             });
         }
@@ -459,13 +473,18 @@ fn check_critical_respiratory_conditions(metric: &RespiratoryMetric) -> Option<V
     // Abnormal respiratory rates
     if let Some(rate) = metric.respiratory_rate {
         if rate < 8 || rate > 30 {
-            let severity = if rate < 6 || rate > 35 { "critical" } else { "warning" };
+            let severity = if rate < 6 || rate > 35 {
+                "critical"
+            } else {
+                "warning"
+            };
             alerts.push(RespiratoryAlert {
                 alert_type: "abnormal_respiratory_rate".to_string(),
                 severity: severity.to_string(),
                 message: format!("Abnormal respiratory rate: {} breaths/min", rate),
                 value: Some(rate as f64),
-                medical_recommendation: "Monitor closely and consult healthcare provider if persistent.".to_string(),
+                medical_recommendation:
+                    "Monitor closely and consult healthcare provider if persistent.".to_string(),
                 requires_immediate_attention: severity == "critical",
             });
         }
@@ -485,7 +504,11 @@ fn check_critical_respiratory_conditions(metric: &RespiratoryMetric) -> Option<V
         }
     }
 
-    if alerts.is_empty() { None } else { Some(alerts) }
+    if alerts.is_empty() {
+        None
+    } else {
+        Some(alerts)
+    }
 }
 
 /// Determine the primary metric type from the request
@@ -494,7 +517,10 @@ fn determine_respiratory_metric_type(request: &RespiratoryIngestRequest) -> Opti
         Some("spo2".to_string())
     } else if request.respiratory_rate.is_some() {
         Some("respiratory_rate".to_string())
-    } else if request.forced_vital_capacity.is_some() || request.forced_expiratory_volume_1.is_some() || request.peak_expiratory_flow_rate.is_some() {
+    } else if request.forced_vital_capacity.is_some()
+        || request.forced_expiratory_volume_1.is_some()
+        || request.peak_expiratory_flow_rate.is_some()
+    {
         Some("spirometry".to_string())
     } else if request.inhaler_usage.is_some() {
         Some("inhaler_usage".to_string())
@@ -561,13 +587,19 @@ fn analyze_respiratory_data(metrics: &[RespiratoryIngestRequest]) -> Respiratory
         recommendations.push("Seek immediate medical attention for low oxygen levels".to_string());
     }
     if abnormal_respiratory_rate_detected {
-        recommendations.push("Monitor respiratory rate and consult healthcare provider if persistent".to_string());
+        recommendations.push(
+            "Monitor respiratory rate and consult healthcare provider if persistent".to_string(),
+        );
     }
     if excessive_inhaler_usage {
-        recommendations.push("Consider reviewing asthma action plan with healthcare provider".to_string());
+        recommendations
+            .push("Consider reviewing asthma action plan with healthcare provider".to_string());
     }
     if average_spo2.is_some_and(|avg| avg < 95.0) {
-        recommendations.push("Monitor oxygen levels closely and ensure proper pulse oximeter positioning".to_string());
+        recommendations.push(
+            "Monitor oxygen levels closely and ensure proper pulse oximeter positioning"
+                .to_string(),
+        );
     }
 
     // Assess lung function if spirometry data available
@@ -610,7 +642,10 @@ fn assess_lung_function(metrics: &[RespiratoryIngestRequest]) -> Option<LungFunc
         } else if fev1_fvc_ratio >= 0.5 {
             ("mild_obstruction", "Mild airway obstruction detected")
         } else if fev1_fvc_ratio >= 0.3 {
-            ("moderate_obstruction", "Moderate airway obstruction detected")
+            (
+                "moderate_obstruction",
+                "Moderate airway obstruction detected",
+            )
         } else {
             ("severe_obstruction", "Severe airway obstruction detected")
         };
@@ -678,7 +713,9 @@ async fn generate_respiratory_summary(
 }
 
 /// Generate timeline analysis for respiratory data trends
-fn generate_respiratory_timeline_analysis(metrics: &[RespiratoryMetric]) -> RespiratoryTimelineAnalysis {
+fn generate_respiratory_timeline_analysis(
+    metrics: &[RespiratoryMetric],
+) -> RespiratoryTimelineAnalysis {
     // Sort metrics by date for trend analysis
     let mut sorted_metrics = metrics.to_vec();
     sorted_metrics.sort_by(|a, b| a.recorded_at.cmp(&b.recorded_at));
@@ -719,8 +756,16 @@ fn analyze_spo2_trend(metrics: &[RespiratoryMetric]) -> String {
     }
 
     // Calculate trend using simple linear regression approach
-    let first_half_avg = spo2_values[..spo2_values.len()/2].iter().map(|(_, spo2)| *spo2).sum::<f64>() / (spo2_values.len() / 2) as f64;
-    let second_half_avg = spo2_values[spo2_values.len()/2..].iter().map(|(_, spo2)| *spo2).sum::<f64>() / (spo2_values.len() - spo2_values.len()/2) as f64;
+    let first_half_avg = spo2_values[..spo2_values.len() / 2]
+        .iter()
+        .map(|(_, spo2)| *spo2)
+        .sum::<f64>()
+        / (spo2_values.len() / 2) as f64;
+    let second_half_avg = spo2_values[spo2_values.len() / 2..]
+        .iter()
+        .map(|(_, spo2)| *spo2)
+        .sum::<f64>()
+        / (spo2_values.len() - spo2_values.len() / 2) as f64;
 
     if second_half_avg > first_half_avg + 1.0 {
         "improving".to_string()
@@ -743,8 +788,16 @@ fn analyze_respiratory_rate_trend(metrics: &[RespiratoryMetric]) -> String {
     }
 
     // Calculate trend
-    let first_half_avg = rate_values[..rate_values.len()/2].iter().map(|(_, rate)| *rate as f64).sum::<f64>() / (rate_values.len() / 2) as f64;
-    let second_half_avg = rate_values[rate_values.len()/2..].iter().map(|(_, rate)| *rate as f64).sum::<f64>() / (rate_values.len() - rate_values.len()/2) as f64;
+    let first_half_avg = rate_values[..rate_values.len() / 2]
+        .iter()
+        .map(|(_, rate)| *rate as f64)
+        .sum::<f64>()
+        / (rate_values.len() / 2) as f64;
+    let second_half_avg = rate_values[rate_values.len() / 2..]
+        .iter()
+        .map(|(_, rate)| *rate as f64)
+        .sum::<f64>()
+        / (rate_values.len() - rate_values.len() / 2) as f64;
 
     if second_half_avg > first_half_avg + 2.0 {
         "increasing".to_string()
@@ -767,8 +820,14 @@ fn analyze_inhaler_usage_pattern(metrics: &[RespiratoryMetric]) -> String {
     }
 
     // Calculate trend
-    let first_half_sum = inhaler_values[..inhaler_values.len()/2].iter().map(|(_, usage)| *usage).sum::<i32>();
-    let second_half_sum = inhaler_values[inhaler_values.len()/2..].iter().map(|(_, usage)| *usage).sum::<i32>();
+    let first_half_sum = inhaler_values[..inhaler_values.len() / 2]
+        .iter()
+        .map(|(_, usage)| *usage)
+        .sum::<i32>();
+    let second_half_sum = inhaler_values[inhaler_values.len() / 2..]
+        .iter()
+        .map(|(_, usage)| *usage)
+        .sum::<i32>();
 
     if second_half_sum > first_half_sum + 5 {
         "increasing".to_string()
@@ -785,8 +844,10 @@ fn identify_critical_periods(metrics: &[RespiratoryMetric]) -> Vec<RespiratoryPe
     let mut current_period: Option<(DateTime<Utc>, Vec<&RespiratoryMetric>)> = None;
 
     for metric in metrics {
-        let is_critical = metric.oxygen_saturation.map_or(false, |spo2| spo2 < 90.0) ||
-                         metric.respiratory_rate.map_or(false, |rate| rate < 8 || rate > 30);
+        let is_critical = metric.oxygen_saturation.map_or(false, |spo2| spo2 < 90.0)
+            || metric
+                .respiratory_rate
+                .map_or(false, |rate| rate < 8 || rate > 30);
 
         if is_critical {
             match &mut current_period {
@@ -800,26 +861,47 @@ fn identify_critical_periods(metrics: &[RespiratoryMetric]) -> Vec<RespiratoryPe
         } else if let Some((start_time, metrics_in_period)) = current_period.take() {
             // End of critical period
             if let Some(last_metric) = metrics_in_period.last() {
-                let avg_spo2 = metrics_in_period.iter()
+                let avg_spo2 = metrics_in_period
+                    .iter()
                     .filter_map(|m| m.oxygen_saturation)
-                    .sum::<f64>() / metrics_in_period.len() as f64;
+                    .sum::<f64>()
+                    / metrics_in_period.len() as f64;
 
-                let avg_respiratory_rate = metrics_in_period.iter()
+                let avg_respiratory_rate = metrics_in_period
+                    .iter()
                     .filter_map(|m| m.respiratory_rate.map(|r| r as f64))
-                    .sum::<f64>() / metrics_in_period.len() as f64;
+                    .sum::<f64>()
+                    / metrics_in_period.len() as f64;
 
-                let concern_type = if avg_spo2 < 90.0 { "hypoxia" }
-                                 else if avg_respiratory_rate < 8.0 { "bradypnea" }
-                                 else if avg_respiratory_rate > 30.0 { "tachypnea" }
-                                 else { "other" };
+                let concern_type = if avg_spo2 < 90.0 {
+                    "hypoxia"
+                } else if avg_respiratory_rate < 8.0 {
+                    "bradypnea"
+                } else if avg_respiratory_rate > 30.0 {
+                    "tachypnea"
+                } else {
+                    "other"
+                };
 
                 periods.push(RespiratoryPeriod {
                     start_time,
                     end_time: last_metric.recorded_at,
                     concern_type: concern_type.to_string(),
-                    severity: if avg_spo2 < 85.0 || avg_respiratory_rate < 6.0 || avg_respiratory_rate > 35.0 { "critical" } else { "warning" }.to_string(),
+                    severity: if avg_spo2 < 85.0
+                        || avg_respiratory_rate < 6.0
+                        || avg_respiratory_rate > 35.0
+                    {
+                        "critical"
+                    } else {
+                        "warning"
+                    }
+                    .to_string(),
                     average_spo2: if avg_spo2 > 0.0 { Some(avg_spo2) } else { None },
-                    average_respiratory_rate: if avg_respiratory_rate > 0.0 { Some(avg_respiratory_rate) } else { None },
+                    average_respiratory_rate: if avg_respiratory_rate > 0.0 {
+                        Some(avg_respiratory_rate)
+                    } else {
+                        None
+                    },
                 });
             }
         }
@@ -833,7 +915,13 @@ fn analyze_lung_function_changes(metrics: &[RespiratoryMetric]) -> Option<LungFu
     let spirometry_data: Vec<(DateTime<Utc>, Option<f64>, Option<f64>)> = metrics
         .iter()
         .filter(|m| m.forced_vital_capacity.is_some() || m.forced_expiratory_volume_1.is_some())
-        .map(|m| (m.recorded_at, m.forced_expiratory_volume_1, m.forced_vital_capacity))
+        .map(|m| {
+            (
+                m.recorded_at,
+                m.forced_expiratory_volume_1,
+                m.forced_vital_capacity,
+            )
+        })
         .collect();
 
     if spirometry_data.len() < 2 {
@@ -841,33 +929,47 @@ fn analyze_lung_function_changes(metrics: &[RespiratoryMetric]) -> Option<LungFu
     }
 
     // Analyze FEV1 trend
-    let fev1_values: Vec<f64> = spirometry_data.iter()
+    let fev1_values: Vec<f64> = spirometry_data
+        .iter()
         .filter_map(|(_, fev1, _)| *fev1)
         .collect();
 
     let fev1_trend = if fev1_values.len() >= 2 {
-        let first_avg = fev1_values[..fev1_values.len()/2].iter().sum::<f64>() / (fev1_values.len()/2) as f64;
-        let second_avg = fev1_values[fev1_values.len()/2..].iter().sum::<f64>() / (fev1_values.len() - fev1_values.len()/2) as f64;
+        let first_avg = fev1_values[..fev1_values.len() / 2].iter().sum::<f64>()
+            / (fev1_values.len() / 2) as f64;
+        let second_avg = fev1_values[fev1_values.len() / 2..].iter().sum::<f64>()
+            / (fev1_values.len() - fev1_values.len() / 2) as f64;
 
-        if second_avg > first_avg + 0.1 { "improving" }
-        else if second_avg < first_avg - 0.1 { "declining" }
-        else { "stable" }
+        if second_avg > first_avg + 0.1 {
+            "improving"
+        } else if second_avg < first_avg - 0.1 {
+            "declining"
+        } else {
+            "stable"
+        }
     } else {
         "insufficient_data"
     };
 
     // Similar analysis for FVC
-    let fvc_values: Vec<f64> = spirometry_data.iter()
+    let fvc_values: Vec<f64> = spirometry_data
+        .iter()
         .filter_map(|(_, _, fvc)| *fvc)
         .collect();
 
     let fvc_trend = if fvc_values.len() >= 2 {
-        let first_avg = fvc_values[..fvc_values.len()/2].iter().sum::<f64>() / (fvc_values.len()/2) as f64;
-        let second_avg = fvc_values[fvc_values.len()/2..].iter().sum::<f64>() / (fvc_values.len() - fvc_values.len()/2) as f64;
+        let first_avg =
+            fvc_values[..fvc_values.len() / 2].iter().sum::<f64>() / (fvc_values.len() / 2) as f64;
+        let second_avg = fvc_values[fvc_values.len() / 2..].iter().sum::<f64>()
+            / (fvc_values.len() - fvc_values.len() / 2) as f64;
 
-        if second_avg > first_avg + 0.1 { "improving" }
-        else if second_avg < first_avg - 0.1 { "declining" }
-        else { "stable" }
+        if second_avg > first_avg + 0.1 {
+            "improving"
+        } else if second_avg < first_avg - 0.1 {
+            "declining"
+        } else {
+            "stable"
+        }
     } else {
         "insufficient_data"
     };
@@ -902,9 +1004,7 @@ async fn insert_respiratory_metrics_batch(
     metrics: Vec<RespiratoryMetric>,
 ) -> Result<BatchInsertResult, Box<dyn std::error::Error + Send + Sync>> {
     if metrics.is_empty() {
-        return Ok(BatchInsertResult {
-            processed_count: 0,
-        });
+        return Ok(BatchInsertResult { processed_count: 0 });
     }
 
     let mut successful_inserts = 0;
