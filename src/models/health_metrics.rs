@@ -1891,7 +1891,7 @@ impl RespiratoryMetric {
 
         // Critical respiratory rate (< 8 or > 30 breaths per minute)
         if let Some(rate) = self.respiratory_rate {
-            if rate < 8 || rate > 30 {
+            if !(8..=30).contains(&rate) {
                 return true;
             }
         }

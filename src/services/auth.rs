@@ -67,7 +67,7 @@ impl AuthContext {
         Self {
             user: User {
                 id: user_id,
-                email: format!("test-{}@example.com", user_id),
+                email: format!("test-{user_id}@example.com"),
                 apple_health_id: None,
                 created_at: Some(chrono::Utc::now()),
                 updated_at: None,
