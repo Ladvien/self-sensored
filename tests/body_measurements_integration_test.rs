@@ -109,7 +109,10 @@ async fn test_body_measurements_ingestion_basic() {
     .await;
 
     // Create request with authentication
-    let req = test::TestRequest::post().uri("/ingest").set_json(&payload).to_request();
+    let req = test::TestRequest::post()
+        .uri("/ingest")
+        .set_json(&payload)
+        .to_request();
 
     // Manually set auth context in extensions
     let mut req = req;
@@ -261,7 +264,10 @@ async fn test_body_measurements_validation() {
     .await;
 
     // Create request with authentication
-    let req = test::TestRequest::post().uri("/ingest").set_json(&payload).to_request();
+    let req = test::TestRequest::post()
+        .uri("/ingest")
+        .set_json(&payload)
+        .to_request();
 
     // Manually set auth context in extensions
     let mut req = req;
@@ -372,7 +378,9 @@ async fn test_body_measurements_data_retrieval() {
 
     // Test with measurement type filter
     let auth = create_auth_context(user_id);
-    let req = test::TestRequest::get().uri("/data?measurement_type=weight").to_request();
+    let req = test::TestRequest::get()
+        .uri("/data?measurement_type=weight")
+        .to_request();
     let mut req = req;
     req.extensions_mut().insert(auth);
 
@@ -384,7 +392,9 @@ async fn test_body_measurements_data_retrieval() {
 
     // Test with measurement source filter
     let auth = create_auth_context(user_id);
-    let req = test::TestRequest::get().uri("/data?measurement_source=smart_scale").to_request();
+    let req = test::TestRequest::get()
+        .uri("/data?measurement_source=smart_scale")
+        .to_request();
     let mut req = req;
     req.extensions_mut().insert(auth);
 
@@ -461,7 +471,10 @@ async fn test_bmi_consistency_validation() {
     .await;
 
     // Create request with authentication
-    let req = test::TestRequest::post().uri("/ingest").set_json(&payload).to_request();
+    let req = test::TestRequest::post()
+        .uri("/ingest")
+        .set_json(&payload)
+        .to_request();
 
     let mut req = req;
     req.extensions_mut().insert(auth);
@@ -543,7 +556,10 @@ async fn test_body_measurements_smart_scale_integration() {
     .await;
 
     // Create request with authentication
-    let req = test::TestRequest::post().uri("/ingest").set_json(&payload).to_request();
+    let req = test::TestRequest::post()
+        .uri("/ingest")
+        .set_json(&payload)
+        .to_request();
 
     let mut req = req;
     req.extensions_mut().insert(auth);

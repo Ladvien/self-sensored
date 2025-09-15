@@ -346,9 +346,6 @@ mod temperature_tests {
     /// Test temperature batch processing functionality
     #[tokio::test]
     async fn test_temperature_batch_processing() {
-        
-        
-
         // Create test temperature metrics for batch processing
         let user_id = Uuid::new_v4();
         let recorded_at = Utc::now();

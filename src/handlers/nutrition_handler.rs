@@ -1003,10 +1003,7 @@ fn generate_daily_aggregations(metrics: &[NutritionMetric]) -> Vec<DailyNutritio
 
     for metric in metrics {
         let date_key = metric.recorded_at.date_naive().to_string();
-        daily_metrics
-            .entry(date_key)
-            .or_default()
-            .push(metric);
+        daily_metrics.entry(date_key).or_default().push(metric);
     }
 
     // Generate daily summaries

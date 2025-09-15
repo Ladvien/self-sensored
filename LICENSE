@@ -1,0 +1,31 @@
+GNU GENERAL PUBLIC LICENSE
+Version 3, 29 June 2007
+
+Copyright (C) 2024 Self-Sensored Health Export API
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+ADDITIONAL TERMS UNDER SECTION 7:
+
+Attribution Requirement: If you distribute a modified version of this
+software, you must clearly indicate that it has been modified and
+provide a link to the original Self-Sensored Health Export API project.
+
+Network Use: If you run a modified version of this software on a server
+and let other users interact with it there, your server must also allow
+those users to download the source code corresponding to the modified
+version running there.
+
+For the complete GPL v3 license text, visit:
+https://www.gnu.org/licenses/gpl-3.0.txt

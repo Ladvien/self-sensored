@@ -1,6 +1,7 @@
 // Integration tests for user characteristics functionality
 use actix_web::{http::StatusCode, test, web, App};
-use chrono::NaiveDate;
+use chrono::{NaiveDate, Utc};
+use rust_decimal::Decimal;
 use serde_json::{json, Value};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -483,6 +484,10 @@ async fn test_wheelchair_user_validation_integration(pool: PgPool) {
         heart_rate: Some(85),
         resting_heart_rate: Some(65),
         heart_rate_variability: Some(25.0),
+        walking_heart_rate_average: None,
+        heart_rate_recovery_one_minute: None,
+        atrial_fibrillation_burden_percentage: None,
+        vo2_max_ml_kg_min: None,
         source_device: Some("Apple Watch".to_string()),
         context: None,
         created_at: Utc::now(),
@@ -506,6 +511,17 @@ async fn test_wheelchair_user_validation_integration(pool: PgPool) {
         flights_climbed: Some(0),      // No flights for wheelchair user
         active_energy_burned_kcal: Some(250.0),
         basal_energy_burned_kcal: Some(1800.0),
+        distance_cycling_meters: None,
+        distance_swimming_meters: None,
+        distance_wheelchair_meters: Some(2000.0), // Wheelchair-specific distance
+        distance_downhill_snow_sports_meters: None,
+        push_count: Some(200), // Wheelchair pushes
+        swimming_stroke_count: None,
+        nike_fuel_points: None,
+        apple_exercise_time_minutes: None,
+        apple_stand_time_minutes: None,
+        apple_move_time_minutes: None,
+        apple_stand_hour_achieved: None,
         source_device: Some("Apple Watch".to_string()),
         created_at: Utc::now(),
     };
@@ -594,6 +610,8 @@ async fn test_profile_completion_tracking(pool: PgPool) {
 }
 
 // Helper trait for default UserCharacteristicsInput
+// COMMENTED OUT: Orphan rule violation
+/*
 impl Default for UserCharacteristicsInput {
     fn default() -> Self {
         Self {
@@ -610,3 +628,4 @@ impl Default for UserCharacteristicsInput {
         }
     }
 }
+*/

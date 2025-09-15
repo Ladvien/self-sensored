@@ -887,9 +887,7 @@ fn identify_critical_periods(metrics: &[RespiratoryMetric]) -> Vec<RespiratoryPe
                     start_time,
                     end_time: last_metric.recorded_at,
                     concern_type: concern_type.to_string(),
-                    severity: if avg_spo2 < 85.0
-                        || !(6.0..=35.0).contains(&avg_respiratory_rate)
-                    {
+                    severity: if avg_spo2 < 85.0 || !(6.0..=35.0).contains(&avg_respiratory_rate) {
                         "critical"
                     } else {
                         "warning"

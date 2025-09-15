@@ -1,0 +1,28 @@
+{
+  "data": {
+    "metrics": [
+      {
+        "id": "c80bc048-08d6-4ab4-863b-86fefd9f3541",
+        "type": "BodyMeasurement",
+        "user_id": "b479a3b9-9ef1-4a82-9771-adff57432e18",
+        "height_cm": null,
+        "created_at": "2025-09-15T10:58:03.598637263Z",
+        "recorded_at": "2025-09-09T13:35:26Z",
+        "source_device": "Withings",
+        "body_weight_kg": null,
+        "body_mass_index": 29.937902450561523,
+        "lean_body_mass_kg": null,
+        "measurement_source": "iOS",
+        "body_fat_percentage": null,
+        "arm_circumference_cm": null,
+        "hip_circumference_cm": null,
+        "chest_circumference_cm": null,
+        "thigh_circumference_cm": null,
+        "waist_circumference_cm": null,
+        "body_temperature_celsius": null,
+        "basal_body_temperature_celsius": null
+      }
+    ],
+    "workouts": []
+  }
+}

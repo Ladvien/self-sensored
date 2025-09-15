@@ -11,21 +11,25 @@
 use chrono::{Duration, Utc};
 use self_sensored::{
     config::ValidationConfig,
-    models::{health_metrics::*, ios_models::*},
-    services::batch_processor::{BatchProcessor, BatchResult},
-    test_utils::*,
+    models::{
+        enums::{ActivityMoveMode, BiologicalSex, BloodType, FitzpatrickSkinType},
+        health_metrics::*,
+        ios_models::*,
+        user_characteristics::UserCharacteristics,
+    },
+    services::batch_processor::BatchProcessor,
 };
 use serde_json::{json, Value};
 use sqlx::PgPool;
 use std::collections::HashMap;
 use uuid::Uuid;
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrations = "./migrations")]
 async fn test_extended_activity_metrics_ingestion(
     pool: PgPool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let user = create_test_user(&pool).await?;
-    let batch_processor = BatchProcessor::new(&pool);
+    let batch_processor = BatchProcessor::new(pool.clone());
 
     // Create comprehensive activity metrics with all new specialized fields
     let cycling_activity = ActivityMetric {
@@ -136,12 +140,12 @@ async fn test_extended_activity_metrics_ingestion(
         snow_sports_activity,
     ];
     let batch_result = batch_processor
-        .process_activity_metrics(user.id, &activities)
+        .process_activity_metrics(user.id, activities)
         .await?;
 
     // Validate batch processing success
     assert_eq!(
-        batch_result, 4,
+        batch_result.processed_count, 4,
         "All 4 extended activity metrics should be inserted"
     );
 
@@ -149,12 +153,12 @@ async fn test_extended_activity_metrics_ingestion(
     let stored_activities: Vec<ActivityMetric> = sqlx::query_as!(
         ActivityMetric,
         r#"SELECT
-            id, user_id, recorded_at, step_count, distance_meters, flights_climbed,
+            id, user_id, recorded_at as "recorded_at!", step_count, distance_meters, flights_climbed,
             active_energy_burned_kcal, basal_energy_burned_kcal,
             distance_cycling_meters, distance_swimming_meters, distance_wheelchair_meters,
             distance_downhill_snow_sports_meters, push_count, swimming_stroke_count,
             nike_fuel_points, apple_exercise_time_minutes, apple_stand_time_minutes,
-            apple_move_time_minutes, apple_stand_hour_achieved, source_device, created_at
+            apple_move_time_minutes, apple_stand_hour_achieved, source_device, created_at as "created_at!"
         FROM activity_metrics
         WHERE user_id = $1
         ORDER BY recorded_at DESC"#,
@@ -209,7 +213,7 @@ async fn test_extended_activity_metrics_ingestion(
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrations = "./migrations")]
 async fn test_activity_metrics_validation_extended_fields(
     pool: PgPool,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -336,27 +340,27 @@ async fn test_activity_metrics_validation_extended_fields(
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrations = "./migrations")]
 async fn test_wheelchair_user_activity_accessibility(
     pool: PgPool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let user = create_test_user(&pool).await?;
-    let batch_processor = BatchProcessor::new(&pool);
+    let batch_processor = BatchProcessor::new(pool.clone());
 
     // Create wheelchair user characteristics
     let wheelchair_characteristics = UserCharacteristics {
         id: Uuid::new_v4(),
         user_id: user.id,
-        biological_sex: "not_set".to_string(),
+        biological_sex: BiologicalSex::NotSet,
         date_of_birth: None,
-        blood_type: "not_set".to_string(),
-        fitzpatrick_skin_type: "not_set".to_string(),
+        blood_type: BloodType::NotSet,
+        fitzpatrick_skin_type: FitzpatrickSkinType::NotSet,
         wheelchair_use: true, // Wheelchair accessibility enabled
-        activity_move_mode: "active_energy".to_string(),
-        emergency_contact_info: None,
-        medical_conditions: None,
-        medications: None,
-        data_sharing_preferences: None,
+        activity_move_mode: ActivityMoveMode::ActiveEnergy,
+        emergency_contact_info: serde_json::json!({}),
+        medical_conditions: vec![],
+        medications: vec![],
+        data_sharing_preferences: serde_json::json!({}),
         created_at: Utc::now(),
         updated_at: Utc::now(),
         last_verified_at: Utc::now(),
@@ -369,20 +373,20 @@ async fn test_wheelchair_user_activity_accessibility(
             fitzpatrick_skin_type, wheelchair_use, activity_move_mode,
             emergency_contact_info, medical_conditions, medications,
             data_sharing_preferences, created_at, updated_at, last_verified_at
-        ) VALUES ($1, $2, $3::biological_sex, $4, $5::blood_type,
-                  $6::fitzpatrick_skin_type, $7, $8::activity_move_mode,
+        ) VALUES ($1, $2, $3, $4, $5,
+                  $6, $7, $8,
                   $9, $10, $11, $12, $13, $14, $15)"#,
         wheelchair_characteristics.id,
         wheelchair_characteristics.user_id,
-        wheelchair_characteristics.biological_sex,
+        wheelchair_characteristics.biological_sex as BiologicalSex,
         wheelchair_characteristics.date_of_birth,
-        wheelchair_characteristics.blood_type,
-        wheelchair_characteristics.fitzpatrick_skin_type,
+        wheelchair_characteristics.blood_type as BloodType,
+        wheelchair_characteristics.fitzpatrick_skin_type as FitzpatrickSkinType,
         wheelchair_characteristics.wheelchair_use,
-        wheelchair_characteristics.activity_move_mode,
+        wheelchair_characteristics.activity_move_mode as ActivityMoveMode,
         wheelchair_characteristics.emergency_contact_info,
-        wheelchair_characteristics.medical_conditions,
-        wheelchair_characteristics.medications,
+        &wheelchair_characteristics.medical_conditions as &[String],
+        &wheelchair_characteristics.medications as &[String],
         wheelchair_characteristics.data_sharing_preferences,
         wheelchair_characteristics.created_at,
         wheelchair_characteristics.updated_at,
@@ -445,10 +449,10 @@ async fn test_wheelchair_user_activity_accessibility(
 
     // Process wheelchair accessibility metrics
     let batch_result = batch_processor
-        .process_activity_metrics(user.id, &wheelchair_activities)
+        .process_activity_metrics(user.id, wheelchair_activities.clone())
         .await?;
     assert_eq!(
-        batch_result, 2,
+        batch_result.processed_count, 2,
         "Both wheelchair activity metrics should be processed"
     );
 
@@ -456,12 +460,12 @@ async fn test_wheelchair_user_activity_accessibility(
     let stored_activities: Vec<ActivityMetric> = sqlx::query_as!(
         ActivityMetric,
         r#"SELECT
-            id, user_id, recorded_at, step_count, distance_meters, flights_climbed,
+            id, user_id, recorded_at as "recorded_at!", step_count, distance_meters, flights_climbed,
             active_energy_burned_kcal, basal_energy_burned_kcal,
             distance_cycling_meters, distance_swimming_meters, distance_wheelchair_meters,
             distance_downhill_snow_sports_meters, push_count, swimming_stroke_count,
             nike_fuel_points, apple_exercise_time_minutes, apple_stand_time_minutes,
-            apple_move_time_minutes, apple_stand_hour_achieved, source_device, created_at
+            apple_move_time_minutes, apple_stand_hour_achieved, source_device, created_at as "created_at!"
         FROM activity_metrics
         WHERE user_id = $1 AND distance_wheelchair_meters IS NOT NULL
         ORDER BY recorded_at DESC"#,
@@ -495,12 +499,12 @@ async fn test_wheelchair_user_activity_accessibility(
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrations = "./migrations")]
 async fn test_multi_sport_activity_tracking(
     pool: PgPool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let user = create_test_user(&pool).await?;
-    let batch_processor = BatchProcessor::new(&pool);
+    let batch_processor = BatchProcessor::new(pool.clone());
 
     // Create a comprehensive multi-sport day with different specialized metrics
     let multi_sport_activities = vec![
@@ -580,10 +584,10 @@ async fn test_multi_sport_activity_tracking(
 
     // Process multi-sport day
     let batch_result = batch_processor
-        .process_activity_metrics(user.id, &multi_sport_activities)
+        .process_activity_metrics(user.id, multi_sport_activities)
         .await?;
     assert_eq!(
-        batch_result, 3,
+        batch_result.processed_count, 3,
         "All three multi-sport activities should be processed"
     );
 
@@ -591,12 +595,12 @@ async fn test_multi_sport_activity_tracking(
     let stored_activities: Vec<ActivityMetric> = sqlx::query_as!(
         ActivityMetric,
         r#"SELECT
-            id, user_id, recorded_at, step_count, distance_meters, flights_climbed,
+            id, user_id, recorded_at as "recorded_at!", step_count, distance_meters, flights_climbed,
             active_energy_burned_kcal, basal_energy_burned_kcal,
             distance_cycling_meters, distance_swimming_meters, distance_wheelchair_meters,
             distance_downhill_snow_sports_meters, push_count, swimming_stroke_count,
             nike_fuel_points, apple_exercise_time_minutes, apple_stand_time_minutes,
-            apple_move_time_minutes, apple_stand_hour_achieved, source_device, created_at
+            apple_move_time_minutes, apple_stand_hour_achieved, source_device, created_at as "created_at!"
         FROM activity_metrics
         WHERE user_id = $1
         ORDER BY recorded_at ASC"#,
@@ -657,12 +661,12 @@ async fn test_multi_sport_activity_tracking(
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[sqlx::test(migrations = "./migrations")]
 async fn test_apple_watch_activity_rings_integration(
     pool: PgPool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let user = create_test_user(&pool).await?;
-    let batch_processor = BatchProcessor::new(&pool);
+    let batch_processor = BatchProcessor::new(pool.clone());
 
     // Simulate a complete Apple Watch activity rings day
     let activity_rings_data = vec![
@@ -742,10 +746,10 @@ async fn test_apple_watch_activity_rings_integration(
 
     // Process Apple Watch activity rings data
     let batch_result = batch_processor
-        .process_activity_metrics(user.id, &activity_rings_data)
+        .process_activity_metrics(user.id, activity_rings_data)
         .await?;
     assert_eq!(
-        batch_result, 3,
+        batch_result.processed_count, 3,
         "All Apple Watch activity ring metrics should be processed"
     );
 
@@ -753,12 +757,12 @@ async fn test_apple_watch_activity_rings_integration(
     let apple_watch_activities: Vec<ActivityMetric> = sqlx::query_as!(
         ActivityMetric,
         r#"SELECT
-            id, user_id, recorded_at, step_count, distance_meters, flights_climbed,
+            id, user_id, recorded_at as "recorded_at!", step_count, distance_meters, flights_climbed,
             active_energy_burned_kcal, basal_energy_burned_kcal,
             distance_cycling_meters, distance_swimming_meters, distance_wheelchair_meters,
             distance_downhill_snow_sports_meters, push_count, swimming_stroke_count,
             nike_fuel_points, apple_exercise_time_minutes, apple_stand_time_minutes,
-            apple_move_time_minutes, apple_stand_hour_achieved, source_device, created_at
+            apple_move_time_minutes, apple_stand_hour_achieved, source_device, created_at as "created_at!"
         FROM activity_metrics
         WHERE user_id = $1 AND source_device LIKE '%Apple Watch%'
         ORDER BY recorded_at ASC"#,
@@ -793,5 +797,38 @@ async fn test_apple_watch_activity_rings_integration(
     assert_eq!(stand_hours_achieved, 3); // All three periods achieved stand goals
 
     cleanup_test_user(&pool, user.id).await?;
+    Ok(())
+}
+
+// Helper functions
+#[derive(Debug)]
+struct TestUser {
+    id: Uuid,
+}
+
+async fn create_test_user(pool: &PgPool) -> Result<TestUser, Box<dyn std::error::Error>> {
+    let user_id = Uuid::new_v4();
+
+    sqlx::query!(
+        "INSERT INTO users (id, email, created_at) VALUES ($1, $2, NOW())",
+        user_id,
+        format!("test_activity_ext_{}@example.com", user_id)
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(TestUser { id: user_id })
+}
+
+async fn cleanup_test_user(pool: &PgPool, user_id: Uuid) -> Result<(), Box<dyn std::error::Error>> {
+    // Clean up in reverse order of foreign key dependencies
+    sqlx::query!("DELETE FROM activity_metrics WHERE user_id = $1", user_id)
+        .execute(pool)
+        .await?;
+
+    sqlx::query!("DELETE FROM users WHERE id = $1", user_id)
+        .execute(pool)
+        .await?;
+
     Ok(())
 }

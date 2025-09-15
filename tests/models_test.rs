@@ -313,8 +313,8 @@ fn test_metric_validation() {
         id: Uuid::new_v4(),
         user_id,
         recorded_at: now,
-        step_count: Some(-1000),                 // Invalid
-        distance_meters: Some(-500.0),           // Invalid
+        step_count: Some(-1000),       // Invalid
+        distance_meters: Some(-500.0), // Invalid
         flights_climbed: None,
         active_energy_burned_kcal: Some(-200.0), // Invalid
         basal_energy_burned_kcal: None,

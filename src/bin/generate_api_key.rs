@@ -1,5 +1,5 @@
-use argon2::{Argon2, PasswordHasher};
 use argon2::password_hash::{rand_core::OsRng, SaltString};
+use argon2::{Argon2, PasswordHasher};
 
 fn main() {
     let api_key = "test_auto_export_key_2024";

@@ -71,7 +71,7 @@ impl UserCharacteristics {
     pub fn age(&self) -> Option<u32> {
         self.date_of_birth.map(|dob| {
             let today = chrono::Utc::now().date_naive();
-            
+
             today.years_since(dob).unwrap_or(0)
         })
     }
@@ -434,7 +434,7 @@ mod tests {
         assert_eq!(characteristics.user_id, user_id);
         assert_eq!(characteristics.biological_sex, BiologicalSex::NotSet);
         assert!(!characteristics.is_complete_for_personalization());
-        assert_eq!(characteristics.completeness_score(), 16.67_f64.round()); // Only wheelchair_use is "set"
+        assert!((characteristics.completeness_score() - 16.67).abs() < 0.01); // Only wheelchair_use is "set"
     }
 
     #[test]

@@ -581,10 +581,7 @@ fn generate_episode_patterns(symptoms: &[SymptomMetric]) -> Vec<EpisodePattern> 
     // Group symptoms by episode
     for symptom in symptoms {
         if let Some(episode_id) = symptom.episode_id {
-            episodes
-                .entry(episode_id)
-                .or_default()
-                .push(symptom);
+            episodes.entry(episode_id).or_default().push(symptom);
         }
     }
 

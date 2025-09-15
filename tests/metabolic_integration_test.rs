@@ -1,4 +1,4 @@
-use actix_web::{test, web, App};
+use actix_web::{test, web, App, HttpMessage};
 use chrono::{DateTime, Utc};
 use serde_json::json;
 use uuid::Uuid;
@@ -11,9 +11,12 @@ use self_sensored::middleware::metrics::Metrics;
 use self_sensored::models::health_metrics::{BloodGlucoseMetric, MetabolicMetric};
 use self_sensored::services::auth::AuthContext;
 
+mod common;
+use common::setup_test_db;
+
 #[tokio::test]
 async fn test_blood_glucose_ingestion_comprehensive() {
-    let pool = crate::setup_test_db().await;
+    let pool = setup_test_db().await;
     let user_id = Uuid::new_v4();
 
     // Create test user
@@ -88,8 +91,8 @@ async fn test_blood_glucose_ingestion_comprehensive() {
         .to_request();
 
     // Mock authentication context
-    let auth_context = AuthContext { user_id };
-    let req = req.extensions_mut().insert(auth_context);
+    let auth_context = AuthContext::new_for_testing(user_id);
+    req.extensions_mut().insert(auth_context);
 
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
@@ -116,7 +119,7 @@ async fn test_blood_glucose_ingestion_comprehensive() {
 
 #[tokio::test]
 async fn test_metabolic_data_ingestion_comprehensive() {
-    let pool = crate::setup_test_db().await;
+    let pool = setup_test_db().await;
     let user_id = Uuid::new_v4();
 
     // Create test user
@@ -179,8 +182,8 @@ async fn test_metabolic_data_ingestion_comprehensive() {
         .to_request();
 
     // Mock authentication context
-    let auth_context = AuthContext { user_id };
-    let req = req.extensions_mut().insert(auth_context);
+    let auth_context = AuthContext::new_for_testing(user_id);
+    req.extensions_mut().insert(auth_context);
 
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
@@ -198,7 +201,7 @@ async fn test_metabolic_data_ingestion_comprehensive() {
 
 #[tokio::test]
 async fn test_blood_glucose_validation_errors() {
-    let pool = crate::setup_test_db().await;
+    let pool = setup_test_db().await;
     let user_id = Uuid::new_v4();
 
     // Create test user
@@ -253,8 +256,8 @@ async fn test_blood_glucose_validation_errors() {
         .to_request();
 
     // Mock authentication context
-    let auth_context = AuthContext { user_id };
-    let req = req.extensions_mut().insert(auth_context);
+    let auth_context = AuthContext::new_for_testing(user_id);
+    req.extensions_mut().insert(auth_context);
 
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
@@ -290,7 +293,7 @@ async fn test_blood_glucose_validation_errors() {
 
 #[tokio::test]
 async fn test_metabolic_data_validation_errors() {
-    let pool = crate::setup_test_db().await;
+    let pool = setup_test_db().await;
     let user_id = Uuid::new_v4();
 
     // Create test user
@@ -339,8 +342,8 @@ async fn test_metabolic_data_validation_errors() {
         .to_request();
 
     // Mock authentication context
-    let auth_context = AuthContext { user_id };
-    let req = req.extensions_mut().insert(auth_context);
+    let auth_context = AuthContext::new_for_testing(user_id);
+    req.extensions_mut().insert(auth_context);
 
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
@@ -370,7 +373,7 @@ async fn test_metabolic_data_validation_errors() {
 
 #[tokio::test]
 async fn test_blood_glucose_data_retrieval() {
-    let pool = crate::setup_test_db().await;
+    let pool = setup_test_db().await;
     let user_id = Uuid::new_v4();
 
     // Create test user
@@ -422,8 +425,8 @@ async fn test_blood_glucose_data_retrieval() {
         .to_request();
 
     // Mock authentication context
-    let auth_context = AuthContext { user_id };
-    let req = req.extensions_mut().insert(auth_context);
+    let auth_context = AuthContext::new_for_testing(user_id);
+    req.extensions_mut().insert(auth_context);
 
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
@@ -443,7 +446,7 @@ async fn test_blood_glucose_data_retrieval() {
 
 #[tokio::test]
 async fn test_metabolic_data_retrieval() {
-    let pool = crate::setup_test_db().await;
+    let pool = setup_test_db().await;
     let user_id = Uuid::new_v4();
 
     // Create test user
@@ -490,8 +493,8 @@ async fn test_metabolic_data_retrieval() {
         .to_request();
 
     // Mock authentication context
-    let auth_context = AuthContext { user_id };
-    let req = req.extensions_mut().insert(auth_context);
+    let auth_context = AuthContext::new_for_testing(user_id);
+    req.extensions_mut().insert(auth_context);
 
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
@@ -512,7 +515,7 @@ async fn test_metabolic_data_retrieval() {
 
 #[tokio::test]
 async fn test_glucose_critical_level_detection() {
-    let pool = crate::setup_test_db().await;
+    let pool = setup_test_db().await;
     let user_id = Uuid::new_v4();
 
     // Create test user
@@ -567,8 +570,8 @@ async fn test_glucose_critical_level_detection() {
         .to_request();
 
     // Mock authentication context
-    let auth_context = AuthContext { user_id };
-    let req = req.extensions_mut().insert(auth_context);
+    let auth_context = AuthContext::new_for_testing(user_id);
+    req.extensions_mut().insert(auth_context);
 
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());

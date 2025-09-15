@@ -1431,9 +1431,7 @@ impl ActivityMetric {
         // Validate accessibility metrics
         if let Some(push_count) = self.push_count {
             if !(0..=50000).contains(&push_count) {
-                return Err(format!(
-                    "push_count {push_count} is out of range (0-50000)"
-                ));
+                return Err(format!("push_count {push_count} is out of range (0-50000)"));
             }
         }
 
@@ -1875,6 +1873,39 @@ impl RespiratoryMetric {
         // Excessive inhaler usage in short time
         if let Some(usage) = self.inhaler_usage {
             if usage > 10 {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Check if respiratory metrics indicate a critical condition
+    pub fn is_critical_condition(&self) -> bool {
+        // Critical oxygen saturation (SpO2 < 90%)
+        if let Some(spo2) = self.oxygen_saturation {
+            if spo2 < 90.0 {
+                return true;
+            }
+        }
+
+        // Critical respiratory rate (< 8 or > 30 breaths per minute)
+        if let Some(rate) = self.respiratory_rate {
+            if rate < 8 || rate > 30 {
+                return true;
+            }
+        }
+
+        // Severe reduction in forced expiratory volume (FEV1 < 1.0L)
+        if let Some(fev1) = self.forced_expiratory_volume_1 {
+            if fev1 < 1.0 {
+                return true;
+            }
+        }
+
+        // Critical peak flow rate (< 100 L/min indicates severe obstruction)
+        if let Some(pefr) = self.peak_expiratory_flow_rate {
+            if pefr < 100.0 {
                 return true;
             }
         }
@@ -2376,9 +2407,7 @@ impl MenstrualMetric {
         // Validate cycle day is within reasonable range
         if let Some(cycle_day) = self.cycle_day {
             if !(1..=40).contains(&cycle_day) {
-                return Err(format!(
-                    "cycle_day {cycle_day} is out of range (1-40 days)"
-                ));
+                return Err(format!("cycle_day {cycle_day} is out of range (1-40 days)"));
             }
         }
 
@@ -2401,9 +2430,7 @@ impl MenstrualMetric {
         // Validate energy level
         if let Some(energy) = self.energy_level {
             if !(1..=5).contains(&energy) {
-                return Err(format!(
-                    "energy_level {energy} is out of range (1-5 scale)"
-                ));
+                return Err(format!("energy_level {energy} is out of range (1-5 scale)"));
             }
         }
 

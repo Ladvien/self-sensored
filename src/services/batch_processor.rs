@@ -2984,6 +2984,67 @@ impl BatchProcessor {
         })
     }
 
+    /// Process activity metrics for single metric type processing
+    /// This is needed for the activity handler's batch processing
+    pub async fn process_activity_metrics(
+        &self,
+        user_id: uuid::Uuid,
+        metrics: Vec<crate::models::ActivityMetric>,
+    ) -> Result<BatchProcessingResult, sqlx::Error> {
+        if metrics.is_empty() {
+            return Ok(BatchProcessingResult::default());
+        }
+
+        let start_time = std::time::Instant::now();
+
+        // Deduplicate activity metrics
+        let deduplicated_metrics = self.deduplicate_activities(user_id, metrics.clone());
+        let duplicates_removed = metrics.len() - deduplicated_metrics.len();
+
+        // Process activity metrics with retry
+        let (processed, failed, errors, retries) = Self::process_with_retry(
+            "ActivityMetrics",
+            || {
+                Self::insert_activities_chunked(
+                    &self.pool,
+                    user_id,
+                    deduplicated_metrics.clone(),
+                    self.config.activity_chunk_size,
+                )
+            },
+            &self.config,
+        )
+        .await;
+
+        let processing_time_ms = start_time.elapsed().as_millis() as u64;
+
+        Ok(BatchProcessingResult {
+            processed_count: processed,
+            failed_count: failed,
+            errors,
+            processing_time_ms,
+            retry_attempts: retries,
+            memory_peak_mb: Some(0.0),
+            chunk_progress: None,
+            deduplication_stats: Some(DeduplicationStats {
+                heart_rate_duplicates: 0,
+                blood_pressure_duplicates: 0,
+                sleep_duplicates: 0,
+                activity_duplicates: duplicates_removed,
+                body_measurement_duplicates: 0,
+                temperature_duplicates: 0,
+                respiratory_duplicates: 0,
+                blood_glucose_duplicates: 0,
+                nutrition_duplicates: 0,
+                workout_duplicates: 0,
+                menstrual_duplicates: 0,
+                fertility_duplicates: 0,
+                total_duplicates: duplicates_removed,
+                deduplication_time_ms: 0,
+            }),
+        })
+    }
+
     /// Process hygiene events in batches with comprehensive validation and deduplication
     pub async fn process_hygiene_events(
         &self,
