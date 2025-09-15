@@ -556,6 +556,13 @@ fn normalize_endpoint(path: &str) -> String {
 pub struct Metrics;
 
 impl Metrics {
+    /// Create a new Metrics instance
+    pub fn new() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(Self)
+    }
+}
+
+impl Metrics {
     /// Record ingest request processing
     #[instrument(skip_all)]
     pub fn record_ingest_request() {
@@ -595,6 +602,29 @@ impl Metrics {
         BATCH_PROCESSING_DURATION_SECONDS
             .with_label_values(&[metric_type, batch_size_bucket])
             .observe(duration.as_secs_f64());
+    }
+
+    /// Record total number of processed metrics
+    #[instrument(skip_all)]
+    pub fn record_ingest_processed_total(count: usize) {
+        INGEST_METRICS_PROCESSED_TOTAL
+            .with_label_values(&["all", "success"])
+            .inc_by(count as f64);
+    }
+
+    /// Record total number of errors during processing
+    #[instrument(skip_all)]
+    pub fn record_ingest_errors_total(count: usize) {
+        INGEST_METRICS_PROCESSED_TOTAL
+            .with_label_values(&["all", "error"])
+            .inc_by(count as f64);
+    }
+
+    /// Record query request processing
+    #[instrument(skip_all)]
+    pub fn record_query_request(query_type: &str) {
+        INGEST_REQUESTS_TOTAL.inc(); // For now, using the same counter
+        tracing::debug!(query_type = %query_type, "Query request recorded");
     }
 
     /// Update database connection pool metrics

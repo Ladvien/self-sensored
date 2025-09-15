@@ -1,28 +1,27 @@
 // Integration tests for hygiene events API endpoints
-use actix_web::{test, web, App};
-use chrono::{DateTime, Duration, Utc};
+use actix_web::{test, web, App, HttpMessage};
+use chrono::{Duration, Utc};
 use serde_json::{json, Value};
 use sqlx::PgPool;
-use std::sync::Arc;
 use uuid::Uuid;
 
 // Import modules from the main application
 use self_sensored::{
-    config::{BatchConfig, ValidationConfig},
+    config::ValidationConfig,
     handlers::hygiene_handler::{
         get_hygiene_data, ingest_hygiene, HygieneIngestPayload, HygieneIngestRequest,
     },
-    models::health_metrics::HygieneMetric,
-    models::enums::HygieneEventType,
     services::{auth::AuthContext, batch_processor::BatchProcessor},
-    middleware::metrics::Metrics,
 };
 
 /// Test helper to create a test user and API key
 async fn create_test_user_and_api_key(pool: &PgPool) -> (Uuid, String) {
     let user_id = Uuid::new_v4();
     let api_key_id = Uuid::new_v4();
-    let test_email = format!("hygiene_test_{}@example.com", user_id.to_string().replace('-', ""));
+    let test_email = format!(
+        "hygiene_test_{}@example.com",
+        user_id.to_string().replace('-', "")
+    );
 
     // Create test user
     sqlx::query!(
@@ -35,7 +34,10 @@ async fn create_test_user_and_api_key(pool: &PgPool) -> (Uuid, String) {
     .expect("Failed to create test user");
 
     // Create API key (using a simple hash for testing)
-    let api_key = format!("test_hygiene_api_key_{}", api_key_id.to_string().replace('-', ""));
+    let api_key = format!(
+        "test_hygiene_api_key_{}",
+        api_key_id.to_string().replace('-', "")
+    );
     let api_key_hash = format!("hash_{}", api_key);
 
     sqlx::query!(
@@ -142,9 +144,8 @@ async fn test_hygiene_events_ingest_comprehensive() {
     let (user_id, _api_key) = create_test_user_and_api_key(&pool).await;
 
     // Initialize dependencies
-    let batch_config = BatchConfig::default();
     let validation_config = ValidationConfig::default();
-    let batch_processor = BatchProcessor::new(Arc::new(pool.clone()), batch_config);
+    let batch_processor = BatchProcessor::new(pool.clone());
 
     // Create sample hygiene events
     let hygiene_events = create_sample_hygiene_events(50);
@@ -159,7 +160,7 @@ async fn test_hygiene_events_ingest_comprehensive() {
             .app_data(web::Data::new(pool.clone()))
             .app_data(web::Data::new(batch_processor))
             .app_data(web::Data::new(validation_config))
-            .service(web::resource("/ingest/hygiene").route(web::post().to(ingest_hygiene)))
+            .service(web::resource("/ingest/hygiene").route(web::post().to(ingest_hygiene))),
     )
     .await;
 
@@ -177,28 +178,36 @@ async fn test_hygiene_events_ingest_comprehensive() {
     let resp = test::call_service(&app, req).await;
 
     println!("📊 Ingestion response status: {}", resp.status());
-    assert!(resp.status().is_success(), "Hygiene events ingestion should succeed");
+    assert!(
+        resp.status().is_success(),
+        "Hygiene events ingestion should succeed"
+    );
 
     let response_body: Value = test::read_body_json(resp).await;
-    println!("📈 Response body: {}", serde_json::to_string_pretty(&response_body).unwrap());
+    println!(
+        "📈 Response body: {}",
+        serde_json::to_string_pretty(&response_body).unwrap()
+    );
 
     // Verify response structure
     assert!(response_body["success"].as_bool().unwrap_or(false));
     assert!(response_body["processed_count"].as_u64().unwrap() > 0);
     assert!(response_body.get("hygiene_analysis").is_some());
 
-    // Verify data was stored in database
-    let stored_events = sqlx::query_as!(
-        HygieneMetric,
-        "SELECT * FROM hygiene_events WHERE user_id = $1 ORDER BY recorded_at DESC",
+    // Verify data was stored in database - simple count check
+    let stored_count = sqlx::query_scalar!(
+        "SELECT COUNT(*) FROM hygiene_events WHERE user_id = $1",
         user_id
     )
-    .fetch_all(&pool)
+    .fetch_one(&pool)
     .await
-    .expect("Failed to retrieve stored hygiene events");
+    .expect("Failed to count stored hygiene events");
 
-    println!("🏥 Stored {} hygiene events in database", stored_events.len());
-    assert!(!stored_events.is_empty());
+    println!(
+        "🏥 Stored {} hygiene events in database",
+        stored_count.unwrap_or(0)
+    );
+    assert!(stored_count.unwrap_or(0) > 0);
 
     // Test specific hygiene analysis features
     let analysis = response_body["hygiene_analysis"].as_object().unwrap();
@@ -254,7 +263,7 @@ async fn test_hygiene_data_retrieval_with_filters() {
                 user_id, recorded_at, event_type, duration_seconds,
                 quality_rating, meets_who_guidelines, health_crisis_enhanced,
                 source_device
-            ) VALUES ($1, $2, $3::hygiene_event_type, $4, $5, $6, $7, $8)"#,
+            ) VALUES ($1, $2, $3::text::hygiene_event_type, $4, $5, $6, $7, $8)"#,
             user_id,
             event_time,
             event_type,
@@ -274,13 +283,12 @@ async fn test_hygiene_data_retrieval_with_filters() {
     let app = test::init_service(
         App::new()
             .app_data(web::Data::new(pool.clone()))
-            .service(web::resource("/data/hygiene").route(web::get().to(get_hygiene_data)))
-    ).await;
+            .service(web::resource("/data/hygiene").route(web::get().to(get_hygiene_data))),
+    )
+    .await;
 
     // Test 1: Get all hygiene data
-    let req = test::TestRequest::get()
-        .uri("/data/hygiene")
-        .to_request();
+    let req = test::TestRequest::get().uri("/data/hygiene").to_request();
 
     let mut req = req;
     req.extensions_mut().insert(auth.clone());
@@ -289,7 +297,10 @@ async fn test_hygiene_data_retrieval_with_filters() {
     assert!(resp.status().is_success());
 
     let response: Value = test::read_body_json(resp).await;
-    println!("📊 All events response: {}", serde_json::to_string_pretty(&response).unwrap());
+    println!(
+        "📊 All events response: {}",
+        serde_json::to_string_pretty(&response).unwrap()
+    );
 
     assert!(response["hygiene_events"].is_array());
     assert!(response["total_count"].as_i64().unwrap() > 0);
@@ -330,7 +341,10 @@ async fn test_hygiene_data_retrieval_with_filters() {
 
     // Should only return WHO guideline compliant events
     for event in events {
-        assert_eq!(event["meets_who_guidelines"].as_bool().unwrap_or(false), true);
+        assert_eq!(
+            event["meets_who_guidelines"].as_bool().unwrap_or(false),
+            true
+        );
     }
 
     // Test 4: Filter for health crisis period
@@ -349,7 +363,10 @@ async fn test_hygiene_data_retrieval_with_filters() {
 
     // Should only return health crisis events
     for event in events {
-        assert_eq!(event["health_crisis_enhanced"].as_bool().unwrap_or(false), true);
+        assert_eq!(
+            event["health_crisis_enhanced"].as_bool().unwrap_or(false),
+            true
+        );
     }
 
     println!("✅ Hygiene data retrieval with filters test completed successfully");
@@ -369,9 +386,8 @@ async fn test_hygiene_events_validation_and_error_handling() {
         .expect("Failed to connect to test database");
 
     let (user_id, _api_key) = create_test_user_and_api_key(&pool).await;
-    let batch_config = BatchConfig::default();
     let validation_config = ValidationConfig::default();
-    let batch_processor = BatchProcessor::new(Arc::new(pool.clone()), batch_config);
+    let batch_processor = BatchProcessor::new(pool.clone());
     let auth = AuthContext::new_for_testing(user_id);
 
     let app = test::init_service(
@@ -379,8 +395,9 @@ async fn test_hygiene_events_validation_and_error_handling() {
             .app_data(web::Data::new(pool.clone()))
             .app_data(web::Data::new(batch_processor))
             .app_data(web::Data::new(validation_config))
-            .service(web::resource("/ingest/hygiene").route(web::post().to(ingest_hygiene)))
-    ).await;
+            .service(web::resource("/ingest/hygiene").route(web::post().to(ingest_hygiene))),
+    )
+    .await;
 
     // Test 1: Invalid event type
     let invalid_payload = json!({
@@ -405,7 +422,10 @@ async fn test_hygiene_events_validation_and_error_handling() {
     let resp = test::call_service(&app, req).await;
     let response: Value = test::read_body_json(resp).await;
 
-    println!("🚫 Invalid event type response: {}", serde_json::to_string_pretty(&response).unwrap());
+    println!(
+        "🚫 Invalid event type response: {}",
+        serde_json::to_string_pretty(&response).unwrap()
+    );
     assert_eq!(response["success"].as_bool().unwrap(), false);
     assert!(response["errors"].as_array().unwrap().len() > 0);
 
@@ -433,7 +453,10 @@ async fn test_hygiene_events_validation_and_error_handling() {
     let resp = test::call_service(&app, req).await;
     let response: Value = test::read_body_json(resp).await;
 
-    println!("⏱️ Invalid duration response: {}", serde_json::to_string_pretty(&response).unwrap());
+    println!(
+        "⏱️ Invalid duration response: {}",
+        serde_json::to_string_pretty(&response).unwrap()
+    );
     assert_eq!(response["success"].as_bool().unwrap(), false);
 
     // Test 3: Invalid quality rating (out of range)
@@ -460,7 +483,10 @@ async fn test_hygiene_events_validation_and_error_handling() {
     let resp = test::call_service(&app, req).await;
     let response: Value = test::read_body_json(resp).await;
 
-    println!("⭐ Invalid quality rating response: {}", serde_json::to_string_pretty(&response).unwrap());
+    println!(
+        "⭐ Invalid quality rating response: {}",
+        serde_json::to_string_pretty(&response).unwrap()
+    );
     assert_eq!(response["success"].as_bool().unwrap(), false);
 
     // Test 4: Empty payload
@@ -544,12 +570,11 @@ async fn test_hygiene_compliance_analysis() {
             data_sensitivity_level: Some("standard".to_string()),
             source_device: Some("smart_toothbrush".to_string()),
             frequency_compliance_rating: Some(4),
-        }
+        },
     ];
 
-    let batch_config = BatchConfig::default();
     let validation_config = ValidationConfig::default();
-    let batch_processor = BatchProcessor::new(Arc::new(pool.clone()), batch_config);
+    let batch_processor = BatchProcessor::new(pool.clone());
     let auth = AuthContext::new_for_testing(user_id);
 
     let payload = HygieneIngestPayload {
@@ -561,8 +586,9 @@ async fn test_hygiene_compliance_analysis() {
             .app_data(web::Data::new(pool.clone()))
             .app_data(web::Data::new(batch_processor))
             .app_data(web::Data::new(validation_config))
-            .service(web::resource("/ingest/hygiene").route(web::post().to(ingest_hygiene)))
-    ).await;
+            .service(web::resource("/ingest/hygiene").route(web::post().to(ingest_hygiene))),
+    )
+    .await;
 
     let req = test::TestRequest::post()
         .uri("/ingest/hygiene")
@@ -577,28 +603,46 @@ async fn test_hygiene_compliance_analysis() {
     assert!(resp.status().is_success());
 
     let response: Value = test::read_body_json(resp).await;
-    println!("🏥 Compliance analysis response: {}", serde_json::to_string_pretty(&response).unwrap());
+    println!(
+        "🏥 Compliance analysis response: {}",
+        serde_json::to_string_pretty(&response).unwrap()
+    );
 
     // Verify compliance analysis
     let analysis = response["hygiene_analysis"].as_object().unwrap();
 
     // Both events should meet guidelines, so compliance should be high
     let compliance_score = analysis["compliance_score"].as_f64().unwrap();
-    assert!(compliance_score >= 80.0, "Compliance score should be high for guideline-meeting events");
+    assert!(
+        compliance_score >= 80.0,
+        "Compliance score should be high for guideline-meeting events"
+    );
 
     let handwashing_compliance = analysis["handwashing_compliance"].as_f64().unwrap();
-    assert_eq!(handwashing_compliance, 100.0, "Handwashing compliance should be 100%");
+    assert_eq!(
+        handwashing_compliance, 100.0,
+        "Handwashing compliance should be 100%"
+    );
 
     let toothbrushing_compliance = analysis["toothbrushing_compliance"].as_f64().unwrap();
-    assert_eq!(toothbrushing_compliance, 100.0, "Toothbrushing compliance should be 100%");
+    assert_eq!(
+        toothbrushing_compliance, 100.0,
+        "Toothbrushing compliance should be 100%"
+    );
 
     // Check critical hygiene events (handwashing)
     let critical_events = analysis["critical_hygiene_events"].as_u64().unwrap();
-    assert_eq!(critical_events, 1, "Should have 1 critical hygiene event (handwashing)");
+    assert_eq!(
+        critical_events, 1,
+        "Should have 1 critical hygiene event (handwashing)"
+    );
 
     // Check smart device detections
     let smart_device_detections = analysis["smart_device_detections"].as_u64().unwrap();
-    assert_eq!(smart_device_detections, 2, "Both events were detected by smart devices");
+    assert_eq!(
+        smart_device_detections, 2,
+        "Both events were detected by smart devices"
+    );
 
     // Check health crisis events
     let health_crisis_events = analysis["health_crisis_events"].as_u64().unwrap();
@@ -606,11 +650,19 @@ async fn test_hygiene_compliance_analysis() {
 
     // Check public health insights
     let public_health = analysis["public_health_insights"].as_object().unwrap();
-    let infection_prevention_score = public_health["infection_prevention_score"].as_f64().unwrap();
-    assert!(infection_prevention_score > 40.0, "Infection prevention score should be reasonable");
+    let infection_prevention_score = public_health["infection_prevention_score"]
+        .as_f64()
+        .unwrap();
+    assert!(
+        infection_prevention_score > 40.0,
+        "Infection prevention score should be reasonable"
+    );
 
     let risk_level = public_health["risk_level"].as_str().unwrap();
-    assert!(matches!(risk_level, "low" | "moderate"), "Risk level should be low or moderate for compliant events");
+    assert!(
+        matches!(risk_level, "low" | "moderate"),
+        "Risk level should be low or moderate for compliant events"
+    );
 
     println!("✅ Hygiene compliance analysis test completed successfully");
 
@@ -639,7 +691,10 @@ async fn test_hygiene_public_health_tracking() {
     .await
     .expect("Failed to call compliance function");
 
-    println!("📊 Initial compliance score: {:?}", compliance_result.compliance_score);
+    println!(
+        "📊 Initial compliance score: {:?}",
+        compliance_result.compliance_score
+    );
 
     // Insert test data that simulates public health scenarios
     let public_health_events = vec![
@@ -647,14 +702,15 @@ async fn test_hygiene_public_health_tracking() {
         ("handwashing", 25, true, true, "crisis_protocol", 5),
         ("handwashing", 30, true, true, "crisis_protocol", 5),
         ("hand_sanitizer", 15, true, true, "crisis_protocol", 4),
-
         // Regular period with mixed compliance
         ("handwashing", 15, false, false, "routine", 3),
         ("toothbrushing", 90, false, false, "routine", 2),
         ("toothbrushing", 130, true, false, "routine", 4),
     ];
 
-    for (i, (event_type, duration, meets_guidelines, crisis, trigger, quality)) in public_health_events.iter().enumerate() {
+    for (i, (event_type, duration, meets_guidelines, crisis, trigger, quality)) in
+        public_health_events.iter().enumerate()
+    {
         let event_time = Utc::now() - Duration::hours((i + 1) as i64);
 
         sqlx::query!(
@@ -662,7 +718,7 @@ async fn test_hygiene_public_health_tracking() {
                 user_id, recorded_at, event_type, duration_seconds, quality_rating,
                 meets_who_guidelines, health_crisis_enhanced, trigger_event,
                 crisis_compliance_level, source_device
-            ) VALUES ($1, $2, $3::hygiene_event_type, $4, $5, $6, $7, $8, $9, 'public_health_test')"#,
+            ) VALUES ($1, $2, $3::text::hygiene_event_type, $4, $5, $6, $7, $8, $9, 'public_health_test')"#,
             user_id,
             event_time,
             event_type,
@@ -687,13 +743,19 @@ async fn test_hygiene_public_health_tracking() {
     .await
     .expect("Failed to get updated compliance score");
 
-    println!("📈 Updated compliance score: {:?}", updated_compliance.compliance_score);
+    println!(
+        "📈 Updated compliance score: {:?}",
+        updated_compliance.compliance_score
+    );
 
     if let Some(compliance_json) = updated_compliance.compliance_score {
-        let compliance: serde_json::Value = serde_json::from_value(compliance_json)
-            .expect("Failed to parse compliance JSON");
+        let compliance: serde_json::Value =
+            serde_json::from_value(compliance_json).expect("Failed to parse compliance JSON");
 
-        println!("🔍 Compliance breakdown: {}", serde_json::to_string_pretty(&compliance).unwrap());
+        println!(
+            "🔍 Compliance breakdown: {}",
+            serde_json::to_string_pretty(&compliance).unwrap()
+        );
 
         // Verify compliance metrics
         assert!(compliance.get("overall_score").is_some());
@@ -718,7 +780,7 @@ async fn test_hygiene_public_health_tracking() {
             r#"INSERT INTO hygiene_events (
                 user_id, recorded_at, event_type, duration_seconds,
                 meets_who_guidelines, source_device
-            ) VALUES ($1, $2, $3::hygiene_event_type, 25, true, 'streak_test')"#,
+            ) VALUES ($1, $2, $3::text::hygiene_event_type, 25, true, 'streak_test')"#,
             user_id,
             timestamp,
             event_type
@@ -801,12 +863,11 @@ async fn test_hygiene_smart_device_integration() {
             data_sensitivity_level: Some("standard".to_string()),
             source_device: Some("philips_sonicare_9900_prestige".to_string()),
             frequency_compliance_rating: Some(5),
-        }
+        },
     ];
 
-    let batch_config = BatchConfig::default();
     let validation_config = ValidationConfig::default();
-    let batch_processor = BatchProcessor::new(Arc::new(pool.clone()), batch_config);
+    let batch_processor = BatchProcessor::new(pool.clone());
     let auth = AuthContext::new_for_testing(user_id);
 
     let payload = HygieneIngestPayload {
@@ -818,8 +879,9 @@ async fn test_hygiene_smart_device_integration() {
             .app_data(web::Data::new(pool.clone()))
             .app_data(web::Data::new(batch_processor))
             .app_data(web::Data::new(validation_config))
-            .service(web::resource("/ingest/hygiene").route(web::post().to(ingest_hygiene)))
-    ).await;
+            .service(web::resource("/ingest/hygiene").route(web::post().to(ingest_hygiene))),
+    )
+    .await;
 
     let req = test::TestRequest::post()
         .uri("/ingest/hygiene")
@@ -834,18 +896,24 @@ async fn test_hygiene_smart_device_integration() {
     assert!(resp.status().is_success());
 
     let response: Value = test::read_body_json(resp).await;
-    println!("📱 Smart device integration response: {}", serde_json::to_string_pretty(&response).unwrap());
+    println!(
+        "📱 Smart device integration response: {}",
+        serde_json::to_string_pretty(&response).unwrap()
+    );
 
     // Verify smart device analysis
     let analysis = response["hygiene_analysis"].as_object().unwrap();
 
     let smart_device_detections = analysis["smart_device_detections"].as_u64().unwrap();
-    assert_eq!(smart_device_detections, 2, "Both events should be detected by smart devices");
+    assert_eq!(
+        smart_device_detections, 2,
+        "Both events should be detected by smart devices"
+    );
 
     // Verify stored data includes smart device information
     let stored_events = sqlx::query!(
         r#"SELECT
-            event_type, device_detected, device_effectiveness_score,
+            event_type::text as "event_type!", device_detected, device_effectiveness_score,
             source_device, achievement_unlocked
         FROM hygiene_events
         WHERE user_id = $1
@@ -865,12 +933,15 @@ async fn test_hygiene_smart_device_integration() {
     }
 
     // Verify specific smart device sources
-    let device_sources: Vec<String> = stored_events.iter()
+    let device_sources: Vec<String> = stored_events
+        .iter()
         .filter_map(|e| e.source_device.as_ref())
         .cloned()
         .collect();
 
-    assert!(device_sources.iter().any(|d| d.contains("oral_b") || d.contains("philips")));
+    assert!(device_sources
+        .iter()
+        .any(|d| d.contains("oral_b") || d.contains("philips")));
 
     println!("✅ Smart device integration test completed successfully");
 

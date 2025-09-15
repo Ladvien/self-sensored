@@ -1,17 +1,15 @@
-use actix_web::{test, web, App, http::StatusCode};
-use chrono::{DateTime, Utc};
-use serde_json::json;
+use actix_web::{http::StatusCode, test, web, App, HttpMessage};
+use chrono::Utc;
 use sqlx::PgPool;
-use std::collections::HashMap;
 use uuid::Uuid;
 
 use self_sensored::{
     config::ValidationConfig,
     db::database::create_connection_pool,
     handlers::body_measurements_handler::{
-        BodyMeasurementsIngestPayload, BodyMeasurementsIngestRequest, BodyMeasurementsIngestResponse,
-        BodyMeasurementsDataResponse, BodyMeasurementsQueryParams,
-        ingest_body_measurements, get_body_measurements_data,
+        get_body_measurements_data, ingest_body_measurements, BodyMeasurementsDataResponse,
+        BodyMeasurementsIngestPayload, BodyMeasurementsIngestRequest,
+        BodyMeasurementsIngestResponse,
     },
     middleware::metrics::Metrics,
     models::health_metrics::BodyMeasurementMetric,
@@ -58,10 +56,7 @@ async fn cleanup_test_data(pool: &PgPool, user_id: Uuid) {
 
 /// Helper function to create auth context
 fn create_auth_context(user_id: Uuid) -> AuthContext {
-    AuthContext {
-        user_id,
-        api_key_id: Uuid::new_v4(),
-    }
+    AuthContext::new_for_testing(user_id)
 }
 
 #[actix_web::test]
@@ -71,35 +66,33 @@ async fn test_body_measurements_ingestion_basic() {
 
     // Create test body measurements payload
     let payload = BodyMeasurementsIngestPayload {
-        body_measurements: vec![
-            BodyMeasurementsIngestRequest {
-                recorded_at: Utc::now(),
-                body_weight_kg: Some(70.5),
-                body_mass_index: Some(22.8),
-                body_fat_percentage: Some(15.2),
-                lean_body_mass_kg: Some(59.8),
-                height_cm: Some(175.0),
-                waist_circumference_cm: Some(80.0),
-                hip_circumference_cm: None,
-                chest_circumference_cm: None,
-                arm_circumference_cm: None,
-                thigh_circumference_cm: None,
-                body_temperature_celsius: None,
-                basal_body_temperature_celsius: None,
-                measurement_source: Some("smart_scale".to_string()),
-                bmi_calculated: Some(true),
-                measurement_reliability: Some("high".to_string()),
-                body_composition_method: Some("bioelectric_impedance".to_string()),
-                fitness_phase: Some("maintenance".to_string()),
-                measurement_conditions: Some("morning_fasted".to_string()),
-                measurement_notes: Some("Post-workout measurement".to_string()),
-                source_device: Some("InBody Scale".to_string()),
-            }
-        ],
+        body_measurements: vec![BodyMeasurementsIngestRequest {
+            recorded_at: Utc::now(),
+            body_weight_kg: Some(70.5),
+            body_mass_index: Some(22.8),
+            body_fat_percentage: Some(15.2),
+            lean_body_mass_kg: Some(59.8),
+            height_cm: Some(175.0),
+            waist_circumference_cm: Some(80.0),
+            hip_circumference_cm: None,
+            chest_circumference_cm: None,
+            arm_circumference_cm: None,
+            thigh_circumference_cm: None,
+            body_temperature_celsius: None,
+            basal_body_temperature_celsius: None,
+            measurement_source: Some("smart_scale".to_string()),
+            bmi_calculated: Some(true),
+            measurement_reliability: Some("high".to_string()),
+            body_composition_method: Some("bioelectric_impedance".to_string()),
+            fitness_phase: Some("maintenance".to_string()),
+            measurement_conditions: Some("morning_fasted".to_string()),
+            measurement_notes: Some("Post-workout measurement".to_string()),
+            source_device: Some("InBody Scale".to_string()),
+        }],
     };
 
     // Create test dependencies
-    let batch_processor = web::Data::new(BatchProcessor::new(pool.clone()).await.expect("Failed to create batch processor"));
+    let batch_processor = web::Data::new(BatchProcessor::new(pool.clone()));
     let metrics = web::Data::new(Metrics::new().expect("Failed to create metrics"));
     let validation_config = web::Data::new(ValidationConfig::default());
     let auth = create_auth_context(user_id);
@@ -111,18 +104,18 @@ async fn test_body_measurements_ingestion_basic() {
             .app_data(batch_processor.clone())
             .app_data(metrics.clone())
             .app_data(validation_config.clone())
-            .route("/ingest", web::post().to(ingest_body_measurements))
-    ).await;
+            .route("/ingest", web::post().to(ingest_body_measurements)),
+    )
+    .await;
 
     // Create request with authentication
-    let mut request = test::TestRequest::post()
-        .uri("/ingest")
-        .set_json(&payload);
+    let req = test::TestRequest::post().uri("/ingest").set_json(&payload).to_request();
 
     // Manually set auth context in extensions
-    request.extensions_mut().insert(auth);
+    let mut req = req;
+    req.extensions_mut().insert(auth);
 
-    let response = test::call_service(&app, request.to_request()).await;
+    let response = test::call_service(&app, req).await;
 
     // Check response
     assert_eq!(response.status(), StatusCode::OK);
@@ -144,7 +137,7 @@ async fn test_body_measurements_ingestion_basic() {
             height_cm, waist_circumference_cm, hip_circumference_cm, chest_circumference_cm,
             arm_circumference_cm, thigh_circumference_cm,
             body_temperature_celsius, basal_body_temperature_celsius,
-            measurement_source, source_device, created_at
+            measurement_source, source_device, created_at as "created_at!"
         FROM body_measurements
         WHERE user_id = $1
         "#,
@@ -158,7 +151,10 @@ async fn test_body_measurements_ingestion_basic() {
     assert_eq!(stored_measurement.body_weight_kg, Some(70.5));
     assert_eq!(stored_measurement.body_mass_index, Some(22.8));
     assert_eq!(stored_measurement.body_fat_percentage, Some(15.2));
-    assert_eq!(stored_measurement.measurement_source, Some("smart_scale".to_string()));
+    assert_eq!(
+        stored_measurement.measurement_source,
+        Some("smart_scale".to_string())
+    );
 
     // Cleanup
     cleanup_test_data(&pool, user_id).await;
@@ -243,12 +239,12 @@ async fn test_body_measurements_validation() {
                 measurement_conditions: Some("evening".to_string()),
                 measurement_notes: None,
                 source_device: Some("Withings Scale".to_string()),
-            }
+            },
         ],
     };
 
     // Create test dependencies
-    let batch_processor = web::Data::new(BatchProcessor::new(pool.clone()).await.expect("Failed to create batch processor"));
+    let batch_processor = web::Data::new(BatchProcessor::new(pool.clone()));
     let metrics = web::Data::new(Metrics::new().expect("Failed to create metrics"));
     let validation_config = web::Data::new(ValidationConfig::default());
     let auth = create_auth_context(user_id);
@@ -260,18 +256,18 @@ async fn test_body_measurements_validation() {
             .app_data(batch_processor.clone())
             .app_data(metrics.clone())
             .app_data(validation_config.clone())
-            .route("/ingest", web::post().to(ingest_body_measurements))
-    ).await;
+            .route("/ingest", web::post().to(ingest_body_measurements)),
+    )
+    .await;
 
     // Create request with authentication
-    let mut request = test::TestRequest::post()
-        .uri("/ingest")
-        .set_json(&payload);
+    let req = test::TestRequest::post().uri("/ingest").set_json(&payload).to_request();
 
     // Manually set auth context in extensions
-    request.extensions_mut().insert(auth);
+    let mut req = req;
+    req.extensions_mut().insert(auth);
 
-    let response = test::call_service(&app, request.to_request()).await;
+    let response = test::call_service(&app, req).await;
 
     // Check response
     assert_eq!(response.status(), StatusCode::OK);
@@ -283,8 +279,12 @@ async fn test_body_measurements_validation() {
     assert_eq!(response_body.errors.len(), 2);
 
     // Check error messages
-    assert!(response_body.errors[0].message.contains("outside valid range"));
-    assert!(response_body.errors[1].message.contains("outside valid range"));
+    assert!(response_body.errors[0]
+        .message
+        .contains("outside valid range"));
+    assert!(response_body.errors[1]
+        .message
+        .contains("outside valid range"));
 
     // Verify only the valid measurement was stored
     let count = sqlx::query_scalar!(
@@ -321,8 +321,24 @@ async fn test_body_measurements_data_retrieval() {
         ($1, $2, $3, $4, $5, $6, $7, $8, $9),
         ($10, $11, $12, $13, $14, $15, $16, $17, $18)
         "#,
-        measurement1_id, user_id, now, 72.5, 23.2, 16.8, 176.0, "smart_scale", "InBody",
-        measurement2_id, user_id, earlier, 73.0, 23.5, 17.2, 176.0, "manual", "Manual Entry"
+        measurement1_id,
+        user_id,
+        now,
+        72.5,
+        23.2,
+        16.8,
+        176.0,
+        "smart_scale",
+        "InBody",
+        measurement2_id,
+        user_id,
+        earlier,
+        73.0,
+        23.5,
+        17.2,
+        176.0,
+        "manual",
+        "Manual Entry"
     )
     .execute(&pool)
     .await
@@ -332,16 +348,17 @@ async fn test_body_measurements_data_retrieval() {
     let app = test::init_service(
         App::new()
             .app_data(web::Data::new(pool.clone()))
-            .route("/data", web::get().to(get_body_measurements_data))
-    ).await;
+            .route("/data", web::get().to(get_body_measurements_data)),
+    )
+    .await;
 
     // Test data retrieval without filters
     let auth = create_auth_context(user_id);
-    let mut request = test::TestRequest::get()
-        .uri("/data");
-    request.extensions_mut().insert(auth);
+    let req = test::TestRequest::get().uri("/data").to_request();
+    let mut req = req;
+    req.extensions_mut().insert(auth);
 
-    let response = test::call_service(&app, request.to_request()).await;
+    let response = test::call_service(&app, req).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     let response_body: BodyMeasurementsDataResponse = test::read_body_json(response).await;
@@ -355,11 +372,11 @@ async fn test_body_measurements_data_retrieval() {
 
     // Test with measurement type filter
     let auth = create_auth_context(user_id);
-    let mut request = test::TestRequest::get()
-        .uri("/data?measurement_type=weight");
-    request.extensions_mut().insert(auth);
+    let req = test::TestRequest::get().uri("/data?measurement_type=weight").to_request();
+    let mut req = req;
+    req.extensions_mut().insert(auth);
 
-    let response = test::call_service(&app, request.to_request()).await;
+    let response = test::call_service(&app, req).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     let response_body: BodyMeasurementsDataResponse = test::read_body_json(response).await;
@@ -367,11 +384,11 @@ async fn test_body_measurements_data_retrieval() {
 
     // Test with measurement source filter
     let auth = create_auth_context(user_id);
-    let mut request = test::TestRequest::get()
-        .uri("/data?measurement_source=smart_scale");
-    request.extensions_mut().insert(auth);
+    let req = test::TestRequest::get().uri("/data?measurement_source=smart_scale").to_request();
+    let mut req = req;
+    req.extensions_mut().insert(auth);
 
-    let response = test::call_service(&app, request.to_request()).await;
+    let response = test::call_service(&app, req).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     let response_body: BodyMeasurementsDataResponse = test::read_body_json(response).await;
@@ -379,11 +396,11 @@ async fn test_body_measurements_data_retrieval() {
 
     // Test with limit
     let auth = create_auth_context(user_id);
-    let mut request = test::TestRequest::get()
-        .uri("/data?limit=1");
-    request.extensions_mut().insert(auth);
+    let req = test::TestRequest::get().uri("/data?limit=1").to_request();
+    let mut req = req;
+    req.extensions_mut().insert(auth);
 
-    let response = test::call_service(&app, request.to_request()).await;
+    let response = test::call_service(&app, req).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     let response_body: BodyMeasurementsDataResponse = test::read_body_json(response).await;
@@ -401,35 +418,33 @@ async fn test_bmi_consistency_validation() {
 
     // Create test payload with BMI inconsistency
     let payload = BodyMeasurementsIngestPayload {
-        body_measurements: vec![
-            BodyMeasurementsIngestRequest {
-                recorded_at: Utc::now(),
-                body_weight_kg: Some(70.0),  // 70kg
-                height_cm: Some(170.0),      // 170cm
-                body_mass_index: Some(30.0), // BMI 30, but calculated should be ~24.2
-                body_fat_percentage: None,
-                lean_body_mass_kg: None,
-                waist_circumference_cm: None,
-                hip_circumference_cm: None,
-                chest_circumference_cm: None,
-                arm_circumference_cm: None,
-                thigh_circumference_cm: None,
-                body_temperature_celsius: None,
-                basal_body_temperature_celsius: None,
-                measurement_source: Some("smart_scale".to_string()),
-                bmi_calculated: Some(true), // This indicates BMI was calculated from weight/height
-                measurement_reliability: Some("standard".to_string()),
-                body_composition_method: None,
-                fitness_phase: None,
-                measurement_conditions: None,
-                measurement_notes: Some("BMI inconsistency test".to_string()),
-                source_device: Some("Test Scale".to_string()),
-            }
-        ],
+        body_measurements: vec![BodyMeasurementsIngestRequest {
+            recorded_at: Utc::now(),
+            body_weight_kg: Some(70.0),  // 70kg
+            height_cm: Some(170.0),      // 170cm
+            body_mass_index: Some(30.0), // BMI 30, but calculated should be ~24.2
+            body_fat_percentage: None,
+            lean_body_mass_kg: None,
+            waist_circumference_cm: None,
+            hip_circumference_cm: None,
+            chest_circumference_cm: None,
+            arm_circumference_cm: None,
+            thigh_circumference_cm: None,
+            body_temperature_celsius: None,
+            basal_body_temperature_celsius: None,
+            measurement_source: Some("smart_scale".to_string()),
+            bmi_calculated: Some(true), // This indicates BMI was calculated from weight/height
+            measurement_reliability: Some("standard".to_string()),
+            body_composition_method: None,
+            fitness_phase: None,
+            measurement_conditions: None,
+            measurement_notes: Some("BMI inconsistency test".to_string()),
+            source_device: Some("Test Scale".to_string()),
+        }],
     };
 
     // Create test dependencies
-    let batch_processor = web::Data::new(BatchProcessor::new(pool.clone()).await.expect("Failed to create batch processor"));
+    let batch_processor = web::Data::new(BatchProcessor::new(pool.clone()));
     let metrics = web::Data::new(Metrics::new().expect("Failed to create metrics"));
     let validation_config = web::Data::new(ValidationConfig::default());
     let auth = create_auth_context(user_id);
@@ -441,17 +456,17 @@ async fn test_bmi_consistency_validation() {
             .app_data(batch_processor.clone())
             .app_data(metrics.clone())
             .app_data(validation_config.clone())
-            .route("/ingest", web::post().to(ingest_body_measurements))
-    ).await;
+            .route("/ingest", web::post().to(ingest_body_measurements)),
+    )
+    .await;
 
     // Create request with authentication
-    let mut request = test::TestRequest::post()
-        .uri("/ingest")
-        .set_json(&payload);
+    let req = test::TestRequest::post().uri("/ingest").set_json(&payload).to_request();
 
-    request.extensions_mut().insert(auth);
+    let mut req = req;
+    req.extensions_mut().insert(auth);
 
-    let response = test::call_service(&app, request.to_request()).await;
+    let response = test::call_service(&app, req).await;
 
     // Check response - should still succeed but with warnings logged
     assert_eq!(response.status(), StatusCode::OK);
@@ -485,35 +500,33 @@ async fn test_body_measurements_smart_scale_integration() {
 
     // Simulate smart scale data with comprehensive body composition
     let payload = BodyMeasurementsIngestPayload {
-        body_measurements: vec![
-            BodyMeasurementsIngestRequest {
-                recorded_at: Utc::now(),
-                body_weight_kg: Some(68.2),
-                body_mass_index: Some(21.8),
-                body_fat_percentage: Some(12.5),
-                lean_body_mass_kg: Some(59.7),
-                height_cm: Some(178.0), // Stored from previous measurement
-                waist_circumference_cm: None,
-                hip_circumference_cm: None,
-                chest_circumference_cm: None,
-                arm_circumference_cm: None,
-                thigh_circumference_cm: None,
-                body_temperature_celsius: None,
-                basal_body_temperature_celsius: None,
-                measurement_source: Some("smart_scale".to_string()),
-                bmi_calculated: Some(true),
-                measurement_reliability: Some("high".to_string()),
-                body_composition_method: Some("bioelectric_impedance".to_string()),
-                fitness_phase: Some("cutting".to_string()),
-                measurement_conditions: Some("morning_fasted".to_string()),
-                measurement_notes: Some("Pre-workout measurement from InBody scale".to_string()),
-                source_device: Some("InBody H20N".to_string()),
-            }
-        ],
+        body_measurements: vec![BodyMeasurementsIngestRequest {
+            recorded_at: Utc::now(),
+            body_weight_kg: Some(68.2),
+            body_mass_index: Some(21.8),
+            body_fat_percentage: Some(12.5),
+            lean_body_mass_kg: Some(59.7),
+            height_cm: Some(178.0), // Stored from previous measurement
+            waist_circumference_cm: None,
+            hip_circumference_cm: None,
+            chest_circumference_cm: None,
+            arm_circumference_cm: None,
+            thigh_circumference_cm: None,
+            body_temperature_celsius: None,
+            basal_body_temperature_celsius: None,
+            measurement_source: Some("smart_scale".to_string()),
+            bmi_calculated: Some(true),
+            measurement_reliability: Some("high".to_string()),
+            body_composition_method: Some("bioelectric_impedance".to_string()),
+            fitness_phase: Some("cutting".to_string()),
+            measurement_conditions: Some("morning_fasted".to_string()),
+            measurement_notes: Some("Pre-workout measurement from InBody scale".to_string()),
+            source_device: Some("InBody H20N".to_string()),
+        }],
     };
 
     // Create test dependencies
-    let batch_processor = web::Data::new(BatchProcessor::new(pool.clone()).await.expect("Failed to create batch processor"));
+    let batch_processor = web::Data::new(BatchProcessor::new(pool.clone()));
     let metrics = web::Data::new(Metrics::new().expect("Failed to create metrics"));
     let validation_config = web::Data::new(ValidationConfig::default());
     let auth = create_auth_context(user_id);
@@ -525,17 +538,17 @@ async fn test_body_measurements_smart_scale_integration() {
             .app_data(batch_processor.clone())
             .app_data(metrics.clone())
             .app_data(validation_config.clone())
-            .route("/ingest", web::post().to(ingest_body_measurements))
-    ).await;
+            .route("/ingest", web::post().to(ingest_body_measurements)),
+    )
+    .await;
 
     // Create request with authentication
-    let mut request = test::TestRequest::post()
-        .uri("/ingest")
-        .set_json(&payload);
+    let req = test::TestRequest::post().uri("/ingest").set_json(&payload).to_request();
 
-    request.extensions_mut().insert(auth);
+    let mut req = req;
+    req.extensions_mut().insert(auth);
 
-    let response = test::call_service(&app, request.to_request()).await;
+    let response = test::call_service(&app, req).await;
 
     // Check response
     assert_eq!(response.status(), StatusCode::OK);
@@ -559,7 +572,9 @@ async fn test_body_measurements_smart_scale_integration() {
     assert!(!insights.progress_indicators.is_empty());
 
     // Find the body fat progress indicator
-    let body_fat_indicator = insights.progress_indicators.iter()
+    let body_fat_indicator = insights
+        .progress_indicators
+        .iter()
         .find(|indicator| indicator.metric == "body_fat_percentage")
         .expect("Should have body fat percentage indicator");
     assert_eq!(body_fat_indicator.value, 12.5);

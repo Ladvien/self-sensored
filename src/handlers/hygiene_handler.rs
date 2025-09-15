@@ -71,7 +71,7 @@ pub struct HygieneQueryParams {
 }
 
 /// Hygiene ingestion response
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct HygieneIngestResponse {
     pub success: bool,
     pub processed_count: usize,
@@ -82,7 +82,7 @@ pub struct HygieneIngestResponse {
 }
 
 /// Hygiene processing error details
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct HygieneProcessingError {
     pub index: usize,
     pub error_type: String,
@@ -92,38 +92,38 @@ pub struct HygieneProcessingError {
 }
 
 /// Hygiene analysis summary
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct HygieneAnalysis {
-    pub compliance_score: f64, // Overall compliance score (0-100%)
-    pub handwashing_compliance: f64, // WHO handwashing guideline compliance
-    pub toothbrushing_compliance: f64, // ADA toothbrushing guideline compliance
+    pub compliance_score: f64,          // Overall compliance score (0-100%)
+    pub handwashing_compliance: f64,    // WHO handwashing guideline compliance
+    pub toothbrushing_compliance: f64,  // ADA toothbrushing guideline compliance
     pub critical_hygiene_events: usize, // Infection prevention critical events
     pub smart_device_detections: usize, // Events detected by smart devices
-    pub health_crisis_events: usize, // Events during health crisis periods
+    pub health_crisis_events: usize,    // Events during health crisis periods
     pub habit_strength_summary: HabitStrengthSummary,
     pub public_health_insights: PublicHealthInsights,
 }
 
 /// Habit strength analysis summary
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct HabitStrengthSummary {
     pub average_streak_length: f64,
     pub strongest_habit: Option<String>, // Event type with longest streak
-    pub developing_habits: Vec<String>, // Habits in development stage
+    pub developing_habits: Vec<String>,  // Habits in development stage
     pub total_achievements: usize,
 }
 
 /// Public health insights for hygiene tracking
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct PublicHealthInsights {
     pub infection_prevention_score: f64, // Critical hygiene compliance
     pub crisis_response_effectiveness: f64, // Compliance during health crises
     pub recommended_improvements: Vec<String>, // Actionable health recommendations
-    pub risk_level: String, // low, moderate, high infection risk
+    pub risk_level: String,              // low, moderate, high infection risk
 }
 
 /// Hygiene data retrieval response
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct HygieneDataResponse {
     pub hygiene_events: Vec<HygieneEventSummary>,
     pub total_count: i64,
@@ -133,7 +133,7 @@ pub struct HygieneDataResponse {
 }
 
 /// Hygiene event summary for API responses
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct HygieneEventSummary {
     pub id: Uuid,
     pub recorded_at: DateTime<Utc>,
@@ -151,7 +151,7 @@ pub struct HygieneEventSummary {
 }
 
 /// Date range summary
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct DateRange {
     pub start: DateTime<Utc>,
     pub end: DateTime<Utc>,
@@ -159,7 +159,7 @@ pub struct DateRange {
 }
 
 /// Compliance summary for hygiene tracking
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ComplianceSummary {
     pub overall_score: f64,
     pub handwashing_events: usize,
@@ -171,7 +171,7 @@ pub struct ComplianceSummary {
 }
 
 /// Hygiene analytics for behavioral insights
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct HygieneAnalytics {
     pub daily_frequency: f64,
     pub category_breakdown: std::collections::HashMap<String, usize>,
@@ -181,7 +181,7 @@ pub struct HygieneAnalytics {
 }
 
 /// Trend analysis for hygiene behavior
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TrendAnalysis {
     pub improving_habits: Vec<String>,
     pub declining_habits: Vec<String>,
@@ -199,7 +199,7 @@ pub async fn ingest_hygiene(
     payload: web::Json<HygieneIngestPayload>,
 ) -> ActixResult<HttpResponse> {
     let start_time = std::time::Instant::now();
-    let user_id = auth.user_id();
+    let user_id = auth.user.id;
 
     info!(
         user_id = %user_id,
@@ -227,6 +227,7 @@ pub async fn ingest_hygiene(
                 processed_count += 1;
             }
             Err(error_msg) => {
+                let error_message = error_msg.clone();
                 errors.push(HygieneProcessingError {
                     index,
                     error_type: "validation_error".to_string(),
@@ -237,7 +238,7 @@ pub async fn ingest_hygiene(
                 warn!(
                     user_id = %user_id,
                     index = index,
-                    error = %error_msg,
+                    error = %error_message,
                     "Hygiene event validation failed"
                 );
             }
@@ -245,8 +246,11 @@ pub async fn ingest_hygiene(
     }
 
     // Batch process validated hygiene metrics
-    let processing_result = if !hygiene_metrics.is_empty() {
-        match batch_processor.process_hygiene_events(user_id, hygiene_metrics).await {
+    let _processing_result = if !hygiene_metrics.is_empty() {
+        match batch_processor
+            .process_hygiene_events(user_id, hygiene_metrics)
+            .await
+        {
             Ok(result) => Some(result),
             Err(e) => {
                 error!(
@@ -258,7 +262,7 @@ pub async fn ingest_hygiene(
                 errors.push(HygieneProcessingError {
                     index: 0,
                     error_type: "database_error".to_string(),
-                    message: format!("Failed to store hygiene events: {}", e),
+                    message: format!("Failed to store hygiene events: {e}"),
                     event_type: None,
                     duration: None,
                 });
@@ -274,7 +278,9 @@ pub async fn ingest_hygiene(
 
     // Generate hygiene analysis if events were processed successfully
     let hygiene_analysis = if processed_count > 0 {
-        generate_hygiene_analysis(user_id, &payload.hygiene_events, &pool).await.ok()
+        generate_hygiene_analysis(user_id, &payload.hygiene_events, &pool)
+            .await
+            .ok()
     } else {
         None
     };
@@ -297,25 +303,13 @@ pub async fn ingest_hygiene(
     );
 
     // Update metrics
-    if let Some(metrics) = Metrics::try_get() {
-        metrics.ingest_requests_total
-            .with_label_values(&["hygiene", if response.success { "success" } else { "failure" }])
-            .inc();
-
-        metrics.metrics_processed_total
-            .with_label_values(&["hygiene"])
-            .inc_by(processed_count as u64);
-
-        if failed_count > 0 {
-            metrics.ingest_errors_total
-                .with_label_values(&["hygiene", "validation_error"])
-                .inc_by(failed_count as u64);
-        }
-
-        metrics.ingest_duration_seconds
-            .with_label_values(&["hygiene"])
-            .observe(processing_time_ms as f64 / 1000.0);
+    Metrics::record_ingest_request();
+    Metrics::record_metrics_processed("hygiene", processed_count as u64, "success");
+    if failed_count > 0 {
+        Metrics::record_ingest_errors_total(failed_count);
     }
+    let processing_duration = std::time::Duration::from_millis(processing_time_ms);
+    Metrics::record_ingest_duration(processing_duration, "hygiene");
 
     Ok(HttpResponse::Ok().json(response))
 }
@@ -327,7 +321,7 @@ pub async fn get_hygiene_data(
     auth: AuthContext,
     query: web::Query<HygieneQueryParams>,
 ) -> ActixResult<HttpResponse> {
-    let user_id = auth.user_id();
+    let user_id = auth.user.id;
 
     info!(
         user_id = %user_id,
@@ -339,9 +333,9 @@ pub async fn get_hygiene_data(
 
     // Set default date range if not provided (last 30 days)
     let end_date = query.end_date.unwrap_or_else(Utc::now);
-    let start_date = query.start_date.unwrap_or_else(|| {
-        end_date - chrono::Duration::days(30)
-    });
+    let start_date = query
+        .start_date
+        .unwrap_or_else(|| end_date - chrono::Duration::days(30));
 
     let limit = query.limit.unwrap_or(1000).min(10000); // Max 10k records
 
@@ -358,14 +352,15 @@ pub async fn get_hygiene_data(
             source_device, created_at
         FROM hygiene_events
         WHERE user_id = $1 AND recorded_at BETWEEN $2 AND $3
-    "#.to_string();
+    "#
+    .to_string();
 
     let mut param_count = 3;
 
     // Add event type filter
-    if let Some(event_type) = &query.event_type {
+    if let Some(_event_type) = &query.event_type {
         param_count += 1;
-        sql_query.push_str(&format!(" AND event_type = ${}", param_count));
+        sql_query.push_str(&format!(" AND event_type = ${param_count}"));
     }
 
     // Add crisis period filter
@@ -383,7 +378,7 @@ pub async fn get_hygiene_data(
     }
 
     sql_query.push_str(" ORDER BY recorded_at DESC");
-    sql_query.push_str(&format!(" LIMIT {}", limit));
+    sql_query.push_str(&format!(" LIMIT {limit}"));
 
     // Execute query
     let hygiene_events = match query.event_type.as_ref() {
@@ -422,9 +417,9 @@ pub async fn get_hygiene_data(
     };
 
     // Get total count for pagination
-    let total_count = get_hygiene_events_count(
-        user_id, start_date, end_date, &query, &pool
-    ).await.unwrap_or(0);
+    let total_count = get_hygiene_events_count(user_id, start_date, end_date, &query, &pool)
+        .await
+        .unwrap_or(0);
 
     // Convert to summary format and generate analytics
     let hygiene_summaries: Vec<HygieneEventSummary> = hygiene_events
@@ -523,11 +518,13 @@ async fn generate_hygiene_analysis(
     pool: &PgPool,
 ) -> Result<HygieneAnalysis, sqlx::Error> {
     // Calculate compliance scores
-    let handwashing_events: Vec<_> = events.iter()
+    let handwashing_events: Vec<_> = events
+        .iter()
         .filter(|e| e.event_type == "handwashing")
         .collect();
 
-    let toothbrushing_events: Vec<_> = events.iter()
+    let toothbrushing_events: Vec<_> = events
+        .iter()
         .filter(|e| e.event_type == "toothbrushing")
         .collect();
 
@@ -537,15 +534,18 @@ async fn generate_hygiene_analysis(
     let overall_compliance = (handwashing_compliance + toothbrushing_compliance) / 2.0;
 
     // Count various event types
-    let critical_events = events.iter()
+    let critical_events = events
+        .iter()
         .filter(|e| matches!(e.event_type.as_str(), "handwashing" | "hand_sanitizer"))
         .count();
 
-    let smart_device_detections = events.iter()
+    let smart_device_detections = events
+        .iter()
         .filter(|e| e.device_detected.unwrap_or(false))
         .count();
 
-    let health_crisis_events = events.iter()
+    let health_crisis_events = events
+        .iter()
         .filter(|e| e.health_crisis_enhanced.unwrap_or(false))
         .count();
 
@@ -578,7 +578,8 @@ fn calculate_guideline_compliance(events: &[&HygieneIngestRequest], min_duration
         return 0.0;
     }
 
-    let compliant_count = events.iter()
+    let compliant_count = events
+        .iter()
         .filter(|e| e.duration_seconds.unwrap_or(0) >= min_duration)
         .count();
 
@@ -594,7 +595,7 @@ async fn generate_habit_strength_summary(
     let streak_data = sqlx::query!(
         r#"
         SELECT
-            event_type,
+            event_type::text as "event_type!",
             MAX(streak_count) as max_streak,
             AVG(streak_count::DECIMAL) as avg_streak,
             COUNT(*) as total_events,
@@ -610,23 +611,26 @@ async fn generate_habit_strength_summary(
     .fetch_all(pool)
     .await?;
 
-    let average_streak_length = streak_data.iter()
-        .filter_map(|row| row.avg_streak.map(|s| s.to_string().parse::<f64>().unwrap_or(0.0)))
-        .fold(0.0, |acc, x| acc + x) / streak_data.len().max(1) as f64;
-
-    let strongest_habit = streak_data.first()
-        .and_then(|row| row.event_type.as_ref())
-        .map(|s| s.to_string());
-
-    let developing_habits: Vec<String> = streak_data.iter()
-        .filter(|row| {
-            row.max_streak.unwrap_or(0) >= 3 && row.max_streak.unwrap_or(0) <= 20
+    let average_streak_length = streak_data
+        .iter()
+        .filter_map(|row| {
+            row.avg_streak
+                .as_ref()
+                .map(|s| s.to_string().parse::<f64>().unwrap_or(0.0))
         })
-        .filter_map(|row| row.event_type.as_ref())
-        .map(|s| s.to_string())
+        .fold(0.0, |acc, x| acc + x)
+        / streak_data.len().max(1) as f64;
+
+    let strongest_habit = streak_data.first().map(|row| row.event_type.clone());
+
+    let developing_habits: Vec<String> = streak_data
+        .iter()
+        .filter(|row| row.max_streak.unwrap_or(0) >= 3 && row.max_streak.unwrap_or(0) <= 20)
+        .map(|row| row.event_type.clone())
         .collect();
 
-    let total_achievements: usize = streak_data.iter()
+    let total_achievements: usize = streak_data
+        .iter()
         .map(|row| row.achievements.unwrap_or(0) as usize)
         .sum();
 
@@ -660,11 +664,14 @@ fn generate_public_health_insights(
     let mut recommendations = Vec::new();
 
     if compliance_score < 70.0 {
-        recommendations.push("Increase hygiene event duration to meet health guidelines".to_string());
+        recommendations
+            .push("Increase hygiene event duration to meet health guidelines".to_string());
     }
 
     if critical_events < (total_events / 3) {
-        recommendations.push("Focus on critical infection prevention hygiene (handwashing, sanitizing)".to_string());
+        recommendations.push(
+            "Focus on critical infection prevention hygiene (handwashing, sanitizing)".to_string(),
+        );
     }
 
     if crisis_response_effectiveness < 75.0 && crisis_events > 0 {
@@ -675,7 +682,8 @@ fn generate_public_health_insights(
         score if score >= 80.0 => "low",
         score if score >= 60.0 => "moderate",
         _ => "high",
-    }.to_string();
+    }
+    .to_string();
 
     PublicHealthInsights {
         infection_prevention_score,
@@ -697,7 +705,8 @@ async fn get_hygiene_events_count(
         SELECT COUNT(*) as total
         FROM hygiene_events
         WHERE user_id = $1 AND recorded_at BETWEEN $2 AND $3
-    "#.to_string();
+    "#
+    .to_string();
 
     if query.event_type.is_some() {
         count_query.push_str(" AND event_type = $4");
@@ -740,38 +749,50 @@ async fn get_hygiene_events_count(
 
 /// Generate compliance summary
 fn generate_compliance_summary(events: &[HygieneMetric]) -> ComplianceSummary {
-    let handwashing_events: Vec<_> = events.iter()
+    let handwashing_events: Vec<_> = events
+        .iter()
         .filter(|e| matches!(e.event_type, HygieneEventType::Handwashing))
         .collect();
 
-    let toothbrushing_events: Vec<_> = events.iter()
+    let toothbrushing_events: Vec<_> = events
+        .iter()
         .filter(|e| matches!(e.event_type, HygieneEventType::Toothbrushing))
         .collect();
 
     let handwashing_compliance = if !handwashing_events.is_empty() {
-        handwashing_events.iter()
+        handwashing_events
+            .iter()
             .filter(|e| e.meets_who_guidelines.unwrap_or(false))
-            .count() as f64 / handwashing_events.len() as f64 * 100.0
+            .count() as f64
+            / handwashing_events.len() as f64
+            * 100.0
     } else {
         0.0
     };
 
     let toothbrushing_compliance = if !toothbrushing_events.is_empty() {
-        toothbrushing_events.iter()
+        toothbrushing_events
+            .iter()
             .filter(|e| e.meets_who_guidelines.unwrap_or(false))
-            .count() as f64 / toothbrushing_events.len() as f64 * 100.0
+            .count() as f64
+            / toothbrushing_events.len() as f64
+            * 100.0
     } else {
         0.0
     };
 
-    let critical_events_total = events.iter()
+    let critical_events_total = events
+        .iter()
         .filter(|e| e.is_critical_for_infection_prevention())
         .count();
 
     let who_guideline_adherence = if !events.is_empty() {
-        events.iter()
+        events
+            .iter()
             .filter(|e| e.meets_who_guidelines.unwrap_or(false))
-            .count() as f64 / events.len() as f64 * 100.0
+            .count() as f64
+            / events.len() as f64
+            * 100.0
     } else {
         0.0
     };
@@ -814,22 +835,26 @@ fn generate_hygiene_analytics(
     }
 
     // Public health score based on critical events and compliance
-    let critical_events = events.iter()
+    let critical_events = events
+        .iter()
         .filter(|e| e.is_critical_for_infection_prevention())
         .count();
 
-    let compliant_events = events.iter()
+    let compliant_events = events
+        .iter()
         .filter(|e| e.meets_who_guidelines.unwrap_or(false))
         .count();
 
     let public_health_score = if !events.is_empty() {
-        ((critical_events as f64 * 0.6) + (compliant_events as f64 * 0.4)) / events.len() as f64 * 100.0
+        ((critical_events as f64 * 0.6) + (compliant_events as f64 * 0.4)) / events.len() as f64
+            * 100.0
     } else {
         0.0
     };
 
     // Smart device adoption
-    let device_events = events.iter()
+    let device_events = events
+        .iter()
         .filter(|e| e.device_detected.unwrap_or(false))
         .count();
 

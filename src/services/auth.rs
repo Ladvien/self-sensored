@@ -61,6 +61,34 @@ pub struct AuthContext {
     pub api_key: ApiKey,
 }
 
+impl AuthContext {
+    /// Create a new AuthContext for testing purposes
+    pub fn new_for_testing(user_id: uuid::Uuid) -> Self {
+        Self {
+            user: User {
+                id: user_id,
+                email: format!("test-{}@example.com", user_id),
+                apple_health_id: None,
+                created_at: Some(chrono::Utc::now()),
+                updated_at: None,
+                is_active: Some(true),
+                metadata: None,
+            },
+            api_key: ApiKey {
+                id: uuid::Uuid::new_v4(),
+                user_id,
+                name: Some("Test API Key".to_string()),
+                created_at: Some(chrono::Utc::now()),
+                last_used_at: None,
+                expires_at: None,
+                is_active: Some(true),
+                permissions: None,
+                rate_limit_per_hour: None,
+            },
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct AuthService {
     pool: PgPool,

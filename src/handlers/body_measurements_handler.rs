@@ -63,7 +63,7 @@ pub struct BodyMeasurementsQueryParams {
 }
 
 /// Body measurements ingestion response
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BodyMeasurementsIngestResponse {
     pub success: bool,
     pub processed_count: usize,
@@ -75,7 +75,7 @@ pub struct BodyMeasurementsIngestResponse {
 }
 
 /// Body measurement processing error details
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BodyMeasurementProcessingError {
     pub index: usize,
     pub error_type: String,
@@ -86,7 +86,7 @@ pub struct BodyMeasurementProcessingError {
 }
 
 /// Body composition analysis summary
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BodyCompositionAnalysis {
     pub weight_trend: Option<WeightTrend>,
     pub bmi_category: Option<String>, // underweight, normal, overweight, obese
@@ -97,7 +97,7 @@ pub struct BodyCompositionAnalysis {
 }
 
 /// Weight trend analysis
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct WeightTrend {
     pub current_weight: f64,
     pub weight_change_kg: Option<f64>, // vs previous measurement
@@ -107,7 +107,7 @@ pub struct WeightTrend {
 }
 
 /// Fitness insights from body measurements
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FitnessInsights {
     pub muscle_mass_trends: Option<MuscleMassTrend>,
     pub body_recomposition_score: Option<f64>, // 0-100 scale
@@ -117,7 +117,7 @@ pub struct FitnessInsights {
 }
 
 /// Muscle mass trend analysis
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct MuscleMassTrend {
     pub lean_mass_change_kg: Option<f64>,
     pub muscle_to_fat_ratio: Option<f64>,
@@ -125,7 +125,7 @@ pub struct MuscleMassTrend {
 }
 
 /// Progress indicator for fitness tracking
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ProgressIndicator {
     pub metric: String,
     pub value: f64,
@@ -135,7 +135,7 @@ pub struct ProgressIndicator {
 }
 
 /// Body measurements data response
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BodyMeasurementsDataResponse {
     pub body_measurements: Vec<BodyMeasurementMetric>,
     pub total_count: i64,
@@ -145,14 +145,14 @@ pub struct BodyMeasurementsDataResponse {
 }
 
 /// Date range for body measurements
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct DateRange {
     pub start: DateTime<Utc>,
     pub end: DateTime<Utc>,
 }
 
 /// Summary statistics for body measurements
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BodyMeasurementsSummary {
     pub latest_weight: Option<f64>,
     pub latest_bmi: Option<f64>,
@@ -164,7 +164,7 @@ pub struct BodyMeasurementsSummary {
 }
 
 /// Body measurement trends over time
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BodyMeasurementTrends {
     pub weight_trend_30_days: Option<TrendData>,
     pub bmi_trend_30_days: Option<TrendData>,
@@ -173,7 +173,7 @@ pub struct BodyMeasurementTrends {
 }
 
 /// Trend data for a specific measurement
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TrendData {
     pub current_value: f64,
     pub change_absolute: f64,
@@ -183,24 +183,24 @@ pub struct TrendData {
 }
 
 /// Ingest body measurements data
-#[instrument(skip(pool, batch_processor, metrics))]
+#[instrument(skip(pool, batch_processor, _metrics))]
 pub async fn ingest_body_measurements(
     auth: AuthContext,
     payload: web::Json<BodyMeasurementsIngestPayload>,
     pool: web::Data<PgPool>,
     batch_processor: web::Data<BatchProcessor>,
-    metrics: web::Data<Metrics>,
+    _metrics: web::Data<Metrics>,
     validation_config: web::Data<ValidationConfig>,
 ) -> ActixResult<HttpResponse> {
     let start_time = std::time::Instant::now();
     info!(
-        user_id = %auth.user_id,
+        user_id = %auth.user.id,
         measurement_count = payload.body_measurements.len(),
         "Processing body measurements ingestion request"
     );
 
     // Increment ingestion counter
-    metrics.increment_counter("body_measurements_ingest_total", &[]);
+    Metrics::record_ingest_request();
 
     let mut processed_count = 0;
     let mut failed_count = 0;
@@ -211,7 +211,7 @@ pub async fn ingest_body_measurements(
     for (index, measurement_request) in payload.body_measurements.iter().enumerate() {
         match convert_and_validate_body_measurement(
             measurement_request,
-            auth.user_id,
+            auth.user.id,
             &validation_config,
         ) {
             Ok(body_measurement) => {
@@ -224,7 +224,8 @@ pub async fn ingest_body_measurements(
                     index,
                     error_type: "validation_error".to_string(),
                     message: error_msg,
-                    measurement_value: measurement_request.body_weight_kg
+                    measurement_value: measurement_request
+                        .body_weight_kg
                         .or(measurement_request.body_mass_index)
                         .or(measurement_request.body_fat_percentage),
                     measurement_type: determine_primary_measurement_type(measurement_request),
@@ -235,25 +236,30 @@ pub async fn ingest_body_measurements(
     }
 
     // Store measurements using batch processor if we have any valid data
-    let mut processing_results = None;
     if !body_measurements.is_empty() {
-        match batch_processor.process_body_measurements(&body_measurements).await {
+        match batch_processor
+            .process_body_measurements(body_measurements.clone())
+            .await
+        {
             Ok(stats) => {
                 info!(
-                    user_id = %auth.user_id,
-                    processed = stats.processed,
-                    duplicates = stats.duplicates_skipped,
+                    user_id = %auth.user.id,
+                    processed = stats.processed_count,
+                    duplicates = stats.deduplication_stats.as_ref().map(|d| d.body_measurement_duplicates).unwrap_or(0),
                     "Body measurements batch processing completed"
                 );
-                processing_results = Some(stats);
             }
             Err(e) => {
                 error!(
-                    user_id = %auth.user_id,
-                    error = %e,
+                    user_id = %auth.user.id,
+                    error = ?e,
                     "Failed to process body measurements batch"
                 );
-                metrics.increment_counter("body_measurements_ingest_errors_total", &[]);
+                Metrics::record_error(
+                    "body_measurements_processing",
+                    "/api/v1/ingest/body-measurements",
+                    "error",
+                );
                 return Ok(HttpResponse::InternalServerError().json(serde_json::json!({
                     "error": "database_error",
                     "message": "Failed to store body measurements data"
@@ -264,13 +270,17 @@ pub async fn ingest_body_measurements(
 
     // Generate analysis if we have measurements
     let body_composition_analysis = if !body_measurements.is_empty() {
-        generate_body_composition_analysis(&body_measurements, &pool).await.ok()
+        generate_body_composition_analysis(&body_measurements, &pool)
+            .await
+            .ok()
     } else {
         None
     };
 
     let fitness_insights = if !body_measurements.is_empty() {
-        generate_fitness_insights(&body_measurements, auth.user_id, &pool).await.ok()
+        generate_fitness_insights(&body_measurements, auth.user.id, &pool)
+            .await
+            .ok()
     } else {
         None
     };
@@ -278,11 +288,10 @@ pub async fn ingest_body_measurements(
     let processing_time_ms = start_time.elapsed().as_millis() as u64;
 
     // Record metrics
-    metrics.record_histogram("body_measurements_ingest_duration_seconds",
-                           processing_time_ms as f64 / 1000.0, &[]);
+    Metrics::record_ingest_duration(start_time.elapsed(), "success");
 
     info!(
-        user_id = %auth.user_id,
+        user_id = %auth.user.id,
         processed_count,
         failed_count,
         processing_time_ms,
@@ -308,7 +317,7 @@ pub async fn get_body_measurements_data(
     pool: web::Data<PgPool>,
 ) -> ActixResult<HttpResponse> {
     info!(
-        user_id = %auth.user_id,
+        user_id = %auth.user.id,
         "Retrieving body measurements data"
     );
 
@@ -321,9 +330,9 @@ pub async fn get_body_measurements_data(
             chest_circumference_cm, arm_circumference_cm, thigh_circumference_cm,
             body_temperature_celsius, basal_body_temperature_celsius, measurement_source,
             source_device, created_at
-        FROM body_measurements WHERE user_id = "#
+        FROM body_measurements WHERE user_id = "#,
     );
-    query_builder.push_bind(auth.user_id);
+    query_builder.push_bind(auth.user.id);
 
     // Add date filters
     if let Some(start_date) = query.start_date {
@@ -342,8 +351,10 @@ pub async fn get_body_measurements_data(
             "bmi" => query_builder.push(" AND body_mass_index IS NOT NULL"),
             "body_fat" => query_builder.push(" AND body_fat_percentage IS NOT NULL"),
             "height" => query_builder.push(" AND height_cm IS NOT NULL"),
-            "circumference" => query_builder.push(" AND (waist_circumference_cm IS NOT NULL OR hip_circumference_cm IS NOT NULL)"),
-            _ => {} // Invalid filter, ignore
+            "circumference" => query_builder.push(
+                " AND (waist_circumference_cm IS NOT NULL OR hip_circumference_cm IS NOT NULL)",
+            ),
+            _ => &mut query_builder, // Invalid filter, ignore
         };
     }
 
@@ -363,16 +374,24 @@ pub async fn get_body_measurements_data(
             // Get total count for pagination
             let count_query = sqlx::query_scalar!(
                 "SELECT COUNT(*) FROM body_measurements WHERE user_id = $1",
-                auth.user_id
+                auth.user.id
             );
-            let total_count = count_query.fetch_one(pool.as_ref()).await.unwrap_or(0);
+            let total_count = count_query
+                .fetch_one(pool.as_ref())
+                .await
+                .unwrap_or(Some(0i64))
+                .unwrap_or(0i64);
 
             // Generate summary
-            let summary = generate_body_measurements_summary(&measurements, pool.as_ref(), auth.user_id).await;
+            let summary =
+                generate_body_measurements_summary(&measurements, pool.as_ref(), auth.user.id)
+                    .await;
 
             // Generate trends if requested
             let trends = if query.include_analysis.unwrap_or(false) {
-                generate_body_measurement_trends(&measurements, auth.user_id, pool.as_ref()).await.ok()
+                generate_body_measurement_trends(&measurements, auth.user.id, pool.as_ref())
+                    .await
+                    .ok()
             } else {
                 None
             };
@@ -397,7 +416,7 @@ pub async fn get_body_measurements_data(
         }
         Err(e) => {
             error!(
-                user_id = %auth.user_id,
+                user_id = %auth.user.id,
                 error = %e,
                 "Failed to retrieve body measurements data"
             );
@@ -415,37 +434,57 @@ fn convert_and_validate_body_measurement(
     user_id: Uuid,
     validation_config: &ValidationConfig,
 ) -> Result<BodyMeasurementMetric, String> {
-    // Validate weight
+    // Validate weight using config
     if let Some(weight) = request.body_weight_kg {
-        if weight < 20.0 || weight > 500.0 {
-            return Err(format!("Body weight {} kg is outside valid range (20-500 kg)", weight));
+        if weight < validation_config.body_weight_min_kg
+            || weight > validation_config.body_weight_max_kg
+        {
+            return Err(format!(
+                "Body weight {} kg is outside valid range ({}-{} kg)",
+                weight, validation_config.body_weight_min_kg, validation_config.body_weight_max_kg
+            ));
         }
     }
 
-    // Validate BMI
+    // Validate BMI using config
     if let Some(bmi) = request.body_mass_index {
-        if bmi < 10.0 || bmi > 60.0 {
-            return Err(format!("BMI {} is outside valid range (10-60)", bmi));
+        if bmi < validation_config.bmi_min || bmi > validation_config.bmi_max {
+            return Err(format!(
+                "BMI {} is outside valid range ({}-{})",
+                bmi, validation_config.bmi_min, validation_config.bmi_max
+            ));
         }
     }
 
-    // Validate body fat percentage
+    // Validate body fat percentage using config
     if let Some(body_fat) = request.body_fat_percentage {
-        if body_fat < 3.0 || body_fat > 50.0 {
-            return Err(format!("Body fat percentage {}% is outside valid range (3-50%)", body_fat));
+        if body_fat < validation_config.body_fat_min_percent
+            || body_fat > validation_config.body_fat_max_percent
+        {
+            return Err(format!(
+                "Body fat percentage {}% is outside valid range ({}-{}%)",
+                body_fat,
+                validation_config.body_fat_min_percent,
+                validation_config.body_fat_max_percent
+            ));
         }
     }
 
-    // Validate height
+    // Validate height (hardcoded ranges as no config field exists yet)
     if let Some(height) = request.height_cm {
-        if height < 50.0 || height > 250.0 {
-            return Err(format!("Height {} cm is outside valid range (50-250 cm)", height));
+        if !(50.0..=250.0).contains(&height) {
+            return Err(format!(
+                "Height {height} cm is outside valid range (50-250 cm)"
+            ));
         }
     }
 
     // Validate BMI consistency if we have weight, height, and BMI
-    if let (Some(weight), Some(height), Some(bmi)) =
-        (request.body_weight_kg, request.height_cm, request.body_mass_index) {
+    if let (Some(weight), Some(height), Some(bmi)) = (
+        request.body_weight_kg,
+        request.height_cm,
+        request.body_mass_index,
+    ) {
         let calculated_bmi = weight / ((height / 100.0) * (height / 100.0));
         let bmi_difference = (bmi - calculated_bmi).abs();
         if bmi_difference > 1.0 {
@@ -499,34 +538,31 @@ fn determine_primary_measurement_type(request: &BodyMeasurementsIngestRequest) -
 /// Generate body composition analysis
 async fn generate_body_composition_analysis(
     measurements: &[BodyMeasurementMetric],
-    pool: &PgPool,
+    _pool: &PgPool,
 ) -> Result<BodyCompositionAnalysis, sqlx::Error> {
     let latest_measurement = measurements.first();
 
     if let Some(latest) = latest_measurement {
         // Determine BMI category
-        let bmi_category = latest.body_mass_index.map(|bmi| {
-            match bmi {
-                bmi if bmi < 18.5 => "underweight".to_string(),
-                bmi if bmi < 25.0 => "normal".to_string(),
-                bmi if bmi < 30.0 => "overweight".to_string(),
-                _ => "obese".to_string(),
-            }
+        let bmi_category = latest.body_mass_index.map(|bmi| match bmi {
+            bmi if bmi < 18.5 => "underweight".to_string(),
+            bmi if bmi < 25.0 => "normal".to_string(),
+            bmi if bmi < 30.0 => "overweight".to_string(),
+            _ => "obese".to_string(),
         });
 
         // Determine body fat category (gender-neutral)
-        let body_fat_category = latest.body_fat_percentage.map(|bf| {
-            match bf {
-                bf if bf <= 9.0 => "essential_fat".to_string(),
-                bf if bf <= 16.0 => "athletic".to_string(),
-                bf if bf <= 20.0 => "fitness".to_string(),
-                bf if bf <= 28.0 => "average".to_string(),
-                _ => "above_average".to_string(),
-            }
+        let body_fat_category = latest.body_fat_percentage.map(|bf| match bf {
+            bf if bf <= 9.0 => "essential_fat".to_string(),
+            bf if bf <= 16.0 => "athletic".to_string(),
+            bf if bf <= 20.0 => "fitness".to_string(),
+            bf if bf <= 28.0 => "average".to_string(),
+            _ => "above_average".to_string(),
         });
 
         // Calculate waist-to-hip ratio
-        let waist_to_hip_ratio = match (latest.waist_circumference_cm, latest.hip_circumference_cm) {
+        let waist_to_hip_ratio = match (latest.waist_circumference_cm, latest.hip_circumference_cm)
+        {
             (Some(waist), Some(hip)) => Some(waist / hip),
             _ => None,
         };
@@ -534,7 +570,8 @@ async fn generate_body_composition_analysis(
         // Generate cardiovascular risk indicators
         let mut risk_indicators = Vec::new();
         if let Some(ratio) = waist_to_hip_ratio {
-            if ratio > 0.9 { // General threshold
+            if ratio > 0.9 {
+                // General threshold
                 risk_indicators.push("elevated_waist_to_hip_ratio".to_string());
             }
         }
@@ -567,8 +604,8 @@ async fn generate_body_composition_analysis(
 /// Generate fitness insights
 async fn generate_fitness_insights(
     measurements: &[BodyMeasurementMetric],
-    user_id: Uuid,
-    pool: &PgPool,
+    _user_id: Uuid,
+    _pool: &PgPool,
 ) -> Result<FitnessInsights, sqlx::Error> {
     // This would typically involve more complex analysis
     // For now, provide basic insights
@@ -615,8 +652,8 @@ async fn generate_fitness_insights(
 /// Generate body measurements summary
 async fn generate_body_measurements_summary(
     measurements: &[BodyMeasurementMetric],
-    pool: &PgPool,
-    user_id: Uuid,
+    _pool: &PgPool,
+    _user_id: Uuid,
 ) -> BodyMeasurementsSummary {
     let latest = measurements.first();
 
@@ -633,9 +670,9 @@ async fn generate_body_measurements_summary(
 
 /// Generate body measurement trends
 async fn generate_body_measurement_trends(
-    measurements: &[BodyMeasurementMetric],
-    user_id: Uuid,
-    pool: &PgPool,
+    _measurements: &[BodyMeasurementMetric],
+    _user_id: Uuid,
+    _pool: &PgPool,
 ) -> Result<BodyMeasurementTrends, sqlx::Error> {
     // This would involve more sophisticated trend analysis
     // For now, provide basic trend structure
