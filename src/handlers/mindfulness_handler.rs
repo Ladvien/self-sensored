@@ -1,16 +1,15 @@
 use actix_web::{web, HttpResponse, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
+use sqlx::{types::BigDecimal, PgPool};
+use bigdecimal::FromPrimitive;
 use std::time::Duration;
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
-use crate::models::{
-    MindfulnessMetric, MentalHealthMetric, ProcessingError
-};
+use crate::models::{MentalHealthMetric, MindfulnessMetric, ProcessingError};
 use crate::services::auth::AuthContext;
-use crate::services::cache::{CacheService, CacheKey};
+use crate::services::cache::{CacheKey, CacheService};
 
 /// Request payload for mindfulness session ingestion
 #[derive(Debug, Deserialize, Serialize)]
@@ -97,7 +96,7 @@ pub struct MentalHealthQueryParams {
 }
 
 /// Privacy-filtered mental health response
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MentalHealthResponse {
     pub data: Vec<MentalHealthSummary>,
     pub privacy_level: String,
@@ -105,7 +104,7 @@ pub struct MentalHealthResponse {
 }
 
 /// Summary of mental health data with privacy protection
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MentalHealthSummary {
     pub id: Uuid,
     pub recorded_at: DateTime<Utc>,
@@ -335,7 +334,10 @@ pub async fn get_mindfulness_data(
     };
 
     // Try to get from cache first
-    if let Some(cached_sessions) = cache.get::<Vec<MindfulnessMetric>>(&cache_key, "health_export").await {
+    if let Some(cached_sessions) = cache
+        .get::<Vec<MindfulnessMetric>>(&cache_key, "health_export")
+        .await
+    {
         let processing_time_ms = start_time.elapsed().as_millis() as u64;
         info!(
             user_id = %auth.user.id,
@@ -354,7 +356,14 @@ pub async fn get_mindfulness_data(
 
             // Cache the results for 10 minutes (configurable TTL for mental health data)
             let cache_ttl = Duration::from_secs(600); // 10 minutes
-            cache.set(&cache_key, "health_export", sessions.clone(), Some(cache_ttl)).await;
+            cache
+                .set(
+                    &cache_key,
+                    "health_export",
+                    sessions.clone(),
+                    Some(cache_ttl),
+                )
+                .await;
 
             info!(
                 user_id = %auth.user.id,
@@ -414,7 +423,10 @@ pub async fn get_mental_health_data(
     };
 
     // Try to get from cache first (shorter TTL for mental health data)
-    if let Some(cached_response) = cache.get::<MentalHealthResponse>(&cache_key, "health_export").await {
+    if let Some(cached_response) = cache
+        .get::<MentalHealthResponse>(&cache_key, "health_export")
+        .await
+    {
         let processing_time_ms = start_time.elapsed().as_millis() as u64;
         info!(
             user_id = %auth.user.id,
@@ -434,7 +446,14 @@ pub async fn get_mental_health_data(
 
             // Cache the results for 5 minutes (shorter TTL for sensitive mental health data)
             let cache_ttl = Duration::from_secs(300); // 5 minutes for mental health data
-            cache.set(&cache_key, "health_export", response.clone(), Some(cache_ttl)).await;
+            cache
+                .set(
+                    &cache_key,
+                    "health_export",
+                    response.clone(),
+                    Some(cache_ttl),
+                )
+                .await;
 
             info!(
                 user_id = %auth.user.id,
@@ -493,7 +512,9 @@ async fn process_mindfulness_session(
     };
 
     // Validate the metric
-    metric.validate().map_err(|e| format!("Validation error: {}", e))?;
+    metric
+        .validate()
+        .map_err(|e| format!("Validation error: {}", e))?;
 
     // Insert into database
     sqlx::query!(
@@ -528,8 +549,8 @@ async fn process_mindfulness_session(
         metric.session_quality_rating,
         metric.mindful_minutes_today,
         metric.mindful_minutes_week,
-        metric.breathing_rate_breaths_per_min,
-        metric.heart_rate_variability_during_session,
+        metric.breathing_rate_breaths_per_min.and_then(BigDecimal::from_f64),
+        metric.heart_rate_variability_during_session.and_then(BigDecimal::from_f64),
         metric.focus_rating,
         metric.guided_session_instructor,
         metric.meditation_app,
@@ -553,15 +574,16 @@ async fn process_mental_health_data(
     health_data: &MentalHealthData,
 ) -> Result<(), String> {
     // Encrypt private notes if present
-    let (encrypted_notes, encryption_key_id) = if let Some(ref private_notes) = health_data.private_notes {
-        // In a real implementation, you would use a proper encryption service
-        // For now, we'll just mark that encryption is needed
-        let key_id = Uuid::new_v4();
-        let encrypted_data = format!("ENCRYPTED:{}", private_notes); // Placeholder encryption
-        (Some(encrypted_data), Some(key_id))
-    } else {
-        (None, None)
-    };
+    let (encrypted_notes, encryption_key_id) =
+        if let Some(ref private_notes) = health_data.private_notes {
+            // In a real implementation, you would use a proper encryption service
+            // For now, we'll just mark that encryption is needed
+            let key_id = Uuid::new_v4();
+            let encrypted_data = format!("ENCRYPTED:{}", private_notes); // Placeholder encryption
+            (Some(encrypted_data), Some(key_id))
+        } else {
+            (None, None)
+        };
 
     // Create mental health metric
     let metric = MentalHealthMetric {
@@ -590,7 +612,9 @@ async fn process_mental_health_data(
     };
 
     // Validate the metric
-    metric.validate().map_err(|e| format!("Validation error: {}", e))?;
+    metric
+        .validate()
+        .map_err(|e| format!("Validation error: {}", e))?;
 
     // Insert into database with privacy protection
     sqlx::query!(
@@ -623,7 +647,7 @@ async fn process_mental_health_data(
         metric.id,
         metric.user_id,
         metric.recorded_at,
-        metric.state_of_mind_valence,
+        metric.state_of_mind_valence.and_then(BigDecimal::from_f64),
         metric.state_of_mind_labels.as_deref(),
         metric.reflection_prompt,
         metric.mood_rating,
@@ -658,9 +682,8 @@ async fn fetch_mindfulness_sessions(
 ) -> Result<Vec<MindfulnessMetric>, sqlx::Error> {
     let limit = query.limit.unwrap_or(100).min(1000); // Cap at 1000 records
 
-    let mut query_builder = sqlx::QueryBuilder::new(
-        "SELECT * FROM mindfulness_metrics WHERE user_id = "
-    );
+    let mut query_builder =
+        sqlx::QueryBuilder::new("SELECT * FROM mindfulness_metrics WHERE user_id = ");
     query_builder.push_bind(user_id);
 
     if let Some(start_date) = query.start_date {
@@ -699,9 +722,8 @@ async fn fetch_mental_health_data(
     let limit = query.limit.unwrap_or(50).min(500); // Lower limit for mental health data
     let include_sensitive = query.include_sensitive_data.unwrap_or(false);
 
-    let mut query_builder = sqlx::QueryBuilder::new(
-        "SELECT * FROM mental_health_metrics WHERE user_id = "
-    );
+    let mut query_builder =
+        sqlx::QueryBuilder::new("SELECT * FROM mental_health_metrics WHERE user_id = ");
     query_builder.push_bind(user_id);
 
     if let Some(start_date) = query.start_date {
@@ -721,16 +743,28 @@ async fn fetch_mental_health_data(
     let metrics = query_result.fetch_all(pool).await?;
 
     // Convert to privacy-filtered summaries
-    let data = metrics
+    let data: Vec<MentalHealthSummary> = metrics
         .into_iter()
         .map(|metric| {
             let wellness_score = Some(metric.wellness_score());
             MentalHealthSummary {
                 id: metric.id,
                 recorded_at: metric.recorded_at,
-                mood_rating: if include_sensitive { metric.mood_rating } else { None },
-                stress_level: if include_sensitive { metric.stress_level } else { None },
-                anxiety_level: if include_sensitive { metric.anxiety_level } else { None },
+                mood_rating: if include_sensitive {
+                    metric.mood_rating
+                } else {
+                    None
+                },
+                stress_level: if include_sensitive {
+                    metric.stress_level
+                } else {
+                    None
+                },
+                anxiety_level: if include_sensitive {
+                    metric.anxiety_level
+                } else {
+                    None
+                },
                 energy_level: metric.energy_level, // Energy level is less sensitive
                 wellness_score,
                 has_notes: metric.has_encrypted_notes(),
@@ -739,7 +773,11 @@ async fn fetch_mental_health_data(
         })
         .collect();
 
-    let privacy_level = if include_sensitive { "detailed" } else { "summary" };
+    let privacy_level = if include_sensitive {
+        "detailed"
+    } else {
+        "summary"
+    };
     let total_count = data.len() as i64; // Store count before moving data
 
     Ok(MentalHealthResponse {
@@ -804,7 +842,7 @@ async fn fetch_mindfulness_sessions_optimized(
            breathing_rate_breaths_per_min, heart_rate_variability_during_session,
            focus_rating, guided_session_instructor, meditation_app, background_sounds,
            location_type, session_notes, source_device, created_at
-           FROM mindfulness_metrics WHERE user_id = "#
+           FROM mindfulness_metrics WHERE user_id = "#,
     );
     query_builder.push_bind(user_id);
 
@@ -850,7 +888,7 @@ async fn fetch_mental_health_data_optimized(
         r#"SELECT id, user_id, recorded_at, state_of_mind_valence, state_of_mind_labels,
            mood_rating, anxiety_level, stress_level, energy_level,
            private_notes_encrypted, source_device, created_at
-           FROM mental_health_metrics WHERE user_id = "#
+           FROM mental_health_metrics WHERE user_id = "#,
     );
     query_builder.push_bind(user_id);
 
@@ -879,9 +917,21 @@ async fn fetch_mental_health_data_optimized(
             MentalHealthSummary {
                 id: metric.id,
                 recorded_at: metric.recorded_at,
-                mood_rating: if include_sensitive { metric.mood_rating } else { None },
-                stress_level: if include_sensitive { metric.stress_level } else { None },
-                anxiety_level: if include_sensitive { metric.anxiety_level } else { None },
+                mood_rating: if include_sensitive {
+                    metric.mood_rating
+                } else {
+                    None
+                },
+                stress_level: if include_sensitive {
+                    metric.stress_level
+                } else {
+                    None
+                },
+                anxiety_level: if include_sensitive {
+                    metric.anxiety_level
+                } else {
+                    None
+                },
                 energy_level: metric.energy_level, // Energy level is less sensitive
                 wellness_score,
                 has_notes: metric.has_encrypted_notes(),
@@ -890,7 +940,11 @@ async fn fetch_mental_health_data_optimized(
         })
         .collect::<Vec<_>>();
 
-    let privacy_level = if include_sensitive { "detailed" } else { "summary" };
+    let privacy_level = if include_sensitive {
+        "detailed"
+    } else {
+        "summary"
+    };
     let total_count = data.len() as i64;
 
     Ok(MentalHealthResponse {
@@ -919,11 +973,7 @@ pub fn generate_mental_health_query_hash(params: &MentalHealthQueryParams) -> St
 }
 
 /// Cache warming function for mindfulness data
-pub async fn warm_mindfulness_cache(
-    pool: &PgPool,
-    cache: &CacheService,
-    user_id: Uuid,
-) -> bool {
+pub async fn warm_mindfulness_cache(pool: &PgPool, cache: &CacheService, user_id: Uuid) -> bool {
     // Warm cache with recent mindfulness sessions (last 7 days)
     let recent_query = MindfulnessQueryParams {
         start_date: Some(Utc::now() - chrono::Duration::days(7)),
@@ -940,12 +990,14 @@ pub async fn warm_mindfulness_cache(
                 hash: generate_mindfulness_query_hash(&recent_query),
             };
 
-            cache.set(
-                &cache_key,
-                "health_export",
-                sessions,
-                Some(Duration::from_secs(600)), // 10 minutes
-            ).await
+            cache
+                .set(
+                    &cache_key,
+                    "health_export",
+                    sessions,
+                    Some(Duration::from_secs(600)), // 10 minutes
+                )
+                .await
         }
         Err(e) => {
             warn!(
@@ -982,10 +1034,7 @@ pub fn log_performance_metrics(
 }
 
 /// Invalidate mindfulness-related cache entries for a user
-async fn invalidate_mindfulness_cache(
-    cache: &CacheService,
-    user_id: Uuid,
-) -> bool {
+async fn invalidate_mindfulness_cache(cache: &CacheService, user_id: Uuid) -> bool {
     // Use wildcard pattern to invalidate all mindfulness cache entries for the user
     let pattern = format!("health_export:mindfulness*:{user_id}:*");
 
@@ -1001,10 +1050,7 @@ async fn invalidate_mindfulness_cache(
 }
 
 /// Invalidate mental health-related cache entries for a user
-async fn invalidate_mental_health_cache(
-    cache: &CacheService,
-    user_id: Uuid,
-) -> bool {
+async fn invalidate_mental_health_cache(cache: &CacheService, user_id: Uuid) -> bool {
     // Use wildcard pattern to invalidate all mental health cache entries for the user
     let pattern = format!("health_export:mental_health*:{user_id}:*");
 
