@@ -6,7 +6,7 @@ use tracing::{error, info, instrument};
 use uuid::Uuid;
 
 use crate::middleware::metrics::Metrics;
-use crate::models::health_metrics::{NutritionMetric, MacronutrientDistribution};
+use crate::models::health_metrics::{MacronutrientDistribution, NutritionMetric};
 use crate::services::auth::AuthContext;
 
 /// Comprehensive nutrition data ingestion payload
@@ -21,32 +21,52 @@ pub struct NutritionIngestRequest {
     pub recorded_at: DateTime<Utc>,
 
     // Hydration & Stimulants
-    pub dietary_water: Option<f64>,                    // liters
-    pub dietary_caffeine: Option<f64>,                 // mg
+    pub dietary_water: Option<f64>,    // liters
+    pub dietary_caffeine: Option<f64>, // mg
 
-    // Macronutrients
-    pub dietary_energy_consumed: Option<f64>,          // calories
-    pub dietary_carbohydrates: Option<f64>,            // grams
-    pub dietary_protein: Option<f64>,                  // grams
-    pub dietary_fat_total: Option<f64>,                // grams
-    pub dietary_fat_saturated: Option<f64>,            // grams
-    pub dietary_cholesterol: Option<f64>,              // mg
-    pub dietary_sodium: Option<f64>,                   // mg
-    pub dietary_fiber: Option<f64>,                    // grams
-    pub dietary_sugar: Option<f64>,                    // grams
+    // Macronutrients (Core Energy)
+    pub dietary_energy_consumed: Option<f64>,     // calories
+    pub dietary_carbohydrates: Option<f64>,       // grams
+    pub dietary_protein: Option<f64>,             // grams
+    pub dietary_fat_total: Option<f64>,           // grams
+    pub dietary_fat_saturated: Option<f64>,       // grams
+    pub dietary_fat_monounsaturated: Option<f64>, // grams
+    pub dietary_fat_polyunsaturated: Option<f64>, // grams
+    pub dietary_cholesterol: Option<f64>,         // mg
+    pub dietary_sodium: Option<f64>,              // mg
+    pub dietary_fiber: Option<f64>,               // grams
+    pub dietary_sugar: Option<f64>,               // grams
 
     // Essential Minerals
-    pub dietary_calcium: Option<f64>,                  // mg
-    pub dietary_iron: Option<f64>,                     // mg
-    pub dietary_magnesium: Option<f64>,                // mg
-    pub dietary_potassium: Option<f64>,                // mg
+    pub dietary_calcium: Option<f64>,    // mg
+    pub dietary_iron: Option<f64>,       // mg
+    pub dietary_magnesium: Option<f64>,  // mg
+    pub dietary_potassium: Option<f64>,  // mg
+    pub dietary_zinc: Option<f64>,       // mg
+    pub dietary_phosphorus: Option<f64>, // mg
 
-    // Essential Vitamins
-    pub dietary_vitamin_a: Option<f64>,                // mcg
-    pub dietary_vitamin_c: Option<f64>,                // mg
-    pub dietary_vitamin_d: Option<f64>,                // IU
+    // Essential Vitamins (Water-soluble)
+    pub dietary_vitamin_c: Option<f64>,             // mg
+    pub dietary_vitamin_b1_thiamine: Option<f64>,   // mg
+    pub dietary_vitamin_b2_riboflavin: Option<f64>, // mg
+    pub dietary_vitamin_b3_niacin: Option<f64>,     // mg
+    pub dietary_vitamin_b6_pyridoxine: Option<f64>, // mg
+    pub dietary_vitamin_b12_cobalamin: Option<f64>, // mcg
+    pub dietary_folate: Option<f64>,                // mcg
+    pub dietary_biotin: Option<f64>,                // mcg
+    pub dietary_pantothenic_acid: Option<f64>,      // mg
 
-    // Metadata
+    // Essential Vitamins (Fat-soluble)
+    pub dietary_vitamin_a: Option<f64>, // mcg RAE
+    pub dietary_vitamin_d: Option<f64>, // IU
+    pub dietary_vitamin_e: Option<f64>, // mg
+    pub dietary_vitamin_k: Option<f64>, // mcg
+
+    // Meal Context for atomic processing
+    pub meal_type: Option<String>,   // breakfast, lunch, dinner, snack
+    pub meal_id: Option<uuid::Uuid>, // Group nutrients from same meal
+
+    // Metadata and source tracking
     pub source_device: Option<String>,
 }
 
@@ -268,11 +288,11 @@ pub struct DateRange {
 pub async fn ingest_nutrition_data(
     pool: web::Data<PgPool>,
     metrics: web::Data<Metrics>,
-    auth_context: web::ReqData<AuthContext>,
+    auth_context: AuthContext,
     payload: web::Json<NutritionIngestPayload>,
 ) -> ActixResult<HttpResponse> {
     let start_time = std::time::Instant::now();
-    let user_id = auth_context.user_id;
+    let user_id = auth_context.user.id;
 
     info!(
         user_id = %user_id,
@@ -289,24 +309,47 @@ pub async fn ingest_nutrition_data(
             id: Uuid::new_v4(),
             user_id,
             recorded_at: request.recorded_at,
+            // Hydration & Stimulants
             dietary_water: request.dietary_water,
             dietary_caffeine: request.dietary_caffeine,
+            // Macronutrients (Core Energy)
             dietary_energy_consumed: request.dietary_energy_consumed,
             dietary_carbohydrates: request.dietary_carbohydrates,
             dietary_protein: request.dietary_protein,
             dietary_fat_total: request.dietary_fat_total,
             dietary_fat_saturated: request.dietary_fat_saturated,
+            dietary_fat_monounsaturated: request.dietary_fat_monounsaturated,
+            dietary_fat_polyunsaturated: request.dietary_fat_polyunsaturated,
             dietary_cholesterol: request.dietary_cholesterol,
             dietary_sodium: request.dietary_sodium,
             dietary_fiber: request.dietary_fiber,
             dietary_sugar: request.dietary_sugar,
+            // Essential Minerals
             dietary_calcium: request.dietary_calcium,
             dietary_iron: request.dietary_iron,
             dietary_magnesium: request.dietary_magnesium,
             dietary_potassium: request.dietary_potassium,
-            dietary_vitamin_a: request.dietary_vitamin_a,
+            dietary_zinc: request.dietary_zinc,
+            dietary_phosphorus: request.dietary_phosphorus,
+            // Essential Vitamins (Water-soluble)
             dietary_vitamin_c: request.dietary_vitamin_c,
+            dietary_vitamin_b1_thiamine: request.dietary_vitamin_b1_thiamine,
+            dietary_vitamin_b2_riboflavin: request.dietary_vitamin_b2_riboflavin,
+            dietary_vitamin_b3_niacin: request.dietary_vitamin_b3_niacin,
+            dietary_vitamin_b6_pyridoxine: request.dietary_vitamin_b6_pyridoxine,
+            dietary_vitamin_b12_cobalamin: request.dietary_vitamin_b12_cobalamin,
+            dietary_folate: request.dietary_folate,
+            dietary_biotin: request.dietary_biotin,
+            dietary_pantothenic_acid: request.dietary_pantothenic_acid,
+            // Essential Vitamins (Fat-soluble)
+            dietary_vitamin_a: request.dietary_vitamin_a,
             dietary_vitamin_d: request.dietary_vitamin_d,
+            dietary_vitamin_e: request.dietary_vitamin_e,
+            dietary_vitamin_k: request.dietary_vitamin_k,
+            // Meal Context for atomic processing
+            meal_type: request.meal_type.clone(),
+            meal_id: request.meal_id,
+            // Metadata and source tracking
             source_device: request.source_device.clone(),
             created_at: Utc::now(),
         };
@@ -384,10 +427,10 @@ pub async fn ingest_nutrition_data(
 #[instrument(skip(pool, auth_context))]
 pub async fn get_nutrition_data(
     pool: web::Data<PgPool>,
-    auth_context: web::ReqData<AuthContext>,
+    auth_context: AuthContext,
     query: web::Query<NutritionQueryParams>,
 ) -> ActixResult<HttpResponse> {
-    let user_id = auth_context.user_id;
+    let user_id = auth_context.user.id;
 
     info!(
         user_id = %user_id,
@@ -421,7 +464,8 @@ pub async fn get_nutrition_data(
     }
 
     // Execute query
-    let nutrition_data = match query_builder.build_query_as::<NutritionMetric>()
+    let nutrition_data = match query_builder
+        .build_query_as::<NutritionMetric>()
         .fetch_all(pool.get_ref())
         .await
     {
@@ -440,10 +484,12 @@ pub async fn get_nutrition_data(
     };
 
     // Get total count
-    let total_count = match sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM nutrition_metrics WHERE user_id = $1")
-        .bind(&user_id)
-        .fetch_one(pool.get_ref())
-        .await
+    let total_count = match sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM nutrition_metrics WHERE user_id = $1",
+    )
+    .bind(&user_id)
+    .fetch_one(pool.get_ref())
+    .await
     {
         Ok(count) => count,
         Err(_) => nutrition_data.len() as i64,
@@ -488,10 +534,10 @@ pub async fn get_nutrition_data(
 #[instrument(skip(pool, auth_context))]
 pub async fn get_hydration_data(
     pool: web::Data<PgPool>,
-    auth_context: web::ReqData<AuthContext>,
+    auth_context: AuthContext,
     query: web::Query<HydrationQueryParams>,
 ) -> ActixResult<HttpResponse> {
-    let user_id = auth_context.user_id;
+    let user_id = auth_context.user.id;
 
     info!(
         user_id = %user_id,
@@ -523,19 +569,21 @@ pub async fn get_hydration_data(
     }
 
     // Execute hydration-specific query
-    let hydration_entries = match query_builder.build_query_as::<(DateTime<Utc>, Option<f64>, Option<f64>, Option<String>)>()
+    let hydration_entries = match query_builder
+        .build_query_as::<(DateTime<Utc>, Option<f64>, Option<f64>, Option<String>)>()
         .fetch_all(pool.get_ref())
         .await
     {
-        Ok(data) => data.into_iter().map(|(recorded_at, water, caffeine, device)| {
-            HydrationEntry {
+        Ok(data) => data
+            .into_iter()
+            .map(|(recorded_at, water, caffeine, device)| HydrationEntry {
                 recorded_at,
                 water_intake_liters: water,
                 caffeine_mg: caffeine,
                 hydration_status: get_hydration_status_from_value(water),
                 source_device: device,
-            }
-        }).collect::<Vec<_>>(),
+            })
+            .collect::<Vec<_>>(),
         Err(e) => {
             error!(
                 user_id = %user_id,
@@ -590,38 +638,64 @@ async fn insert_nutrition_metrics_batch(
     for chunk in metrics.chunks(chunk_size) {
         let mut query_builder = sqlx::QueryBuilder::new(
             "INSERT INTO nutrition_metrics (
-                id, user_id, recorded_at, dietary_water, dietary_caffeine,
+                id, user_id, recorded_at,
+                dietary_water, dietary_caffeine,
                 dietary_energy_consumed, dietary_carbohydrates, dietary_protein,
-                dietary_fat_total, dietary_fat_saturated, dietary_cholesterol,
-                dietary_sodium, dietary_fiber, dietary_sugar,
-                dietary_calcium, dietary_iron, dietary_magnesium, dietary_potassium,
-                dietary_vitamin_a, dietary_vitamin_c, dietary_vitamin_d,
-                source_device, created_at
-            ) "
+                dietary_fat_total, dietary_fat_saturated, dietary_fat_monounsaturated, dietary_fat_polyunsaturated,
+                dietary_cholesterol, dietary_sodium, dietary_fiber, dietary_sugar,
+                dietary_calcium, dietary_iron, dietary_magnesium, dietary_potassium, dietary_zinc, dietary_phosphorus,
+                dietary_vitamin_c, dietary_vitamin_b1_thiamine, dietary_vitamin_b2_riboflavin, dietary_vitamin_b3_niacin,
+                dietary_vitamin_b6_pyridoxine, dietary_vitamin_b12_cobalamin, dietary_folate, dietary_biotin, dietary_pantothenic_acid,
+                dietary_vitamin_a, dietary_vitamin_d, dietary_vitamin_e, dietary_vitamin_k,
+                meal_type, meal_id, source_device, created_at
+            ) ",
         );
 
         query_builder.push_values(chunk.iter(), |mut b, metric| {
             b.push_bind(&metric.id)
                 .push_bind(&metric.user_id)
                 .push_bind(&metric.recorded_at)
+                // Hydration & Stimulants
                 .push_bind(&metric.dietary_water)
                 .push_bind(&metric.dietary_caffeine)
+                // Macronutrients (Core Energy)
                 .push_bind(&metric.dietary_energy_consumed)
                 .push_bind(&metric.dietary_carbohydrates)
                 .push_bind(&metric.dietary_protein)
                 .push_bind(&metric.dietary_fat_total)
                 .push_bind(&metric.dietary_fat_saturated)
+                .push_bind(&metric.dietary_fat_monounsaturated)
+                .push_bind(&metric.dietary_fat_polyunsaturated)
                 .push_bind(&metric.dietary_cholesterol)
                 .push_bind(&metric.dietary_sodium)
                 .push_bind(&metric.dietary_fiber)
                 .push_bind(&metric.dietary_sugar)
+                // Essential Minerals
                 .push_bind(&metric.dietary_calcium)
                 .push_bind(&metric.dietary_iron)
                 .push_bind(&metric.dietary_magnesium)
                 .push_bind(&metric.dietary_potassium)
-                .push_bind(&metric.dietary_vitamin_a)
+                .push_bind(&metric.dietary_zinc)
+                .push_bind(&metric.dietary_phosphorus)
+                // Essential Vitamins (Water-soluble)
                 .push_bind(&metric.dietary_vitamin_c)
+                .push_bind(&metric.dietary_vitamin_b1_thiamine)
+                .push_bind(&metric.dietary_vitamin_b2_riboflavin)
+                .push_bind(&metric.dietary_vitamin_b3_niacin)
+                .push_bind(&metric.dietary_vitamin_b6_pyridoxine)
+                .push_bind(&metric.dietary_vitamin_b12_cobalamin)
+                .push_bind(&metric.dietary_folate)
+                .push_bind(&metric.dietary_biotin)
+                .push_bind(&metric.dietary_pantothenic_acid)
+                // Essential Vitamins (Fat-soluble)
+                .push_bind(&metric.dietary_vitamin_a)
                 .push_bind(&metric.dietary_vitamin_d)
+                .push_bind(&metric.dietary_vitamin_e)
+                .push_bind(&metric.dietary_vitamin_k)
+                // Meal Context for atomic processing
+                .push_bind(&metric.meal_type)
+                .push_bind(&metric.meal_id)
+                // Metadata and source tracking
                 .push_bind(&metric.source_device)
                 .push_bind(&metric.created_at);
         });
@@ -635,6 +709,8 @@ async fn insert_nutrition_metrics_batch(
             dietary_protein = COALESCE(EXCLUDED.dietary_protein, nutrition_metrics.dietary_protein),
             dietary_fat_total = COALESCE(EXCLUDED.dietary_fat_total, nutrition_metrics.dietary_fat_total),
             dietary_fat_saturated = COALESCE(EXCLUDED.dietary_fat_saturated, nutrition_metrics.dietary_fat_saturated),
+            dietary_fat_monounsaturated = COALESCE(EXCLUDED.dietary_fat_monounsaturated, nutrition_metrics.dietary_fat_monounsaturated),
+            dietary_fat_polyunsaturated = COALESCE(EXCLUDED.dietary_fat_polyunsaturated, nutrition_metrics.dietary_fat_polyunsaturated),
             dietary_cholesterol = COALESCE(EXCLUDED.dietary_cholesterol, nutrition_metrics.dietary_cholesterol),
             dietary_sodium = COALESCE(EXCLUDED.dietary_sodium, nutrition_metrics.dietary_sodium),
             dietary_fiber = COALESCE(EXCLUDED.dietary_fiber, nutrition_metrics.dietary_fiber),
@@ -643,9 +719,23 @@ async fn insert_nutrition_metrics_batch(
             dietary_iron = COALESCE(EXCLUDED.dietary_iron, nutrition_metrics.dietary_iron),
             dietary_magnesium = COALESCE(EXCLUDED.dietary_magnesium, nutrition_metrics.dietary_magnesium),
             dietary_potassium = COALESCE(EXCLUDED.dietary_potassium, nutrition_metrics.dietary_potassium),
-            dietary_vitamin_a = COALESCE(EXCLUDED.dietary_vitamin_a, nutrition_metrics.dietary_vitamin_a),
+            dietary_zinc = COALESCE(EXCLUDED.dietary_zinc, nutrition_metrics.dietary_zinc),
+            dietary_phosphorus = COALESCE(EXCLUDED.dietary_phosphorus, nutrition_metrics.dietary_phosphorus),
             dietary_vitamin_c = COALESCE(EXCLUDED.dietary_vitamin_c, nutrition_metrics.dietary_vitamin_c),
+            dietary_vitamin_b1_thiamine = COALESCE(EXCLUDED.dietary_vitamin_b1_thiamine, nutrition_metrics.dietary_vitamin_b1_thiamine),
+            dietary_vitamin_b2_riboflavin = COALESCE(EXCLUDED.dietary_vitamin_b2_riboflavin, nutrition_metrics.dietary_vitamin_b2_riboflavin),
+            dietary_vitamin_b3_niacin = COALESCE(EXCLUDED.dietary_vitamin_b3_niacin, nutrition_metrics.dietary_vitamin_b3_niacin),
+            dietary_vitamin_b6_pyridoxine = COALESCE(EXCLUDED.dietary_vitamin_b6_pyridoxine, nutrition_metrics.dietary_vitamin_b6_pyridoxine),
+            dietary_vitamin_b12_cobalamin = COALESCE(EXCLUDED.dietary_vitamin_b12_cobalamin, nutrition_metrics.dietary_vitamin_b12_cobalamin),
+            dietary_folate = COALESCE(EXCLUDED.dietary_folate, nutrition_metrics.dietary_folate),
+            dietary_biotin = COALESCE(EXCLUDED.dietary_biotin, nutrition_metrics.dietary_biotin),
+            dietary_pantothenic_acid = COALESCE(EXCLUDED.dietary_pantothenic_acid, nutrition_metrics.dietary_pantothenic_acid),
+            dietary_vitamin_a = COALESCE(EXCLUDED.dietary_vitamin_a, nutrition_metrics.dietary_vitamin_a),
             dietary_vitamin_d = COALESCE(EXCLUDED.dietary_vitamin_d, nutrition_metrics.dietary_vitamin_d),
+            dietary_vitamin_e = COALESCE(EXCLUDED.dietary_vitamin_e, nutrition_metrics.dietary_vitamin_e),
+            dietary_vitamin_k = COALESCE(EXCLUDED.dietary_vitamin_k, nutrition_metrics.dietary_vitamin_k),
+            meal_type = COALESCE(EXCLUDED.meal_type, nutrition_metrics.meal_type),
+            meal_id = COALESCE(EXCLUDED.meal_id, nutrition_metrics.meal_id),
             source_device = COALESCE(EXCLUDED.source_device, nutrition_metrics.source_device)
         ");
 
@@ -679,20 +769,33 @@ fn generate_nutrition_analysis(metrics: &[NutritionMetric]) -> Option<NutritionA
     };
 
     // Calculate macronutrient analysis
-    let total_calories: f64 = metrics.iter().filter_map(|m| m.dietary_energy_consumed).sum();
+    let total_calories: f64 = metrics
+        .iter()
+        .filter_map(|m| m.dietary_energy_consumed)
+        .sum();
     let total_protein: f64 = metrics.iter().filter_map(|m| m.dietary_protein).sum();
     let total_carbs: f64 = metrics.iter().filter_map(|m| m.dietary_carbohydrates).sum();
     let total_fat: f64 = metrics.iter().filter_map(|m| m.dietary_fat_total).sum();
 
-    let calorie_values: Vec<f64> = metrics.iter().filter_map(|m| m.dietary_energy_consumed).collect();
+    let calorie_values: Vec<f64> = metrics
+        .iter()
+        .filter_map(|m| m.dietary_energy_consumed)
+        .collect();
     let calorie_range = if !calorie_values.is_empty() {
         NutrientRange {
             min: calorie_values.iter().cloned().fold(f64::INFINITY, f64::min),
-            max: calorie_values.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+            max: calorie_values
+                .iter()
+                .cloned()
+                .fold(f64::NEG_INFINITY, f64::max),
             average: total_calories / calorie_values.len() as f64,
         }
     } else {
-        NutrientRange { min: 0.0, max: 0.0, average: 0.0 }
+        NutrientRange {
+            min: 0.0,
+            max: 0.0,
+            average: 0.0,
+        }
     };
 
     let macronutrient_analysis = MacronutrientAnalysis {
@@ -733,7 +836,10 @@ fn generate_nutrition_analysis(metrics: &[NutritionMetric]) -> Option<NutritionA
     // Count special conditions
     let balanced_meals_count = metrics.iter().filter(|m| m.is_balanced_meal()).count();
     let excessive_sodium_alerts = metrics.iter().filter(|m| m.has_excessive_sodium()).count();
-    let caffeine_warnings = metrics.iter().filter(|m| m.exceeds_caffeine_limit()).count();
+    let caffeine_warnings = metrics
+        .iter()
+        .filter(|m| m.exceeds_caffeine_limit())
+        .count();
 
     Some(NutritionAnalysis {
         total_entries,
@@ -757,7 +863,8 @@ fn generate_daily_nutrition_summary(metrics: &[NutritionMetric]) -> Option<Daily
     let day_start = latest_date.date_naive().and_hms_opt(0, 0, 0)?.and_utc();
     let day_end = latest_date.date_naive().and_hms_opt(23, 59, 59)?.and_utc();
 
-    let day_metrics: Vec<&NutritionMetric> = metrics.iter()
+    let day_metrics: Vec<&NutritionMetric> = metrics
+        .iter()
         .filter(|m| m.recorded_at >= day_start && m.recorded_at <= day_end)
         .collect();
 
@@ -765,10 +872,16 @@ fn generate_daily_nutrition_summary(metrics: &[NutritionMetric]) -> Option<Daily
         return None;
     }
 
-    let total_calories: f64 = day_metrics.iter().filter_map(|m| m.dietary_energy_consumed).sum();
+    let total_calories: f64 = day_metrics
+        .iter()
+        .filter_map(|m| m.dietary_energy_consumed)
+        .sum();
     let water_intake: f64 = day_metrics.iter().filter_map(|m| m.dietary_water).sum();
     let protein: f64 = day_metrics.iter().filter_map(|m| m.dietary_protein).sum();
-    let carbs: f64 = day_metrics.iter().filter_map(|m| m.dietary_carbohydrates).sum();
+    let carbs: f64 = day_metrics
+        .iter()
+        .filter_map(|m| m.dietary_carbohydrates)
+        .sum();
     let fat: f64 = day_metrics.iter().filter_map(|m| m.dietary_fat_total).sum();
     let fiber: f64 = day_metrics.iter().filter_map(|m| m.dietary_fiber).sum();
     let sodium: f64 = day_metrics.iter().filter_map(|m| m.dietary_sodium).sum();
@@ -812,7 +925,10 @@ fn generate_nutrition_summary(metrics: &[NutritionMetric]) -> NutritionSummary {
         }
     };
 
-    let total_calories: f64 = metrics.iter().filter_map(|m| m.dietary_energy_consumed).sum();
+    let total_calories: f64 = metrics
+        .iter()
+        .filter_map(|m| m.dietary_energy_consumed)
+        .sum();
     let total_water: f64 = metrics.iter().filter_map(|m| m.dietary_water).sum();
 
     let days_span = (date_range.end - date_range.start).num_days().max(1) as f64;
@@ -855,9 +971,18 @@ fn generate_hydration_summary(entries: &[HydrationEntry]) -> HydrationSummary {
         0.0
     };
 
-    let well_hydrated_days = entries.iter().filter(|e| e.hydration_status == "well_hydrated").count();
-    let dehydrated_days = entries.iter().filter(|e| e.hydration_status == "dehydrated").count();
-    let overhydrated_days = entries.iter().filter(|e| e.hydration_status == "overhydrated").count();
+    let well_hydrated_days = entries
+        .iter()
+        .filter(|e| e.hydration_status == "well_hydrated")
+        .count();
+    let dehydrated_days = entries
+        .iter()
+        .filter(|e| e.hydration_status == "dehydrated")
+        .count();
+    let overhydrated_days = entries
+        .iter()
+        .filter(|e| e.hydration_status == "overhydrated")
+        .count();
 
     HydrationSummary {
         total_water_liters: total_water,
@@ -878,7 +1003,10 @@ fn generate_daily_aggregations(metrics: &[NutritionMetric]) -> Vec<DailyNutritio
 
     for metric in metrics {
         let date_key = metric.recorded_at.date_naive().to_string();
-        daily_metrics.entry(date_key).or_insert_with(Vec::new).push(metric);
+        daily_metrics
+            .entry(date_key)
+            .or_insert_with(Vec::new)
+            .push(metric);
     }
 
     // Generate daily summaries
@@ -891,10 +1019,16 @@ fn generate_daily_aggregations(metrics: &[NutritionMetric]) -> Vec<DailyNutritio
                 .unwrap()
                 .and_utc();
 
-            let total_calories: f64 = day_metrics.iter().filter_map(|m| m.dietary_energy_consumed).sum();
+            let total_calories: f64 = day_metrics
+                .iter()
+                .filter_map(|m| m.dietary_energy_consumed)
+                .sum();
             let water_intake: f64 = day_metrics.iter().filter_map(|m| m.dietary_water).sum();
             let protein: f64 = day_metrics.iter().filter_map(|m| m.dietary_protein).sum();
-            let carbs: f64 = day_metrics.iter().filter_map(|m| m.dietary_carbohydrates).sum();
+            let carbs: f64 = day_metrics
+                .iter()
+                .filter_map(|m| m.dietary_carbohydrates)
+                .sum();
             let fat: f64 = day_metrics.iter().filter_map(|m| m.dietary_fat_total).sum();
             let fiber: f64 = day_metrics.iter().filter_map(|m| m.dietary_fiber).sum();
             let sodium: f64 = day_metrics.iter().filter_map(|m| m.dietary_sodium).sum();
@@ -938,7 +1072,9 @@ fn get_hydration_status_from_value(water: Option<f64>) -> String {
     }
 }
 
-fn calculate_average_macronutrient_distribution(metrics: &[NutritionMetric]) -> Option<MacronutrientDistribution> {
+fn calculate_average_macronutrient_distribution(
+    metrics: &[NutritionMetric],
+) -> Option<MacronutrientDistribution> {
     let distributions: Vec<MacronutrientDistribution> = metrics
         .iter()
         .filter_map(|m| m.macronutrient_distribution())
@@ -948,9 +1084,21 @@ fn calculate_average_macronutrient_distribution(metrics: &[NutritionMetric]) -> 
         return None;
     }
 
-    let avg_carb = distributions.iter().map(|d| d.carbohydrate_percent as u16).sum::<u16>() / distributions.len() as u16;
-    let avg_protein = distributions.iter().map(|d| d.protein_percent as u16).sum::<u16>() / distributions.len() as u16;
-    let avg_fat = distributions.iter().map(|d| d.fat_percent as u16).sum::<u16>() / distributions.len() as u16;
+    let avg_carb = distributions
+        .iter()
+        .map(|d| d.carbohydrate_percent as u16)
+        .sum::<u16>()
+        / distributions.len() as u16;
+    let avg_protein = distributions
+        .iter()
+        .map(|d| d.protein_percent as u16)
+        .sum::<u16>()
+        / distributions.len() as u16;
+    let avg_fat = distributions
+        .iter()
+        .map(|d| d.fat_percent as u16)
+        .sum::<u16>()
+        / distributions.len() as u16;
 
     Some(MacronutrientDistribution {
         carbohydrate_percent: avg_carb as u8,
@@ -963,12 +1111,14 @@ fn identify_deficiency_risks(metrics: &[NutritionMetric]) -> Vec<String> {
     let mut risks = Vec::new();
 
     let total_vitamin_c: f64 = metrics.iter().filter_map(|m| m.dietary_vitamin_c).sum();
-    if total_vitamin_c < 90.0 * metrics.len() as f64 { // 90mg RDA * number of entries
+    if total_vitamin_c < 90.0 * metrics.len() as f64 {
+        // 90mg RDA * number of entries
         risks.push("Vitamin C deficiency risk".to_string());
     }
 
     let total_iron: f64 = metrics.iter().filter_map(|m| m.dietary_iron).sum();
-    if total_iron < 18.0 * metrics.len() as f64 { // 18mg RDA * number of entries
+    if total_iron < 18.0 * metrics.len() as f64 {
+        // 18mg RDA * number of entries
         risks.push("Iron deficiency risk".to_string());
     }
 
@@ -978,7 +1128,8 @@ fn identify_deficiency_risks(metrics: &[NutritionMetric]) -> Vec<String> {
 fn identify_excess_warnings(metrics: &[NutritionMetric]) -> Vec<String> {
     let mut warnings = Vec::new();
 
-    let avg_sodium: f64 = metrics.iter().filter_map(|m| m.dietary_sodium).sum::<f64>() / metrics.len() as f64;
+    let avg_sodium: f64 =
+        metrics.iter().filter_map(|m| m.dietary_sodium).sum::<f64>() / metrics.len() as f64;
     if avg_sodium > 2300.0 {
         warnings.push("Excessive sodium intake".to_string());
     }
@@ -1005,8 +1156,10 @@ fn identify_dietary_concerns(metrics: &[NutritionMetric]) -> Vec<DietaryConcern>
     }
 
     // Check for low fiber
-    let avg_fiber: f64 = metrics.iter().filter_map(|m| m.dietary_fiber).sum::<f64>() / metrics.len() as f64;
-    if avg_fiber < 25.0 { // 25g daily recommendation
+    let avg_fiber: f64 =
+        metrics.iter().filter_map(|m| m.dietary_fiber).sum::<f64>() / metrics.len() as f64;
+    if avg_fiber < 25.0 {
+        // 25g daily recommendation
         concerns.push(DietaryConcern {
             concern_type: "low_fiber".to_string(),
             severity: "medium".to_string(),
@@ -1026,7 +1179,8 @@ fn identify_dietary_patterns(metrics: &[NutritionMetric]) -> Vec<DietaryPattern>
     let mut patterns = Vec::new();
 
     // High protein pattern
-    let high_protein_meals = metrics.iter()
+    let high_protein_meals = metrics
+        .iter()
         .filter(|m| {
             if let Some(dist) = m.macronutrient_distribution() {
                 dist.protein_percent > 25
@@ -1046,7 +1200,8 @@ fn identify_dietary_patterns(metrics: &[NutritionMetric]) -> Vec<DietaryPattern>
     }
 
     // Low carb pattern
-    let low_carb_meals = metrics.iter()
+    let low_carb_meals = metrics
+        .iter()
         .filter(|m| {
             if let Some(dist) = m.macronutrient_distribution() {
                 dist.carbohydrate_percent < 30
