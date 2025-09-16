@@ -39,6 +39,7 @@ pub struct RateLimiter {
     redis_client: Option<RedisClient>,
     fallback_store: Arc<Mutex<HashMap<String, InMemoryRateLimit>>>,
     requests_per_hour: i32,
+    ip_requests_per_hour: i32,
     window_duration: Duration,
     using_redis: bool,
 }
@@ -47,6 +48,11 @@ impl RateLimiter {
     /// Create a new rate limiter with Redis backend
     pub async fn new(redis_url: &str) -> Result<Self, RateLimitError> {
         let requests_per_hour = std::env::var("RATE_LIMIT_REQUESTS_PER_HOUR")
+            .unwrap_or_else(|_| "100".to_string())
+            .parse::<i32>()
+            .unwrap_or(100);
+
+        let ip_requests_per_hour = std::env::var("RATE_LIMIT_IP_REQUESTS_PER_HOUR")
             .unwrap_or_else(|_| "100".to_string())
             .parse::<i32>()
             .unwrap_or(100);
@@ -64,6 +70,7 @@ impl RateLimiter {
                                 redis_client: Some(client),
                                 fallback_store: Arc::new(Mutex::new(HashMap::new())),
                                 requests_per_hour,
+                                ip_requests_per_hour,
                                 window_duration: Duration::from_secs(3600), // 1 hour
                                 using_redis: true,
                             });
@@ -87,6 +94,7 @@ impl RateLimiter {
             redis_client: None,
             fallback_store: Arc::new(Mutex::new(HashMap::new())),
             requests_per_hour,
+            ip_requests_per_hour,
             window_duration: Duration::from_secs(3600), // 1 hour
             using_redis: false,
         })
@@ -98,6 +106,19 @@ impl RateLimiter {
             redis_client: None,
             fallback_store: Arc::new(Mutex::new(HashMap::new())),
             requests_per_hour,
+            ip_requests_per_hour: 100,                  // Default IP limit
+            window_duration: Duration::from_secs(3600), // 1 hour
+            using_redis: false,
+        }
+    }
+
+    /// Create a new rate limiter with in-memory store and custom IP limit (for testing)
+    pub fn new_in_memory_with_ip_limit(requests_per_hour: i32, ip_requests_per_hour: i32) -> Self {
+        Self {
+            redis_client: None,
+            fallback_store: Arc::new(Mutex::new(HashMap::new())),
+            requests_per_hour,
+            ip_requests_per_hour,
             window_duration: Duration::from_secs(3600), // 1 hour
             using_redis: false,
         }
@@ -125,11 +146,8 @@ impl RateLimiter {
     ) -> Result<RateLimitInfo, RateLimitError> {
         let key = format!("rate_limit:ip:{ip_address}");
 
-        // Use more restrictive limits for IP-based rate limiting (100 requests/hour)
-        let ip_limit = std::env::var("RATE_LIMIT_IP_REQUESTS_PER_HOUR")
-            .unwrap_or_else(|_| "100".to_string())
-            .parse::<i32>()
-            .unwrap_or(100);
+        // Use the configured IP limit from the struct
+        let ip_limit = self.ip_requests_per_hour;
 
         if self.using_redis && self.redis_client.is_some() {
             self.check_redis_rate_limit_with_limit(&key, ip_limit).await

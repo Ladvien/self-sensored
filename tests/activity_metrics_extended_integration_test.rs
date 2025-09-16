@@ -11,6 +11,7 @@
 use chrono::{Duration, Utc};
 use self_sensored::{
     config::ValidationConfig,
+    db::database::create_connection_pool,
     models::{
         enums::{ActivityMoveMode, BiologicalSex, BloodType, FitzpatrickSkinType},
         health_metrics::*,
@@ -24,10 +25,20 @@ use sqlx::PgPool;
 use std::collections::HashMap;
 use uuid::Uuid;
 
-#[sqlx::test(migrations = "./migrations")]
-async fn test_extended_activity_metrics_ingestion(
-    pool: PgPool,
-) -> Result<(), Box<dyn std::error::Error>> {
+/// Helper function to create test database pool
+async fn create_test_pool() -> PgPool {
+    let database_url = std::env::var("TEST_DATABASE_URL")
+        .or_else(|_| std::env::var("DATABASE_URL"))
+        .expect("TEST_DATABASE_URL or DATABASE_URL must be set");
+
+    create_connection_pool(&database_url)
+        .await
+        .expect("Failed to create test database pool")
+}
+
+#[tokio::test]
+async fn test_extended_activity_metrics_ingestion() -> Result<(), Box<dyn std::error::Error>> {
+    let pool = create_test_pool().await;
     let user = create_test_user(&pool).await?;
     let batch_processor = BatchProcessor::new(pool.clone());
 
@@ -213,10 +224,9 @@ async fn test_extended_activity_metrics_ingestion(
     Ok(())
 }
 
-#[sqlx::test(migrations = "./migrations")]
-async fn test_activity_metrics_validation_extended_fields(
-    pool: PgPool,
-) -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::test]
+async fn test_activity_metrics_validation_extended_fields() -> Result<(), Box<dyn std::error::Error>> {
+    let pool = create_test_pool().await;
     let user = create_test_user(&pool).await?;
     let config = ValidationConfig::default();
 
@@ -340,10 +350,9 @@ async fn test_activity_metrics_validation_extended_fields(
     Ok(())
 }
 
-#[sqlx::test(migrations = "./migrations")]
-async fn test_wheelchair_user_activity_accessibility(
-    pool: PgPool,
-) -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::test]
+async fn test_wheelchair_user_activity_accessibility() -> Result<(), Box<dyn std::error::Error>> {
+    let pool = create_test_pool().await;
     let user = create_test_user(&pool).await?;
     let batch_processor = BatchProcessor::new(pool.clone());
 
@@ -499,10 +508,9 @@ async fn test_wheelchair_user_activity_accessibility(
     Ok(())
 }
 
-#[sqlx::test(migrations = "./migrations")]
-async fn test_multi_sport_activity_tracking(
-    pool: PgPool,
-) -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::test]
+async fn test_multi_sport_activity_tracking() -> Result<(), Box<dyn std::error::Error>> {
+    let pool = create_test_pool().await;
     let user = create_test_user(&pool).await?;
     let batch_processor = BatchProcessor::new(pool.clone());
 
@@ -661,10 +669,9 @@ async fn test_multi_sport_activity_tracking(
     Ok(())
 }
 
-#[sqlx::test(migrations = "./migrations")]
-async fn test_apple_watch_activity_rings_integration(
-    pool: PgPool,
-) -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::test]
+async fn test_apple_watch_activity_rings_integration() -> Result<(), Box<dyn std::error::Error>> {
+    let pool = create_test_pool().await;
     let user = create_test_user(&pool).await?;
     let batch_processor = BatchProcessor::new(pool.clone());
 

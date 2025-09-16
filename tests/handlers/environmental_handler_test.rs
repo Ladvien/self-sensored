@@ -4,6 +4,7 @@ use serde_json::json;
 use sqlx::PgPool;
 use std::collections::HashMap;
 
+use self_sensored::db::database::create_connection_pool;
 use self_sensored::handlers::environmental_handler::{
     ingest_environmental_handler, ingest_audio_exposure_handler, ingest_safety_events_handler,
     get_environmental_data_handler, EnvironmentalIngestPayload, AudioExposureIngestPayload,
@@ -13,6 +14,16 @@ use self_sensored::models::{EnvironmentalMetric, AudioExposureMetric, SafetyEven
 use self_sensored::services::auth::{AuthContext, User};
 
 // Test helper functions
+async fn create_test_pool() -> PgPool {
+    let database_url = std::env::var("DATABASE_URL")
+        .or_else(|_| std::env::var("TEST_DATABASE_URL"))
+        .expect("DATABASE_URL or TEST_DATABASE_URL must be set for testing");
+
+    create_connection_pool(&database_url)
+        .await
+        .expect("Failed to create test database connection pool")
+}
+
 async fn create_test_user(pool: &PgPool) -> User {
     let user_id = uuid::Uuid::new_v4();
     let email = format!("test_{}@example.com", user_id);
@@ -41,8 +52,9 @@ fn create_auth_context(user: User) -> AuthContext {
     AuthContext { user }
 }
 
-#[sqlx::test]
-async fn test_ingest_environmental_handler_success(pool: PgPool) {
+#[tokio::test]
+async fn test_ingest_environmental_handler_success() {
+    let pool = create_test_pool().await;
     // Create test user
     let user = create_test_user(&pool).await;
     let auth = create_auth_context(user.clone());
@@ -102,8 +114,9 @@ async fn test_ingest_environmental_handler_success(pool: PgPool) {
     assert_eq!(stored_count, 1, "Expected one environmental metric to be stored");
 }
 
-#[sqlx::test]
-async fn test_ingest_audio_exposure_handler_dangerous_levels(pool: PgPool) {
+#[tokio::test]
+async fn test_ingest_audio_exposure_handler_dangerous_levels() {
+    let pool = create_test_pool().await;
     // Create test user
     let user = create_test_user(&pool).await;
     let auth = create_auth_context(user.clone());
@@ -159,8 +172,9 @@ async fn test_ingest_audio_exposure_handler_dangerous_levels(pool: PgPool) {
     assert_eq!(stored_count, 1, "Expected one audio exposure metric to be stored");
 }
 
-#[sqlx::test]
-async fn test_ingest_safety_events_handler_critical_events(pool: PgPool) {
+#[tokio::test]
+async fn test_ingest_safety_events_handler_critical_events() {
+    let pool = create_test_pool().await;
     // Create test user
     let user = create_test_user(&pool).await;
     let auth = create_auth_context(user.clone());
@@ -218,8 +232,9 @@ async fn test_ingest_safety_events_handler_critical_events(pool: PgPool) {
     assert_eq!(stored_count, 1, "Expected one safety event to be stored");
 }
 
-#[sqlx::test]
-async fn test_get_environmental_data_handler(pool: PgPool) {
+#[tokio::test]
+async fn test_get_environmental_data_handler() {
+    let pool = create_test_pool().await;
     // Create test user
     let user = create_test_user(&pool).await;
     let auth = create_auth_context(user.clone());
@@ -275,8 +290,9 @@ async fn test_get_environmental_data_handler(pool: PgPool) {
     assert_eq!(data_array.len(), 1, "Expected one environmental record");
 }
 
-#[sqlx::test]
-async fn test_environmental_validation_errors(pool: PgPool) {
+#[tokio::test]
+async fn test_environmental_validation_errors() {
+    let pool = create_test_pool().await;
     // Create test user
     let user = create_test_user(&pool).await;
     let auth = create_auth_context(user.clone());
@@ -333,8 +349,9 @@ async fn test_environmental_validation_errors(pool: PgPool) {
     assert!(!errors.is_empty(), "Should have validation error messages");
 }
 
-#[sqlx::test]
-async fn test_audio_exposure_validation(pool: PgPool) {
+#[tokio::test]
+async fn test_audio_exposure_validation() {
+    let pool = create_test_pool().await;
     // Create test user
     let user = create_test_user(&pool).await;
     let auth = create_auth_context(user.clone());
@@ -379,8 +396,9 @@ async fn test_audio_exposure_validation(pool: PgPool) {
     assert!(body["failed_count"].as_u64().unwrap() > 0, "Should have validation failures");
 }
 
-#[sqlx::test]
-async fn test_safety_event_validation(pool: PgPool) {
+#[tokio::test]
+async fn test_safety_event_validation() {
+    let pool = create_test_pool().await;
     // Create test user
     let user = create_test_user(&pool).await;
     let auth = create_auth_context(user.clone());
@@ -428,8 +446,9 @@ async fn test_safety_event_validation(pool: PgPool) {
     assert!(body["failed_count"].as_u64().unwrap() > 0, "Should have validation failures");
 }
 
-#[sqlx::test]
-async fn test_empty_payload_rejection(pool: PgPool) {
+#[tokio::test]
+async fn test_empty_payload_rejection() {
+    let pool = create_test_pool().await;
     // Create test user
     let user = create_test_user(&pool).await;
     let auth = create_auth_context(user.clone());
@@ -460,8 +479,9 @@ async fn test_empty_payload_rejection(pool: PgPool) {
 }
 
 // Integration test with iOS data parsing
-#[sqlx::test]
-async fn test_ios_environmental_data_conversion(pool: PgPool) {
+#[tokio::test]
+async fn test_ios_environmental_data_conversion() {
+    let pool = create_test_pool().await;
     use self_sensored::models::ios_models::{IosIngestPayload, IosIngestData, IosMetric, IosMetricData};
 
     // Create test user

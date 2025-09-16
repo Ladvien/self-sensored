@@ -7,6 +7,7 @@ use std::env;
 use uuid::Uuid;
 
 use self_sensored::{
+    db::database::create_connection_pool,
     handlers::{health::health_check, ingest::ingest_handler},
     middleware::{auth::AuthMiddleware, rate_limit::RateLimitMiddleware},
     models::{ApiResponse, IngestResponse},
@@ -18,10 +19,12 @@ use self_sensored::{
 
 async fn get_test_pool() -> PgPool {
     dotenv::dotenv().ok();
-    let database_url = env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL must be set");
-    sqlx::PgPool::connect(&database_url)
+    let database_url = env::var("TEST_DATABASE_URL")
+        .or_else(|_| env::var("DATABASE_URL"))
+        .expect("TEST_DATABASE_URL or DATABASE_URL must be set");
+    create_connection_pool(&database_url)
         .await
-        .expect("Failed to connect to test database")
+        .expect("Failed to create test database pool")
 }
 
 fn get_test_redis_client() -> redis::Client {

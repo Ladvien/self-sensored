@@ -5,22 +5,22 @@ use chrono::{DateTime, Utc};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sqlx::postgres::PgPoolOptions;
+    use self_sensored::db::database::create_connection_pool;
     use std::env;
 
-    async fn setup_test_db() -> PgPool {
+    async fn create_test_pool() -> PgPool {
         let database_url = env::var("TEST_DATABASE_URL")
-            .expect("TEST_DATABASE_URL must be set for integration tests");
+            .or_else(|_| env::var("DATABASE_URL"))
+            .expect("TEST_DATABASE_URL or DATABASE_URL must be set for integration tests");
 
-        PgPoolOptions::new()
-            .max_connections(5)
-            .connect(&database_url)
+        create_connection_pool(&database_url)
             .await
-            .expect("Failed to connect to test database")
+            .expect("Failed to create test database connection pool")
     }
 
-    #[sqlx::test]
-    async fn test_all_required_tables_exist(pool: PgPool) {
+    #[tokio::test]
+    async fn test_all_required_tables_exist() {
+        let pool = create_test_pool().await;
         let expected_tables = vec![
             "users", "api_keys", "audit_log", "raw_ingestions", "heart_rate_metrics",
             "blood_pressure_metrics", "sleep_metrics", "activity_metrics", "workouts",
@@ -54,8 +54,9 @@ mod tests {
         }
     }
 
-    #[sqlx::test]
-    async fn test_required_extensions_enabled(pool: PgPool) {
+    #[tokio::test]
+    async fn test_required_extensions_enabled() {
+        let pool = create_test_pool().await;
         let query = r#"
             SELECT extname 
             FROM pg_extension 
@@ -72,8 +73,9 @@ mod tests {
         assert!(extensions.contains("postgis"), "PostGIS extension not enabled");
     }
 
-    #[sqlx::test] 
-    async fn test_partitioned_tables_structure(pool: PgPool) {
+    #[tokio::test]
+    async fn test_partitioned_tables_structure() {
+        let pool = create_test_pool().await;
         // Test that partitioned tables exist and are properly configured
         let query = r#"
             SELECT 
@@ -110,8 +112,9 @@ mod tests {
         }
     }
 
-    #[sqlx::test]
-    async fn test_partition_functions_exist(pool: PgPool) {
+    #[tokio::test]
+    async fn test_partition_functions_exist() {
+        let pool = create_test_pool().await;
         let expected_functions = vec![
             "create_monthly_partitions",
             "maintain_partitions", 
@@ -138,8 +141,9 @@ mod tests {
         }
     }
 
-    #[sqlx::test]
-    async fn test_brin_indexes_exist(pool: PgPool) {
+    #[tokio::test]
+    async fn test_brin_indexes_exist() {
+        let pool = create_test_pool().await;
         let query = r#"
             SELECT indexname
             FROM pg_indexes 
@@ -168,8 +172,9 @@ mod tests {
         assert!(has_time_series_brin, "No time-series BRIN indexes found");
     }
 
-    #[sqlx::test]
-    async fn test_spatial_indexes_exist(pool: PgPool) {
+    #[tokio::test]
+    async fn test_spatial_indexes_exist() {
+        let pool = create_test_pool().await;
         let query = r#"
             SELECT indexname, indexdef
             FROM pg_indexes 
@@ -182,8 +187,9 @@ mod tests {
         assert!(!rows.is_empty(), "No spatial (GIST) indexes found for GPS data");
     }
 
-    #[sqlx::test]
-    async fn test_api_keys_dual_format_support(pool: PgPool) {
+    #[tokio::test]
+    async fn test_api_keys_dual_format_support() {
+        let pool = create_test_pool().await;
         // Test that api_keys table supports both UUID and hashed key formats
         let query = r#"
             SELECT column_name, data_type, is_nullable
@@ -206,8 +212,9 @@ mod tests {
         assert!(!constraint_rows.is_empty(), "Missing key_type constraint");
     }
 
-    #[sqlx::test]
-    async fn test_heart_rate_metrics_architecture_compliance(pool: PgPool) {
+    #[tokio::test]
+    async fn test_heart_rate_metrics_architecture_compliance() {
+        let pool = create_test_pool().await;
         // Test that heart_rate_metrics matches ARCHITECTURE.md specification
         let query = r#"
             SELECT column_name, data_type
@@ -233,8 +240,9 @@ mod tests {
         }
     }
 
-    #[sqlx::test]
-    async fn test_workout_routes_postgis_support(pool: PgPool) {
+    #[tokio::test]
+    async fn test_workout_routes_postgis_support() {
+        let pool = create_test_pool().await;
         // Test that workout_routes table has proper PostGIS geometry support
         let query = r#"
             SELECT column_name, data_type, udt_name
@@ -252,8 +260,9 @@ mod tests {
                "location column is not PostGIS geometry type");
     }
 
-    #[sqlx::test]
-    async fn test_constraints_and_checks(pool: PgPool) {
+    #[tokio::test]
+    async fn test_constraints_and_checks() {
+        let pool = create_test_pool().await;
         // Test that critical constraints exist
         let query = r#"
             SELECT 
@@ -294,8 +303,9 @@ mod tests {
         assert!(!check_constraints.is_empty(), "No check constraints found");
     }
 
-    #[sqlx::test]
-    async fn test_triggers_exist(pool: PgPool) {
+    #[tokio::test]
+    async fn test_triggers_exist() {
+        let pool = create_test_pool().await;
         let query = r#"
             SELECT trigger_name, event_object_table
             FROM information_schema.triggers
@@ -313,8 +323,9 @@ mod tests {
         assert!(trigger_tables.contains("users"), "users table missing updated_at trigger");
     }
 
-    #[sqlx::test]
-    async fn test_partition_creation_function(pool: PgPool) {
+    #[tokio::test]
+    async fn test_partition_creation_function() {
+        let pool = create_test_pool().await;
         // Test the partition creation function works
         let result = sqlx::query("SELECT create_monthly_partitions('raw_ingestions_partitioned', 'received_at', 0, 1)")
             .execute(&pool)
@@ -335,8 +346,9 @@ mod tests {
         assert!(count > 0, "No partitions created by create_monthly_partitions function");
     }
 
-    #[sqlx::test]
-    async fn test_data_validation_constraints(pool: PgPool) {
+    #[tokio::test]
+    async fn test_data_validation_constraints() {
+        let pool = create_test_pool().await;
         // Test that data validation constraints work properly
         
         // Test heart rate constraints
@@ -369,8 +381,9 @@ mod tests {
         assert!(invalid_bp.is_err(), "Blood pressure constraint not working - should reject systolic > 300");
     }
 
-    #[sqlx::test]
-    async fn test_performance_under_load(pool: PgPool) {
+    #[tokio::test]
+    async fn test_performance_under_load() {
+        let pool = create_test_pool().await;
         use std::time::Instant;
         
         // Insert test data and measure query performance
@@ -424,8 +437,9 @@ mod tests {
             .expect("Failed to cleanup test data");
     }
 
-    #[sqlx::test]
-    async fn test_index_usage(pool: PgPool) {
+    #[tokio::test]
+    async fn test_index_usage() {
+        let pool = create_test_pool().await;
         // Test that queries use appropriate indexes
         let user_id = uuid::Uuid::new_v4();
         

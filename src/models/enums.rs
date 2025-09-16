@@ -1277,11 +1277,14 @@ impl fmt::Display for SymptomSeverity {
 
 /// Biological Sex for health metrics personalization
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[sqlx(type_name = "biological_sex", rename_all = "snake_case")]
+#[sqlx(type_name = "biological_sex")]
 #[serde(rename_all = "snake_case")]
 pub enum BiologicalSex {
+    #[sqlx(rename = "male")]
     Male,
+    #[sqlx(rename = "female")]
     Female,
+    #[sqlx(rename = "not_set")]
     NotSet,
 }
 
@@ -1322,17 +1325,26 @@ impl fmt::Display for BiologicalSex {
 
 /// Blood Type for medical emergency information
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[sqlx(type_name = "blood_type", rename_all = "snake_case")]
+#[sqlx(type_name = "blood_type")]
 #[serde(rename_all = "snake_case")]
 pub enum BloodType {
+    #[sqlx(rename = "A_positive")]
     APositive,
+    #[sqlx(rename = "A_negative")]
     ANegative,
+    #[sqlx(rename = "B_positive")]
     BPositive,
+    #[sqlx(rename = "B_negative")]
     BNegative,
+    #[sqlx(rename = "AB_positive")]
     AbPositive,
+    #[sqlx(rename = "AB_negative")]
     AbNegative,
+    #[sqlx(rename = "O_positive")]
     OPositive,
+    #[sqlx(rename = "O_negative")]
     ONegative,
+    #[sqlx(rename = "not_set")]
     NotSet,
 }
 
@@ -1436,15 +1448,22 @@ impl fmt::Display for BloodType {
 
 /// Fitzpatrick Skin Type for UV protection recommendations (1-6 scale)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[sqlx(type_name = "fitzpatrick_skin_type", rename_all = "snake_case")]
+#[sqlx(type_name = "fitzpatrick_skin_type")]
 #[serde(rename_all = "snake_case")]
 pub enum FitzpatrickSkinType {
+    #[sqlx(rename = "type_1")]
     Type1, // Very fair skin, always burns, never tans
+    #[sqlx(rename = "type_2")]
     Type2, // Fair skin, usually burns, tans minimally
+    #[sqlx(rename = "type_3")]
     Type3, // Medium skin, sometimes burns, tans gradually
+    #[sqlx(rename = "type_4")]
     Type4, // Olive skin, rarely burns, tans well
+    #[sqlx(rename = "type_5")]
     Type5, // Brown skin, very rarely burns, tans darkly
+    #[sqlx(rename = "type_6")]
     Type6, // Black skin, never burns, always tans darkly
+    #[sqlx(rename = "not_set")]
     NotSet,
 }
 
@@ -1520,11 +1539,14 @@ impl fmt::Display for FitzpatrickSkinType {
 
 /// Apple Watch Activity Move Mode for fitness personalization
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[sqlx(type_name = "activity_move_mode", rename_all = "snake_case")]
+#[sqlx(type_name = "activity_move_mode")]
 #[serde(rename_all = "snake_case")]
 pub enum ActivityMoveMode {
+    #[sqlx(rename = "active_energy")]
     ActiveEnergy, // Calories-based move goals
+    #[sqlx(rename = "move_time")]
     MoveTime,     // Time-based move goals (accessibility)
+    #[sqlx(rename = "not_set")]
     NotSet,
 }
 

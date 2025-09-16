@@ -11,8 +11,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
     // Get database URL from environment
-    let database_url = env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     // Create database connection pool
     let pool = PgPool::connect(&database_url).await?;
@@ -74,8 +73,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .execute(&pool)
             .await?;
 
-            info!("✅ Successfully reprocessed {}: {} metrics processed",
-                  record.id, result.processed_count);
+            info!(
+                "✅ Successfully reprocessed {}: {} metrics processed",
+                record.id, result.processed_count
+            );
             processed_count += 1;
         } else {
             // Update with new errors
@@ -88,14 +89,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .execute(&pool)
             .await?;
 
-            warn!("⚠️ Reprocessed {} with {} errors: {} processed, {} failed",
-                  record.id, result.errors.len(), result.processed_count, result.failed_count);
+            warn!(
+                "⚠️ Reprocessed {} with {} errors: {} processed, {} failed",
+                record.id,
+                result.errors.len(),
+                result.processed_count,
+                result.failed_count
+            );
             failed_count += 1;
         }
     }
 
-    info!("🎯 Reprocessing complete: {} successfully processed, {} failed",
-          processed_count, failed_count);
+    info!(
+        "🎯 Reprocessing complete: {} successfully processed, {} failed",
+        processed_count, failed_count
+    );
 
     // Show final statistics
     let stats = sqlx::query!(
@@ -114,13 +122,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("📊 Final statistics:");
     for stat in stats {
-        let avg_size = stat.avg_size_mb
+        let avg_size = stat
+            .avg_size_mb
             .map(|bd| bd.to_string().parse::<f64>().unwrap_or(0.0))
             .unwrap_or(0.0);
-        info!("  {}: {} records (avg {:.2} MB)",
-              stat.processing_status.unwrap_or("unknown".to_string()),
-              stat.count.unwrap_or(0),
-              avg_size);
+        info!(
+            "  {}: {} records (avg {:.2} MB)",
+            stat.processing_status.unwrap_or("unknown".to_string()),
+            stat.count.unwrap_or(0),
+            avg_size
+        );
     }
 
     Ok(())

@@ -344,15 +344,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_rate_limit_middleware_ip_based_headers() {
-        // Clean up environment first
-        std::env::remove_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR");
-
-        // Test that rate limiting returns proper headers for IP-based limiting
-        // Set IP rate limit to 100 for testing BEFORE creating the rate limiter
-        std::env::set_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR", "100");
-
-        // Use low limit for API keys but IP limit will be read from env var
-        let rate_limiter = web::Data::new(RateLimiter::new_in_memory(2));
+        // Use the new constructor with explicit IP limit
+        let rate_limiter = web::Data::new(RateLimiter::new_in_memory_with_ip_limit(2, 100));
 
         let app = test::init_service(
             App::new()
@@ -381,9 +374,6 @@ mod tests {
         // Verify remaining count decremented
         let remaining_header = resp1.headers().get("x-ratelimit-remaining").unwrap();
         assert_eq!(remaining_header.to_str().unwrap(), "99");
-
-        // Clean up env var
-        std::env::remove_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR");
     }
 
     /// Test multiple requests to check rate limiting behavior
@@ -392,14 +382,8 @@ mod tests {
         // Use a unique IP for this test to avoid conflicts
         let test_ip = "192.168.1.101";
 
-        // Clean up environment first
-        std::env::remove_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR");
-
-        // Set IP rate limit to 3 for testing BEFORE creating the rate limiter
-        std::env::set_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR", "3");
-
-        // The API key limit can be different from IP limit
-        let rate_limiter = web::Data::new(RateLimiter::new_in_memory(100));
+        // Create rate limiter with IP limit of 3 for testing
+        let rate_limiter = web::Data::new(RateLimiter::new_in_memory_with_ip_limit(100, 3));
 
         // Clear the rate limiter to ensure clean state
         rate_limiter.clear_all().await.unwrap();
@@ -476,9 +460,6 @@ mod tests {
             rate_limited_count, 3,
             "Should rate limit the remaining 3 requests"
         );
-
-        // Clean up env var
-        std::env::remove_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR");
     }
 
     /// Test rate limit header consistency
@@ -487,14 +468,8 @@ mod tests {
         // Use a unique IP for this test to avoid conflicts
         let test_ip = "192.168.1.102";
 
-        // Clean up environment first
-        std::env::remove_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR");
-
-        // Set IP rate limit to 2 for testing BEFORE creating the rate limiter
-        std::env::set_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR", "2");
-
-        // The API key limit can be different from IP limit
-        let rate_limiter = web::Data::new(RateLimiter::new_in_memory(100));
+        // Create rate limiter with IP limit of 2 for testing
+        let rate_limiter = web::Data::new(RateLimiter::new_in_memory_with_ip_limit(100, 2));
 
         // Clear the rate limiter to ensure clean state
         rate_limiter.clear_all().await.unwrap();
@@ -529,7 +504,7 @@ mod tests {
                 .and_then(|h| h.to_str().ok())
                 .and_then(|s| s.parse::<i32>().ok());
 
-            let limit = 2; // Using configured limit from env var
+            let limit = 2; // Using configured IP limit
 
             match status {
                 200 => {
@@ -578,9 +553,6 @@ mod tests {
             rate_limited_count, 3,
             "Should have exactly 3 rate limited requests"
         );
-
-        // Clean up env var
-        std::env::remove_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR");
     }
 
     /// Test rate limiting behavior under rapid sequential requests
@@ -589,14 +561,8 @@ mod tests {
         // Use a unique IP for this test to avoid conflicts
         let test_ip = "192.168.1.103";
 
-        // Clean up environment first
-        std::env::remove_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR");
-
-        // Set IP rate limit to 5 for testing BEFORE creating the rate limiter
-        std::env::set_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR", "5");
-
-        // The API key limit can be different from IP limit
-        let rate_limiter = web::Data::new(RateLimiter::new_in_memory(100));
+        // Use the new constructor with explicit IP limit of 5
+        let rate_limiter = web::Data::new(RateLimiter::new_in_memory_with_ip_limit(100, 5));
 
         // Clear the rate limiter to ensure clean state
         rate_limiter.clear_all().await.unwrap();
@@ -664,9 +630,6 @@ mod tests {
             rate_limited_count, 5,
             "Should have exactly 5 rate limited requests"
         );
-
-        // Clean up env var
-        std::env::remove_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR");
     }
 
     /// Test rate limiting recovery after time window expires
@@ -675,14 +638,8 @@ mod tests {
         // Use a unique IP for this test to avoid conflicts
         let test_ip = "192.168.1.104";
 
-        // Clean up environment first
-        std::env::remove_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR");
-
-        // Set IP rate limit to 2 for testing BEFORE creating the rate limiter
-        std::env::set_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR", "2");
-
-        // The API key limit can be different from IP limit
-        let rate_limiter = web::Data::new(RateLimiter::new_in_memory(100));
+        // Create rate limiter with IP limit of 2 for testing
+        let rate_limiter = web::Data::new(RateLimiter::new_in_memory_with_ip_limit(100, 2));
 
         // Clear the rate limiter to ensure clean state
         rate_limiter.clear_all().await.unwrap();
@@ -715,8 +672,5 @@ mod tests {
         // In a real test, we would advance time here and verify recovery
         // For now, just verify that the rate limiting is working correctly
         println!("✅ Rate limiting recovery test framework verified");
-
-        // Clean up env var
-        std::env::remove_var("RATE_LIMIT_IP_REQUESTS_PER_HOUR");
     }
 }

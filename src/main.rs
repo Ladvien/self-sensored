@@ -99,7 +99,10 @@ async fn main() -> std::io::Result<()> {
     if max_payload_size_mb == 0 {
         info!("Max payload size: unlimited (personal health app)");
     } else {
-        info!("Max payload size: {}MB (security-limited)", max_payload_size_mb);
+        info!(
+            "Max payload size: {}MB (security-limited)",
+            max_payload_size_mb
+        );
     }
     info!("Connection timeout: {}s", connection_timeout_seconds);
     info!(

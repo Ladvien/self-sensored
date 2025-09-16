@@ -52,7 +52,7 @@ pub async fn optimized_ingest_handler(
     };
 
     // Optimization 2: Validate payload constraints early
-    let total_metrics = internal_payload.data.metrics.len() + internal_payload.data.workouts.len();
+    let _total_metrics = internal_payload.data.metrics.len() + internal_payload.data.workouts.len();
     // No metrics count limit for personal health app
 
     // Optimization 3: Parallel validation using task-based parallelism

@@ -7,6 +7,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 // Import the application modules
+use self_sensored::db::database::create_connection_pool;
 use self_sensored::handlers::user_characteristics_handler;
 use self_sensored::middleware::auth::AuthMiddleware;
 use self_sensored::models::enums::{
@@ -16,6 +17,17 @@ use self_sensored::models::user_characteristics::{UserCharacteristics, UserChara
 use self_sensored::services::auth::AuthContext;
 use self_sensored::services::auth::AuthService;
 use self_sensored::services::user_characteristics::UserCharacteristicsService;
+
+/// Helper function to create test database pool
+async fn create_test_pool() -> PgPool {
+    let database_url = std::env::var("TEST_DATABASE_URL")
+        .or_else(|_| std::env::var("DATABASE_URL"))
+        .expect("TEST_DATABASE_URL or DATABASE_URL must be set");
+
+    create_connection_pool(&database_url)
+        .await
+        .expect("Failed to create test database pool")
+}
 
 /// Helper to create test user characteristics input
 fn create_test_characteristics_input() -> UserCharacteristicsInput {
@@ -101,8 +113,9 @@ async fn cleanup_test_data(pool: &PgPool, user_id: Uuid) {
         .ok();
 }
 
-#[sqlx::test]
-async fn test_create_user_characteristics(pool: PgPool) {
+#[tokio::test]
+async fn test_create_user_characteristics() {
+    let pool = create_test_pool().await;
     let user_id = create_test_user(&pool).await;
     let _api_key = create_test_api_key(&pool, user_id).await;
 
@@ -176,8 +189,9 @@ async fn test_create_user_characteristics(pool: PgPool) {
     cleanup_test_data(&pool, user_id).await;
 }
 
-#[sqlx::test]
-async fn test_get_user_characteristics(pool: PgPool) {
+#[tokio::test]
+async fn test_get_user_characteristics() {
+    let pool = create_test_pool().await;
     let user_id = create_test_user(&pool).await;
     let characteristics_service = UserCharacteristicsService::new(pool.clone());
 
@@ -229,8 +243,9 @@ async fn test_get_user_characteristics(pool: PgPool) {
     cleanup_test_data(&pool, user_id).await;
 }
 
-#[sqlx::test]
-async fn test_update_user_characteristics(pool: PgPool) {
+#[tokio::test]
+async fn test_update_user_characteristics() {
+    let pool = create_test_pool().await;
     let user_id = create_test_user(&pool).await;
     let characteristics_service = UserCharacteristicsService::new(pool.clone());
 
@@ -283,8 +298,9 @@ async fn test_update_user_characteristics(pool: PgPool) {
     cleanup_test_data(&pool, user_id).await;
 }
 
-#[sqlx::test]
-async fn test_validation_ranges(pool: PgPool) {
+#[tokio::test]
+async fn test_validation_ranges() {
+    let pool = create_test_pool().await;
     let user_id = create_test_user(&pool).await;
     let characteristics_service = UserCharacteristicsService::new(pool.clone());
 
@@ -341,8 +357,9 @@ async fn test_validation_ranges(pool: PgPool) {
     cleanup_test_data(&pool, user_id).await;
 }
 
-#[sqlx::test]
-async fn test_ios_data_processing(pool: PgPool) {
+#[tokio::test]
+async fn test_ios_data_processing() {
+    let pool = create_test_pool().await;
     let user_id = create_test_user(&pool).await;
     let characteristics_service = UserCharacteristicsService::new(pool.clone());
 
@@ -391,8 +408,9 @@ async fn test_ios_data_processing(pool: PgPool) {
     cleanup_test_data(&pool, user_id).await;
 }
 
-#[sqlx::test]
-async fn test_aggregate_stats(pool: PgPool) {
+#[tokio::test]
+async fn test_aggregate_stats() {
+    let pool = create_test_pool().await;
     let characteristics_service = UserCharacteristicsService::new(pool.clone());
 
     // Create multiple test users with different characteristics
@@ -452,8 +470,9 @@ async fn test_aggregate_stats(pool: PgPool) {
     cleanup_test_data(&pool, user3_id).await;
 }
 
-#[sqlx::test]
-async fn test_wheelchair_user_validation_integration(pool: PgPool) {
+#[tokio::test]
+async fn test_wheelchair_user_validation_integration() {
+    let pool = create_test_pool().await;
     use chrono::Utc;
     use self_sensored::config::ValidationConfig;
     use self_sensored::models::health_metrics::{ActivityMetric, HeartRateMetric};
@@ -551,8 +570,9 @@ async fn test_wheelchair_user_validation_integration(pool: PgPool) {
     cleanup_test_data(&pool, user_id).await;
 }
 
-#[sqlx::test]
-async fn test_profile_completion_tracking(pool: PgPool) {
+#[tokio::test]
+async fn test_profile_completion_tracking() {
+    let pool = create_test_pool().await;
     let user_id = create_test_user(&pool).await;
     let characteristics_service = UserCharacteristicsService::new(pool.clone());
 
