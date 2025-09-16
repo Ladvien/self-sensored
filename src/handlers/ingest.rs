@@ -233,8 +233,8 @@ pub async fn ingest_handler(
     // Always process synchronously - no limits or thresholds for personal health app
     let total_data_count = processed_payload.data.metrics.len() + processed_payload.data.workouts.len();
 
-    // Process all payloads synchronously - removed async threshold
-    if false { // Never async
+    // Process large payloads asynchronously to avoid Cloudflare 524 timeouts
+    if payload_size_mb > 10.0 { // Process async for payloads over 10MB
         info!(
             user_id = %auth.user.id,
             metric_count = processed_payload.data.metrics.len(),

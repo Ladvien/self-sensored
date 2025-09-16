@@ -68,7 +68,7 @@ impl Default for BatchConfig {
             heart_rate_chunk_size: 4200, // 10 params: 65,535 ÷ 10 × 0.8 ≈ 4,200 (max ~42,000 params) - Updated for expanded cardiovascular metrics
             blood_pressure_chunk_size: 8000, // 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000 (max ~48,000 params)
             sleep_chunk_size: 6000, // 10 params: 65,535 ÷ 10 × 0.8 ≈ 6,000 (max ~60,000 params)
-            activity_chunk_size: 6500, // 8 params: 65,535 ÷ 8 × 0.8 ≈ 6,500 (max ~52,000 params)
+            activity_chunk_size: 2700, // 19 params: 65,535 ÷ 19 × 0.8 ≈ 2,700 (max ~51,300 params)
             body_measurement_chunk_size: 3000, // 16 params: 65,535 ÷ 16 × 0.8 ≈ 3,275, using 3,000 for safety (max ~48,000 params)
             temperature_chunk_size: 8000, // 8 params: 65,535 ÷ 8 × 0.8 ≈ 8,000 (max ~64,000 params) - optimized for high-frequency monitoring
             respiratory_chunk_size: 7000, // 7 params: 65,535 ÷ 7 × 0.8 ≈ 7,000 (max ~49,000 params)
