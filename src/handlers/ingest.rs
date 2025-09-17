@@ -139,8 +139,30 @@ pub async fn ingest_handler(
         }
     };
 
-    // Validate payload constraints
-    let _total_metrics = internal_payload.data.metrics.len() + internal_payload.data.workouts.len();
+    // Validate payload constraints - reject empty payloads early
+    let total_metrics = internal_payload.data.metrics.len() + internal_payload.data.workouts.len();
+
+    // Early validation: reject empty payloads
+    if total_metrics == 0 {
+        warn!(
+            user_id = %auth.user.id,
+            "Empty payload received - no metrics or workouts to process"
+        );
+        Metrics::record_error("empty_payload", "/api/v1/ingest", "error");
+
+        return Ok(HttpResponse::BadRequest().json(
+            ApiResponse::<()>::error(
+                "Empty payload: no metrics or workouts provided. Please include at least one metric or workout.".to_string()
+            )
+        ));
+    }
+
+    info!(
+        user_id = %auth.user.id,
+        total_metrics = total_metrics,
+        "Payload validation passed - contains metrics/workouts"
+    );
+
     // No metrics count limit for personal health app
 
     // Validate individual metrics and workouts
@@ -295,13 +317,13 @@ pub async fn ingest_handler(
             );
         });
 
-        // Return immediate response to avoid timeout
+        // Return immediate response to avoid timeout - indicate acceptance, not completion
         let response = IngestResponse {
-            success: true,
-            processed_count: total_data_count,
+            success: false,     // Not yet processed, only accepted
+            processed_count: 0, // No processing completed yet
             failed_count: 0,
             processing_time_ms: start_time.elapsed().as_millis() as u64,
-            errors: vec![],
+            errors: vec![], // Will be populated during background processing
         };
 
         info!(
@@ -310,12 +332,12 @@ pub async fn ingest_handler(
             "Accepted large payload for async processing"
         );
 
-        // Return 202 Accepted for async processing
+        // Return 202 Accepted for async processing with clear messaging
         return Ok(
             HttpResponse::Accepted().json(ApiResponse::success_with_message(
                 response,
                 format!(
-                    "Processing {} items asynchronously. Check raw_ingestion id {} for status.",
+                    "Accepted {} items for background processing. Processing is NOT yet complete. Monitor raw_ingestion id {} for actual status.",
                     total_data_count, raw_id
                 ),
             )),
@@ -346,9 +368,9 @@ pub async fn ingest_handler(
         );
     }
 
-    // Create response
+    // Create response with accurate success determination
     let response = IngestResponse {
-        success: result.errors.is_empty(),
+        success: result.errors.is_empty() && result.processed_count > 0,
         processed_count: result.processed_count,
         failed_count: result.failed_count,
         processing_time_ms: processing_time,
@@ -550,11 +572,31 @@ async fn update_processing_status(
     raw_id: Uuid,
     result: &BatchProcessingResult,
 ) -> Result<(), sqlx::Error> {
-    let status = if result.errors.is_empty() {
-        "processed"
+    // Determine status based on both errors and actual processing success
+    let expected_count = result.processed_count + result.failed_count;
+    let has_errors = !result.errors.is_empty();
+    let partial_failure = result.failed_count > 0;
+
+    let status = if has_errors && result.processed_count == 0 {
+        "error" // Complete failure
+    } else if partial_failure {
+        "partial_success" // Some items failed
+    } else if result.processed_count > 0 {
+        "processed" // All items processed successfully
     } else {
-        "error"
+        "error" // No items processed (unexpected)
     };
+
+    // Log detailed status for debugging
+    info!(
+        raw_id = %raw_id,
+        status = %status,
+        processed_count = result.processed_count,
+        failed_count = result.failed_count,
+        errors_count = result.errors.len(),
+        expected_count = expected_count,
+        "Processing status determined"
+    );
     let processing_errors = if result.errors.is_empty() {
         None
     } else {
