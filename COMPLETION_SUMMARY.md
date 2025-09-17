@@ -38,11 +38,12 @@ All critical data loss issues identified in REPORT.md have been resolved. The he
 - **File**: `/src/config/batch_config.rs`
 
 #### STORY-EMERGENCY-005: Environmental/AudioExposure Processing ✅
-- **Fixed**: Added missing fields to GroupedMetrics
-- **Fixed**: Added missing match arms in batch processor
-- **Implemented**: Full processing logic for both metric types
-- **Result**: 85,532 metrics no longer lost
-- **File**: `/src/services/batch_processor.rs`
+- **Fixed**: Added missing parallel processing tasks in process_parallel() method
+- **Fixed**: Added missing BatchConfig field initializations in async handler
+- **Verified**: Deduplication and chunked insert methods already implemented
+- **Tested**: Added comprehensive chunk size validation tests
+- **Result**: 85,532 metrics (Environmental: 84,432, AudioExposure: 1,100) no longer lost
+- **Files**: `/src/services/batch_processor.rs`, `/src/handlers/ingest_async_simple.rs`, tests
 
 ### 📊 DATA STORIES (P1) - COMPLETE
 
