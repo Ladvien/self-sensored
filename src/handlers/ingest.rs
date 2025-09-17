@@ -151,6 +151,8 @@ pub async fn ingest_handler(
             failed_count: 0,
             processing_time_ms: start_time.elapsed().as_millis() as u64,
             errors: vec![], // Will be populated during background processing
+            processing_status: Some("accepted_for_processing".to_string()),
+            raw_ingestion_id: Some(raw_id),
         };
 
         info!(
@@ -164,7 +166,7 @@ pub async fn ingest_handler(
             HttpResponse::Accepted().json(ApiResponse::success_with_message(
                 response,
                 format!(
-                    "Large payload ({:.1}MB) accepted for background processing. Processing is NOT yet complete. Monitor raw_ingestion id {} for status updates.",
+                    "Large payload ({:.1}MB) accepted for background processing. Status: 'accepted_for_processing' - NO metrics have been processed yet (processed_count: 0). Use raw_ingestion_id {} to check processing status later.",
                     payload_size_mb, raw_id
                 ),
             )),
@@ -282,6 +284,8 @@ pub async fn ingest_handler(
                         failed_count: all_validation_errors.len(),
                         processing_time_ms: start_time.elapsed().as_millis() as u64,
                         errors: all_validation_errors,
+                        processing_status: Some("error".to_string()),
+                        raw_ingestion_id: None, // No raw ingestion saved for validation failures
                     },
                 ),
             ));
@@ -350,12 +354,22 @@ pub async fn ingest_handler(
     }
 
     // Create response with accurate success determination
+    let processing_status = if result.errors.is_empty() && result.processed_count > 0 {
+        "processed"
+    } else if result.processed_count > 0 && result.failed_count > 0 {
+        "partial_success"
+    } else {
+        "error"
+    };
+
     let response = IngestResponse {
         success: result.errors.is_empty() && result.processed_count > 0,
         processed_count: result.processed_count,
         failed_count: result.failed_count,
         processing_time_ms: processing_time,
         errors: result.errors,
+        processing_status: Some(processing_status.to_string()),
+        raw_ingestion_id: Some(raw_id),
     };
 
     // Record final metrics

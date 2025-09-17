@@ -261,12 +261,17 @@ pub async fn ingest_async_optimized_handler(
     }
 
     // Create response
+    let success = processing_result.errors.is_empty();
+    let processing_status = if success { "processed" } else { "partial_success" };
+
     let response = IngestResponse {
-        success: processing_result.errors.is_empty(),
+        success,
         processed_count: processing_result.processed_count,
         failed_count: processing_result.failed_count,
         processing_time_ms: processing_time,
         errors: processing_result.errors,
+        processing_status: Some(processing_status.to_string()),
+        raw_ingestion_id: None, // Simple async handler doesn't track raw ingestion
     };
 
     // Determine status using timeout manager

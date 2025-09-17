@@ -1545,7 +1545,7 @@ pub enum ActivityMoveMode {
     #[sqlx(rename = "active_energy")]
     ActiveEnergy, // Calories-based move goals
     #[sqlx(rename = "move_time")]
-    MoveTime,     // Time-based move goals (accessibility)
+    MoveTime, // Time-based move goals (accessibility)
     #[sqlx(rename = "not_set")]
     NotSet,
 }

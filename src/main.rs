@@ -300,6 +300,11 @@ async fn main() -> std::io::Result<()> {
                         web::get()
                             .to(handlers::environmental_handler::get_environmental_data_handler),
                     )
+                    .route(
+                        "/data/audio-exposure",
+                        web::get()
+                            .to(handlers::environmental_handler::get_audio_exposure_data_handler),
+                    )
                     // Temperature metrics endpoints
                     .route(
                         "/ingest/temperature",

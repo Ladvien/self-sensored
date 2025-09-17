@@ -1,0 +1,23 @@
+[Unit]
+Description=Health Export REST API
+After=network.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ladvien
+WorkingDirectory=/mnt/datadrive_m2/self-sensored
+Environment="PATH=/home/ladvien/.cargo/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="RUST_LOG=info"
+ExecStart=/mnt/datadrive_m2/self-sensored/target/release/self-sensored
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/mnt/codex_fs/logs/self-sensored/service.log
+StandardError=append:/mnt/codex_fs/logs/self-sensored/service-error.log
+# Give the process time to write logs on shutdown
+TimeoutStopSec=30
+KillMode=mixed
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target

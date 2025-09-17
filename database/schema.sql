@@ -812,6 +812,105 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ============================================================================
+-- ENVIRONMENTAL & AUDIO EXPOSURE TABLES
+-- ============================================================================
+
+-- Environmental metrics table for environmental health monitoring
+CREATE TABLE environmental_metrics (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recorded_at TIMESTAMPTZ NOT NULL,
+
+    -- UV Exposure Monitoring
+    uv_index DOUBLE PRECISION CHECK (uv_index >= 0 AND uv_index <= 15),
+    uv_exposure_minutes INTEGER CHECK (uv_exposure_minutes >= 0),
+    time_in_daylight_minutes INTEGER CHECK (time_in_daylight_minutes >= 0),
+
+    -- Environmental Conditions
+    ambient_temperature_celsius DOUBLE PRECISION CHECK (ambient_temperature_celsius >= -50 AND ambient_temperature_celsius <= 60),
+    humidity_percent DOUBLE PRECISION CHECK (humidity_percent >= 0 AND humidity_percent <= 100),
+    air_pressure_hpa DOUBLE PRECISION CHECK (air_pressure_hpa >= 800 AND air_pressure_hpa <= 1200),
+    altitude_meters DOUBLE PRECISION CHECK (altitude_meters >= -500 AND altitude_meters <= 9000),
+
+    -- Location Context
+    location_latitude DOUBLE PRECISION CHECK (location_latitude >= -90 AND location_latitude <= 90),
+    location_longitude DOUBLE PRECISION CHECK (location_longitude >= -180 AND location_longitude <= 180),
+
+    -- Metadata
+    source_device VARCHAR(255),
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+
+    -- Unique constraint to prevent duplicate entries per time
+    UNIQUE (user_id, recorded_at)
+);
+
+-- Audio exposure metrics table for hearing health monitoring
+CREATE TABLE audio_exposure_metrics (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recorded_at TIMESTAMPTZ NOT NULL,
+
+    -- Audio Exposure Levels (WHO/NIOSH standards)
+    environmental_audio_exposure_db DOUBLE PRECISION CHECK (environmental_audio_exposure_db >= 0 AND environmental_audio_exposure_db <= 140),
+    headphone_audio_exposure_db DOUBLE PRECISION CHECK (headphone_audio_exposure_db >= 0 AND headphone_audio_exposure_db <= 140),
+
+    -- Exposure Duration and Event Tracking
+    exposure_duration_minutes INTEGER NOT NULL CHECK (exposure_duration_minutes >= 0),
+    audio_exposure_event BOOLEAN NOT NULL DEFAULT false, -- true if dangerous level detected (>85dB for >8hrs or >100dB for any duration)
+
+    -- Hearing Health Context
+    hearing_protection_used BOOLEAN DEFAULT false,
+    environment_type VARCHAR(100), -- 'concert', 'workplace', 'commute', 'home', 'gym', 'outdoor', 'other'
+    activity_during_exposure VARCHAR(100), -- 'music_listening', 'call', 'workout', 'commute', 'work', 'entertainment', 'other'
+
+    -- Risk Assessment
+    daily_noise_dose_percentage DOUBLE PRECISION CHECK (daily_noise_dose_percentage >= 0 AND daily_noise_dose_percentage <= 1000), -- OSHA/NIOSH 8-hour exposure limit
+    weekly_exposure_hours DOUBLE PRECISION CHECK (weekly_exposure_hours >= 0),
+
+    -- Location Context (for noise mapping)
+    location_latitude DOUBLE PRECISION CHECK (location_latitude >= -90 AND location_latitude <= 90),
+    location_longitude DOUBLE PRECISION CHECK (location_longitude >= -180 AND location_longitude <= 180),
+
+    -- Metadata
+    source_device VARCHAR(255),
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+
+    -- Unique constraint to prevent duplicate entries per time
+    UNIQUE (user_id, recorded_at)
+);
+
+-- Indexes for environmental metrics (time-series optimized with BRIN)
+CREATE INDEX idx_environmental_user_time_brin ON environmental_metrics USING BRIN (user_id, recorded_at);
+CREATE INDEX idx_environmental_user_date ON environmental_metrics (user_id, recorded_at DESC);
+CREATE INDEX idx_environmental_uv_exposure ON environmental_metrics (uv_index, recorded_at) WHERE uv_index IS NOT NULL;
+CREATE INDEX idx_environmental_location ON environmental_metrics (location_latitude, location_longitude) WHERE location_latitude IS NOT NULL AND location_longitude IS NOT NULL;
+
+-- Indexes for audio exposure metrics (time-series optimized with BRIN)
+CREATE INDEX idx_audio_exposure_user_time_brin ON audio_exposure_metrics USING BRIN (user_id, recorded_at);
+CREATE INDEX idx_audio_exposure_user_date ON audio_exposure_metrics (user_id, recorded_at DESC);
+CREATE INDEX idx_audio_exposure_dangerous ON audio_exposure_metrics (user_id, recorded_at) WHERE audio_exposure_event = true;
+CREATE INDEX idx_audio_exposure_levels ON audio_exposure_metrics (environmental_audio_exposure_db, headphone_audio_exposure_db, recorded_at) WHERE environmental_audio_exposure_db IS NOT NULL OR headphone_audio_exposure_db IS NOT NULL;
+CREATE INDEX idx_audio_exposure_location ON audio_exposure_metrics (location_latitude, location_longitude) WHERE location_latitude IS NOT NULL AND location_longitude IS NOT NULL;
+
+-- Monthly partitioning for environmental metrics (time-series data optimization)
+SELECT create_range_partitions(
+    'environmental_metrics'::regclass,
+    'recorded_at',
+    CURRENT_DATE - INTERVAL '1 month',
+    INTERVAL '1 month',
+    6  -- Create 6 months of partitions (3 past, current, 2 future)
+);
+
+-- Monthly partitioning for audio exposure metrics (time-series data optimization)
+SELECT create_range_partitions(
+    'audio_exposure_metrics'::regclass,
+    'recorded_at',
+    CURRENT_DATE - INTERVAL '1 month',
+    INTERVAL '1 month',
+    6  -- Create 6 months of partitions (3 past, current, 2 future)
+);
+
+-- ============================================================================
 -- MINDFULNESS & MENTAL HEALTH TABLES
 -- ============================================================================
 

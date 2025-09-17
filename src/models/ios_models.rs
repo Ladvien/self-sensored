@@ -9,16 +9,24 @@ pub struct IosIngestPayload {
     pub data: IosIngestData,
 }
 
-/// Container for iOS health data
+/// Container for iOS health data - CRITICAL: iOS sends metrics as a HashMap, not Vec!
+/// The actual format is: "metrics": { "HKQuantityTypeIdentifierHeartRate": [...] }
 #[derive(Debug, Deserialize, Serialize)]
 pub struct IosIngestData {
-    pub metrics: Vec<IosMetric>,
+    // FIXME: This should be HashMap<String, Vec<IosMetricDataPoint>> to match actual iOS format
+    // Current format is wrong - iOS Auto Health Export sends grouped metrics by HealthKit identifier
+    pub metrics: Vec<IosMetric>, // This is the WRONG format - keeping for backward compatibility
+    // Correct format would be:
+    // pub metrics: std::collections::HashMap<String, Vec<IosMetricDataPoint>>,
+
     // workouts may not be present in iOS app structure
     #[serde(default)]
     pub workouts: Vec<IosWorkout>,
 }
 
-/// iOS metric structure with name and data array
+/// DEPRECATED: iOS metric structure - this format is incorrect for actual iOS app
+/// The iOS Auto Health Export app sends metrics grouped by HealthKit identifier keys
+/// TODO: Replace with correct format that matches Postman collection examples
 #[derive(Debug, Deserialize, Serialize)]
 pub struct IosMetric {
     pub name: String,
@@ -78,9 +86,24 @@ impl IosIngestPayload {
                     .or_else(|| parse_ios_date(&data_point.end))
                     .unwrap_or_else(Utc::now);
 
-                // Convert based on metric name (handle more variations including environmental)
-                match ios_metric.name.to_lowercase().as_str() {
-                    "heart_rate"
+                // CRITICAL LOGGING: Track all iOS metric names for STORY-DATA-002 audit
+                tracing::info!(
+                    "Processing iOS metric: '{}' with units: {:?}",
+                    ios_metric.name,
+                    ios_metric.units
+                );
+
+                // Convert based on metric name - now supporting ALL HealthKit identifiers from DATA.md
+                // CRITICAL: Handle both HealthKit identifiers (HKQuantityTypeIdentifierHeartRate)
+                // and simplified names (heart_rate) for backward compatibility
+                match ios_metric.name.as_str() {
+                    // HEART RATE METRICS - HealthKit identifiers + backward compatibility
+                    "HKQuantityTypeIdentifierHeartRate"
+                    | "HKQuantityTypeIdentifierRestingHeartRate"
+                    | "HKQuantityTypeIdentifierWalkingHeartRateAverage"
+                    | "HKQuantityTypeIdentifierHeartRateVariabilitySDNN"
+                    | "HKQuantityTypeIdentifierHeartRateRecoveryOneMinute"
+                    | "heart_rate"
                     | "heartrate"
                     | "resting_heart_rate"
                     | "walking_heart_rate"
@@ -124,21 +147,30 @@ impl IosIngestPayload {
                             }
                         }
                     }
-                    "blood_pressure_systolic" | "systolic_blood_pressure" => {
+                    // BLOOD PRESSURE METRICS - HealthKit identifiers + backward compatibility
+                    "HKQuantityTypeIdentifierBloodPressureSystolic"
+                    | "blood_pressure_systolic"
+                    | "systolic_blood_pressure" => {
                         if let Some(qty) = data_point.qty {
                             let timestamp_key = recorded_at.to_rfc3339();
                             let entry = bp_readings.entry(timestamp_key).or_default();
                             entry.0 = Some(qty as i16);
                         }
                     }
-                    "blood_pressure_diastolic" | "diastolic_blood_pressure" => {
+                    "HKQuantityTypeIdentifierBloodPressureDiastolic"
+                    | "blood_pressure_diastolic"
+                    | "diastolic_blood_pressure" => {
                         if let Some(qty) = data_point.qty {
                             let timestamp_key = recorded_at.to_rfc3339();
                             let entry = bp_readings.entry(timestamp_key).or_default();
                             entry.1 = Some(qty as i16);
                         }
                     }
-                    "sleep_analysis" | "sleep" | "sleep_time" => {
+                    // SLEEP METRICS - HealthKit identifiers + backward compatibility
+                    "HKCategoryTypeIdentifierSleepAnalysis"
+                    | "sleep_analysis"
+                    | "sleep"
+                    | "sleep_time" => {
                         let start_time = parse_ios_date(&data_point.start).unwrap_or(recorded_at);
                         let end_time = parse_ios_date(&data_point.end).unwrap_or(recorded_at);
 
@@ -180,7 +212,24 @@ impl IosIngestPayload {
                             internal_metrics.push(HealthMetric::Sleep(metric));
                         }
                     }
-                    "steps"
+                    // ACTIVITY METRICS - HealthKit identifiers + backward compatibility
+                    "HKQuantityTypeIdentifierStepCount"
+                    | "HKQuantityTypeIdentifierDistanceWalkingRunning"
+                    | "HKQuantityTypeIdentifierDistanceCycling"
+                    | "HKQuantityTypeIdentifierDistanceSwimming"
+                    | "HKQuantityTypeIdentifierDistanceWheelchair"
+                    | "HKQuantityTypeIdentifierDistanceDownhillSnowSports"
+                    | "HKQuantityTypeIdentifierActiveEnergyBurned"
+                    | "HKQuantityTypeIdentifierBasalEnergyBurned"
+                    | "HKQuantityTypeIdentifierFlightsClimbed"
+                    | "HKQuantityTypeIdentifierPushCount"
+                    | "HKQuantityTypeIdentifierSwimmingStrokeCount"
+                    | "HKQuantityTypeIdentifierNikeFuel"
+                    | "HKQuantityTypeIdentifierAppleExerciseTime"
+                    | "HKQuantityTypeIdentifierAppleStandTime"
+                    | "HKQuantityTypeIdentifierAppleMoveTime"
+                    | "HKCategoryTypeIdentifierAppleStandHour"
+                    | "steps"
                     | "step_count"
                     | "distance_walking_running"
                     | "distance"
@@ -199,58 +248,101 @@ impl IosIngestPayload {
                                     user_id,
                                     recorded_at,
                                     step_count: if matches!(
-                                        ios_metric.name.to_lowercase().as_str(),
-                                        "steps" | "step_count"
+                                        ios_metric.name.as_str(),
+                                        "HKQuantityTypeIdentifierStepCount" | "steps" | "step_count"
                                     ) {
                                         Some(qty as i32)
                                     } else {
                                         None
                                     },
                                     distance_meters: if matches!(
-                                        ios_metric.name.to_lowercase().as_str(),
-                                        "distance_walking_running" | "distance"
+                                        ios_metric.name.as_str(),
+                                        "HKQuantityTypeIdentifierDistanceWalkingRunning" | "distance_walking_running" | "distance"
                                     ) {
                                         Some(qty)
                                     } else {
                                         None
                                     },
                                     active_energy_burned_kcal: if matches!(
-                                        ios_metric.name.to_lowercase().as_str(),
-                                        "active_energy_burned" | "calories"
+                                        ios_metric.name.as_str(),
+                                        "HKQuantityTypeIdentifierActiveEnergyBurned" | "active_energy_burned" | "calories"
                                     ) {
                                         Some(qty)
                                     } else {
                                         None
                                     },
-                                    basal_energy_burned_kcal: if ios_metric
-                                        .name
-                                        .to_lowercase()
-                                        .as_str()
-                                        == "basal_energy_burned"
-                                    {
+                                    basal_energy_burned_kcal: if matches!(
+                                        ios_metric.name.as_str(),
+                                        "HKQuantityTypeIdentifierBasalEnergyBurned" | "basal_energy_burned"
+                                    ) {
                                         Some(qty)
                                     } else {
                                         None
                                     },
-                                    flights_climbed: if ios_metric.name.to_lowercase().as_str()
-                                        == "flights_climbed"
-                                    {
+                                    flights_climbed: if matches!(
+                                        ios_metric.name.as_str(),
+                                        "HKQuantityTypeIdentifierFlightsClimbed" | "flights_climbed"
+                                    ) {
                                         Some(qty as i32)
                                     } else {
                                         None
                                     },
-                                    // Extended activity metrics - will be populated by specialized parsing later
-                                    distance_cycling_meters: None,
-                                    distance_swimming_meters: None,
-                                    distance_wheelchair_meters: None,
-                                    distance_downhill_snow_sports_meters: None,
-                                    push_count: None,
-                                    swimming_stroke_count: None,
-                                    nike_fuel_points: None,
-                                    apple_exercise_time_minutes: None,
-                                    apple_stand_time_minutes: None,
-                                    apple_move_time_minutes: None,
-                                    apple_stand_hour_achieved: None,
+                                    // Extended activity metrics - now mapped from HealthKit identifiers
+                                    distance_cycling_meters: if ios_metric.name == "HKQuantityTypeIdentifierDistanceCycling" {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    distance_swimming_meters: if ios_metric.name == "HKQuantityTypeIdentifierDistanceSwimming" {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    distance_wheelchair_meters: if ios_metric.name == "HKQuantityTypeIdentifierDistanceWheelchair" {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    distance_downhill_snow_sports_meters: if ios_metric.name == "HKQuantityTypeIdentifierDistanceDownhillSnowSports" {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    push_count: if ios_metric.name == "HKQuantityTypeIdentifierPushCount" {
+                                        Some(qty as i32)
+                                    } else {
+                                        None
+                                    },
+                                    swimming_stroke_count: if ios_metric.name == "HKQuantityTypeIdentifierSwimmingStrokeCount" {
+                                        Some(qty as i32)
+                                    } else {
+                                        None
+                                    },
+                                    nike_fuel_points: if ios_metric.name == "HKQuantityTypeIdentifierNikeFuel" {
+                                        Some(qty as i32)
+                                    } else {
+                                        None
+                                    },
+                                    apple_exercise_time_minutes: if ios_metric.name == "HKQuantityTypeIdentifierAppleExerciseTime" {
+                                        Some(qty as i32)
+                                    } else {
+                                        None
+                                    },
+                                    apple_stand_time_minutes: if ios_metric.name == "HKQuantityTypeIdentifierAppleStandTime" {
+                                        Some(qty as i32)
+                                    } else {
+                                        None
+                                    },
+                                    apple_move_time_minutes: if ios_metric.name == "HKQuantityTypeIdentifierAppleMoveTime" {
+                                        Some(qty as i32)
+                                    } else {
+                                        None
+                                    },
+                                    apple_stand_hour_achieved: if ios_metric.name == "HKCategoryTypeIdentifierAppleStandHour" {
+                                        Some(qty > 0.0) // Convert to boolean
+                                    } else {
+                                        None
+                                    },
                                     source_device: data_point.source.clone(),
                                     created_at: Utc::now(),
                                 };
@@ -258,8 +350,12 @@ impl IosIngestPayload {
                             }
                         }
                     }
-                    // Temperature Metrics - Body, Basal, Apple Watch Wrist, Environmental
-                    "body_temperature"
+                    // TEMPERATURE METRICS - HealthKit identifiers + backward compatibility
+                    "HKQuantityTypeIdentifierBodyTemperature"
+                    | "HKQuantityTypeIdentifierBasalBodyTemperature"
+                    | "HKQuantityTypeIdentifierAppleSleepingWristTemperature"
+                    | "HKQuantityTypeIdentifierWaterTemperature"
+                    | "body_temperature"
                     | "basal_body_temperature"
                     | "apple_sleeping_wrist_temperature"
                     | "wrist_temperature"
@@ -273,34 +369,33 @@ impl IosIngestPayload {
                                     user_id,
                                     recorded_at,
                                     body_temperature: if matches!(
-                                        ios_metric.name.to_lowercase().as_str(),
-                                        "body_temperature" | "temperature"
+                                        ios_metric.name.as_str(),
+                                        "HKQuantityTypeIdentifierBodyTemperature" | "body_temperature" | "temperature"
                                     ) {
                                         Some(qty)
                                     } else {
                                         None
                                     },
-                                    basal_body_temperature: if ios_metric
-                                        .name
-                                        .to_lowercase()
-                                        .as_str()
-                                        == "basal_body_temperature"
-                                    {
+                                    basal_body_temperature: if matches!(
+                                        ios_metric.name.as_str(),
+                                        "HKQuantityTypeIdentifierBasalBodyTemperature" | "basal_body_temperature"
+                                    ) {
                                         Some(qty)
                                     } else {
                                         None
                                     },
                                     apple_sleeping_wrist_temperature: if matches!(
-                                        ios_metric.name.to_lowercase().as_str(),
-                                        "apple_sleeping_wrist_temperature" | "wrist_temperature"
+                                        ios_metric.name.as_str(),
+                                        "HKQuantityTypeIdentifierAppleSleepingWristTemperature" | "apple_sleeping_wrist_temperature" | "wrist_temperature"
                                     ) {
                                         Some(qty)
                                     } else {
                                         None
                                     },
-                                    water_temperature: if ios_metric.name.to_lowercase().as_str()
-                                        == "water_temperature"
-                                    {
+                                    water_temperature: if matches!(
+                                        ios_metric.name.as_str(),
+                                        "HKQuantityTypeIdentifierWaterTemperature" | "water_temperature"
+                                    ) {
                                         Some(qty)
                                     } else {
                                         None
@@ -318,7 +413,8 @@ impl IosIngestPayload {
                             }
                         }
                     }
-                    // Environmental & Safety Metrics
+                    // ENVIRONMENTAL & SAFETY METRICS - HealthKit identifiers + backward compatibility
+                    // Note: HealthKit doesn't have standard UV identifiers, these are likely custom
                     "uv_exposure" | "uv_index" | "environmental_uv_exposure" => {
                         if let Some(qty) = data_point.qty {
                             if qty >= 0.0 {
@@ -383,7 +479,10 @@ impl IosIngestPayload {
                             }
                         }
                     }
-                    "environmental_audio_exposure" | "environmental_sound_exposure" => {
+                    // AUDIO EXPOSURE METRICS - Critical for data loss prevention
+                    "HKQuantityTypeIdentifierEnvironmentalAudioExposure"
+                    | "environmental_audio_exposure"
+                    | "environmental_sound_exposure" => {
                         if let Some(qty) = data_point.qty {
                             if qty >= 0.0 {
                                 let duration_minutes = data_point
@@ -411,7 +510,9 @@ impl IosIngestPayload {
                             }
                         }
                     }
-                    "headphone_audio_exposure" | "headphone_sound_exposure" => {
+                    "HKQuantityTypeIdentifierHeadphoneAudioExposure"
+                    | "headphone_audio_exposure"
+                    | "headphone_sound_exposure" => {
                         if let Some(qty) = data_point.qty {
                             if qty >= 0.0 {
                                 let duration_minutes = data_point
@@ -475,8 +576,14 @@ impl IosIngestPayload {
                             }
                         }
                     }
-                    // Body Measurements - Weight, BMI, Body Composition, Height, Circumferences
-                    "body_mass"
+                    // BODY MEASUREMENT METRICS - HealthKit identifiers + backward compatibility
+                    "HKQuantityTypeIdentifierBodyMass"
+                    | "HKQuantityTypeIdentifierBodyMassIndex"
+                    | "HKQuantityTypeIdentifierBodyFatPercentage"
+                    | "HKQuantityTypeIdentifierLeanBodyMass"
+                    | "HKQuantityTypeIdentifierHeight"
+                    | "HKQuantityTypeIdentifierWaistCircumference"
+                    | "body_mass"
                     | "weight"
                     | "body_weight"
                     | "body_mass_kg"
@@ -525,32 +632,32 @@ impl IosIngestPayload {
                                     recorded_at,
                                     // Weight & Body Composition
                                     body_weight_kg: if matches!(
-                                        ios_metric.name.to_lowercase().as_str(),
-                                        "body_mass" | "weight" | "body_weight" | "body_mass_kg"
+                                        ios_metric.name.as_str(),
+                                        "HKQuantityTypeIdentifierBodyMass" | "body_mass" | "weight" | "body_weight" | "body_mass_kg"
                                     ) {
                                         Some(qty)
                                     } else {
                                         None
                                     },
                                     body_mass_index: if matches!(
-                                        ios_metric.name.to_lowercase().as_str(),
-                                        "body_mass_index" | "bmi"
+                                        ios_metric.name.as_str(),
+                                        "HKQuantityTypeIdentifierBodyMassIndex" | "body_mass_index" | "bmi"
                                     ) {
                                         Some(qty)
                                     } else {
                                         None
                                     },
                                     body_fat_percentage: if matches!(
-                                        ios_metric.name.to_lowercase().as_str(),
-                                        "body_fat_percentage" | "body_fat"
+                                        ios_metric.name.as_str(),
+                                        "HKQuantityTypeIdentifierBodyFatPercentage" | "body_fat_percentage" | "body_fat"
                                     ) {
                                         Some(qty)
                                     } else {
                                         None
                                     },
                                     lean_body_mass_kg: if matches!(
-                                        ios_metric.name.to_lowercase().as_str(),
-                                        "lean_body_mass" | "lean_body_mass_kg" | "muscle_mass"
+                                        ios_metric.name.as_str(),
+                                        "HKQuantityTypeIdentifierLeanBodyMass" | "lean_body_mass" | "lean_body_mass_kg" | "muscle_mass"
                                     ) {
                                         Some(qty)
                                     } else {
@@ -558,16 +665,16 @@ impl IosIngestPayload {
                                     },
                                     // Physical Measurements
                                     height_cm: if matches!(
-                                        ios_metric.name.to_lowercase().as_str(),
-                                        "height" | "height_cm"
+                                        ios_metric.name.as_str(),
+                                        "HKQuantityTypeIdentifierHeight" | "height" | "height_cm"
                                     ) {
                                         Some(qty)
                                     } else {
                                         None
                                     },
                                     waist_circumference_cm: if matches!(
-                                        ios_metric.name.to_lowercase().as_str(),
-                                        "waist_circumference" | "waist"
+                                        ios_metric.name.as_str(),
+                                        "HKQuantityTypeIdentifierWaistCircumference" | "waist_circumference" | "waist"
                                     ) {
                                         Some(qty)
                                     } else {
@@ -624,34 +731,111 @@ impl IosIngestPayload {
                         }
                     }
                     _ => {
-                        // For unknown metric types, log for debugging and try to extract as activity if numeric
-                        tracing::debug!(
-                            "Unknown iOS metric type: {} with qty: {:?}",
+                        // CRITICAL: Unknown metric type detected - potential data loss!
+                        tracing::warn!(
+                            "🚨 UNKNOWN iOS METRIC TYPE: '{}' with units: {:?}, qty: {:?} - POTENTIAL DATA LOSS!",
                             ios_metric.name,
+                            ios_metric.units,
                             data_point.qty
                         );
 
-                        // Check if it might be an environmental metric we don't recognize yet
-                        if ios_metric.name.to_lowercase().contains("environmental")
-                            || ios_metric.name.to_lowercase().contains("audio")
-                            || ios_metric.name.to_lowercase().contains("sound")
-                            || ios_metric.name.to_lowercase().contains("uv")
-                            || ios_metric.name.to_lowercase().contains("daylight")
-                        {
-                            tracing::info!(
-                                "Potentially environmental metric not yet supported: '{}'",
+                        // Log detailed information for iOS metric analysis
+                        tracing::info!(
+                            "Unknown metric details - Source: {:?}, Date: {:?}, Start: {:?}, End: {:?}, Extra fields: {:?}",
+                            data_point.source,
+                            data_point.date,
+                            data_point.start,
+                            data_point.end,
+                            data_point.extra.keys().collect::<Vec<_>>()
+                        );
+
+                        // Check for high-priority HealthKit identifiers that are missing mapping
+                        let critical_missing_identifiers = [
+                            // Respiratory metrics
+                            "HKQuantityTypeIdentifierRespiratoryRate",
+                            "HKQuantityTypeIdentifierOxygenSaturation",
+                            "HKQuantityTypeIdentifierPeakExpiratoryFlowRate",
+                            "HKQuantityTypeIdentifierInhalerUsage",
+
+                            // Blood & metabolic metrics
+                            "HKQuantityTypeIdentifierBloodGlucose",
+                            "HKQuantityTypeIdentifierBloodAlcoholContent",
+                            "HKQuantityTypeIdentifierInsulinDelivery",
+
+                            // Nutrition metrics
+                            "HKQuantityTypeIdentifierDietaryWater",
+                            "HKQuantityTypeIdentifierDietaryEnergyConsumed",
+                            "HKQuantityTypeIdentifierDietaryCarbohydrates",
+                            "HKQuantityTypeIdentifierDietaryProtein",
+                            "HKQuantityTypeIdentifierDietaryFatTotal",
+                            "HKQuantityTypeIdentifierDietarySodium",
+                            "HKQuantityTypeIdentifierDietaryFiber",
+                            "HKQuantityTypeIdentifierDietaryCaffeine",
+
+                            // Mental health & mindfulness
+                            "HKCategoryTypeIdentifierMindfulSession",
+                            "HKStateOfMind",
+
+                            // Reproductive health
+                            "HKCategoryTypeIdentifierMenstrualFlow",
+                            "HKCategoryTypeIdentifierSexualActivity",
+                            "HKCategoryTypeIdentifierOvulationTestResult",
+
+                            // Symptoms
+                            "HKCategoryTypeIdentifierHeadache",
+                            "HKCategoryTypeIdentifierNausea",
+                            "HKCategoryTypeIdentifierFatigue",
+                            "HKCategoryTypeIdentifierAbdominalCramps",
+                            "HKCategoryTypeIdentifierFever",
+                            "HKCategoryTypeIdentifierCoughing",
+                            "HKCategoryTypeIdentifierShortnessOfBreath",
+
+                            // Fall detection & safety
+                            "HKCategoryTypeIdentifierAppleWalkingSteadinessEvent",
+
+                            // Advanced cardiovascular
+                            "HKQuantityTypeIdentifierAtrialFibrillationBurden",
+                            "HKQuantityTypeIdentifierVO2Max",
+                            "HKCategoryTypeIdentifierHighHeartRateEvent",
+                            "HKCategoryTypeIdentifierLowHeartRateEvent",
+                            "HKCategoryTypeIdentifierIrregularHeartRhythmEvent",
+                        ];
+
+                        if critical_missing_identifiers.contains(&ios_metric.name.as_str()) {
+                            tracing::error!(
+                                "🔥 CRITICAL: Missing mapping for high-priority HealthKit identifier '{}' - This is a known iOS metric type that needs immediate implementation!",
                                 ios_metric.name
                             );
                         }
 
-                        // If it has a numeric quantity, store as generic activity data
-                        if let Some(qty) = data_point.qty {
-                            if qty >= 0.0 {
-                                tracing::info!(
-                                    "Converting unknown metric '{}' to generic activity data",
-                                    ios_metric.name
-                                );
-                            }
+                        // Check if it might be a supported but unmapped metric type
+                        if ios_metric.name.starts_with("HKQuantityTypeIdentifier") || ios_metric.name.starts_with("HKCategoryTypeIdentifier") {
+                            tracing::error!(
+                                "💀 CRITICAL DATA LOSS: Valid HealthKit identifier '{}' has no mapping! This metric will be completely lost.",
+                                ios_metric.name
+                            );
+                        }
+
+                        // Log patterns for future implementation
+                        if ios_metric.name.to_lowercase().contains("dietary") {
+                            tracing::warn!("Missing nutrition metric mapping: '{}'", ios_metric.name);
+                        } else if ios_metric.name.to_lowercase().contains("symptom") || ios_metric.name.to_lowercase().contains("headache") || ios_metric.name.to_lowercase().contains("nausea") {
+                            tracing::warn!("Missing symptom metric mapping: '{}'", ios_metric.name);
+                        } else if ios_metric.name.to_lowercase().contains("menstrual") || ios_metric.name.to_lowercase().contains("ovulation") {
+                            tracing::warn!("Missing reproductive health metric mapping: '{}'", ios_metric.name);
+                        } else if ios_metric.name.to_lowercase().contains("mindful") {
+                            tracing::warn!("Missing mindfulness metric mapping: '{}'", ios_metric.name);
+                        }
+
+                        // Count unmapped metrics for monitoring
+                        static UNMAPPED_METRIC_COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+                        let count = UNMAPPED_METRIC_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+                        if count > 0 && count % 100 == 0 {
+                            tracing::error!(
+                                "⚠️ ALERT: {} unmapped iOS metrics encountered in this session - significant data loss occurring!",
+                                count
+                            );
                         }
                     }
                 }
@@ -739,6 +923,13 @@ impl IosIngestPayload {
                 internal_workouts.push(workout);
             }
         }
+
+        // Log final conversion summary
+        tracing::info!(
+            "iOS conversion completed: {} internal metrics created, {} workouts created",
+            internal_metrics.len(),
+            internal_workouts.len()
+        );
 
         IngestPayload {
             data: IngestData {

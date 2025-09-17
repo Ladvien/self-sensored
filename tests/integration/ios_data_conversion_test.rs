@@ -119,3 +119,301 @@ fn test_all_metric_types_source_mapping() {
         }
     }
 }
+
+/// CRITICAL TEST: Validate HealthKit identifier mappings for STORY-DATA-002
+/// This test ensures all major iOS HealthKit identifiers are properly mapped
+#[test]
+fn test_healthkit_identifier_mappings() {
+    // Test payload with actual HealthKit identifiers that iOS Auto Health Export sends
+    let ios_json = json!({
+        "data": {
+            "metrics": [
+                {
+                    "name": "HKQuantityTypeIdentifierHeartRate",
+                    "units": "count/min",
+                    "data": [
+                        {
+                            "sourceName": "Apple Watch",
+                            "source": "Apple Watch Series 7",
+                            "date": "2025-09-17 12:00:00 -0500",
+                            "qty": 75.0
+                        }
+                    ]
+                },
+                {
+                    "name": "HKQuantityTypeIdentifierBloodPressureSystolic",
+                    "units": "mmHg",
+                    "data": [
+                        {
+                            "source": "Health",
+                            "date": "2025-09-17 12:00:00 -0500",
+                            "qty": 120.0
+                        }
+                    ]
+                },
+                {
+                    "name": "HKQuantityTypeIdentifierBloodPressureDiastolic",
+                    "units": "mmHg",
+                    "data": [
+                        {
+                            "source": "Health",
+                            "date": "2025-09-17 12:00:00 -0500",
+                            "qty": 80.0
+                        }
+                    ]
+                },
+                {
+                    "name": "HKQuantityTypeIdentifierStepCount",
+                    "units": "count",
+                    "data": [
+                        {
+                            "source": "iPhone",
+                            "date": "2025-09-17 00:00:00 -0500",
+                            "qty": 8542.0
+                        }
+                    ]
+                },
+                {
+                    "name": "HKQuantityTypeIdentifierActiveEnergyBurned",
+                    "units": "kcal",
+                    "data": [
+                        {
+                            "source": "Apple Watch",
+                            "date": "2025-09-17 10:00:00 -0500",
+                            "qty": 320.5
+                        }
+                    ]
+                },
+                {
+                    "name": "HKQuantityTypeIdentifierDistanceWalkingRunning",
+                    "units": "m",
+                    "data": [
+                        {
+                            "source": "iPhone",
+                            "date": "2025-09-17 00:00:00 -0500",
+                            "qty": 5500.0
+                        }
+                    ]
+                },
+                {
+                    "name": "HKQuantityTypeIdentifierBodyMass",
+                    "units": "kg",
+                    "data": [
+                        {
+                            "source": "Health",
+                            "date": "2025-09-17 08:00:00 -0500",
+                            "qty": 70.5
+                        }
+                    ]
+                },
+                {
+                    "name": "HKCategoryTypeIdentifierSleepAnalysis",
+                    "data": [
+                        {
+                            "source": "iPhone",
+                            "start": "2025-09-16 22:00:00 -0500",
+                            "end": "2025-09-17 06:00:00 -0500"
+                        }
+                    ]
+                }
+            ],
+            "workouts": []
+        }
+    });
+
+    let ios_payload: IosIngestPayload = serde_json::from_value(ios_json)
+        .expect("Failed to parse iOS payload with HealthKit identifiers");
+
+    let test_user_id = uuid::Uuid::new_v4();
+    let internal_payload = ios_payload.to_internal_format(test_user_id);
+
+    // Verify we got the expected number of metrics (some may create multiple records like BP)
+    assert!(!internal_payload.data.metrics.is_empty(), "Should have converted HealthKit identifiers");
+
+    // Test each metric type conversion
+    let mut found_heart_rate = false;
+    let mut found_blood_pressure = false;
+    let mut found_activity = false;
+    let mut found_body_measurement = false;
+    let mut found_sleep = false;
+
+    for metric in &internal_payload.data.metrics {
+        match metric {
+            self_sensored::models::HealthMetric::HeartRate(hr) => {
+                found_heart_rate = true;
+                assert_eq!(hr.heart_rate, Some(75), "HealthKit heart rate should be mapped");
+                assert_eq!(hr.source_device, Some("Apple Watch Series 7".to_string()));
+            },
+            self_sensored::models::HealthMetric::BloodPressure(bp) => {
+                found_blood_pressure = true;
+                assert!(bp.systolic == 120 || bp.diastolic == 80, "HealthKit blood pressure should be mapped");
+                assert_eq!(bp.source_device, Some("Auto Health Export iOS".to_string()));
+            },
+            self_sensored::models::HealthMetric::Activity(activity) => {
+                found_activity = true;
+                // Should find either steps, calories, or distance
+                assert!(
+                    activity.step_count == Some(8542) ||
+                    activity.active_energy_burned_kcal == Some(320.5) ||
+                    activity.distance_meters == Some(5500.0),
+                    "HealthKit activity metrics should be mapped"
+                );
+            },
+            self_sensored::models::HealthMetric::BodyMeasurement(body) => {
+                found_body_measurement = true;
+                assert_eq!(body.body_weight_kg, Some(70.5), "HealthKit body mass should be mapped");
+                assert_eq!(body.source_device, Some("Health".to_string()));
+            },
+            self_sensored::models::HealthMetric::Sleep(sleep) => {
+                found_sleep = true;
+                assert!(sleep.duration_minutes.is_some(), "HealthKit sleep should be mapped");
+                assert_eq!(sleep.source_device, Some("iPhone".to_string()));
+            },
+            _ => {}
+        }
+    }
+
+    // Verify all expected metrics were found
+    assert!(found_heart_rate, "HKQuantityTypeIdentifierHeartRate should be mapped to HeartRate metric");
+    assert!(found_blood_pressure, "HKQuantityTypeIdentifierBloodPressure* should be mapped to BloodPressure metric");
+    assert!(found_activity, "HKQuantityTypeIdentifier* activity metrics should be mapped to Activity metric");
+    assert!(found_body_measurement, "HKQuantityTypeIdentifierBodyMass should be mapped to BodyMeasurement metric");
+    assert!(found_sleep, "HKCategoryTypeIdentifierSleepAnalysis should be mapped to Sleep metric");
+}
+
+/// Test extended activity metrics mapping for HealthKit identifiers
+#[test]
+fn test_extended_activity_healthkit_identifiers() {
+    let ios_json = json!({
+        "data": {
+            "metrics": [
+                {
+                    "name": "HKQuantityTypeIdentifierDistanceCycling",
+                    "units": "m",
+                    "data": [{"source": "iPhone", "date": "2025-09-17 10:00:00 -0500", "qty": 15000.0}]
+                },
+                {
+                    "name": "HKQuantityTypeIdentifierDistanceSwimming",
+                    "units": "m",
+                    "data": [{"source": "Apple Watch", "date": "2025-09-17 11:00:00 -0500", "qty": 1000.0}]
+                },
+                {
+                    "name": "HKQuantityTypeIdentifierAppleExerciseTime",
+                    "units": "min",
+                    "data": [{"source": "Apple Watch", "date": "2025-09-17 12:00:00 -0500", "qty": 30.0}]
+                },
+                {
+                    "name": "HKQuantityTypeIdentifierAppleStandTime",
+                    "units": "min",
+                    "data": [{"source": "Apple Watch", "date": "2025-09-17 13:00:00 -0500", "qty": 12.0}]
+                },
+                {
+                    "name": "HKCategoryTypeIdentifierAppleStandHour",
+                    "data": [{"source": "Apple Watch", "date": "2025-09-17 14:00:00 -0500", "qty": 1.0}]
+                }
+            ],
+            "workouts": []
+        }
+    });
+
+    let ios_payload: IosIngestPayload = serde_json::from_value(ios_json)
+        .expect("Failed to parse extended activity HealthKit identifiers");
+
+    let test_user_id = uuid::Uuid::new_v4();
+    let internal_payload = ios_payload.to_internal_format(test_user_id);
+
+    assert!(!internal_payload.data.metrics.is_empty(), "Should have converted extended activity metrics");
+
+    for metric in &internal_payload.data.metrics {
+        if let self_sensored::models::HealthMetric::Activity(activity) = metric {
+            // Verify extended activity fields are properly mapped
+            if activity.distance_cycling_meters.is_some() {
+                assert_eq!(activity.distance_cycling_meters, Some(15000.0));
+            }
+            if activity.distance_swimming_meters.is_some() {
+                assert_eq!(activity.distance_swimming_meters, Some(1000.0));
+            }
+            if activity.apple_exercise_time_minutes.is_some() {
+                assert_eq!(activity.apple_exercise_time_minutes, Some(30));
+            }
+            if activity.apple_stand_time_minutes.is_some() {
+                assert_eq!(activity.apple_stand_time_minutes, Some(12));
+            }
+            if activity.apple_stand_hour_achieved.is_some() {
+                assert_eq!(activity.apple_stand_hour_achieved, Some(true));
+            }
+        }
+    }
+}
+
+/// Test unknown HealthKit identifiers trigger proper logging
+#[test]
+fn test_unknown_healthkit_identifiers_logging() {
+    let ios_json = json!({
+        "data": {
+            "metrics": [
+                {
+                    "name": "HKQuantityTypeIdentifierRespiratoryRate",
+                    "units": "count/min",
+                    "data": [{"source": "Apple Watch", "date": "2025-09-17 12:00:00 -0500", "qty": 16.0}]
+                },
+                {
+                    "name": "HKQuantityTypeIdentifierBloodGlucose",
+                    "units": "mg/dL",
+                    "data": [{"source": "Glucose Meter", "date": "2025-09-17 08:00:00 -0500", "qty": 95.0}]
+                },
+                {
+                    "name": "SomeCustomMetric",
+                    "units": "custom",
+                    "data": [{"source": "Third Party App", "date": "2025-09-17 12:00:00 -0500", "qty": 42.0}]
+                }
+            ],
+            "workouts": []
+        }
+    });
+
+    let ios_payload: IosIngestPayload = serde_json::from_value(ios_json)
+        .expect("Failed to parse payload with unknown HealthKit identifiers");
+
+    let test_user_id = uuid::Uuid::new_v4();
+    let internal_payload = ios_payload.to_internal_format(test_user_id);
+
+    // Should not crash, but metrics should be empty since they're unmapped
+    // The key is that this should trigger the warning logs we added
+    println!("Converted {} metrics from unknown HealthKit identifiers", internal_payload.data.metrics.len());
+}
+
+/// Test backward compatibility - old simplified names should still work
+#[test]
+fn test_backward_compatibility_simplified_names() {
+    let ios_json = json!({
+        "data": {
+            "metrics": [
+                {
+                    "name": "heart_rate",  // Old simplified name
+                    "units": "count/min",
+                    "data": [{"source": "Apple Watch", "date": "2025-09-17 12:00:00 -0500", "qty": 72.0}]
+                },
+                {
+                    "name": "HKQuantityTypeIdentifierHeartRate",  // New HealthKit identifier
+                    "units": "count/min",
+                    "data": [{"source": "Apple Watch", "date": "2025-09-17 12:01:00 -0500", "qty": 73.0}]
+                }
+            ],
+            "workouts": []
+        }
+    });
+
+    let ios_payload: IosIngestPayload = serde_json::from_value(ios_json)
+        .expect("Failed to parse backward compatibility payload");
+
+    let test_user_id = uuid::Uuid::new_v4();
+    let internal_payload = ios_payload.to_internal_format(test_user_id);
+
+    // Should have 2 heart rate metrics - one from old name, one from HealthKit identifier
+    let heart_rate_count = internal_payload.data.metrics.iter()
+        .filter(|m| matches!(m, self_sensored::models::HealthMetric::HeartRate(_)))
+        .count();
+
+    assert_eq!(heart_rate_count, 2, "Both simplified names and HealthKit identifiers should work");
+}

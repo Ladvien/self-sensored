@@ -225,7 +225,8 @@ async fn test_extended_activity_metrics_ingestion() -> Result<(), Box<dyn std::e
 }
 
 #[tokio::test]
-async fn test_activity_metrics_validation_extended_fields() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_activity_metrics_validation_extended_fields() -> Result<(), Box<dyn std::error::Error>>
+{
     let pool = create_test_pool().await;
     let user = create_test_user(&pool).await?;
     let config = ValidationConfig::default();

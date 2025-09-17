@@ -554,7 +554,8 @@ impl AuthService {
 
         // If not a UUID, check against hashed keys (for our generated keys)
         // This maintains backward compatibility with hashed API keys
-        if api_key_str.starts_with("hea_") {
+        // Also check for test keys or other formats
+        if api_key_str.starts_with("hea_") || api_key_str.starts_with("test_") || !api_key_str.is_empty() {
             let api_keys = sqlx::query!(
                 r#"
                 SELECT 

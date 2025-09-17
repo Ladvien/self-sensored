@@ -72,6 +72,8 @@ pub async fn optimized_ingest_handler(
                             failed_count: errors.len(),
                             processing_time_ms: start_time.elapsed().as_millis() as u64,
                             errors,
+                            processing_status: Some("error".to_string()),
+                            raw_ingestion_id: None,
                         },
                     ),
                 ));
@@ -125,12 +127,17 @@ pub async fn optimized_ingest_handler(
     }
 
     // Create optimized response
+    let success = result.errors.is_empty();
+    let processing_status = if success { "processed" } else { "partial_success" };
+
     let response = IngestResponse {
-        success: result.errors.is_empty(),
+        success,
         processed_count: result.processed_count,
         failed_count: result.failed_count,
         processing_time_ms: processing_time,
         errors: result.errors,
+        processing_status: Some(processing_status.to_string()),
+        raw_ingestion_id: None, // Optimized handler doesn't track raw ingestion
     };
 
     info!(

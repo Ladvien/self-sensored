@@ -845,6 +845,12 @@ pub struct IngestResponse {
     pub failed_count: usize,
     pub processing_time_ms: u64,
     pub errors: Vec<ProcessingError>,
+
+    // New fields for STORY-EMERGENCY-003: Better async processing response clarity
+    /// Processing status: "processed" (synchronous), "accepted_for_processing" (async), "error", "partial_success"
+    pub processing_status: Option<String>,
+    /// Raw ingestion ID for tracking async processing status
+    pub raw_ingestion_id: Option<uuid::Uuid>,
 }
 
 /// Individual processing error

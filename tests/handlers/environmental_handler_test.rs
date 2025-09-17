@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use self_sensored::db::database::create_connection_pool;
 use self_sensored::handlers::environmental_handler::{
     ingest_environmental_handler, ingest_audio_exposure_handler, ingest_safety_events_handler,
-    get_environmental_data_handler, EnvironmentalIngestPayload, AudioExposureIngestPayload,
-    SafetyEventIngestPayload,
+    get_environmental_data_handler, get_audio_exposure_data_handler,
+    EnvironmentalIngestPayload, AudioExposureIngestPayload, SafetyEventIngestPayload,
 };
 use self_sensored::models::{EnvironmentalMetric, AudioExposureMetric, SafetyEventMetric};
 use self_sensored::services::auth::{AuthContext, User};

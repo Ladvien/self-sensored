@@ -117,12 +117,17 @@ pub async fn ingest_environmental_handler(
         Metrics::record_error("validation", "/api/v1/ingest/environmental", "warning");
     }
 
+    let success = errors.is_empty();
+    let processing_status = if success { "processed" } else { "partial_success" };
+
     Ok(HttpResponse::Ok().json(crate::models::IngestResponse {
-        success: errors.is_empty(),
+        success,
         processed_count,
         failed_count,
         processing_time_ms: processing_time,
         errors,
+        processing_status: Some(processing_status.to_string()),
+        raw_ingestion_id: None, // Environmental handler doesn't use raw ingestion tracking
     }))
 }
 
@@ -207,12 +212,17 @@ pub async fn ingest_audio_exposure_handler(
         Metrics::record_error("validation", "/api/v1/ingest/audio-exposure", "warning");
     }
 
+    let success = errors.is_empty();
+    let processing_status = if success { "processed" } else { "partial_success" };
+
     Ok(HttpResponse::Ok().json(crate::models::IngestResponse {
-        success: errors.is_empty(),
+        success,
         processed_count,
         failed_count,
         processing_time_ms: processing_time,
         errors,
+        processing_status: Some(processing_status.to_string()),
+        raw_ingestion_id: None, // Environmental handler doesn't use raw ingestion tracking
     }))
 }
 
@@ -306,12 +316,17 @@ pub async fn ingest_safety_events_handler(
         Metrics::record_error("validation", "/api/v1/ingest/safety-events", "warning");
     }
 
+    let success = errors.is_empty();
+    let processing_status = if success { "processed" } else { "partial_success" };
+
     Ok(HttpResponse::Ok().json(crate::models::IngestResponse {
-        success: errors.is_empty(),
+        success,
         processed_count,
         failed_count,
         processing_time_ms: processing_time,
         errors,
+        processing_status: Some(processing_status.to_string()),
+        raw_ingestion_id: None, // Environmental handler doesn't use raw ingestion tracking
     }))
 }
 
@@ -350,6 +365,55 @@ pub async fn get_environmental_data_handler(
             Ok(
                 HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
                     "Failed to retrieve environmental data".to_string(),
+                )),
+            )
+        }
+    }
+}
+
+/// Audio exposure data response
+#[derive(Debug, Serialize)]
+pub struct AudioExposureDataResponse {
+    pub data: Vec<AudioExposureMetric>,
+    pub total_count: Option<i64>,
+    pub has_more: bool,
+}
+
+/// Get audio exposure data endpoint
+#[instrument(skip(pool))]
+pub async fn get_audio_exposure_data_handler(
+    pool: web::Data<PgPool>,
+    auth: AuthContext,
+    query: web::Query<EnvironmentalQueryParams>,
+) -> Result<HttpResponse> {
+    info!(
+        user_id = %auth.user.id,
+        "Retrieving audio exposure data"
+    );
+
+    let start_date = query.start_date.unwrap_or_else(|| {
+        Utc::now() - chrono::Duration::days(30) // Default to last 30 days
+    });
+    let end_date = query.end_date.unwrap_or_else(Utc::now);
+    let limit = query.limit.unwrap_or(1000).min(10000); // Max 10k records
+    let offset = query.offset.unwrap_or(0);
+
+    // Query audio exposure data
+    match get_audio_exposure_data(&pool, &auth.user.id, start_date, end_date, limit, offset).await {
+        Ok((data, total_count)) => {
+            let has_more = data.len() as i32 == limit;
+
+            Ok(HttpResponse::Ok().json(AudioExposureDataResponse {
+                data,
+                total_count: Some(total_count),
+                has_more,
+            }))
+        }
+        Err(e) => {
+            error!("Failed to retrieve audio exposure data: {}", e);
+            Ok(
+                HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                    "Failed to retrieve audio exposure data".to_string(),
                 )),
             )
         }
@@ -411,24 +475,27 @@ async fn store_audio_exposure_metric(
     user_id: &Uuid,
     metric: &AudioExposureMetric,
 ) -> Result<(), sqlx::Error> {
-    // Note: We need to create a separate table for audio exposure or extend environmental_metrics
-    // For now, storing in environmental_metrics table with audio-specific fields
     sqlx::query!(
         r#"
-        INSERT INTO environmental_metrics (
+        INSERT INTO audio_exposure_metrics (
             id, user_id, recorded_at, environmental_audio_exposure_db,
-            headphone_audio_exposure_db, source_device, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+            headphone_audio_exposure_db, exposure_duration_minutes,
+            audio_exposure_event, source_device, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         ON CONFLICT (user_id, recorded_at) DO UPDATE SET
-            environmental_audio_exposure_db = COALESCE(EXCLUDED.environmental_audio_exposure_db, environmental_metrics.environmental_audio_exposure_db),
-            headphone_audio_exposure_db = COALESCE(EXCLUDED.headphone_audio_exposure_db, environmental_metrics.headphone_audio_exposure_db),
-            source_device = COALESCE(EXCLUDED.source_device, environmental_metrics.source_device)
+            environmental_audio_exposure_db = COALESCE(EXCLUDED.environmental_audio_exposure_db, audio_exposure_metrics.environmental_audio_exposure_db),
+            headphone_audio_exposure_db = COALESCE(EXCLUDED.headphone_audio_exposure_db, audio_exposure_metrics.headphone_audio_exposure_db),
+            exposure_duration_minutes = COALESCE(EXCLUDED.exposure_duration_minutes, audio_exposure_metrics.exposure_duration_minutes),
+            audio_exposure_event = COALESCE(EXCLUDED.audio_exposure_event, audio_exposure_metrics.audio_exposure_event),
+            source_device = COALESCE(EXCLUDED.source_device, audio_exposure_metrics.source_device)
         "#,
         metric.id,
         user_id,
         metric.recorded_at,
         metric.environmental_audio_exposure_db,
         metric.headphone_audio_exposure_db,
+        metric.exposure_duration_minutes,
+        metric.audio_exposure_event,
         metric.source_device,
         metric.created_at
     )
@@ -487,7 +554,8 @@ async fn get_environmental_data(
             time_in_daylight_minutes, ambient_temperature_celsius,
             humidity_percent, air_pressure_hpa, altitude_meters,
             location_latitude, location_longitude,
-            environmental_audio_exposure_db, headphone_audio_exposure_db,
+            NULL::double precision as environmental_audio_exposure_db,
+            NULL::double precision as headphone_audio_exposure_db,
             source_device, created_at::timestamptz as "created_at!"
         FROM environmental_metrics
         WHERE user_id = $1 AND recorded_at BETWEEN $2 AND $3
@@ -505,6 +573,51 @@ async fn get_environmental_data(
 
     let total_count = sqlx::query!(
         "SELECT COUNT(*) as count FROM environmental_metrics WHERE user_id = $1 AND recorded_at BETWEEN $2 AND $3",
+        user_id,
+        start_date,
+        end_date
+    )
+    .fetch_one(pool)
+    .await?
+    .count
+    .unwrap_or(0);
+
+    Ok((data, total_count))
+}
+
+/// Get audio exposure data from database
+async fn get_audio_exposure_data(
+    pool: &PgPool,
+    user_id: &Uuid,
+    start_date: DateTime<Utc>,
+    end_date: DateTime<Utc>,
+    limit: i32,
+    offset: i32,
+) -> Result<(Vec<AudioExposureMetric>, i64), sqlx::Error> {
+    let data = sqlx::query_as!(
+        AudioExposureMetric,
+        r#"
+        SELECT
+            id, user_id, recorded_at::timestamptz as "recorded_at!",
+            environmental_audio_exposure_db, headphone_audio_exposure_db,
+            exposure_duration_minutes, audio_exposure_event,
+            source_device, created_at::timestamptz as "created_at!"
+        FROM audio_exposure_metrics
+        WHERE user_id = $1 AND recorded_at BETWEEN $2 AND $3
+        ORDER BY recorded_at DESC
+        LIMIT $4 OFFSET $5
+        "#,
+        user_id,
+        start_date,
+        end_date,
+        limit as i64,
+        offset as i64
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let total_count = sqlx::query!(
+        "SELECT COUNT(*) as count FROM audio_exposure_metrics WHERE user_id = $1 AND recorded_at BETWEEN $2 AND $3",
         user_id,
         start_date,
         end_date
