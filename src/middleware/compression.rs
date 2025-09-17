@@ -118,7 +118,7 @@ fn add_caching_headers<B>(response: &mut ServiceResponse<B>, path: &str) {
     }
 }
 
-/// Add performance-related headers
+/// Add performance-related headers and critical security headers
 fn add_performance_headers<B>(response: &mut ServiceResponse<B>) {
     let headers = response.headers_mut();
 
@@ -127,7 +127,38 @@ fn add_performance_headers<B>(response: &mut ServiceResponse<B>) {
         headers.insert(HeaderName::from_static("server-timing"), header_value);
     }
 
-    // Add security headers that can impact performance
+    // Add critical security headers for HIPAA compliance and production security
+
+    // Content Security Policy - strict policy for health data API
+    headers.insert(
+        HeaderName::from_static("content-security-policy"),
+        HeaderValue::from_static(
+            "default-src 'none'; script-src 'none'; style-src 'none'; img-src 'none'; \
+             connect-src 'self'; font-src 'none'; object-src 'none'; media-src 'none'; \
+             frame-src 'none'; child-src 'none'; worker-src 'none'; frame-ancestors 'none'; \
+             form-action 'none'; upgrade-insecure-requests; block-all-mixed-content",
+        ),
+    );
+
+    // Strict Transport Security - force HTTPS with subdomain inclusion
+    headers.insert(
+        HeaderName::from_static("strict-transport-security"),
+        HeaderValue::from_static("max-age=31536000; includeSubDomains; preload"),
+    );
+
+    // X-XSS-Protection - enable XSS filtering
+    headers.insert(
+        HeaderName::from_static("x-xss-protection"),
+        HeaderValue::from_static("1; mode=block"),
+    );
+
+    // Referrer Policy - strict referrer policy for privacy
+    headers.insert(
+        HeaderName::from_static("referrer-policy"),
+        HeaderValue::from_static("strict-origin-when-cross-origin"),
+    );
+
+    // Existing security headers
     headers.insert(
         HeaderName::from_static("x-content-type-options"),
         HeaderValue::from_static("nosniff"),
@@ -136,6 +167,43 @@ fn add_performance_headers<B>(response: &mut ServiceResponse<B>) {
     headers.insert(
         HeaderName::from_static("x-frame-options"),
         HeaderValue::from_static("DENY"),
+    );
+
+    // Additional security headers for HIPAA compliance
+
+    // Permissions Policy - disable unnecessary browser features
+    headers.insert(
+        HeaderName::from_static("permissions-policy"),
+        HeaderValue::from_static(
+            "accelerometer=(), ambient-light-sensor=(), autoplay=(), battery=(), \
+             camera=(), cross-origin-isolated=(), display-capture=(), document-domain=(), \
+             encrypted-media=(), execution-while-not-rendered=(), execution-while-out-of-viewport=(), \
+             fullscreen=(), geolocation=(), gyroscope=(), keyboard-map=(), magnetometer=(), \
+             microphone=(), midi=(), navigation-override=(), payment=(), picture-in-picture=(), \
+             publickey-credentials-get=(), screen-wake-lock=(), sync-xhr=(), usb=(), \
+             web-share=(), xr-spatial-tracking=(), clipboard-read=(), clipboard-write=(), \
+             gamepad=(), speaker-selection=(), conversion-measurement=(), focus-without-user-activation=(), \
+             hid=(), idle-detection=(), interest-cohort=(), serial=(), sync-script=(), \
+             trust-token-redemption=(), window-placement=(), vertical-scroll=()"
+        ),
+    );
+
+    // Cross-Origin Resource Policy - restrict cross-origin access
+    headers.insert(
+        HeaderName::from_static("cross-origin-resource-policy"),
+        HeaderValue::from_static("same-origin"),
+    );
+
+    // Cross-Origin-Embedder-Policy - require CORP for subresources
+    headers.insert(
+        HeaderName::from_static("cross-origin-embedder-policy"),
+        HeaderValue::from_static("require-corp"),
+    );
+
+    // Cross-Origin-Opener-Policy - isolate browsing context
+    headers.insert(
+        HeaderName::from_static("cross-origin-opener-policy"),
+        HeaderValue::from_static("same-origin"),
     );
 
     // Add compression hint
