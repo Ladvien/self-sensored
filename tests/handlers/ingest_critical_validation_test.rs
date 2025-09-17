@@ -449,26 +449,117 @@ mod integration_tests {
 
     #[actix_web::test]
     async fn test_async_processing_response_accuracy() {
-        // This test would verify that large payloads return proper async responses
-        // indicating that processing is not yet complete
+        // This test verifies that large payloads return proper async responses
+        // indicating that processing is not yet complete with new fields
 
         let pool = setup_test_db().await;
         let (user_id, api_key) = setup_test_auth(&pool).await;
 
-        // Create a large payload that triggers async processing (>10MB)
-        // For testing, we'll simulate this with a smaller payload
+        // Create a large payload string (>10MB) to trigger async processing
+        let large_data_string = "x".repeat(11 * 1024 * 1024); // 11MB string
         let large_payload = json!({
             "data": {
-                "metrics": [
-                    // Add enough metrics to trigger async path
-                    // In real test, this would be a very large payload
-                ],
+                "metrics": [{
+                    "type": "heart_rate",
+                    "recorded_at": "2024-01-01T12:00:00Z",
+                    "heart_rate": 75,
+                    "source_device": large_data_string
+                }],
                 "workouts": []
             }
         });
 
-        // This test would need to be implemented with actual large payload
-        // to verify the async response behavior
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .route("/api/v1/ingest", web::post().to(ingest_handler))
+        ).await;
+
+        let req = test::TestRequest::post()
+            .uri("/api/v1/ingest")
+            .insert_header(("Authorization", format!("Bearer {}", api_key)))
+            .insert_header(("Content-Type", "application/json"))
+            .set_json(&large_payload)
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+
+        // Verify response is HTTP 202 Accepted (not 200 OK)
+        assert_eq!(resp.status(), StatusCode::ACCEPTED, "Large payload should return 202 Accepted");
+
+        let body: ApiResponse<IngestResponse> = test::read_body_json(resp).await;
+
+        // Verify the response indicates async processing with new fields
+        assert!(!body.data.success, "success should be false for async processing");
+        assert_eq!(body.data.processed_count, 0, "processed_count should be 0 for async processing");
+
+        // NEW FIELDS: Verify processing_status and raw_ingestion_id are set
+        assert_eq!(body.data.processing_status, Some("accepted_for_processing".to_string()),
+                   "processing_status should be 'accepted_for_processing'");
+        assert!(body.data.raw_ingestion_id.is_some(),
+                "raw_ingestion_id should be provided for status tracking");
+
+        // Verify message is clear about async processing
+        assert!(body.message.contains("accepted_for_processing"),
+                "Message should mention processing status");
+        assert!(body.message.contains("NO metrics have been processed yet"),
+                "Message should clarify that no processing has occurred");
+        assert!(body.message.contains("raw_ingestion_id"),
+                "Message should mention the ID for status checking");
+
+        cleanup_test_data(&pool, user_id).await;
+    }
+
+    #[actix_web::test]
+    async fn test_sync_processing_response_fields() {
+        // This test verifies that small payloads (synchronous processing)
+        // also include the new processing_status and raw_ingestion_id fields
+
+        let pool = setup_test_db().await;
+        let (user_id, api_key) = setup_test_auth(&pool).await;
+
+        // Create a small payload for synchronous processing
+        let small_payload = json!({
+            "data": {
+                "metrics": [{
+                    "type": "heart_rate",
+                    "recorded_at": "2024-01-01T12:00:00Z",
+                    "heart_rate": 75,
+                    "source_device": "iPhone"
+                }],
+                "workouts": []
+            }
+        });
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .route("/api/v1/ingest", web::post().to(ingest_handler))
+        ).await;
+
+        let req = test::TestRequest::post()
+            .uri("/api/v1/ingest")
+            .insert_header(("Authorization", format!("Bearer {}", api_key)))
+            .insert_header(("Content-Type", "application/json"))
+            .set_json(&small_payload)
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+
+        // Verify response is HTTP 200 OK (synchronous processing)
+        assert_eq!(resp.status(), StatusCode::OK, "Small payload should return 200 OK");
+
+        let body: ApiResponse<IngestResponse> = test::read_body_json(resp).await;
+
+        // Verify synchronous processing fields
+        assert!(body.data.success, "success should be true for successful sync processing");
+        assert!(body.data.processed_count > 0, "processed_count should be > 0 for sync processing");
+
+        // NEW FIELDS: Verify processing_status and raw_ingestion_id are set for sync too
+        assert_eq!(body.data.processing_status, Some("processed".to_string()),
+                   "processing_status should be 'processed' for successful sync processing");
+        assert!(body.data.raw_ingestion_id.is_some(),
+                "raw_ingestion_id should be provided for audit trail");
 
         cleanup_test_data(&pool, user_id).await;
     }
