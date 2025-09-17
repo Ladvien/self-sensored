@@ -108,6 +108,13 @@ async fn test_batch_config_custom() {
         nutrition_chunk_size: 1600,
         menstrual_chunk_size: 6500,
         fertility_chunk_size: 4300,
+        environmental_chunk_size: 3700,  // 14 params: 51,800 total params (safe)
+        audio_exposure_chunk_size: 7000, // 7 params: 49,000 total params (safe)
+        safety_event_chunk_size: 6500,   // 8 params: 52,000 total params (safe)
+        mindfulness_chunk_size: 5800,    // 9 params: 52,200 total params (safe)
+        mental_health_chunk_size: 5200,  // 10 params: 52,000 total params (safe)
+        symptom_chunk_size: 5800,        // 9 params: 52,200 total params (safe)
+        hygiene_chunk_size: 6500,        // 8 params: 52,000 total params (safe)
         enable_progress_tracking: true,
         enable_intra_batch_deduplication: false,
         enable_dual_write_activity_metrics: false,
@@ -135,4 +142,45 @@ fn test_processing_status_debug() {
     let status = ProcessingStatus::InProgress;
     let debug_output = format!("{status:?}");
     assert!(debug_output.contains("InProgress"));
+}
+
+#[tokio::test]
+async fn test_environmental_and_audio_exposure_chunk_sizes() {
+    use self_sensored::config::BatchConfig;
+    use self_sensored::config::{ENVIRONMENTAL_PARAMS_PER_RECORD, AUDIO_EXPOSURE_PARAMS_PER_RECORD};
+
+    let config = BatchConfig::default();
+
+    // Test Environmental metrics chunk size
+    let environmental_total_params = config.environmental_chunk_size * ENVIRONMENTAL_PARAMS_PER_RECORD;
+    assert!(
+        environmental_total_params <= 52428, // SAFE_PARAM_LIMIT
+        "Environmental chunk size {} * {} params = {} should be <= 52428 (safe PostgreSQL limit)",
+        config.environmental_chunk_size,
+        ENVIRONMENTAL_PARAMS_PER_RECORD,
+        environmental_total_params
+    );
+
+    // Test AudioExposure metrics chunk size
+    let audio_exposure_total_params = config.audio_exposure_chunk_size * AUDIO_EXPOSURE_PARAMS_PER_RECORD;
+    assert!(
+        audio_exposure_total_params <= 52428, // SAFE_PARAM_LIMIT
+        "AudioExposure chunk size {} * {} params = {} should be <= 52428 (safe PostgreSQL limit)",
+        config.audio_exposure_chunk_size,
+        AUDIO_EXPOSURE_PARAMS_PER_RECORD,
+        audio_exposure_total_params
+    );
+
+    // Test that validation passes for Environmental and AudioExposure
+    let validation_result = config.validate();
+    assert!(
+        validation_result.is_ok(),
+        "Environmental and AudioExposure configuration should pass validation: {:?}",
+        validation_result
+    );
+
+    println!("✅ Environmental metrics: {} chunk size * {} params = {} total params (safe)",
+             config.environmental_chunk_size, ENVIRONMENTAL_PARAMS_PER_RECORD, environmental_total_params);
+    println!("✅ AudioExposure metrics: {} chunk size * {} params = {} total params (safe)",
+             config.audio_exposure_chunk_size, AUDIO_EXPOSURE_PARAMS_PER_RECORD, audio_exposure_total_params);
 }

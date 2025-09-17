@@ -39,10 +39,10 @@ async fn test_chunk_size_calculations() {
     let sleep_safe = (sleep_max as f64 * 0.8) as usize; // = 5,242
     assert!(5000 <= sleep_safe, "Sleep chunk size should be safe");
     
-    // Activity: 7 params per record
-    let activity_max = 65535 / 7; // = 9,362
-    let activity_safe = (activity_max as f64 * 0.8) as usize; // = 7,489
-    assert!(7000 <= activity_safe, "Activity chunk size should be safe");
+    // Activity: 19 params per record
+    let activity_max = 65535 / 19; // = 3,449
+    let activity_safe = (activity_max as f64 * 0.8) as usize; // = 2,759
+    assert!(2700 <= activity_safe, "Activity chunk size should be safe");
     
     // Workout: 10 params per record
     let workout_max = 65535 / 10; // = 6,553
@@ -55,11 +55,11 @@ async fn test_chunk_size_calculations() {
 async fn test_batch_config_default_chunk_sizes() {
     let config = BatchConfig::default();
     
-    // Verify chunk sizes stay under parameter limits
-    assert!(config.heart_rate_chunk_size * 6 < 65535, "Heart rate chunks exceed parameter limit");
+    // Verify chunk sizes stay under parameter limits with correct parameter counts
+    assert!(config.heart_rate_chunk_size * 10 < 65535, "Heart rate chunks exceed parameter limit");
     assert!(config.blood_pressure_chunk_size * 6 < 65535, "Blood pressure chunks exceed parameter limit");
     assert!(config.sleep_chunk_size * 10 < 65535, "Sleep chunks exceed parameter limit");
-    assert!(config.activity_chunk_size * 7 < 65535, "Activity chunks exceed parameter limit");
+    assert!(config.activity_chunk_size * 19 < 65535, "Activity chunks exceed parameter limit");
     assert!(config.workout_chunk_size * 10 < 65535, "Workout chunks exceed parameter limit");
     
     // Verify reasonable chunk sizes
@@ -242,8 +242,8 @@ async fn test_mixed_large_batch_chunking() {
         }));
     }
     
-    // Add large number of activity metrics (within 7,000 chunk limit)
-    for i in 0..6000 {
+    // Add large number of activity metrics (within 2,700 chunk limit)
+    for i in 0..2500 {
         metrics.push(HealthMetric::Activity(ActivityMetric {
             date: chrono::Utc::now().date_naive() + chrono::Duration::days(i as i64),
             steps: Some(10000 + i),
@@ -276,8 +276,8 @@ async fn test_mixed_large_batch_chunking() {
     
     // Verify chunk sizes were respected (within configured limits)
     let config = BatchConfig::default();
-    assert!(12000 <= config.heart_rate_chunk_size * 2, "Heart rate test size should be within chunking capacity");
-    assert!(6000 <= config.activity_chunk_size, "Activity test size should be within single chunk limit");
+    assert!(12000 <= config.heart_rate_chunk_size * 3, "Heart rate test size should be within chunking capacity");
+    assert!(2500 <= config.activity_chunk_size, "Activity test size should be within single chunk limit");
     
     // Verify both metric types were inserted
     let heart_rate_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM heart_rate_metrics WHERE user_id = $1")
@@ -437,4 +437,146 @@ async fn test_chunking_performance_benchmark() {
     
     println!("Processed {} records in {:?}", large_count, duration);
     println!("Processing rate: {:.0} records/second", large_count as f64 / duration.as_secs_f64());
+}
+
+/// Test comprehensive PostgreSQL parameter limit validation for all metric types
+#[tokio::test]
+async fn test_postgresql_parameter_limit_validation() {
+    use self_sensored::config::batch_config::{
+        SAFE_PARAM_LIMIT,
+        HEART_RATE_PARAMS_PER_RECORD,
+        BLOOD_PRESSURE_PARAMS_PER_RECORD,
+        SLEEP_PARAMS_PER_RECORD,
+        ACTIVITY_PARAMS_PER_RECORD,
+        BODY_MEASUREMENT_PARAMS_PER_RECORD,
+        TEMPERATURE_PARAMS_PER_RECORD,
+        RESPIRATORY_PARAMS_PER_RECORD,
+        WORKOUT_PARAMS_PER_RECORD,
+        BLOOD_GLUCOSE_PARAMS_PER_RECORD,
+        NUTRITION_PARAMS_PER_RECORD,
+        MENSTRUAL_PARAMS_PER_RECORD,
+        FERTILITY_PARAMS_PER_RECORD,
+        ENVIRONMENTAL_PARAMS_PER_RECORD,
+        AUDIO_EXPOSURE_PARAMS_PER_RECORD,
+    };
+
+    let config = BatchConfig::default();
+
+    // Test all metric types against PostgreSQL parameter limits
+    let validations = vec![
+        ("heart_rate", config.heart_rate_chunk_size, HEART_RATE_PARAMS_PER_RECORD),
+        ("blood_pressure", config.blood_pressure_chunk_size, BLOOD_PRESSURE_PARAMS_PER_RECORD),
+        ("sleep", config.sleep_chunk_size, SLEEP_PARAMS_PER_RECORD),
+        ("activity", config.activity_chunk_size, ACTIVITY_PARAMS_PER_RECORD),
+        ("body_measurement", config.body_measurement_chunk_size, BODY_MEASUREMENT_PARAMS_PER_RECORD),
+        ("temperature", config.temperature_chunk_size, TEMPERATURE_PARAMS_PER_RECORD),
+        ("respiratory", config.respiratory_chunk_size, RESPIRATORY_PARAMS_PER_RECORD),
+        ("workout", config.workout_chunk_size, WORKOUT_PARAMS_PER_RECORD),
+        ("blood_glucose", config.blood_glucose_chunk_size, BLOOD_GLUCOSE_PARAMS_PER_RECORD),
+        ("nutrition", config.nutrition_chunk_size, NUTRITION_PARAMS_PER_RECORD),
+        ("menstrual", config.menstrual_chunk_size, MENSTRUAL_PARAMS_PER_RECORD),
+        ("fertility", config.fertility_chunk_size, FERTILITY_PARAMS_PER_RECORD),
+        ("environmental", config.environmental_chunk_size, ENVIRONMENTAL_PARAMS_PER_RECORD),
+        ("audio_exposure", config.audio_exposure_chunk_size, AUDIO_EXPOSURE_PARAMS_PER_RECORD),
+    ];
+
+    println!("\nPostgreSQL Parameter Limit Validation Report:");
+    println!("Safe Parameter Limit: {}", SAFE_PARAM_LIMIT);
+    println!("=" * 80);
+
+    for (metric_type, chunk_size, params_per_record) in &validations {
+        let total_params = chunk_size * params_per_record;
+        let percentage = (total_params as f64 / SAFE_PARAM_LIMIT as f64) * 100.0;
+        let status = if total_params <= SAFE_PARAM_LIMIT { "SAFE" } else { "VIOLATION" };
+
+        println!(
+            "{:15} | {:5} × {:2} = {:6} params ({:5.1}%) - {}",
+            metric_type, chunk_size, params_per_record, total_params, percentage, status
+        );
+
+        // Assert all are safe
+        assert!(
+            total_params <= SAFE_PARAM_LIMIT,
+            "CRITICAL: {} chunk size {} * {} params = {} exceeds safe limit {}",
+            metric_type, chunk_size, params_per_record, total_params, SAFE_PARAM_LIMIT
+        );
+    }
+
+    // Test validation function catches violations
+    let result = config.validate();
+    assert!(result.is_ok(), "Current BatchConfig should pass validation: {:?}", result);
+}
+
+/// Test edge cases that would cause PostgreSQL parameter violations
+#[tokio::test]
+async fn test_parameter_violation_detection() {
+    use self_sensored::config::batch_config::ACTIVITY_PARAMS_PER_RECORD;
+
+    // Test Activity metric violations (the most vulnerable metric with 19 params)
+    let dangerous_config = BatchConfig {
+        activity_chunk_size: 7000, // 7000 * 19 = 133,000 > 65,535 limit
+        ..Default::default()
+    };
+
+    let result = dangerous_config.validate();
+    assert!(result.is_err(), "Dangerous activity configuration should fail validation");
+
+    let error_msg = result.unwrap_err();
+    assert!(error_msg.contains("activity"), "Error should mention activity metric");
+    assert!(error_msg.contains("CRITICAL"), "Error should be marked as critical");
+    assert!(error_msg.contains("exceeding safe limit"), "Error should mention safe limit");
+
+    // Test Sleep metric violations
+    let sleep_violation_config = BatchConfig {
+        sleep_chunk_size: 7000, // 7000 * 10 = 70,000 > 52,428 safe limit
+        ..Default::default()
+    };
+
+    let result = sleep_violation_config.validate();
+    assert!(result.is_err(), "Sleep violation configuration should fail validation");
+
+    // Test Temperature metric violations
+    let temp_violation_config = BatchConfig {
+        temperature_chunk_size: 8000, // 8000 * 8 = 64,000 > 52,428 safe limit
+        ..Default::default()
+    };
+
+    let result = temp_violation_config.validate();
+    assert!(result.is_err(), "Temperature violation configuration should fail validation");
+}
+
+/// Test that maximum safe chunk sizes are calculated correctly
+#[tokio::test]
+async fn test_max_safe_chunk_calculations() {
+    use self_sensored::config::batch_config::{
+        SAFE_PARAM_LIMIT,
+        HEART_RATE_PARAMS_PER_RECORD,
+        ACTIVITY_PARAMS_PER_RECORD,
+        SLEEP_PARAMS_PER_RECORD,
+        TEMPERATURE_PARAMS_PER_RECORD,
+    };
+
+    // Calculate theoretical maximum safe chunk sizes
+    let max_heart_rate = SAFE_PARAM_LIMIT / HEART_RATE_PARAMS_PER_RECORD;
+    let max_activity = SAFE_PARAM_LIMIT / ACTIVITY_PARAMS_PER_RECORD;
+    let max_sleep = SAFE_PARAM_LIMIT / SLEEP_PARAMS_PER_RECORD;
+    let max_temperature = SAFE_PARAM_LIMIT / TEMPERATURE_PARAMS_PER_RECORD;
+
+    // Verify current config is within safe bounds
+    let config = BatchConfig::default();
+
+    assert!(config.heart_rate_chunk_size <= max_heart_rate,
+        "Heart rate chunk size {} exceeds max safe {}", config.heart_rate_chunk_size, max_heart_rate);
+    assert!(config.activity_chunk_size <= max_activity,
+        "Activity chunk size {} exceeds max safe {}", config.activity_chunk_size, max_activity);
+    assert!(config.sleep_chunk_size <= max_sleep,
+        "Sleep chunk size {} exceeds max safe {}", config.sleep_chunk_size, max_sleep);
+    assert!(config.temperature_chunk_size <= max_temperature,
+        "Temperature chunk size {} exceeds max safe {}", config.temperature_chunk_size, max_temperature);
+
+    println!("Maximum Safe Chunk Sizes:");
+    println!("Heart Rate: {} (current: {})", max_heart_rate, config.heart_rate_chunk_size);
+    println!("Activity: {} (current: {})", max_activity, config.activity_chunk_size);
+    println!("Sleep: {} (current: {})", max_sleep, config.sleep_chunk_size);
+    println!("Temperature: {} (current: {})", max_temperature, config.temperature_chunk_size);
 }

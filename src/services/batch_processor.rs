@@ -647,6 +647,56 @@ impl BatchProcessor {
             }));
         }
 
+        // Process environmental & safety metrics
+        if !grouped.environmental_metrics.is_empty() {
+            let environmental_metrics = std::mem::take(&mut grouped.environmental_metrics);
+            let pool = self.pool.clone();
+            let config = self.config.clone();
+            let semaphore = self.db_semaphore.clone();
+            let chunk_size = config.environmental_chunk_size;
+            tasks.push(tokio::spawn(async move {
+                let _permit = semaphore.acquire().await.expect("Semaphore closed");
+                Self::process_with_retry(
+                    "Environmental",
+                    || {
+                        Self::insert_environmental_metrics_chunked(
+                            &pool,
+                            user_id,
+                            environmental_metrics.clone(),
+                            chunk_size,
+                        )
+                    },
+                    &config,
+                )
+                .await
+            }));
+        }
+
+        if !grouped.audio_exposure_metrics.is_empty() {
+            let audio_exposure_metrics = std::mem::take(&mut grouped.audio_exposure_metrics);
+            let pool = self.pool.clone();
+            let config = self.config.clone();
+            let semaphore = self.db_semaphore.clone();
+            let chunk_size = config.audio_exposure_chunk_size;
+            tasks.push(tokio::spawn(async move {
+                let _permit = semaphore.acquire().await.expect("Semaphore closed");
+                Self::process_with_retry(
+                    "AudioExposure",
+                    || {
+                        Self::insert_audio_exposure_metrics_chunked(
+                            &pool,
+                            user_id,
+                            audio_exposure_metrics.clone(),
+                            chunk_size,
+                        )
+                    },
+                    &config,
+                )
+                .await
+            }));
+        }
+
+
         // Process reproductive health metrics (HIPAA-Compliant Privacy-First Processing)
         if !grouped.menstrual_metrics.is_empty() {
             let menstrual_metrics = std::mem::take(&mut grouped.menstrual_metrics);
@@ -2061,7 +2111,7 @@ impl BatchProcessor {
         }
 
         // Use safe default chunking to prevent parameter limit errors
-        let chunk_size = 6000; // Safe default for sleep (10 params per record)
+        let chunk_size = 5200; // Safe default for sleep (10 params per record) - FIXED from 6000
 
         Self::insert_sleep_metrics_chunked(pool, user_id, metrics, chunk_size).await
     }

@@ -6,10 +6,10 @@ use self_sensored::config::{BatchConfig, ValidationConfig};
 fn test_batch_config_default() {
     let config = BatchConfig::default();
     assert_eq!(config.max_retries, 3);
-    assert_eq!(config.heart_rate_chunk_size, 8000);
+    assert_eq!(config.heart_rate_chunk_size, 4200);
     assert_eq!(config.blood_pressure_chunk_size, 8000);
-    assert_eq!(config.sleep_chunk_size, 5000);
-    assert_eq!(config.activity_chunk_size, 7000);
+    assert_eq!(config.sleep_chunk_size, 5200);
+    assert_eq!(config.activity_chunk_size, 2700);
     assert_eq!(config.workout_chunk_size, 5000);
     assert!(config.enable_parallel_processing);
     assert!(config.enable_progress_tracking);

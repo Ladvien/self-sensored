@@ -24,6 +24,13 @@ pub const FERTILITY_PARAMS_PER_RECORD: usize = 12; // user_id, recorded_at, cerv
 pub const ENVIRONMENTAL_PARAMS_PER_RECORD: usize = 14; // user_id, recorded_at, environmental_audio_exposure_db, headphone_audio_exposure_db, uv_index, uv_exposure_minutes, ambient_temperature_celsius, humidity_percent, air_pressure_hpa, altitude_meters, time_in_daylight_minutes, location_latitude, location_longitude, source_device
 pub const AUDIO_EXPOSURE_PARAMS_PER_RECORD: usize = 7; // user_id, recorded_at, environmental_audio_exposure_db, headphone_audio_exposure_db, exposure_duration_minutes, audio_exposure_event, source_device
 
+// Mental Health and Safety Parameters
+pub const SAFETY_EVENT_PARAMS_PER_RECORD: usize = 8; // user_id, recorded_at, event_type, severity_level, location, description, emergency_contact_notified, source_device
+pub const MINDFULNESS_PARAMS_PER_RECORD: usize = 9; // user_id, recorded_at, session_type, duration_minutes, stress_level_before, stress_level_after, focus_rating, notes, source_device
+pub const MENTAL_HEALTH_PARAMS_PER_RECORD: usize = 10; // user_id, recorded_at, mood_rating, anxiety_level, stress_level, energy_level, sleep_quality_perception, medication_taken, therapy_session, notes, source_device
+pub const SYMPTOM_PARAMS_PER_RECORD: usize = 9; // user_id, recorded_at, symptom_type, severity_rating, location, duration_minutes, triggers, relief_factors, notes, source_device
+pub const HYGIENE_PARAMS_PER_RECORD: usize = 8; // user_id, recorded_at, activity_type, frequency, duration_minutes, quality_rating, notes, source_device
+
 /// Configuration for batch processing operations
 #[derive(Debug, Clone)]
 pub struct BatchConfig {
@@ -52,6 +59,13 @@ pub struct BatchConfig {
     // Environmental and Audio Exposure Batch Processing
     pub environmental_chunk_size: usize, // 14 params per record -> max 3,730
     pub audio_exposure_chunk_size: usize, // 7 params per record -> max 7,000
+
+    // Mental Health and Safety Batch Processing
+    pub safety_event_chunk_size: usize, // 8 params per record -> max 6,553
+    pub mindfulness_chunk_size: usize, // 9 params per record -> max 5,825
+    pub mental_health_chunk_size: usize, // 10 params per record -> max 5,242
+    pub symptom_chunk_size: usize, // 9 params per record -> max 5,825
+    pub hygiene_chunk_size: usize, // 8 params per record -> max 6,553
 
     pub enable_progress_tracking: bool, // Track progress for large batches
     pub enable_intra_batch_deduplication: bool, // Enable deduplication within batches
@@ -91,6 +105,13 @@ impl Default for BatchConfig {
             // Environmental and Audio Exposure Batch Processing
             environmental_chunk_size: 3700, // 14 params: 65,535 ÷ 14 × 0.8 ≈ 3,730 (max ~52,220 params)
             audio_exposure_chunk_size: 7000, // 7 params: 65,535 ÷ 7 × 0.8 ≈ 7,000 (max ~49,000 params)
+
+            // Mental Health and Safety Batch Processing
+            safety_event_chunk_size: 6500, // 8 params: 65,535 ÷ 8 × 0.8 ≈ 6,500 (max ~52,000 params)
+            mindfulness_chunk_size: 5800, // 9 params: 65,535 ÷ 9 × 0.8 ≈ 5,825 (max ~52,425 params)
+            mental_health_chunk_size: 5200, // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,200 (max ~52,000 params)
+            symptom_chunk_size: 5800, // 9 params: 65,535 ÷ 9 × 0.8 ≈ 5,825 (max ~52,425 params)
+            hygiene_chunk_size: 6500, // 8 params: 65,535 ÷ 8 × 0.8 ≈ 6,500 (max ~52,000 params)
 
             enable_progress_tracking: true,
             enable_intra_batch_deduplication: true, // Enable by default for performance
@@ -193,6 +214,28 @@ impl BatchConfig {
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(7000),
 
+            // Mental Health and Safety Batch Processing Environment Configuration
+            safety_event_chunk_size: env::var("BATCH_SAFETY_EVENT_CHUNK_SIZE")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(6500),
+            mindfulness_chunk_size: env::var("BATCH_MINDFULNESS_CHUNK_SIZE")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(5800),
+            mental_health_chunk_size: env::var("BATCH_MENTAL_HEALTH_CHUNK_SIZE")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(5200),
+            symptom_chunk_size: env::var("BATCH_SYMPTOM_CHUNK_SIZE")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(5800),
+            hygiene_chunk_size: env::var("BATCH_HYGIENE_CHUNK_SIZE")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(6500),
+
             enable_progress_tracking: env::var("BATCH_ENABLE_PROGRESS_TRACKING")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -280,6 +323,43 @@ impl BatchConfig {
                 "fertility",
                 self.fertility_chunk_size,
                 FERTILITY_PARAMS_PER_RECORD,
+            ),
+            // Environmental and Audio Exposure Validation
+            (
+                "environmental",
+                self.environmental_chunk_size,
+                ENVIRONMENTAL_PARAMS_PER_RECORD,
+            ),
+            (
+                "audio_exposure",
+                self.audio_exposure_chunk_size,
+                AUDIO_EXPOSURE_PARAMS_PER_RECORD,
+            ),
+            // Mental Health and Safety Validation
+            (
+                "safety_event",
+                self.safety_event_chunk_size,
+                SAFETY_EVENT_PARAMS_PER_RECORD,
+            ),
+            (
+                "mindfulness",
+                self.mindfulness_chunk_size,
+                MINDFULNESS_PARAMS_PER_RECORD,
+            ),
+            (
+                "mental_health",
+                self.mental_health_chunk_size,
+                MENTAL_HEALTH_PARAMS_PER_RECORD,
+            ),
+            (
+                "symptom",
+                self.symptom_chunk_size,
+                SYMPTOM_PARAMS_PER_RECORD,
+            ),
+            (
+                "hygiene",
+                self.hygiene_chunk_size,
+                HYGIENE_PARAMS_PER_RECORD,
             ),
         ];
 
