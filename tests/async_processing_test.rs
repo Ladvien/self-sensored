@@ -35,8 +35,8 @@ async fn create_test_api_key(pool: &PgPool, user_id: Uuid) -> String {
     // Hash the API key using Argon2 (same as production)
     let salt = b"test_salt_16byte"; // 16 bytes
     let config = argon2::Config::default();
-    let hashed_key = argon2::hash_encoded(api_key.as_bytes(), salt, &config)
-        .expect("Failed to hash API key");
+    let hashed_key =
+        argon2::hash_encoded(api_key.as_bytes(), salt, &config).expect("Failed to hash API key");
 
     sqlx::query!(
         r#"
@@ -113,7 +113,11 @@ async fn test_async_processing_response_fields_large_payload() {
 
     // Verify payload is large enough to trigger async processing
     let payload_size_mb = payload_json.len() as f64 / (1024.0 * 1024.0);
-    assert!(payload_size_mb > 10.0, "Payload must be >10MB to trigger async processing, got {:.1}MB", payload_size_mb);
+    assert!(
+        payload_size_mb > 10.0,
+        "Payload must be >10MB to trigger async processing, got {:.1}MB",
+        payload_size_mb
+    );
 
     // Create app with auth middleware
     let auth_service = AuthService::new(pool.clone());
@@ -137,24 +141,43 @@ async fn test_async_processing_response_fields_large_payload() {
     let resp = test::call_service(&app, req).await;
 
     // CRITICAL TEST: Verify HTTP 202 Accepted status for async processing
-    assert_eq!(resp.status(), 202, "Large payload should return HTTP 202 Accepted");
+    assert_eq!(
+        resp.status(),
+        202,
+        "Large payload should return HTTP 202 Accepted"
+    );
 
     // Parse response body
     let body: actix_web::body::MessageBody = test::read_body(resp).await;
     let response_text = String::from_utf8(body.to_vec()).expect("Response should be valid UTF-8");
-    let api_response: ApiResponse<IngestResponse> = serde_json::from_str(&response_text)
-        .expect("Response should be valid JSON");
+    let api_response: ApiResponse<IngestResponse> =
+        serde_json::from_str(&response_text).expect("Response should be valid JSON");
 
     // CRITICAL TEST: Verify response fields for async processing
-    assert!(api_response.success, "API response success should be true for accepted async processing");
+    assert!(
+        api_response.success,
+        "API response success should be true for accepted async processing"
+    );
 
     let ingest_response = api_response.data.expect("Response should contain data");
 
     // STORY-EMERGENCY-003: Critical async processing response fields
-    assert_eq!(ingest_response.success, true, "IngestResponse.success should be true - request was accepted");
-    assert_eq!(ingest_response.processed_count, 0, "processed_count should be 0 - no metrics processed yet");
-    assert_eq!(ingest_response.failed_count, 0, "failed_count should be 0 - processing hasn't started");
-    assert!(ingest_response.errors.is_empty(), "errors should be empty - processing hasn't started");
+    assert_eq!(
+        ingest_response.success, true,
+        "IngestResponse.success should be true - request was accepted"
+    );
+    assert_eq!(
+        ingest_response.processed_count, 0,
+        "processed_count should be 0 - no metrics processed yet"
+    );
+    assert_eq!(
+        ingest_response.failed_count, 0,
+        "failed_count should be 0 - processing hasn't started"
+    );
+    assert!(
+        ingest_response.errors.is_empty(),
+        "errors should be empty - processing hasn't started"
+    );
 
     // Verify async-specific fields
     assert_eq!(
@@ -162,18 +185,32 @@ async fn test_async_processing_response_fields_large_payload() {
         "accepted_for_processing",
         "processing_status should indicate async processing"
     );
-    assert!(ingest_response.raw_ingestion_id.is_some(), "raw_ingestion_id should be provided for status tracking");
+    assert!(
+        ingest_response.raw_ingestion_id.is_some(),
+        "raw_ingestion_id should be provided for status tracking"
+    );
 
     // Verify processing time is very fast (< 5 seconds for acceptance)
-    assert!(ingest_response.processing_time_ms < 5000,
-        "Async acceptance should be fast, got {}ms", ingest_response.processing_time_ms);
+    assert!(
+        ingest_response.processing_time_ms < 5000,
+        "Async acceptance should be fast, got {}ms",
+        ingest_response.processing_time_ms
+    );
 
     // Verify message is clear about async nature
-    let message = api_response.error.expect("Response should contain informational message");
-    assert!(message.contains("accepted for background processing"),
-        "Message should clearly indicate background processing: {}", message);
-    assert!(message.contains("raw_ingestion_id"),
-        "Message should reference raw_ingestion_id for status checking: {}", message);
+    let message = api_response
+        .error
+        .expect("Response should contain informational message");
+    assert!(
+        message.contains("accepted for background processing"),
+        "Message should clearly indicate background processing: {}",
+        message
+    );
+    assert!(
+        message.contains("raw_ingestion_id"),
+        "Message should reference raw_ingestion_id for status checking: {}",
+        message
+    );
 
     // Cleanup
     cleanup_test_db(&pool, user_id).await;
@@ -210,24 +247,43 @@ async fn test_synchronous_processing_response_fields_small_payload() {
     let resp = test::call_service(&app, req).await;
 
     // Verify HTTP 200 OK for synchronous processing
-    assert_eq!(resp.status(), 200, "Small payload should return HTTP 200 OK");
+    assert_eq!(
+        resp.status(),
+        200,
+        "Small payload should return HTTP 200 OK"
+    );
 
     // Parse response body
     let body: actix_web::body::MessageBody = test::read_body(resp).await;
     let response_text = String::from_utf8(body.to_vec()).expect("Response should be valid UTF-8");
-    let api_response: ApiResponse<IngestResponse> = serde_json::from_str(&response_text)
-        .expect("Response should be valid JSON");
+    let api_response: ApiResponse<IngestResponse> =
+        serde_json::from_str(&response_text).expect("Response should be valid JSON");
 
     // Verify response fields for synchronous processing
-    assert!(api_response.success, "API response success should be true for successful sync processing");
+    assert!(
+        api_response.success,
+        "API response success should be true for successful sync processing"
+    );
 
     let ingest_response = api_response.data.expect("Response should contain data");
 
     // Synchronous processing response verification
-    assert_eq!(ingest_response.success, true, "IngestResponse.success should be true - metrics were processed");
-    assert_eq!(ingest_response.processed_count, 1, "processed_count should be 1 - one metric processed");
-    assert_eq!(ingest_response.failed_count, 0, "failed_count should be 0 - no failures");
-    assert!(ingest_response.errors.is_empty(), "errors should be empty - no processing errors");
+    assert_eq!(
+        ingest_response.success, true,
+        "IngestResponse.success should be true - metrics were processed"
+    );
+    assert_eq!(
+        ingest_response.processed_count, 1,
+        "processed_count should be 1 - one metric processed"
+    );
+    assert_eq!(
+        ingest_response.failed_count, 0,
+        "failed_count should be 0 - no failures"
+    );
+    assert!(
+        ingest_response.errors.is_empty(),
+        "errors should be empty - no processing errors"
+    );
 
     // Verify sync-specific fields
     assert_eq!(
@@ -235,7 +291,10 @@ async fn test_synchronous_processing_response_fields_small_payload() {
         "processed",
         "processing_status should indicate completed processing"
     );
-    assert!(ingest_response.raw_ingestion_id.is_some(), "raw_ingestion_id should be provided");
+    assert!(
+        ingest_response.raw_ingestion_id.is_some(),
+        "raw_ingestion_id should be provided"
+    );
 
     // Cleanup
     cleanup_test_db(&pool, user_id).await;
@@ -269,9 +328,8 @@ async fn test_async_vs_sync_response_difference() {
 
     let resp_small = test::call_service(&app, req_small).await;
     let body_small: actix_web::body::MessageBody = test::read_body(resp_small).await;
-    let response_small: ApiResponse<IngestResponse> = serde_json::from_str(
-        &String::from_utf8(body_small.to_vec()).unwrap()
-    ).unwrap();
+    let response_small: ApiResponse<IngestResponse> =
+        serde_json::from_str(&String::from_utf8(body_small.to_vec()).unwrap()).unwrap();
 
     // Test 2: Large payload (asynchronous)
     let large_payload = create_large_payload();
@@ -286,31 +344,54 @@ async fn test_async_vs_sync_response_difference() {
 
     let resp_large = test::call_service(&app, req_large).await;
     let body_large: actix_web::body::MessageBody = test::read_body(resp_large).await;
-    let response_large: ApiResponse<IngestResponse> = serde_json::from_str(
-        &String::from_utf8(body_large.to_vec()).unwrap()
-    ).unwrap();
+    let response_large: ApiResponse<IngestResponse> =
+        serde_json::from_str(&String::from_utf8(body_large.to_vec()).unwrap()).unwrap();
 
     // CRITICAL COMPARISON: Verify different response patterns
     let small_data = response_small.data.unwrap();
     let large_data = response_large.data.unwrap();
 
     // Both should indicate success (request acceptance)
-    assert_eq!(small_data.success, true, "Small payload: success should be true");
-    assert_eq!(large_data.success, true, "Large payload: success should be true");
+    assert_eq!(
+        small_data.success, true,
+        "Small payload: success should be true"
+    );
+    assert_eq!(
+        large_data.success, true,
+        "Large payload: success should be true"
+    );
 
     // But processed_count should differ
-    assert_eq!(small_data.processed_count, 1, "Small payload: should process 1 metric immediately");
-    assert_eq!(large_data.processed_count, 0, "Large payload: should not process any metrics yet");
+    assert_eq!(
+        small_data.processed_count, 1,
+        "Small payload: should process 1 metric immediately"
+    );
+    assert_eq!(
+        large_data.processed_count, 0,
+        "Large payload: should not process any metrics yet"
+    );
 
     // Processing status should differ
-    assert_eq!(small_data.processing_status.as_ref().unwrap(), "processed",
-        "Small payload: should be processed");
-    assert_eq!(large_data.processing_status.as_ref().unwrap(), "accepted_for_processing",
-        "Large payload: should be accepted for processing");
+    assert_eq!(
+        small_data.processing_status.as_ref().unwrap(),
+        "processed",
+        "Small payload: should be processed"
+    );
+    assert_eq!(
+        large_data.processing_status.as_ref().unwrap(),
+        "accepted_for_processing",
+        "Large payload: should be accepted for processing"
+    );
 
     // Both should have raw_ingestion_id
-    assert!(small_data.raw_ingestion_id.is_some(), "Small payload: should have raw_ingestion_id");
-    assert!(large_data.raw_ingestion_id.is_some(), "Large payload: should have raw_ingestion_id");
+    assert!(
+        small_data.raw_ingestion_id.is_some(),
+        "Small payload: should have raw_ingestion_id"
+    );
+    assert!(
+        large_data.raw_ingestion_id.is_some(),
+        "Large payload: should have raw_ingestion_id"
+    );
 
     // Cleanup
     cleanup_test_db(&pool, user_id).await;
@@ -351,8 +432,8 @@ async fn test_async_processing_database_state() {
     // Parse response to get raw_ingestion_id
     let body: actix_web::body::MessageBody = test::read_body(resp).await;
     let response_text = String::from_utf8(body.to_vec()).expect("Response should be valid UTF-8");
-    let api_response: ApiResponse<IngestResponse> = serde_json::from_str(&response_text)
-        .expect("Response should be valid JSON");
+    let api_response: ApiResponse<IngestResponse> =
+        serde_json::from_str(&response_text).expect("Response should be valid JSON");
 
     let ingest_response = api_response.data.unwrap();
     let raw_ingestion_id = ingest_response.raw_ingestion_id.unwrap();
@@ -366,11 +447,18 @@ async fn test_async_processing_database_state() {
     .await
     .expect("Raw ingestion record should exist");
 
-    assert_eq!(raw_ingestion.id, raw_ingestion_id, "Raw ingestion ID should match");
-    assert_eq!(raw_ingestion.processing_status, "parsing",
-        "Initial processing status should be 'parsing' for async processing");
-    assert!(raw_ingestion.processed_at.is_some(),
-        "processed_at should be set when record is created");
+    assert_eq!(
+        raw_ingestion.id, raw_ingestion_id,
+        "Raw ingestion ID should match"
+    );
+    assert_eq!(
+        raw_ingestion.processing_status, "parsing",
+        "Initial processing status should be 'parsing' for async processing"
+    );
+    assert!(
+        raw_ingestion.processed_at.is_some(),
+        "processed_at should be set when record is created"
+    );
 
     // Verify no metrics have been processed yet (they should be processed in background)
     let heart_rate_count = sqlx::query!(
@@ -381,8 +469,11 @@ async fn test_async_processing_database_state() {
     .await
     .expect("Should be able to query heart rate metrics");
 
-    assert_eq!(heart_rate_count.count.unwrap_or(0), 0,
-        "No heart rate metrics should be processed immediately for async processing");
+    assert_eq!(
+        heart_rate_count.count.unwrap_or(0),
+        0,
+        "No heart rate metrics should be processed immediately for async processing"
+    );
 
     // Cleanup
     cleanup_test_db(&pool, user_id).await;

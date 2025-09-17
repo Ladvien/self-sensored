@@ -62,10 +62,10 @@ pub struct BatchConfig {
 
     // Mental Health and Safety Batch Processing
     pub safety_event_chunk_size: usize, // 8 params per record -> max 6,553
-    pub mindfulness_chunk_size: usize, // 9 params per record -> max 5,825
+    pub mindfulness_chunk_size: usize,  // 9 params per record -> max 5,825
     pub mental_health_chunk_size: usize, // 10 params per record -> max 5,242
-    pub symptom_chunk_size: usize, // 9 params per record -> max 5,825
-    pub hygiene_chunk_size: usize, // 8 params per record -> max 6,553
+    pub symptom_chunk_size: usize,      // 9 params per record -> max 5,825
+    pub hygiene_chunk_size: usize,      // 8 params per record -> max 6,553
 
     pub enable_progress_tracking: bool, // Track progress for large batches
     pub enable_intra_batch_deduplication: bool, // Enable deduplication within batches

@@ -9,14 +9,14 @@ use uuid::Uuid;
 
 use self_sensored::{
     handlers::ingest::ingest_handler,
+    middleware::auth::AuthMiddleware,
     models::{ApiResponse, IngestResponse},
     services::auth::AuthService,
-    middleware::auth::AuthMiddleware,
 };
 
 // Import test utilities
 mod common;
-use common::{get_test_pool, setup_test_user_and_key, cleanup_test_data};
+use common::{cleanup_test_data, get_test_pool, setup_test_user_and_key};
 
 /// Test that comprehensive metadata is stored for processing status tracking
 #[actix_web::test]
@@ -52,8 +52,9 @@ async fn test_status_metadata_comprehensive_tracking() {
         App::new()
             .app_data(web::Data::new(pool.clone()))
             .wrap(AuthMiddleware::new())
-            .route("/v1/ingest", web::post().to(ingest_handler))
-    ).await;
+            .route("/v1/ingest", web::post().to(ingest_handler)),
+    )
+    .await;
 
     // Make request
     let req = test::TestRequest::post()
@@ -113,7 +114,7 @@ async fn test_status_metadata_comprehensive_tracking() {
 
         // For this successful case, verify no data loss detected
         assert_eq!(metadata["expected_count"], 2); // 2 heart rate metrics
-        assert_eq!(metadata["actual_count"], 2);   // All processed
+        assert_eq!(metadata["actual_count"], 2); // All processed
         assert_eq!(metadata["silent_failures"], 0); // No silent failures
         assert_eq!(metadata["loss_percentage"], 0.0); // No loss
         assert_eq!(metadata["has_silent_failures"], false);
@@ -144,8 +145,9 @@ async fn test_empty_payload_rejection() {
         App::new()
             .app_data(web::Data::new(pool.clone()))
             .wrap(AuthMiddleware::new())
-            .route("/v1/ingest", web::post().to(ingest_handler))
-    ).await;
+            .route("/v1/ingest", web::post().to(ingest_handler)),
+    )
+    .await;
 
     let req = test::TestRequest::post()
         .uri("/v1/ingest")
@@ -196,8 +198,9 @@ async fn test_large_payload_async_processing_response() {
         App::new()
             .app_data(web::Data::new(pool.clone()))
             .wrap(AuthMiddleware::new())
-            .route("/v1/ingest", web::post().to(ingest_handler))
-    ).await;
+            .route("/v1/ingest", web::post().to(ingest_handler)),
+    )
+    .await;
 
     let req = test::TestRequest::post()
         .uri("/v1/ingest")
@@ -217,9 +220,12 @@ async fn test_large_payload_async_processing_response() {
 
     // Verify async processing response fields (STORY-EMERGENCY-003 fix)
     assert_eq!(ingest_response.processed_count, 0); // No metrics processed yet
-    assert_eq!(ingest_response.failed_count, 0);    // No failures yet
+    assert_eq!(ingest_response.failed_count, 0); // No failures yet
     assert!(ingest_response.processing_status.is_some());
-    assert_eq!(ingest_response.processing_status.unwrap(), "accepted_for_processing");
+    assert_eq!(
+        ingest_response.processing_status.unwrap(),
+        "accepted_for_processing"
+    );
     assert!(ingest_response.raw_ingestion_id.is_some());
 
     // Verify the response message is clear about async nature
@@ -255,8 +261,9 @@ async fn test_duplicate_payload_detection() {
         App::new()
             .app_data(web::Data::new(pool.clone()))
             .wrap(AuthMiddleware::new())
-            .route("/v1/ingest", web::post().to(ingest_handler))
-    ).await;
+            .route("/v1/ingest", web::post().to(ingest_handler)),
+    )
+    .await;
 
     // First request - should succeed
     let req1 = test::TestRequest::post()
@@ -322,8 +329,9 @@ async fn test_parameter_limit_violation_detection() {
         App::new()
             .app_data(web::Data::new(pool.clone()))
             .wrap(AuthMiddleware::new())
-            .route("/v1/ingest", web::post().to(ingest_handler))
-    ).await;
+            .route("/v1/ingest", web::post().to(ingest_handler)),
+    )
+    .await;
 
     let req = test::TestRequest::post()
         .uri("/v1/ingest")
@@ -359,8 +367,10 @@ async fn test_parameter_limit_violation_detection() {
         let loss_percentage = metadata["loss_percentage"].as_f64().unwrap();
 
         // Log the results for verification
-        println!("Expected: {}, Actual: {}, Silent failures: {}, Loss: {}%",
-            expected_count, actual_count, silent_failures, loss_percentage);
+        println!(
+            "Expected: {}, Actual: {}, Silent failures: {}, Loss: {}%",
+            expected_count, actual_count, silent_failures, loss_percentage
+        );
 
         // The status should reflect whether there was any data loss
         let status = record.processing_status.unwrap();
@@ -414,8 +424,9 @@ async fn test_validation_errors_vs_data_loss() {
         App::new()
             .app_data(web::Data::new(pool.clone()))
             .wrap(AuthMiddleware::new())
-            .route("/v1/ingest", web::post().to(ingest_handler))
-    ).await;
+            .route("/v1/ingest", web::post().to(ingest_handler)),
+    )
+    .await;
 
     let req = test::TestRequest::post()
         .uri("/v1/ingest")
@@ -437,7 +448,10 @@ async fn test_validation_errors_vs_data_loss() {
     assert!(ingest_response.errors.len() > 0);
 
     // Status should be partial_success (not error) because validation failures are accounted for
-    assert_eq!(ingest_response.processing_status.unwrap(), "partial_success");
+    assert_eq!(
+        ingest_response.processing_status.unwrap(),
+        "partial_success"
+    );
 
     cleanup_test_data(&pool, user_id).await;
 }

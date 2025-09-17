@@ -11,8 +11,9 @@ use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::config::{
-    BatchConfig, ACTIVITY_PARAMS_PER_RECORD, AUDIO_EXPOSURE_PARAMS_PER_RECORD, BLOOD_PRESSURE_PARAMS_PER_RECORD,
-    BODY_MEASUREMENT_PARAMS_PER_RECORD, ENVIRONMENTAL_PARAMS_PER_RECORD, HEART_RATE_PARAMS_PER_RECORD, SAFE_PARAM_LIMIT,
+    BatchConfig, ACTIVITY_PARAMS_PER_RECORD, AUDIO_EXPOSURE_PARAMS_PER_RECORD,
+    BLOOD_PRESSURE_PARAMS_PER_RECORD, BODY_MEASUREMENT_PARAMS_PER_RECORD,
+    ENVIRONMENTAL_PARAMS_PER_RECORD, HEART_RATE_PARAMS_PER_RECORD, SAFE_PARAM_LIMIT,
     SLEEP_PARAMS_PER_RECORD, WORKOUT_PARAMS_PER_RECORD,
 };
 use crate::middleware::metrics::Metrics;
@@ -295,16 +296,14 @@ impl BatchProcessor {
         // Warn if utilization is high
         if utilization > 80.0 {
             return Err(format!(
-                "High pool utilization: {:.1}% ({}/{})",
-                utilization, active_connections, pool_size
+                "High pool utilization: {utilization:.1}% ({active_connections}/{pool_size})"
             ));
         }
 
         // Check if we have enough available connections for batch processing
         if idle_connections < 5 {
             return Err(format!(
-                "Low idle connections: {} available, need at least 5 for efficient batch processing",
-                idle_connections
+                "Low idle connections: {idle_connections} available, need at least 5 for efficient batch processing"
             ));
         }
 
@@ -695,7 +694,6 @@ impl BatchProcessor {
                 .await
             }));
         }
-
 
         // Process reproductive health metrics (HIPAA-Compliant Privacy-First Processing)
         if !grouped.menstrual_metrics.is_empty() {
@@ -1423,12 +1421,14 @@ impl BatchProcessor {
 
         // Deduplicate metabolic metrics
         let original_metabolic_count = grouped.metabolic_metrics.len();
-        grouped.metabolic_metrics = self.deduplicate_metabolic_metrics(user_id, grouped.metabolic_metrics);
+        grouped.metabolic_metrics =
+            self.deduplicate_metabolic_metrics(user_id, grouped.metabolic_metrics);
         stats.metabolic_duplicates = original_metabolic_count - grouped.metabolic_metrics.len();
 
         // Deduplicate nutrition metrics
         let original_nutrition_count = grouped.nutrition_metrics.len();
-        grouped.nutrition_metrics = self.deduplicate_nutrition_metrics(user_id, grouped.nutrition_metrics);
+        grouped.nutrition_metrics =
+            self.deduplicate_nutrition_metrics(user_id, grouped.nutrition_metrics);
         stats.nutrition_duplicates = original_nutrition_count - grouped.nutrition_metrics.len();
 
         // Deduplicate workout metrics
@@ -1438,32 +1438,44 @@ impl BatchProcessor {
 
         // Deduplicate environmental & safety metrics
         let original_environmental_count = grouped.environmental_metrics.len();
-        grouped.environmental_metrics = self.deduplicate_environmental_metrics(user_id, grouped.environmental_metrics);
-        stats.environmental_duplicates = original_environmental_count - grouped.environmental_metrics.len();
+        grouped.environmental_metrics =
+            self.deduplicate_environmental_metrics(user_id, grouped.environmental_metrics);
+        stats.environmental_duplicates =
+            original_environmental_count - grouped.environmental_metrics.len();
 
         let original_audio_exposure_count = grouped.audio_exposure_metrics.len();
-        grouped.audio_exposure_metrics = self.deduplicate_audio_exposure_metrics(user_id, grouped.audio_exposure_metrics);
-        stats.audio_exposure_duplicates = original_audio_exposure_count - grouped.audio_exposure_metrics.len();
+        grouped.audio_exposure_metrics =
+            self.deduplicate_audio_exposure_metrics(user_id, grouped.audio_exposure_metrics);
+        stats.audio_exposure_duplicates =
+            original_audio_exposure_count - grouped.audio_exposure_metrics.len();
 
         let original_safety_event_count = grouped.safety_event_metrics.len();
-        grouped.safety_event_metrics = self.deduplicate_safety_event_metrics(user_id, grouped.safety_event_metrics);
-        stats.safety_event_duplicates = original_safety_event_count - grouped.safety_event_metrics.len();
+        grouped.safety_event_metrics =
+            self.deduplicate_safety_event_metrics(user_id, grouped.safety_event_metrics);
+        stats.safety_event_duplicates =
+            original_safety_event_count - grouped.safety_event_metrics.len();
 
         // Deduplicate mental health & wellness metrics
         let original_mindfulness_count = grouped.mindfulness_metrics.len();
-        grouped.mindfulness_metrics = self.deduplicate_mindfulness_metrics(user_id, grouped.mindfulness_metrics);
-        stats.mindfulness_duplicates = original_mindfulness_count - grouped.mindfulness_metrics.len();
+        grouped.mindfulness_metrics =
+            self.deduplicate_mindfulness_metrics(user_id, grouped.mindfulness_metrics);
+        stats.mindfulness_duplicates =
+            original_mindfulness_count - grouped.mindfulness_metrics.len();
 
         let original_mental_health_count = grouped.mental_health_metrics.len();
-        grouped.mental_health_metrics = self.deduplicate_mental_health_metrics(user_id, grouped.mental_health_metrics);
-        stats.mental_health_duplicates = original_mental_health_count - grouped.mental_health_metrics.len();
+        grouped.mental_health_metrics =
+            self.deduplicate_mental_health_metrics(user_id, grouped.mental_health_metrics);
+        stats.mental_health_duplicates =
+            original_mental_health_count - grouped.mental_health_metrics.len();
 
         let original_symptom_count = grouped.symptom_metrics.len();
-        grouped.symptom_metrics = self.deduplicate_symptom_metrics(user_id, grouped.symptom_metrics);
+        grouped.symptom_metrics =
+            self.deduplicate_symptom_metrics(user_id, grouped.symptom_metrics);
         stats.symptom_duplicates = original_symptom_count - grouped.symptom_metrics.len();
 
         let original_hygiene_count = grouped.hygiene_metrics.len();
-        grouped.hygiene_metrics = self.deduplicate_hygiene_metrics(user_id, grouped.hygiene_metrics);
+        grouped.hygiene_metrics =
+            self.deduplicate_hygiene_metrics(user_id, grouped.hygiene_metrics);
         stats.hygiene_duplicates = original_hygiene_count - grouped.hygiene_metrics.len();
 
         // Deduplicate reproductive health metrics (HIPAA-Compliant Privacy-First Processing)
@@ -3373,7 +3385,7 @@ impl BatchProcessor {
     /// This is needed for the activity handler's batch processing
     pub async fn process_activity_metrics(
         &self,
-user_id: uuid::Uuid,
+        user_id: uuid::Uuid,
         metrics: Vec<crate::models::ActivityMetric>,
     ) -> Result<BatchProcessingResult, sqlx::Error> {
         if metrics.is_empty() {
@@ -3441,7 +3453,7 @@ user_id: uuid::Uuid,
     /// Process hygiene events in batches with comprehensive validation and deduplication
     pub async fn process_hygiene_events(
         &self,
-user_id: uuid::Uuid,
+        user_id: uuid::Uuid,
         metrics: Vec<crate::models::health_metrics::HygieneMetric>,
     ) -> Result<BatchProcessingResult, sqlx::Error> {
         if metrics.is_empty() {
@@ -3509,7 +3521,7 @@ user_id: uuid::Uuid,
     /// Deduplicate hygiene events based on user_id, recorded_at, and event_type
     fn deduplicate_hygiene_events(
         &self,
-user_id: uuid::Uuid,
+        user_id: uuid::Uuid,
         metrics: Vec<crate::models::health_metrics::HygieneMetric>,
     ) -> Vec<crate::models::health_metrics::HygieneMetric> {
         // Always enable deduplication for hygiene events
@@ -3547,7 +3559,7 @@ user_id: uuid::Uuid,
     /// Insert hygiene events in chunks with ON CONFLICT handling
     async fn insert_hygiene_events_chunked(
         pool: &sqlx::PgPool,
-user_id: uuid::Uuid,
+        user_id: uuid::Uuid,
         metrics: Vec<crate::models::health_metrics::HygieneMetric>,
         chunk_size: usize,
     ) -> Result<usize, sqlx::Error> {
@@ -3647,7 +3659,7 @@ user_id: uuid::Uuid,
     /// Implements cycle-aware deduplication and medical-grade validation for women's health tracking
     pub async fn process_menstrual_metrics(
         &self,
-user_id: uuid::Uuid,
+        user_id: uuid::Uuid,
         metrics: Vec<crate::models::MenstrualMetric>,
     ) -> Result<BatchProcessingResult, sqlx::Error> {
         if metrics.is_empty() {
@@ -3727,7 +3739,7 @@ user_id: uuid::Uuid,
     /// Implements privacy-first deduplication and encrypted sensitive data handling
     pub async fn process_fertility_metrics(
         &self,
-user_id: uuid::Uuid,
+        user_id: uuid::Uuid,
         metrics: Vec<crate::models::FertilityMetric>,
     ) -> Result<BatchProcessingResult, sqlx::Error> {
         if metrics.is_empty() {
@@ -3814,7 +3826,7 @@ user_id: uuid::Uuid,
     /// STUB: Insert metabolic metrics - TODO: Implement full database operations
     async fn insert_metabolic_metrics(
         &self,
-user_id: uuid::Uuid,
+        user_id: uuid::Uuid,
         metrics: Vec<crate::models::MetabolicMetric>,
     ) -> Result<usize, sqlx::Error> {
         warn!(
@@ -3859,7 +3871,7 @@ user_id: uuid::Uuid,
     /// STUB: Insert safety event metrics - TODO: Implement full database operations
     async fn insert_safety_event_metrics(
         &self,
-user_id: uuid::Uuid,
+        user_id: uuid::Uuid,
         metrics: Vec<crate::models::SafetyEventMetric>,
     ) -> Result<usize, sqlx::Error> {
         warn!(
@@ -3874,7 +3886,7 @@ user_id: uuid::Uuid,
     /// STUB: Insert mindfulness metrics - TODO: Implement full database operations
     async fn insert_mindfulness_metrics(
         &self,
-user_id: uuid::Uuid,
+        user_id: uuid::Uuid,
         metrics: Vec<crate::models::MindfulnessMetric>,
     ) -> Result<usize, sqlx::Error> {
         warn!(
@@ -3889,7 +3901,7 @@ user_id: uuid::Uuid,
     /// STUB: Insert mental health metrics - TODO: Implement full database operations
     async fn insert_mental_health_metrics(
         &self,
-user_id: uuid::Uuid,
+        user_id: uuid::Uuid,
         metrics: Vec<crate::models::MentalHealthMetric>,
     ) -> Result<usize, sqlx::Error> {
         warn!(
@@ -3904,7 +3916,7 @@ user_id: uuid::Uuid,
     /// STUB: Insert symptom metrics - TODO: Implement full database operations
     async fn insert_symptom_metrics(
         &self,
-user_id: uuid::Uuid,
+        user_id: uuid::Uuid,
         metrics: Vec<crate::models::SymptomMetric>,
     ) -> Result<usize, sqlx::Error> {
         warn!(
@@ -3919,7 +3931,7 @@ user_id: uuid::Uuid,
     /// STUB: Insert hygiene metrics - TODO: Implement full database operations
     async fn insert_hygiene_metrics(
         &self,
-user_id: uuid::Uuid,
+        user_id: uuid::Uuid,
         metrics: Vec<crate::models::HygieneMetric>,
     ) -> Result<usize, sqlx::Error> {
         warn!(
@@ -3942,7 +3954,8 @@ user_id: uuid::Uuid,
             return Ok(0);
         }
 
-        let chunks: Vec<&[crate::models::EnvironmentalMetric]> = metrics.chunks(chunk_size).collect();
+        let chunks: Vec<&[crate::models::EnvironmentalMetric]> =
+            metrics.chunks(chunk_size).collect();
         let mut total_inserted = 0;
         let max_params_per_chunk = chunk_size * ENVIRONMENTAL_PARAMS_PER_RECORD;
 
@@ -4033,7 +4046,8 @@ user_id: uuid::Uuid,
             return Ok(0);
         }
 
-        let chunks: Vec<&[crate::models::AudioExposureMetric]> = metrics.chunks(chunk_size).collect();
+        let chunks: Vec<&[crate::models::AudioExposureMetric]> =
+            metrics.chunks(chunk_size).collect();
         let mut total_inserted = 0;
         let max_params_per_chunk = chunk_size * AUDIO_EXPOSURE_PARAMS_PER_RECORD;
 
@@ -4106,7 +4120,7 @@ user_id: uuid::Uuid,
     /// STUB: Deduplicate metabolic metrics - TODO: Implement proper deduplication
     fn deduplicate_metabolic_metrics(
         &self,
-user_id: uuid::Uuid,
+        user_id: uuid::Uuid,
         metrics: Vec<crate::models::MetabolicMetric>,
     ) -> Vec<crate::models::MetabolicMetric> {
         // TODO: Implement proper deduplication using MetabolicKey
@@ -4116,7 +4130,7 @@ user_id: uuid::Uuid,
     /// STUB: Deduplicate nutrition metrics - TODO: Implement proper deduplication
     fn deduplicate_nutrition_metrics(
         &self,
-user_id: uuid::Uuid,
+        user_id: uuid::Uuid,
         metrics: Vec<crate::models::NutritionMetric>,
     ) -> Vec<crate::models::NutritionMetric> {
         // TODO: Implement proper deduplication
@@ -4202,7 +4216,7 @@ user_id: uuid::Uuid,
     /// STUB: Deduplicate safety event metrics - TODO: Implement proper deduplication
     fn deduplicate_safety_event_metrics(
         &self,
-user_id: uuid::Uuid,
+        user_id: uuid::Uuid,
         metrics: Vec<crate::models::SafetyEventMetric>,
     ) -> Vec<crate::models::SafetyEventMetric> {
         // TODO: Implement proper deduplication using SafetyEventKey
@@ -4212,7 +4226,7 @@ user_id: uuid::Uuid,
     /// STUB: Deduplicate mindfulness metrics - TODO: Implement proper deduplication
     fn deduplicate_mindfulness_metrics(
         &self,
-user_id: uuid::Uuid,
+        user_id: uuid::Uuid,
         metrics: Vec<crate::models::MindfulnessMetric>,
     ) -> Vec<crate::models::MindfulnessMetric> {
         // TODO: Implement proper deduplication using MindfulnessKey
@@ -4222,7 +4236,7 @@ user_id: uuid::Uuid,
     /// STUB: Deduplicate mental health metrics - TODO: Implement proper deduplication
     fn deduplicate_mental_health_metrics(
         &self,
-user_id: uuid::Uuid,
+        user_id: uuid::Uuid,
         metrics: Vec<crate::models::MentalHealthMetric>,
     ) -> Vec<crate::models::MentalHealthMetric> {
         // TODO: Implement proper deduplication using MentalHealthKey
@@ -4232,7 +4246,7 @@ user_id: uuid::Uuid,
     /// STUB: Deduplicate symptom metrics - TODO: Implement proper deduplication
     fn deduplicate_symptom_metrics(
         &self,
-user_id: uuid::Uuid,
+        user_id: uuid::Uuid,
         metrics: Vec<crate::models::SymptomMetric>,
     ) -> Vec<crate::models::SymptomMetric> {
         // TODO: Implement proper deduplication using SymptomKey
@@ -4242,7 +4256,7 @@ user_id: uuid::Uuid,
     /// STUB: Deduplicate hygiene metrics - TODO: Implement proper deduplication
     fn deduplicate_hygiene_metrics(
         &self,
-user_id: uuid::Uuid,
+        user_id: uuid::Uuid,
         metrics: Vec<crate::models::HygieneMetric>,
     ) -> Vec<crate::models::HygieneMetric> {
         // TODO: Implement proper deduplication using HygieneKey

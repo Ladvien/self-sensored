@@ -201,10 +201,10 @@ pub async fn ingest_async_optimized_handler(
             audio_exposure_chunk_size: 7000, // 7 params: optimized for audio exposure
             // Mental Health and Safety Batch Processing
             safety_event_chunk_size: 6500, // 8 params: optimized for safety events
-            mindfulness_chunk_size: 5800, // 9 params: optimized for mindfulness data
+            mindfulness_chunk_size: 5800,  // 9 params: optimized for mindfulness data
             mental_health_chunk_size: 5200, // 10 params: optimized for mental health data
-            symptom_chunk_size: 5800, // 9 params: optimized for symptom tracking
-            hygiene_chunk_size: 6500, // 8 params: optimized for hygiene tracking
+            symptom_chunk_size: 5800,      // 9 params: optimized for symptom tracking
+            hygiene_chunk_size: 6500,      // 8 params: optimized for hygiene tracking
             enable_progress_tracking: false, // Disable for speed
             enable_intra_batch_deduplication: true,
             enable_dual_write_activity_metrics: false, // Disable for async endpoint to prioritize speed
@@ -268,7 +268,11 @@ pub async fn ingest_async_optimized_handler(
 
     // Create response
     let success = processing_result.errors.is_empty();
-    let processing_status = if success { "processed" } else { "partial_success" };
+    let processing_status = if success {
+        "processed"
+    } else {
+        "partial_success"
+    };
 
     let response = IngestResponse {
         success,

@@ -20,8 +20,8 @@ async fn test_auth_service_with_cache_compilation() {
 #[test]
 fn test_auth_service_cache_methods_exist() {
     // Test that the new methods exist (compilation test)
-    use std::pin::Pin;
     use std::future::Future;
+    use std::pin::Pin;
 
     // This is a compile-time test to ensure our methods exist
     fn _test_methods_exist<T>() -> Pin<Box<dyn Future<Output = ()>>>

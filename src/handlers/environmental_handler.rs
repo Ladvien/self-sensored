@@ -118,7 +118,11 @@ pub async fn ingest_environmental_handler(
     }
 
     let success = errors.is_empty();
-    let processing_status = if success { "processed" } else { "partial_success" };
+    let processing_status = if success {
+        "processed"
+    } else {
+        "partial_success"
+    };
 
     Ok(HttpResponse::Ok().json(crate::models::IngestResponse {
         success,
@@ -213,7 +217,11 @@ pub async fn ingest_audio_exposure_handler(
     }
 
     let success = errors.is_empty();
-    let processing_status = if success { "processed" } else { "partial_success" };
+    let processing_status = if success {
+        "processed"
+    } else {
+        "partial_success"
+    };
 
     Ok(HttpResponse::Ok().json(crate::models::IngestResponse {
         success,
@@ -317,7 +325,11 @@ pub async fn ingest_safety_events_handler(
     }
 
     let success = errors.is_empty();
-    let processing_status = if success { "processed" } else { "partial_success" };
+    let processing_status = if success {
+        "processed"
+    } else {
+        "partial_success"
+    };
 
     Ok(HttpResponse::Ok().json(crate::models::IngestResponse {
         success,

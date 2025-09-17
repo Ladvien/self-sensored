@@ -1,6 +1,6 @@
 use actix_web::{web, HttpResponse, Result};
 use chrono::Utc;
-use redis::{Client as RedisClient};
+use redis::Client as RedisClient;
 use serde_json::json;
 use sqlx::PgPool;
 use std::sync::atomic::{AtomicU64, Ordering};

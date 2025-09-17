@@ -19,10 +19,7 @@ async fn get_test_pool() -> sqlx::PgPool {
 
 #[tokio::test]
 async fn test_basic_health_check_works() {
-    let app = test::init_service(
-        App::new().route("/health", web::get().to(health_check)),
-    )
-    .await;
+    let app = test::init_service(App::new().route("/health", web::get().to(health_check))).await;
 
     let req = test::TestRequest::get().uri("/health").to_request();
     let resp = test::call_service(&app, req).await;
@@ -36,10 +33,8 @@ async fn test_basic_health_check_works() {
 
 #[tokio::test]
 async fn test_liveness_probe_works() {
-    let app = test::init_service(
-        App::new().route("/health/live", web::get().to(liveness_probe)),
-    )
-    .await;
+    let app =
+        test::init_service(App::new().route("/health/live", web::get().to(liveness_probe))).await;
 
     let req = test::TestRequest::get().uri("/health/live").to_request();
     let resp = test::call_service(&app, req).await;

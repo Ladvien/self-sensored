@@ -128,7 +128,11 @@ pub async fn optimized_ingest_handler(
 
     // Create optimized response
     let success = result.errors.is_empty();
-    let processing_status = if success { "processed" } else { "partial_success" };
+    let processing_status = if success {
+        "processed"
+    } else {
+        "partial_success"
+    };
 
     let response = IngestResponse {
         success,

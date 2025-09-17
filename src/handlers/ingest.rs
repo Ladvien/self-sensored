@@ -129,10 +129,9 @@ pub async fn ingest_handler(
                 return Ok(HttpResponse::BadRequest().json(
                     ApiResponse::<()>::error(
                         format!(
-                            "Duplicate large payload detected ({:.1}MB). This exact payload was already processed. \
-                            Use the status API with raw_ingestion_id {} to check processing results. \
-                            To prevent client retry loops and server overload, identical large payloads are rejected.",
-                            payload_size_mb, existing_id
+                            "Duplicate large payload detected ({payload_size_mb:.1}MB). This exact payload was already processed. \
+                            Use the status API with raw_ingestion_id {existing_id} to check processing results. \
+                            To prevent client retry loops and server overload, identical large payloads are rejected."
                         )
                     )
                 ));
@@ -191,11 +190,11 @@ pub async fn ingest_handler(
         // Return immediate acceptance response to prevent Cloudflare timeout
         // CRITICAL FIX for STORY-EMERGENCY-003: Clear async processing status
         let response = IngestResponse {
-            success: true,      // Request successfully accepted (not indicating processing completion)
+            success: true, // Request successfully accepted (not indicating processing completion)
             processed_count: 0, // No metrics processed yet - processing is async
-            failed_count: 0,    // No failures yet - processing hasn't started
+            failed_count: 0, // No failures yet - processing hasn't started
             processing_time_ms: start_time.elapsed().as_millis() as u64,
-            errors: vec![],     // No errors yet - processing is async
+            errors: vec![], // No errors yet - processing is async
             processing_status: Some("accepted_for_processing".to_string()),
             raw_ingestion_id: Some(raw_id),
         };
@@ -211,8 +210,7 @@ pub async fn ingest_handler(
             HttpResponse::Accepted().json(ApiResponse::success_with_message(
                 response,
                 format!(
-                    "Payload accepted for background processing. Use raw_ingestion_id {} to check actual processing results via status API.",
-                    raw_id
+                    "Payload accepted for background processing. Use raw_ingestion_id {raw_id} to check actual processing results via status API."
                 ),
             )),
         );
@@ -275,16 +273,13 @@ pub async fn ingest_handler(
             );
             Metrics::record_error("duplicate_payload", "/api/v1/ingest", "error");
 
-            return Ok(HttpResponse::BadRequest().json(
-                ApiResponse::<()>::error(
-                    format!(
-                        "Duplicate payload detected. This exact payload was already processed. \
-                        Use the status API with raw_ingestion_id {} to check processing results. \
-                        To prevent client retry loops, identical payloads are rejected.",
-                        existing_id
-                    )
-                )
-            ));
+            return Ok(
+                HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
+                    "Duplicate payload detected. This exact payload was already processed. \
+                        Use the status API with raw_ingestion_id {existing_id} to check processing results. \
+                        To prevent client retry loops, identical payloads are rejected."
+                ))),
+            );
         }
         Ok(None) => {
             // No duplicate found, continue processing
@@ -422,7 +417,8 @@ pub async fn ingest_handler(
     let processor = BatchProcessor::new(pool.get_ref().clone());
 
     // Calculate original metric count before moving the payload
-    let original_metric_count = processed_payload.data.metrics.len() + processed_payload.data.workouts.len();
+    let original_metric_count =
+        processed_payload.data.metrics.len() + processed_payload.data.workouts.len();
 
     let mut result = processor
         .process_batch(auth.user.id, processed_payload)
@@ -639,7 +635,8 @@ async fn store_raw_payload_bytes(
 
     // For large payloads, avoid storing the full content in JSON to prevent memory issues
     // Instead, store only metadata - the actual parsing will happen in background processing
-    let raw_json = if payload_size > 10_000_000 { // > 10MB
+    let raw_json = if payload_size > 10_000_000 {
+        // > 10MB
         serde_json::json!({
             "large_payload": true,
             "needs_parsing": true,
@@ -745,11 +742,7 @@ async fn update_processing_status(
     let expected_count = original_metric_count;
     let actual_count = actual_processed;
     let failed_with_errors = failed_count;
-    let silent_failures = if expected_count > (actual_count + failed_with_errors) {
-        expected_count - (actual_count + failed_with_errors)
-    } else {
-        0
-    };
+    let silent_failures = expected_count.saturating_sub(actual_count + failed_with_errors);
 
     // Enhanced data loss detection with multiple thresholds
     let loss_percentage = if expected_count > 0 {
@@ -1096,7 +1089,8 @@ fn spawn_complete_processing_task(
                     "timestamp": chrono::Utc::now()
                 });
 
-                if let Err(e) = update_processing_failure(&pool, raw_id, "failed", error_json).await {
+                if let Err(e) = update_processing_failure(&pool, raw_id, "failed", error_json).await
+                {
                     error!("Failed to update parsing failure status: {}", e);
                 }
                 return;
@@ -1134,7 +1128,10 @@ fn spawn_complete_processing_task(
             .filter_map(|(index, metric)| match metric.validate() {
                 Ok(()) => Some(metric),
                 Err(_) => {
-                    debug!("Background processing: excluding invalid metric at index {}", index);
+                    debug!(
+                        "Background processing: excluding invalid metric at index {}",
+                        index
+                    );
                     None
                 }
             })
@@ -1148,7 +1145,10 @@ fn spawn_complete_processing_task(
             .filter_map(|(index, workout)| match validate_single_workout(&workout) {
                 Ok(()) => Some(workout),
                 Err(_) => {
-                    debug!("Background processing: excluding invalid workout at index {}", index);
+                    debug!(
+                        "Background processing: excluding invalid workout at index {}",
+                        index
+                    );
                     None
                 }
             })
@@ -1206,9 +1206,12 @@ fn spawn_complete_processing_task(
         let processor = BatchProcessor::new(pool.clone());
 
         // Calculate original metric count before moving the payload
-        let original_metric_count = filtered_payload.data.metrics.len() + filtered_payload.data.workouts.len();
+        let original_metric_count =
+            filtered_payload.data.metrics.len() + filtered_payload.data.workouts.len();
 
-        let mut result = processor.process_batch(auth.user.id, filtered_payload).await;
+        let mut result = processor
+            .process_batch(auth.user.id, filtered_payload)
+            .await;
 
         // Add validation errors to the processing result
         if !all_validation_errors.is_empty() {
@@ -1217,7 +1220,9 @@ fn spawn_complete_processing_task(
         }
 
         // Step 4: Update final processing status
-        if let Err(e) = update_processing_status(&pool, raw_id, &result, original_metric_count).await {
+        if let Err(e) =
+            update_processing_status(&pool, raw_id, &result, original_metric_count).await
+        {
             error!(
                 user_id = %auth.user.id,
                 raw_id = %raw_id,
