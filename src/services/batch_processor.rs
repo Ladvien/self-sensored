@@ -11,8 +11,8 @@ use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::config::{
-    BatchConfig, ACTIVITY_PARAMS_PER_RECORD, BLOOD_PRESSURE_PARAMS_PER_RECORD,
-    BODY_MEASUREMENT_PARAMS_PER_RECORD, HEART_RATE_PARAMS_PER_RECORD, SAFE_PARAM_LIMIT,
+    BatchConfig, ACTIVITY_PARAMS_PER_RECORD, AUDIO_EXPOSURE_PARAMS_PER_RECORD, BLOOD_PRESSURE_PARAMS_PER_RECORD,
+    BODY_MEASUREMENT_PARAMS_PER_RECORD, ENVIRONMENTAL_PARAMS_PER_RECORD, HEART_RATE_PARAMS_PER_RECORD, SAFE_PARAM_LIMIT,
     SLEEP_PARAMS_PER_RECORD, WORKOUT_PARAMS_PER_RECORD,
 };
 use crate::middleware::metrics::Metrics;
@@ -3776,34 +3776,34 @@ user_id: uuid::Uuid,
         Ok(0) // Return 0 to indicate no processing yet
     }
 
-    /// STUB: Insert environmental metrics - TODO: Implement full database operations
+    /// Batch insert environmental metrics with comprehensive environmental data
     async fn insert_environmental_metrics(
         &self,
-user_id: uuid::Uuid,
+        user_id: uuid::Uuid,
         metrics: Vec<crate::models::EnvironmentalMetric>,
     ) -> Result<usize, sqlx::Error> {
-        warn!(
-            user_id = %user_id,
-            count = metrics.len(),
-            "STUB: Environmental metrics processing not yet implemented - data being lost!"
-        );
-        // TODO: Implement actual database insertion
-        Ok(0)
+        Self::insert_environmental_metrics_chunked(
+            &self.pool,
+            user_id,
+            metrics,
+            self.config.environmental_chunk_size,
+        )
+        .await
     }
 
-    /// STUB: Insert audio exposure metrics - TODO: Implement full database operations
+    /// Batch insert audio exposure metrics for hearing health monitoring
     async fn insert_audio_exposure_metrics(
         &self,
-user_id: uuid::Uuid,
+        user_id: uuid::Uuid,
         metrics: Vec<crate::models::AudioExposureMetric>,
     ) -> Result<usize, sqlx::Error> {
-        warn!(
-            user_id = %user_id,
-            count = metrics.len(),
-            "STUB: Audio exposure metrics processing not yet implemented - data being lost!"
-        );
-        // TODO: Implement actual database insertion
-        Ok(0)
+        Self::insert_audio_exposure_metrics_chunked(
+            &self.pool,
+            user_id,
+            metrics,
+            self.config.audio_exposure_chunk_size,
+        )
+        .await
     }
 
     /// STUB: Insert safety event metrics - TODO: Implement full database operations
@@ -3881,6 +3881,174 @@ user_id: uuid::Uuid,
         Ok(0)
     }
 
+    /// Batch insert environmental metrics in optimized chunks
+    async fn insert_environmental_metrics_chunked(
+        pool: &PgPool,
+        user_id: Uuid,
+        metrics: Vec<crate::models::EnvironmentalMetric>,
+        chunk_size: usize,
+    ) -> Result<usize, sqlx::Error> {
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        let chunks: Vec<&[crate::models::EnvironmentalMetric]> = metrics.chunks(chunk_size).collect();
+        let mut total_inserted = 0;
+        let max_params_per_chunk = chunk_size * ENVIRONMENTAL_PARAMS_PER_RECORD;
+
+        info!(
+            metric_type = "environmental",
+            total_records = metrics.len(),
+            chunk_count = chunks.len(),
+            chunk_size = chunk_size,
+            max_params_per_chunk = max_params_per_chunk,
+            "Processing environmental metrics in chunks"
+        );
+
+        for (chunk_idx, chunk) in chunks.iter().enumerate() {
+            let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
+                "INSERT INTO environmental_metrics (user_id, recorded_at, environmental_audio_exposure_db, headphone_audio_exposure_db, uv_index, uv_exposure_minutes, ambient_temperature_celsius, humidity_percent, air_pressure_hpa, altitude_meters, time_in_daylight_minutes, location_latitude, location_longitude, source_device) "
+            );
+
+            query_builder.push_values(chunk.iter(), |mut b, metric| {
+                b.push_bind(user_id)
+                    .push_bind(metric.recorded_at)
+                    .push_bind(metric.environmental_audio_exposure_db)
+                    .push_bind(metric.headphone_audio_exposure_db)
+                    .push_bind(metric.uv_index)
+                    .push_bind(metric.uv_exposure_minutes)
+                    .push_bind(metric.ambient_temperature_celsius)
+                    .push_bind(metric.humidity_percent)
+                    .push_bind(metric.air_pressure_hpa)
+                    .push_bind(metric.altitude_meters)
+                    .push_bind(metric.time_in_daylight_minutes)
+                    .push_bind(metric.location_latitude)
+                    .push_bind(metric.location_longitude)
+                    .push_bind(&metric.source_device);
+            });
+
+            query_builder.push(" ON CONFLICT (user_id, recorded_at) DO UPDATE SET
+                environmental_audio_exposure_db = COALESCE(EXCLUDED.environmental_audio_exposure_db, environmental_metrics.environmental_audio_exposure_db),
+                headphone_audio_exposure_db = COALESCE(EXCLUDED.headphone_audio_exposure_db, environmental_metrics.headphone_audio_exposure_db),
+                uv_index = COALESCE(EXCLUDED.uv_index, environmental_metrics.uv_index),
+                uv_exposure_minutes = COALESCE(EXCLUDED.uv_exposure_minutes, environmental_metrics.uv_exposure_minutes),
+                ambient_temperature_celsius = COALESCE(EXCLUDED.ambient_temperature_celsius, environmental_metrics.ambient_temperature_celsius),
+                humidity_percent = COALESCE(EXCLUDED.humidity_percent, environmental_metrics.humidity_percent),
+                air_pressure_hpa = COALESCE(EXCLUDED.air_pressure_hpa, environmental_metrics.air_pressure_hpa),
+                altitude_meters = COALESCE(EXCLUDED.altitude_meters, environmental_metrics.altitude_meters),
+                time_in_daylight_minutes = COALESCE(EXCLUDED.time_in_daylight_minutes, environmental_metrics.time_in_daylight_minutes),
+                location_latitude = COALESCE(EXCLUDED.location_latitude, environmental_metrics.location_latitude),
+                location_longitude = COALESCE(EXCLUDED.location_longitude, environmental_metrics.location_longitude),
+                source_device = COALESCE(EXCLUDED.source_device, environmental_metrics.source_device),
+                updated_at = NOW()");
+
+            let insert_result = query_builder.build().execute(pool).await;
+
+            match insert_result {
+                Ok(result) => {
+                    let rows_inserted = result.rows_affected() as usize;
+                    total_inserted += rows_inserted;
+                    info!(
+                        metric_type = "environmental",
+                        chunk_idx = chunk_idx,
+                        chunk_size = chunk.len(),
+                        rows_inserted = rows_inserted,
+                        "Successfully inserted environmental metrics chunk"
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        error = %e,
+                        metric_type = "environmental",
+                        chunk_idx = chunk_idx,
+                        chunk_size = chunk.len(),
+                        "Failed to insert environmental metrics chunk"
+                    );
+                    return Err(e);
+                }
+            }
+        }
+
+        Ok(total_inserted)
+    }
+
+    /// Batch insert audio exposure metrics in optimized chunks for hearing health monitoring
+    async fn insert_audio_exposure_metrics_chunked(
+        pool: &PgPool,
+        user_id: Uuid,
+        metrics: Vec<crate::models::AudioExposureMetric>,
+        chunk_size: usize,
+    ) -> Result<usize, sqlx::Error> {
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        let chunks: Vec<&[crate::models::AudioExposureMetric]> = metrics.chunks(chunk_size).collect();
+        let mut total_inserted = 0;
+        let max_params_per_chunk = chunk_size * AUDIO_EXPOSURE_PARAMS_PER_RECORD;
+
+        info!(
+            metric_type = "audio_exposure",
+            total_records = metrics.len(),
+            chunk_count = chunks.len(),
+            chunk_size = chunk_size,
+            max_params_per_chunk = max_params_per_chunk,
+            "Processing audio exposure metrics in chunks"
+        );
+
+        for (chunk_idx, chunk) in chunks.iter().enumerate() {
+            let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
+                "INSERT INTO audio_exposure_metrics (user_id, recorded_at, environmental_audio_exposure_db, headphone_audio_exposure_db, exposure_duration_minutes, audio_exposure_event, source_device) "
+            );
+
+            query_builder.push_values(chunk.iter(), |mut b, metric| {
+                b.push_bind(user_id)
+                    .push_bind(metric.recorded_at)
+                    .push_bind(metric.environmental_audio_exposure_db)
+                    .push_bind(metric.headphone_audio_exposure_db)
+                    .push_bind(metric.exposure_duration_minutes)
+                    .push_bind(metric.audio_exposure_event)
+                    .push_bind(&metric.source_device);
+            });
+
+            query_builder.push(" ON CONFLICT (user_id, recorded_at) DO UPDATE SET
+                environmental_audio_exposure_db = COALESCE(EXCLUDED.environmental_audio_exposure_db, audio_exposure_metrics.environmental_audio_exposure_db),
+                headphone_audio_exposure_db = COALESCE(EXCLUDED.headphone_audio_exposure_db, audio_exposure_metrics.headphone_audio_exposure_db),
+                exposure_duration_minutes = EXCLUDED.exposure_duration_minutes,
+                audio_exposure_event = EXCLUDED.audio_exposure_event,
+                source_device = COALESCE(EXCLUDED.source_device, audio_exposure_metrics.source_device),
+                updated_at = NOW()");
+
+            let insert_result = query_builder.build().execute(pool).await;
+
+            match insert_result {
+                Ok(result) => {
+                    let rows_inserted = result.rows_affected() as usize;
+                    total_inserted += rows_inserted;
+                    info!(
+                        metric_type = "audio_exposure",
+                        chunk_idx = chunk_idx,
+                        chunk_size = chunk.len(),
+                        rows_inserted = rows_inserted,
+                        "Successfully inserted audio exposure metrics chunk"
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        error = %e,
+                        metric_type = "audio_exposure",
+                        chunk_idx = chunk_idx,
+                        chunk_size = chunk.len(),
+                        "Failed to insert audio exposure metrics chunk"
+                    );
+                    return Err(e);
+                }
+            }
+        }
+
+        Ok(total_inserted)
+    }
+
     // ============================================================================
     // STUB DEDUPLICATION METHODS FOR MISSING METRIC TYPES
     // ============================================================================
@@ -3905,24 +4073,80 @@ user_id: uuid::Uuid,
         metrics // Return all for now - no deduplication yet
     }
 
-    /// STUB: Deduplicate environmental metrics - TODO: Implement proper deduplication
+    /// Deduplicate environmental metrics using EnvironmentalKey (user_id, recorded_at)
     fn deduplicate_environmental_metrics(
         &self,
-user_id: uuid::Uuid,
+        _user_id: uuid::Uuid,
         metrics: Vec<crate::models::EnvironmentalMetric>,
     ) -> Vec<crate::models::EnvironmentalMetric> {
-        // TODO: Implement proper deduplication using EnvironmentalKey
-        metrics
+        let mut seen_keys = HashSet::new();
+        let mut deduplicated = Vec::with_capacity(metrics.len());
+        let mut duplicates_removed = 0;
+
+        for metric in metrics {
+            let key = EnvironmentalKey {
+                user_id: metric.user_id,
+                recorded_at_millis: metric.recorded_at.timestamp_millis(),
+            };
+
+            if seen_keys.insert(key) {
+                // Key was not present, add metric
+                deduplicated.push(metric);
+            } else {
+                // Duplicate found, skip this metric
+                duplicates_removed += 1;
+            }
+        }
+
+        if duplicates_removed > 0 {
+            info!(
+                metric_type = "environmental",
+                original_count = seen_keys.len() + duplicates_removed,
+                deduplicated_count = deduplicated.len(),
+                duplicates_removed = duplicates_removed,
+                "Environmental metrics deduplication completed"
+            );
+        }
+
+        deduplicated
     }
 
-    /// STUB: Deduplicate audio exposure metrics - TODO: Implement proper deduplication
+    /// Deduplicate audio exposure metrics using AudioExposureKey (user_id, recorded_at)
     fn deduplicate_audio_exposure_metrics(
         &self,
-user_id: uuid::Uuid,
+        _user_id: uuid::Uuid,
         metrics: Vec<crate::models::AudioExposureMetric>,
     ) -> Vec<crate::models::AudioExposureMetric> {
-        // TODO: Implement proper deduplication using AudioExposureKey
-        metrics
+        let mut seen_keys = HashSet::new();
+        let mut deduplicated = Vec::with_capacity(metrics.len());
+        let mut duplicates_removed = 0;
+
+        for metric in metrics {
+            let key = AudioExposureKey {
+                user_id: metric.user_id,
+                recorded_at_millis: metric.recorded_at.timestamp_millis(),
+            };
+
+            if seen_keys.insert(key) {
+                // Key was not present, add metric
+                deduplicated.push(metric);
+            } else {
+                // Duplicate found, skip this metric
+                duplicates_removed += 1;
+            }
+        }
+
+        if duplicates_removed > 0 {
+            info!(
+                metric_type = "audio_exposure",
+                original_count = seen_keys.len() + duplicates_removed,
+                deduplicated_count = deduplicated.len(),
+                duplicates_removed = duplicates_removed,
+                "Audio exposure metrics deduplication completed"
+            );
+        }
+
+        deduplicated
     }
 
     /// STUB: Deduplicate safety event metrics - TODO: Implement proper deduplication

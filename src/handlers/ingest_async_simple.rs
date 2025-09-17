@@ -196,6 +196,9 @@ pub async fn ingest_async_optimized_handler(
             // Reproductive Health Batch Processing (Privacy-Optimized for Large Batches)
             menstrual_chunk_size: 6500, // 8 params: optimized for high-frequency tracking
             fertility_chunk_size: 4300, // 12 params: privacy-optimized chunks
+            // Environmental and Audio Exposure Batch Processing
+            environmental_chunk_size: 3700, // 14 params: optimized for environmental data
+            audio_exposure_chunk_size: 7000, // 7 params: optimized for audio exposure
             enable_progress_tracking: false, // Disable for speed
             enable_intra_batch_deduplication: true,
             enable_dual_write_activity_metrics: false, // Disable for async endpoint to prioritize speed
