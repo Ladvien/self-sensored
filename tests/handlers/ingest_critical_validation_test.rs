@@ -563,4 +563,282 @@ mod integration_tests {
 
         cleanup_test_data(&pool, user_id).await;
     }
+
+    /// Test duplicate payload detection for STORY-EMERGENCY-002
+    #[actix_web::test]
+    async fn test_duplicate_payload_rejection() {
+        let pool = setup_test_db().await;
+        let (user_id, api_key) = setup_test_auth(&pool).await;
+
+        // Create a valid payload with a heart rate metric
+        let test_payload = json!({
+            "data": {
+                "metrics": [{
+                    "type": "HeartRate",
+                    "recorded_at": "2023-12-01T12:00:00Z",
+                    "heart_rate": 75,
+                    "resting_heart_rate": 65,
+                    "heart_rate_variability": 25.5,
+                    "context": "resting",
+                    "source_device": "Apple Watch"
+                }],
+                "workouts": []
+            }
+        });
+
+        // Create test app
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .route("/v1/ingest", web::post().to(ingest_handler))
+        ).await;
+
+        // First submission - should succeed
+        let req1 = test::TestRequest::post()
+            .uri("/v1/ingest")
+            .insert_header(("Authorization", format!("Bearer {}", api_key)))
+            .set_json(&test_payload)
+            .to_request();
+
+        let resp1 = test::call_service(&app, req1).await;
+
+        // First submission should be successful
+        assert_eq!(resp1.status(), StatusCode::OK);
+        let body1: ApiResponse<IngestResponse> = test::read_body_json(resp1).await;
+        assert!(body1.success);
+        assert!(body1.data.is_some());
+
+        let first_response = body1.data.unwrap();
+        assert!(first_response.raw_ingestion_id.is_some());
+        let first_raw_id = first_response.raw_ingestion_id.unwrap();
+
+        // Second submission with identical payload - should be rejected as duplicate
+        let req2 = test::TestRequest::post()
+            .uri("/v1/ingest")
+            .insert_header(("Authorization", format!("Bearer {}", api_key)))
+            .set_json(&test_payload)
+            .to_request();
+
+        let resp2 = test::call_service(&app, req2).await;
+
+        // Second submission should be rejected with 400 Bad Request
+        assert_eq!(resp2.status(), StatusCode::BAD_REQUEST);
+
+        let body2: ApiResponse<()> = test::read_body_json(resp2).await;
+        assert!(!body2.success);
+        assert!(body2.error.is_some());
+
+        let error_message = body2.error.unwrap();
+        assert!(error_message.contains("Duplicate payload detected"));
+        assert!(error_message.contains("already processed"));
+        assert!(error_message.contains(&first_raw_id.to_string()));
+        assert!(error_message.contains("prevent client retry loops"));
+
+        cleanup_test_data(&pool, user_id).await;
+    }
+
+    /// Test that different payloads from same user are not considered duplicates
+    #[actix_web::test]
+    async fn test_different_payloads_not_duplicates() {
+        let pool = setup_test_db().await;
+        let (user_id, api_key) = setup_test_auth(&pool).await;
+
+        // Create first payload
+        let payload1 = json!({
+            "data": {
+                "metrics": [{
+                    "type": "HeartRate",
+                    "recorded_at": "2023-12-01T12:00:00Z",
+                    "heart_rate": 75,
+                    "resting_heart_rate": 65,
+                    "heart_rate_variability": 25.5,
+                    "context": "resting",
+                    "source_device": "Apple Watch"
+                }],
+                "workouts": []
+            }
+        });
+
+        // Create second payload with different heart rate value
+        let payload2 = json!({
+            "data": {
+                "metrics": [{
+                    "type": "HeartRate",
+                    "recorded_at": "2023-12-01T12:00:00Z",
+                    "heart_rate": 85, // Different value
+                    "resting_heart_rate": 65,
+                    "heart_rate_variability": 25.5,
+                    "context": "resting",
+                    "source_device": "Apple Watch"
+                }],
+                "workouts": []
+            }
+        });
+
+        // Create test app
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .route("/v1/ingest", web::post().to(ingest_handler))
+        ).await;
+
+        // Submit first payload
+        let req1 = test::TestRequest::post()
+            .uri("/v1/ingest")
+            .insert_header(("Authorization", format!("Bearer {}", api_key)))
+            .set_json(&payload1)
+            .to_request();
+
+        let resp1 = test::call_service(&app, req1).await;
+        assert_eq!(resp1.status(), StatusCode::OK);
+
+        // Submit second payload (different) - should succeed
+        let req2 = test::TestRequest::post()
+            .uri("/v1/ingest")
+            .insert_header(("Authorization", format!("Bearer {}", api_key)))
+            .set_json(&payload2)
+            .to_request();
+
+        let resp2 = test::call_service(&app, req2).await;
+        assert_eq!(resp2.status(), StatusCode::OK);
+
+        let body2: ApiResponse<IngestResponse> = test::read_body_json(resp2).await;
+        assert!(body2.success);
+
+        cleanup_test_data(&pool, user_id).await;
+    }
+
+    /// Test that duplicate detection works for empty payloads too
+    #[actix_web::test]
+    async fn test_duplicate_empty_payload_rejection() {
+        let pool = setup_test_db().await;
+        let (user_id, api_key) = setup_test_auth(&pool).await;
+
+        // Create empty payload
+        let empty_payload = json!({
+            "data": {
+                "metrics": [],
+                "workouts": []
+            }
+        });
+
+        // Create test app
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .route("/v1/ingest", web::post().to(ingest_handler))
+        ).await;
+
+        // First submission of empty payload - should be rejected for being empty
+        let req1 = test::TestRequest::post()
+            .uri("/v1/ingest")
+            .insert_header(("Authorization", format!("Bearer {}", api_key)))
+            .set_json(&empty_payload)
+            .to_request();
+
+        let resp1 = test::call_service(&app, req1).await;
+        assert_eq!(resp1.status(), StatusCode::BAD_REQUEST);
+
+        let body1: ApiResponse<()> = test::read_body_json(resp1).await;
+        assert!(!body1.success);
+        let error1 = body1.error.unwrap();
+        assert!(error1.contains("Empty payload"));
+
+        // Second submission of same empty payload - should still be rejected for being empty
+        // (Empty payloads are rejected before duplicate check)
+        let req2 = test::TestRequest::post()
+            .uri("/v1/ingest")
+            .insert_header(("Authorization", format!("Bearer {}", api_key)))
+            .set_json(&empty_payload)
+            .to_request();
+
+        let resp2 = test::call_service(&app, req2).await;
+        assert_eq!(resp2.status(), StatusCode::BAD_REQUEST);
+
+        let body2: ApiResponse<()> = test::read_body_json(resp2).await;
+        assert!(!body2.success);
+        let error2 = body2.error.unwrap();
+        assert!(error2.contains("Empty payload"));
+
+        cleanup_test_data(&pool, user_id).await;
+    }
+
+    /// Test that duplicate detection is user-specific (different users can submit same payload)
+    #[actix_web::test]
+    async fn test_duplicate_detection_user_specific() {
+        let pool = setup_test_db().await;
+        let (user_id1, api_key1) = setup_test_auth(&pool).await;
+
+        // Create second user
+        let user_id2 = Uuid::new_v4();
+        let api_key_id2 = Uuid::new_v4();
+        let api_key2 = "test_key_user2";
+
+        // Insert second user and API key
+        sqlx::query!("INSERT INTO users (id, email) VALUES ($1, $2)", user_id2, "test2@example.com")
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        sqlx::query!(
+            "INSERT INTO api_keys (id, user_id, name, key_hash) VALUES ($1, $2, $3, $4)",
+            api_key_id2,
+            user_id2,
+            "Test API Key 2",
+            "dummy_hash_2"
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Same payload for both users
+        let test_payload = json!({
+            "data": {
+                "metrics": [{
+                    "type": "HeartRate",
+                    "recorded_at": "2023-12-01T12:00:00Z",
+                    "heart_rate": 75,
+                    "resting_heart_rate": 65,
+                    "heart_rate_variability": 25.5,
+                    "context": "resting",
+                    "source_device": "Apple Watch"
+                }],
+                "workouts": []
+            }
+        });
+
+        // Create test app
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(pool.clone()))
+                .route("/v1/ingest", web::post().to(ingest_handler))
+        ).await;
+
+        // User 1 submits payload
+        let req1 = test::TestRequest::post()
+            .uri("/v1/ingest")
+            .insert_header(("Authorization", format!("Bearer {}", api_key1)))
+            .set_json(&test_payload)
+            .to_request();
+
+        let resp1 = test::call_service(&app, req1).await;
+        assert_eq!(resp1.status(), StatusCode::OK);
+
+        // User 2 submits same payload - should succeed (different user)
+        let req2 = test::TestRequest::post()
+            .uri("/v1/ingest")
+            .insert_header(("Authorization", format!("Bearer {}", api_key2)))
+            .set_json(&test_payload)
+            .to_request();
+
+        let resp2 = test::call_service(&app, req2).await;
+        assert_eq!(resp2.status(), StatusCode::OK);
+
+        let body2: ApiResponse<IngestResponse> = test::read_body_json(resp2).await;
+        assert!(body2.success);
+
+        // Cleanup both users
+        cleanup_test_data(&pool, user_id1).await;
+        cleanup_test_data(&pool, user_id2).await;
+    }
 }
