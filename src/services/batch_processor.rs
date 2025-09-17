@@ -51,8 +51,20 @@ pub struct DeduplicationStats {
     pub temperature_duplicates: usize,
     pub respiratory_duplicates: usize,
     pub blood_glucose_duplicates: usize,
+    pub metabolic_duplicates: usize,
     pub nutrition_duplicates: usize,
     pub workout_duplicates: usize,
+
+    // Environmental & Safety Deduplication Stats
+    pub environmental_duplicates: usize,
+    pub audio_exposure_duplicates: usize,
+    pub safety_event_duplicates: usize,
+
+    // Mental Health & Wellness Deduplication Stats
+    pub mindfulness_duplicates: usize,
+    pub mental_health_duplicates: usize,
+    pub symptom_duplicates: usize,
+    pub hygiene_duplicates: usize,
 
     // Reproductive Health Deduplication Stats (HIPAA-Compliant)
     pub menstrual_duplicates: usize,
@@ -149,6 +161,66 @@ struct FertilityKey {
     recorded_at_millis: i64,
     // Note: Not including sexual_activity in key for enhanced privacy protection
     // Deduplication based on timestamp only for sensitive data
+}
+
+/// Unique key for metabolic metrics (user_id, recorded_at)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct MetabolicKey {
+    user_id: Uuid,
+    recorded_at_millis: i64,
+}
+
+/// Unique key for environmental metrics (user_id, recorded_at)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct EnvironmentalKey {
+    user_id: Uuid,
+    recorded_at_millis: i64,
+}
+
+/// Unique key for audio exposure metrics (user_id, recorded_at)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct AudioExposureKey {
+    user_id: Uuid,
+    recorded_at_millis: i64,
+}
+
+/// Unique key for safety event metrics (user_id, recorded_at, event_type)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct SafetyEventKey {
+    user_id: Uuid,
+    recorded_at_millis: i64,
+    event_type: String,
+}
+
+/// Unique key for mindfulness metrics (user_id, session_start, session_end)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct MindfulnessKey {
+    user_id: Uuid,
+    session_start_millis: i64,
+    session_end_millis: i64,
+}
+
+/// Unique key for mental health metrics (user_id, recorded_at)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct MentalHealthKey {
+    user_id: Uuid,
+    recorded_at_millis: i64,
+}
+
+/// Unique key for symptom metrics (user_id, recorded_at, symptom_type)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct SymptomKey {
+    user_id: Uuid,
+    recorded_at_millis: i64,
+    symptom_type: String,
+}
+
+/// Unique key for hygiene metrics (user_id, recorded_at, event_type)
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct HygieneKey {
+    user_id: Uuid,
+    recorded_at_millis: i64,
+    event_type: String,
 }
 
 /// Progress tracking for chunked operations
@@ -813,12 +885,127 @@ impl BatchProcessor {
             result.retry_attempts += retries;
         }
 
+        // Process metabolic metrics
+        if !grouped.metabolic_metrics.is_empty() {
+            let metabolic_metrics = std::mem::take(&mut grouped.metabolic_metrics);
+            let (processed, failed, errors, retries) = Self::process_with_retry(
+                "Metabolic",
+                || self.insert_metabolic_metrics(user_id, metabolic_metrics.clone()),
+                &self.config,
+            )
+            .await;
+            result.processed_count += processed;
+            result.failed_count += failed;
+            result.errors.extend(errors);
+            result.retry_attempts += retries;
+        }
+
         // Process nutrition metrics
         if !grouped.nutrition_metrics.is_empty() {
             let nutrition_metrics = std::mem::take(&mut grouped.nutrition_metrics);
             let (processed, failed, errors, retries) = Self::process_with_retry(
                 "Nutrition",
                 || self.insert_nutrition_metrics(user_id, nutrition_metrics.clone()),
+                &self.config,
+            )
+            .await;
+            result.processed_count += processed;
+            result.failed_count += failed;
+            result.errors.extend(errors);
+            result.retry_attempts += retries;
+        }
+
+        // Process environmental & safety metrics
+        if !grouped.environmental_metrics.is_empty() {
+            let environmental_metrics = std::mem::take(&mut grouped.environmental_metrics);
+            let (processed, failed, errors, retries) = Self::process_with_retry(
+                "Environmental",
+                || self.insert_environmental_metrics(user_id, environmental_metrics.clone()),
+                &self.config,
+            )
+            .await;
+            result.processed_count += processed;
+            result.failed_count += failed;
+            result.errors.extend(errors);
+            result.retry_attempts += retries;
+        }
+
+        if !grouped.audio_exposure_metrics.is_empty() {
+            let audio_exposure_metrics = std::mem::take(&mut grouped.audio_exposure_metrics);
+            let (processed, failed, errors, retries) = Self::process_with_retry(
+                "AudioExposure",
+                || self.insert_audio_exposure_metrics(user_id, audio_exposure_metrics.clone()),
+                &self.config,
+            )
+            .await;
+            result.processed_count += processed;
+            result.failed_count += failed;
+            result.errors.extend(errors);
+            result.retry_attempts += retries;
+        }
+
+        if !grouped.safety_event_metrics.is_empty() {
+            let safety_event_metrics = std::mem::take(&mut grouped.safety_event_metrics);
+            let (processed, failed, errors, retries) = Self::process_with_retry(
+                "SafetyEvent",
+                || self.insert_safety_event_metrics(user_id, safety_event_metrics.clone()),
+                &self.config,
+            )
+            .await;
+            result.processed_count += processed;
+            result.failed_count += failed;
+            result.errors.extend(errors);
+            result.retry_attempts += retries;
+        }
+
+        // Process mental health & wellness metrics
+        if !grouped.mindfulness_metrics.is_empty() {
+            let mindfulness_metrics = std::mem::take(&mut grouped.mindfulness_metrics);
+            let (processed, failed, errors, retries) = Self::process_with_retry(
+                "Mindfulness",
+                || self.insert_mindfulness_metrics(user_id, mindfulness_metrics.clone()),
+                &self.config,
+            )
+            .await;
+            result.processed_count += processed;
+            result.failed_count += failed;
+            result.errors.extend(errors);
+            result.retry_attempts += retries;
+        }
+
+        if !grouped.mental_health_metrics.is_empty() {
+            let mental_health_metrics = std::mem::take(&mut grouped.mental_health_metrics);
+            let (processed, failed, errors, retries) = Self::process_with_retry(
+                "MentalHealth",
+                || self.insert_mental_health_metrics(user_id, mental_health_metrics.clone()),
+                &self.config,
+            )
+            .await;
+            result.processed_count += processed;
+            result.failed_count += failed;
+            result.errors.extend(errors);
+            result.retry_attempts += retries;
+        }
+
+        if !grouped.symptom_metrics.is_empty() {
+            let symptom_metrics = std::mem::take(&mut grouped.symptom_metrics);
+            let (processed, failed, errors, retries) = Self::process_with_retry(
+                "Symptom",
+                || self.insert_symptom_metrics(user_id, symptom_metrics.clone()),
+                &self.config,
+            )
+            .await;
+            result.processed_count += processed;
+            result.failed_count += failed;
+            result.errors.extend(errors);
+            result.retry_attempts += retries;
+        }
+
+        if !grouped.hygiene_metrics.is_empty() {
+            let hygiene_metrics = std::mem::take(&mut grouped.hygiene_metrics);
+            let (processed, failed, errors, retries) = Self::process_with_retry(
+                "Hygiene",
+                || self.insert_hygiene_metrics(user_id, hygiene_metrics.clone()),
                 &self.config,
             )
             .await;
@@ -1026,21 +1213,34 @@ impl BatchProcessor {
                 HealthMetric::Activity(activity) => grouped.activities.push(activity),
                 HealthMetric::BodyMeasurement(body) => grouped.body_measurements.push(body),
                 HealthMetric::Temperature(temp) => grouped.temperature_metrics.push(temp),
+                HealthMetric::Respiratory(respiratory) => {
+                    grouped.respiratory_metrics.push(respiratory)
+                }
                 HealthMetric::BloodGlucose(glucose) => grouped.blood_glucose.push(glucose),
+                HealthMetric::Metabolic(metabolic) => grouped.metabolic_metrics.push(metabolic),
                 HealthMetric::Nutrition(nutrition) => grouped.nutrition_metrics.push(nutrition),
                 HealthMetric::Workout(workout) => grouped.workouts.push(workout),
+
+                // Environmental & Safety Metrics
+                HealthMetric::Environmental(environmental) => {
+                    grouped.environmental_metrics.push(environmental)
+                }
+                HealthMetric::AudioExposure(audio) => grouped.audio_exposure_metrics.push(audio),
+                HealthMetric::SafetyEvent(safety) => grouped.safety_event_metrics.push(safety),
+
+                // Mental Health & Wellness Metrics
+                HealthMetric::Mindfulness(mindfulness) => {
+                    grouped.mindfulness_metrics.push(mindfulness)
+                }
+                HealthMetric::MentalHealth(mental_health) => {
+                    grouped.mental_health_metrics.push(mental_health)
+                }
+                HealthMetric::Symptom(symptom) => grouped.symptom_metrics.push(symptom),
+                HealthMetric::Hygiene(hygiene) => grouped.hygiene_metrics.push(hygiene),
 
                 // Reproductive Health Metrics (HIPAA-Compliant Privacy-First Processing)
                 HealthMetric::Menstrual(menstrual) => grouped.menstrual_metrics.push(menstrual),
                 HealthMetric::Fertility(fertility) => grouped.fertility_metrics.push(fertility),
-
-                _ => {
-                    // Handle other metric types not yet supported
-                    warn!(
-                        "Metric type {} not yet supported in batch processing",
-                        metric.metric_type()
-                    );
-                }
             }
         }
 
@@ -1066,8 +1266,20 @@ impl BatchProcessor {
                     temperature_duplicates: 0,
                     respiratory_duplicates: 0,
                     blood_glucose_duplicates: 0,
+                    metabolic_duplicates: 0,
                     nutrition_duplicates: 0,
                     workout_duplicates: 0,
+
+                    // Environmental & Safety Deduplication Stats
+                    environmental_duplicates: 0,
+                    audio_exposure_duplicates: 0,
+                    safety_event_duplicates: 0,
+
+                    // Mental Health & Wellness Deduplication Stats
+                    mindfulness_duplicates: 0,
+                    mental_health_duplicates: 0,
+                    symptom_duplicates: 0,
+                    hygiene_duplicates: 0,
 
                     // Reproductive Health Deduplication Stats (HIPAA-Compliant)
                     menstrual_duplicates: 0,
@@ -1089,8 +1301,20 @@ impl BatchProcessor {
             temperature_duplicates: 0,
             respiratory_duplicates: 0,
             blood_glucose_duplicates: 0,
+            metabolic_duplicates: 0,
             nutrition_duplicates: 0,
             workout_duplicates: 0,
+
+            // Environmental & Safety Deduplication Stats
+            environmental_duplicates: 0,
+            audio_exposure_duplicates: 0,
+            safety_event_duplicates: 0,
+
+            // Mental Health & Wellness Deduplication Stats
+            mindfulness_duplicates: 0,
+            mental_health_duplicates: 0,
+            symptom_duplicates: 0,
+            hygiene_duplicates: 0,
 
             // Reproductive Health Deduplication Stats (HIPAA-Compliant)
             menstrual_duplicates: 0,
@@ -1147,10 +1371,50 @@ impl BatchProcessor {
         grouped.blood_glucose = self.deduplicate_blood_glucose(user_id, grouped.blood_glucose);
         stats.blood_glucose_duplicates = original_glucose_count - grouped.blood_glucose.len();
 
+        // Deduplicate metabolic metrics
+        let original_metabolic_count = grouped.metabolic_metrics.len();
+        grouped.metabolic_metrics = self.deduplicate_metabolic_metrics(user_id, grouped.metabolic_metrics);
+        stats.metabolic_duplicates = original_metabolic_count - grouped.metabolic_metrics.len();
+
+        // Deduplicate nutrition metrics
+        let original_nutrition_count = grouped.nutrition_metrics.len();
+        grouped.nutrition_metrics = self.deduplicate_nutrition_metrics(user_id, grouped.nutrition_metrics);
+        stats.nutrition_duplicates = original_nutrition_count - grouped.nutrition_metrics.len();
+
         // Deduplicate workout metrics
         let original_workout_count = grouped.workouts.len();
         grouped.workouts = self.deduplicate_workouts(user_id, grouped.workouts);
         stats.workout_duplicates = original_workout_count - grouped.workouts.len();
+
+        // Deduplicate environmental & safety metrics
+        let original_environmental_count = grouped.environmental_metrics.len();
+        grouped.environmental_metrics = self.deduplicate_environmental_metrics(user_id, grouped.environmental_metrics);
+        stats.environmental_duplicates = original_environmental_count - grouped.environmental_metrics.len();
+
+        let original_audio_exposure_count = grouped.audio_exposure_metrics.len();
+        grouped.audio_exposure_metrics = self.deduplicate_audio_exposure_metrics(user_id, grouped.audio_exposure_metrics);
+        stats.audio_exposure_duplicates = original_audio_exposure_count - grouped.audio_exposure_metrics.len();
+
+        let original_safety_event_count = grouped.safety_event_metrics.len();
+        grouped.safety_event_metrics = self.deduplicate_safety_event_metrics(user_id, grouped.safety_event_metrics);
+        stats.safety_event_duplicates = original_safety_event_count - grouped.safety_event_metrics.len();
+
+        // Deduplicate mental health & wellness metrics
+        let original_mindfulness_count = grouped.mindfulness_metrics.len();
+        grouped.mindfulness_metrics = self.deduplicate_mindfulness_metrics(user_id, grouped.mindfulness_metrics);
+        stats.mindfulness_duplicates = original_mindfulness_count - grouped.mindfulness_metrics.len();
+
+        let original_mental_health_count = grouped.mental_health_metrics.len();
+        grouped.mental_health_metrics = self.deduplicate_mental_health_metrics(user_id, grouped.mental_health_metrics);
+        stats.mental_health_duplicates = original_mental_health_count - grouped.mental_health_metrics.len();
+
+        let original_symptom_count = grouped.symptom_metrics.len();
+        grouped.symptom_metrics = self.deduplicate_symptom_metrics(user_id, grouped.symptom_metrics);
+        stats.symptom_duplicates = original_symptom_count - grouped.symptom_metrics.len();
+
+        let original_hygiene_count = grouped.hygiene_metrics.len();
+        grouped.hygiene_metrics = self.deduplicate_hygiene_metrics(user_id, grouped.hygiene_metrics);
+        stats.hygiene_duplicates = original_hygiene_count - grouped.hygiene_metrics.len();
 
         // Deduplicate reproductive health metrics (HIPAA-Compliant Privacy-First Processing)
         let original_menstrual_count = grouped.menstrual_metrics.len();
@@ -1171,7 +1435,16 @@ impl BatchProcessor {
             + stats.temperature_duplicates
             + stats.respiratory_duplicates
             + stats.blood_glucose_duplicates
+            + stats.metabolic_duplicates
+            + stats.nutrition_duplicates
             + stats.workout_duplicates
+            + stats.environmental_duplicates
+            + stats.audio_exposure_duplicates
+            + stats.safety_event_duplicates
+            + stats.mindfulness_duplicates
+            + stats.mental_health_duplicates
+            + stats.symptom_duplicates
+            + stats.hygiene_duplicates
             + stats.menstrual_duplicates
             + stats.fertility_duplicates;
 
@@ -2936,8 +3209,20 @@ impl BatchProcessor {
                 temperature_duplicates: duplicates_removed,
                 respiratory_duplicates: 0,
                 blood_glucose_duplicates: 0,
+                metabolic_duplicates: 0,
                 nutrition_duplicates: 0,
                 workout_duplicates: 0,
+
+                // Environmental & Safety Deduplication Stats
+                environmental_duplicates: 0,
+                audio_exposure_duplicates: 0,
+                safety_event_duplicates: 0,
+
+                // Mental Health & Wellness Deduplication Stats
+                mindfulness_duplicates: 0,
+                mental_health_duplicates: 0,
+                symptom_duplicates: 0,
+                hygiene_duplicates: 0,
 
                 // Reproductive Health Deduplication Stats (HIPAA-Compliant)
                 menstrual_duplicates: 0,
@@ -3012,6 +3297,18 @@ impl BatchProcessor {
                 nutrition_duplicates: 0,
                 workout_duplicates: 0,
 
+                // Environmental & Safety Deduplication Stats
+                metabolic_duplicates: 0,
+                environmental_duplicates: 0,
+                audio_exposure_duplicates: 0,
+                safety_event_duplicates: 0,
+
+                // Mental Health & Wellness Deduplication Stats
+                mindfulness_duplicates: 0,
+                mental_health_duplicates: 0,
+                symptom_duplicates: 0,
+                hygiene_duplicates: 0,
+
                 // Reproductive Health Deduplication Stats (HIPAA-Compliant)
                 menstrual_duplicates: 0,
                 fertility_duplicates: 0,
@@ -3026,7 +3323,7 @@ impl BatchProcessor {
     /// This is needed for the activity handler's batch processing
     pub async fn process_activity_metrics(
         &self,
-        user_id: uuid::Uuid,
+user_id: uuid::Uuid,
         metrics: Vec<crate::models::ActivityMetric>,
     ) -> Result<BatchProcessingResult, sqlx::Error> {
         if metrics.is_empty() {
@@ -3075,6 +3372,14 @@ impl BatchProcessor {
                 blood_glucose_duplicates: 0,
                 nutrition_duplicates: 0,
                 workout_duplicates: 0,
+                metabolic_duplicates: 0,
+                environmental_duplicates: 0,
+                audio_exposure_duplicates: 0,
+                safety_event_duplicates: 0,
+                mindfulness_duplicates: 0,
+                mental_health_duplicates: 0,
+                symptom_duplicates: 0,
+                hygiene_duplicates: 0,
                 menstrual_duplicates: 0,
                 fertility_duplicates: 0,
                 total_duplicates: duplicates_removed,
@@ -3086,7 +3391,7 @@ impl BatchProcessor {
     /// Process hygiene events in batches with comprehensive validation and deduplication
     pub async fn process_hygiene_events(
         &self,
-        user_id: uuid::Uuid,
+user_id: uuid::Uuid,
         metrics: Vec<crate::models::health_metrics::HygieneMetric>,
     ) -> Result<BatchProcessingResult, sqlx::Error> {
         if metrics.is_empty() {
@@ -3135,6 +3440,14 @@ impl BatchProcessor {
                 blood_glucose_duplicates: 0,
                 nutrition_duplicates: 0,
                 workout_duplicates: 0,
+                metabolic_duplicates: 0,
+                environmental_duplicates: 0,
+                audio_exposure_duplicates: 0,
+                safety_event_duplicates: 0,
+                mindfulness_duplicates: 0,
+                mental_health_duplicates: 0,
+                symptom_duplicates: 0,
+                hygiene_duplicates: 0,
                 menstrual_duplicates: 0,
                 fertility_duplicates: 0,
                 total_duplicates: duplicates_removed,
@@ -3146,7 +3459,7 @@ impl BatchProcessor {
     /// Deduplicate hygiene events based on user_id, recorded_at, and event_type
     fn deduplicate_hygiene_events(
         &self,
-        user_id: uuid::Uuid,
+user_id: uuid::Uuid,
         metrics: Vec<crate::models::health_metrics::HygieneMetric>,
     ) -> Vec<crate::models::health_metrics::HygieneMetric> {
         // Always enable deduplication for hygiene events
@@ -3184,7 +3497,7 @@ impl BatchProcessor {
     /// Insert hygiene events in chunks with ON CONFLICT handling
     async fn insert_hygiene_events_chunked(
         pool: &sqlx::PgPool,
-        user_id: uuid::Uuid,
+user_id: uuid::Uuid,
         metrics: Vec<crate::models::health_metrics::HygieneMetric>,
         chunk_size: usize,
     ) -> Result<usize, sqlx::Error> {
@@ -3284,7 +3597,7 @@ impl BatchProcessor {
     /// Implements cycle-aware deduplication and medical-grade validation for women's health tracking
     pub async fn process_menstrual_metrics(
         &self,
-        user_id: uuid::Uuid,
+user_id: uuid::Uuid,
         metrics: Vec<crate::models::MenstrualMetric>,
     ) -> Result<BatchProcessingResult, sqlx::Error> {
         if metrics.is_empty() {
@@ -3344,6 +3657,14 @@ impl BatchProcessor {
                 blood_glucose_duplicates: 0,
                 nutrition_duplicates: 0,
                 workout_duplicates: 0,
+                metabolic_duplicates: 0,
+                environmental_duplicates: 0,
+                audio_exposure_duplicates: 0,
+                safety_event_duplicates: 0,
+                mindfulness_duplicates: 0,
+                mental_health_duplicates: 0,
+                symptom_duplicates: 0,
+                hygiene_duplicates: 0,
                 menstrual_duplicates: duplicates_removed,
                 fertility_duplicates: 0,
                 total_duplicates: duplicates_removed,
@@ -3356,7 +3677,7 @@ impl BatchProcessor {
     /// Implements privacy-first deduplication and encrypted sensitive data handling
     pub async fn process_fertility_metrics(
         &self,
-        user_id: uuid::Uuid,
+user_id: uuid::Uuid,
         metrics: Vec<crate::models::FertilityMetric>,
     ) -> Result<BatchProcessingResult, sqlx::Error> {
         if metrics.is_empty() {
@@ -3417,12 +3738,241 @@ impl BatchProcessor {
                 blood_glucose_duplicates: 0,
                 nutrition_duplicates: 0,
                 workout_duplicates: 0,
+                metabolic_duplicates: 0,
+                environmental_duplicates: 0,
+                audio_exposure_duplicates: 0,
+                safety_event_duplicates: 0,
+                mindfulness_duplicates: 0,
+                mental_health_duplicates: 0,
+                symptom_duplicates: 0,
+                hygiene_duplicates: 0,
                 menstrual_duplicates: 0,
                 fertility_duplicates: duplicates_removed,
                 total_duplicates: duplicates_removed,
                 deduplication_time_ms: 0,
             }),
         })
+    }
+
+    // ============================================================================
+    // STUB METHODS FOR MISSING METRIC TYPES - CRITICAL DATA LOSS PREVENTION
+    // ============================================================================
+    // TODO: These are temporary stub implementations to prevent data loss.
+    // Full implementations with proper database operations are needed urgently.
+    // See TODO_CRITICAL_METRIC_METHODS.md for implementation details.
+
+    /// STUB: Insert metabolic metrics - TODO: Implement full database operations
+    async fn insert_metabolic_metrics(
+        &self,
+user_id: uuid::Uuid,
+        metrics: Vec<crate::models::MetabolicMetric>,
+    ) -> Result<usize, sqlx::Error> {
+        warn!(
+            user_id = %user_id,
+            count = metrics.len(),
+            "STUB: Metabolic metrics processing not yet implemented - data being lost!"
+        );
+        // TODO: Implement actual database insertion
+        Ok(0) // Return 0 to indicate no processing yet
+    }
+
+    /// STUB: Insert environmental metrics - TODO: Implement full database operations
+    async fn insert_environmental_metrics(
+        &self,
+user_id: uuid::Uuid,
+        metrics: Vec<crate::models::EnvironmentalMetric>,
+    ) -> Result<usize, sqlx::Error> {
+        warn!(
+            user_id = %user_id,
+            count = metrics.len(),
+            "STUB: Environmental metrics processing not yet implemented - data being lost!"
+        );
+        // TODO: Implement actual database insertion
+        Ok(0)
+    }
+
+    /// STUB: Insert audio exposure metrics - TODO: Implement full database operations
+    async fn insert_audio_exposure_metrics(
+        &self,
+user_id: uuid::Uuid,
+        metrics: Vec<crate::models::AudioExposureMetric>,
+    ) -> Result<usize, sqlx::Error> {
+        warn!(
+            user_id = %user_id,
+            count = metrics.len(),
+            "STUB: Audio exposure metrics processing not yet implemented - data being lost!"
+        );
+        // TODO: Implement actual database insertion
+        Ok(0)
+    }
+
+    /// STUB: Insert safety event metrics - TODO: Implement full database operations
+    async fn insert_safety_event_metrics(
+        &self,
+user_id: uuid::Uuid,
+        metrics: Vec<crate::models::SafetyEventMetric>,
+    ) -> Result<usize, sqlx::Error> {
+        warn!(
+            user_id = %user_id,
+            count = metrics.len(),
+            "STUB: Safety event metrics processing not yet implemented - data being lost!"
+        );
+        // TODO: Implement actual database insertion
+        Ok(0)
+    }
+
+    /// STUB: Insert mindfulness metrics - TODO: Implement full database operations
+    async fn insert_mindfulness_metrics(
+        &self,
+user_id: uuid::Uuid,
+        metrics: Vec<crate::models::MindfulnessMetric>,
+    ) -> Result<usize, sqlx::Error> {
+        warn!(
+            user_id = %user_id,
+            count = metrics.len(),
+            "STUB: Mindfulness metrics processing not yet implemented - data being lost!"
+        );
+        // TODO: Implement actual database insertion
+        Ok(0)
+    }
+
+    /// STUB: Insert mental health metrics - TODO: Implement full database operations
+    async fn insert_mental_health_metrics(
+        &self,
+user_id: uuid::Uuid,
+        metrics: Vec<crate::models::MentalHealthMetric>,
+    ) -> Result<usize, sqlx::Error> {
+        warn!(
+            user_id = %user_id,
+            count = metrics.len(),
+            "STUB: Mental health metrics processing not yet implemented - data being lost!"
+        );
+        // TODO: Implement actual database insertion
+        Ok(0)
+    }
+
+    /// STUB: Insert symptom metrics - TODO: Implement full database operations
+    async fn insert_symptom_metrics(
+        &self,
+user_id: uuid::Uuid,
+        metrics: Vec<crate::models::SymptomMetric>,
+    ) -> Result<usize, sqlx::Error> {
+        warn!(
+            user_id = %user_id,
+            count = metrics.len(),
+            "STUB: Symptom metrics processing not yet implemented - data being lost!"
+        );
+        // TODO: Implement actual database insertion
+        Ok(0)
+    }
+
+    /// STUB: Insert hygiene metrics - TODO: Implement full database operations
+    async fn insert_hygiene_metrics(
+        &self,
+user_id: uuid::Uuid,
+        metrics: Vec<crate::models::HygieneMetric>,
+    ) -> Result<usize, sqlx::Error> {
+        warn!(
+            user_id = %user_id,
+            count = metrics.len(),
+            "STUB: Hygiene metrics processing not yet implemented - data being lost!"
+        );
+        // TODO: Implement actual database insertion
+        Ok(0)
+    }
+
+    // ============================================================================
+    // STUB DEDUPLICATION METHODS FOR MISSING METRIC TYPES
+    // ============================================================================
+
+    /// STUB: Deduplicate metabolic metrics - TODO: Implement proper deduplication
+    fn deduplicate_metabolic_metrics(
+        &self,
+user_id: uuid::Uuid,
+        metrics: Vec<crate::models::MetabolicMetric>,
+    ) -> Vec<crate::models::MetabolicMetric> {
+        // TODO: Implement proper deduplication using MetabolicKey
+        metrics // Return all for now - no deduplication yet
+    }
+
+    /// STUB: Deduplicate nutrition metrics - TODO: Implement proper deduplication
+    fn deduplicate_nutrition_metrics(
+        &self,
+user_id: uuid::Uuid,
+        metrics: Vec<crate::models::NutritionMetric>,
+    ) -> Vec<crate::models::NutritionMetric> {
+        // TODO: Implement proper deduplication
+        metrics // Return all for now - no deduplication yet
+    }
+
+    /// STUB: Deduplicate environmental metrics - TODO: Implement proper deduplication
+    fn deduplicate_environmental_metrics(
+        &self,
+user_id: uuid::Uuid,
+        metrics: Vec<crate::models::EnvironmentalMetric>,
+    ) -> Vec<crate::models::EnvironmentalMetric> {
+        // TODO: Implement proper deduplication using EnvironmentalKey
+        metrics
+    }
+
+    /// STUB: Deduplicate audio exposure metrics - TODO: Implement proper deduplication
+    fn deduplicate_audio_exposure_metrics(
+        &self,
+user_id: uuid::Uuid,
+        metrics: Vec<crate::models::AudioExposureMetric>,
+    ) -> Vec<crate::models::AudioExposureMetric> {
+        // TODO: Implement proper deduplication using AudioExposureKey
+        metrics
+    }
+
+    /// STUB: Deduplicate safety event metrics - TODO: Implement proper deduplication
+    fn deduplicate_safety_event_metrics(
+        &self,
+user_id: uuid::Uuid,
+        metrics: Vec<crate::models::SafetyEventMetric>,
+    ) -> Vec<crate::models::SafetyEventMetric> {
+        // TODO: Implement proper deduplication using SafetyEventKey
+        metrics
+    }
+
+    /// STUB: Deduplicate mindfulness metrics - TODO: Implement proper deduplication
+    fn deduplicate_mindfulness_metrics(
+        &self,
+user_id: uuid::Uuid,
+        metrics: Vec<crate::models::MindfulnessMetric>,
+    ) -> Vec<crate::models::MindfulnessMetric> {
+        // TODO: Implement proper deduplication using MindfulnessKey
+        metrics
+    }
+
+    /// STUB: Deduplicate mental health metrics - TODO: Implement proper deduplication
+    fn deduplicate_mental_health_metrics(
+        &self,
+user_id: uuid::Uuid,
+        metrics: Vec<crate::models::MentalHealthMetric>,
+    ) -> Vec<crate::models::MentalHealthMetric> {
+        // TODO: Implement proper deduplication using MentalHealthKey
+        metrics
+    }
+
+    /// STUB: Deduplicate symptom metrics - TODO: Implement proper deduplication
+    fn deduplicate_symptom_metrics(
+        &self,
+user_id: uuid::Uuid,
+        metrics: Vec<crate::models::SymptomMetric>,
+    ) -> Vec<crate::models::SymptomMetric> {
+        // TODO: Implement proper deduplication using SymptomKey
+        metrics
+    }
+
+    /// STUB: Deduplicate hygiene metrics - TODO: Implement proper deduplication
+    fn deduplicate_hygiene_metrics(
+        &self,
+user_id: uuid::Uuid,
+        metrics: Vec<crate::models::HygieneMetric>,
+    ) -> Vec<crate::models::HygieneMetric> {
+        // TODO: Implement proper deduplication using HygieneKey
+        metrics
     }
 }
 
@@ -3437,8 +3987,20 @@ struct GroupedMetrics {
     temperature_metrics: Vec<crate::models::TemperatureMetric>,
     respiratory_metrics: Vec<crate::models::RespiratoryMetric>,
     blood_glucose: Vec<crate::models::BloodGlucoseMetric>,
+    metabolic_metrics: Vec<crate::models::MetabolicMetric>,
     nutrition_metrics: Vec<crate::models::NutritionMetric>,
     workouts: Vec<crate::models::WorkoutData>,
+
+    // Environmental & Safety Metrics
+    environmental_metrics: Vec<crate::models::EnvironmentalMetric>,
+    audio_exposure_metrics: Vec<crate::models::AudioExposureMetric>,
+    safety_event_metrics: Vec<crate::models::SafetyEventMetric>,
+
+    // Mental Health & Wellness Metrics
+    mindfulness_metrics: Vec<crate::models::MindfulnessMetric>,
+    mental_health_metrics: Vec<crate::models::MentalHealthMetric>,
+    symptom_metrics: Vec<crate::models::SymptomMetric>,
+    hygiene_metrics: Vec<crate::models::HygieneMetric>,
 
     // Reproductive Health Metrics (HIPAA-Compliant Privacy-First Processing)
     menstrual_metrics: Vec<crate::models::MenstrualMetric>,
