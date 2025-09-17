@@ -1,5 +1,58 @@
 // Simple tests for batch processor without depending on other modules
 #[tokio::test]
+async fn test_postgresql_parameter_limits_validation() {
+    use self_sensored::config::BatchConfig;
+
+    // Test that default configuration is safe
+    let safe_config = BatchConfig::default();
+    assert!(
+        safe_config.validate().is_ok(),
+        "Default configuration should pass validation"
+    );
+
+    // Test critical cases that would cause data loss
+    let dangerous_config = BatchConfig {
+        activity_chunk_size: 7000, // 19 params * 7000 = 133,000 params (way over limit!)
+        temperature_chunk_size: 8000, // 8 params * 8000 = 64,000 params (over limit)
+        sleep_chunk_size: 6000,    // 10 params * 6000 = 60,000 params (over safe limit)
+        ..BatchConfig::default()
+    };
+
+    let validation_result = dangerous_config.validate();
+    assert!(
+        validation_result.is_err(),
+        "Dangerous configuration should fail validation"
+    );
+
+    let error_message = validation_result.unwrap_err();
+    assert!(
+        error_message.contains("activity chunk size 7000"),
+        "Should flag activity chunk size"
+    );
+    assert!(
+        error_message.contains("temperature chunk size 8000"),
+        "Should flag temperature chunk size"
+    );
+    assert!(
+        error_message.contains("SILENT DATA LOSS"),
+        "Should warn about data loss"
+    );
+
+    // Test that fixed configuration passes
+    let fixed_config = BatchConfig {
+        activity_chunk_size: 2700,    // 19 params * 2700 = 51,300 params (safe)
+        temperature_chunk_size: 6500, // 8 params * 6500 = 52,000 params (safe)
+        sleep_chunk_size: 5200,       // 10 params * 5200 = 52,000 params (safe)
+        ..BatchConfig::default()
+    };
+
+    assert!(
+        fixed_config.validate().is_ok(),
+        "Fixed configuration should pass validation"
+    );
+}
+
+#[tokio::test]
 async fn test_batch_processor_compilation() {
     // This test just verifies the batch processor compiles correctly
     // It doesn't run actual database operations
@@ -42,12 +95,13 @@ async fn test_batch_config_custom() {
         enable_parallel_processing: false,
         chunk_size: 2000,
         memory_limit_mb: 1000.0,
-        heart_rate_chunk_size: 8000,
-        blood_pressure_chunk_size: 8000,
-        sleep_chunk_size: 5000,
-        activity_chunk_size: 7000,
+        // Use SAFE chunk sizes to prevent PostgreSQL parameter limit violations
+        heart_rate_chunk_size: 4200, // 10 params: 42,000 total params (safe)
+        blood_pressure_chunk_size: 8000, // 6 params: 48,000 total params (safe)
+        sleep_chunk_size: 5200,      // 10 params: 52,000 total params (safe)
+        activity_chunk_size: 2700,   // 19 params: 51,300 total params (safe)
         body_measurement_chunk_size: 3000,
-        temperature_chunk_size: 8000,
+        temperature_chunk_size: 6500, // 8 params: 52,000 total params (safe)
         respiratory_chunk_size: 7000,
         workout_chunk_size: 5000,
         blood_glucose_chunk_size: 6500,

@@ -64,13 +64,13 @@ impl Default for BatchConfig {
             enable_parallel_processing: true, // Keep parallel processing enabled
             chunk_size: 1000,
             memory_limit_mb: 500.0,
-            // Safe chunk sizes (80% of theoretical max for reliability)
+            // Safe chunk sizes (80% of theoretical max for reliability) - FIXED to prevent PostgreSQL parameter violations
             heart_rate_chunk_size: 4200, // 10 params: 65,535 ÷ 10 × 0.8 ≈ 4,200 (max ~42,000 params) - Updated for expanded cardiovascular metrics
             blood_pressure_chunk_size: 8000, // 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000 (max ~48,000 params)
-            sleep_chunk_size: 6000, // 10 params: 65,535 ÷ 10 × 0.8 ≈ 6,000 (max ~60,000 params)
-            activity_chunk_size: 2700, // 19 params: 65,535 ÷ 19 × 0.8 ≈ 2,700 (max ~51,300 params)
+            sleep_chunk_size: 5200, // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,200 (max ~52,000 params) - FIXED from 6000
+            activity_chunk_size: 2700, // 19 params: 65,535 ÷ 19 × 0.8 ≈ 2,700 (max ~51,300 params) - ALREADY CORRECT
             body_measurement_chunk_size: 3000, // 16 params: 65,535 ÷ 16 × 0.8 ≈ 3,275, using 3,000 for safety (max ~48,000 params)
-            temperature_chunk_size: 8000, // 8 params: 65,535 ÷ 8 × 0.8 ≈ 8,000 (max ~64,000 params) - optimized for high-frequency monitoring
+            temperature_chunk_size: 6500, // 8 params: 65,535 ÷ 8 × 0.8 ≈ 6,500 (max ~52,000 params) - FIXED from 8000
             respiratory_chunk_size: 7000, // 7 params: 65,535 ÷ 7 × 0.8 ≈ 7,000 (max ~49,000 params)
             workout_chunk_size: 5000, // 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000 (max ~50,000 params)
             blood_glucose_chunk_size: 6500, // 8 params: 65,535 ÷ 8 × 0.8 ≈ 6,500 (max ~52,000 params)
@@ -131,7 +131,7 @@ impl BatchConfig {
             sleep_chunk_size: env::var("BATCH_SLEEP_CHUNK_SIZE")
                 .ok()
                 .and_then(|v| v.parse().ok())
-                .unwrap_or(6000),
+                .unwrap_or(5200),
             activity_chunk_size: env::var("BATCH_ACTIVITY_CHUNK_SIZE")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -143,7 +143,7 @@ impl BatchConfig {
             temperature_chunk_size: env::var("BATCH_TEMPERATURE_CHUNK_SIZE")
                 .ok()
                 .and_then(|v| v.parse().ok())
-                .unwrap_or(5000),
+                .unwrap_or(6500),
             respiratory_chunk_size: env::var("BATCH_RESPIRATORY_CHUNK_SIZE")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -197,6 +197,9 @@ impl BatchConfig {
     }
 
     /// Validate chunk sizes against PostgreSQL parameter limits
+    ///
+    /// This validation prevents silent data loss by ensuring all batch operations
+    /// stay under PostgreSQL's 65,535 parameter limit per query.
     pub fn validate(&self) -> Result<(), String> {
         let validations = vec![
             (
@@ -258,13 +261,32 @@ impl BatchConfig {
             ),
         ];
 
+        let mut errors = Vec::new();
+
         for (metric_type, chunk_size, params_per_record) in validations {
             let total_params = chunk_size * params_per_record;
+
+            // Critical error: exceeds safe limit (would cause data loss)
             if total_params > SAFE_PARAM_LIMIT {
-                return Err(format!(
-                    "{metric_type} chunk size {chunk_size} would result in {total_params} parameters, exceeding safe limit of {SAFE_PARAM_LIMIT}"
+                let max_safe_chunk_size = SAFE_PARAM_LIMIT / params_per_record;
+                errors.push(format!(
+                    "CRITICAL: {metric_type} chunk size {chunk_size} * {params_per_record} params = {total_params} parameters, exceeding safe limit of {SAFE_PARAM_LIMIT}. Maximum safe chunk size: {max_safe_chunk_size}. THIS CAUSES SILENT DATA LOSS!"
                 ));
             }
+            // Warning: getting close to the limit
+            else if total_params > (SAFE_PARAM_LIMIT * 90 / 100) {
+                eprintln!(
+                    "WARNING: {metric_type} chunk size {chunk_size} uses {total_params} parameters ({}% of safe limit)",
+                    (total_params * 100) / SAFE_PARAM_LIMIT
+                );
+            }
+        }
+
+        if !errors.is_empty() {
+            return Err(format!(
+                "Batch configuration validation failed:\n{}",
+                errors.join("\n")
+            ));
         }
 
         Ok(())
