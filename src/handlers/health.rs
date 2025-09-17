@@ -1,10 +1,11 @@
 use actix_web::{web, HttpResponse, Result};
 use chrono::Utc;
+use redis::{Client as RedisClient};
 use serde_json::json;
 use sqlx::PgPool;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tracing::info;
+use tracing::{error, info, warn};
 
 /// Health check statistics
 static HEALTH_CHECK_COUNT: AtomicU64 = AtomicU64::new(0);
@@ -67,15 +68,17 @@ pub async fn health_check() -> Result<HttpResponse> {
 }
 
 /// Comprehensive API status endpoint with database connectivity and system diagnostics
-pub async fn api_status(_pool: web::Data<PgPool>) -> Result<HttpResponse> {
+pub async fn api_status(pool: web::Data<PgPool>) -> Result<HttpResponse> {
     let check_start = std::time::Instant::now();
     let timestamp = Utc::now();
 
     info!("Comprehensive API status check initiated");
 
-    // Simplified status check for now - TODO: Add proper database health checks
-    let database_status = "connected";
-    let db_response_time_ms = 10;
+    // Perform actual database health check
+    let (database_status, db_response_time_ms) = check_database_health(&pool).await;
+
+    // Check Redis connectivity if configured
+    let (redis_status, redis_response_time_ms) = check_redis_health().await;
 
     let check_duration = check_start.elapsed();
 
@@ -94,6 +97,15 @@ pub async fn api_status(_pool: web::Data<PgPool>) -> Result<HttpResponse> {
             "status": database_status,
             "response_time_ms": db_response_time_ms
         },
+        "redis": {
+            "status": redis_status,
+            "response_time_ms": redis_response_time_ms
+        },
+        "dependencies": {
+            "database_healthy": database_status == "connected",
+            "redis_healthy": redis_status == "connected" || redis_status == "not_configured",
+            "all_healthy": database_status == "connected" && (redis_status == "connected" || redis_status == "not_configured")
+        },
         "system": {
             "uptime_seconds": SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -102,13 +114,31 @@ pub async fn api_status(_pool: web::Data<PgPool>) -> Result<HttpResponse> {
         },
         "performance": {
             "check_duration_ms": check_duration.as_millis(),
-            "db_response_time_ms": db_response_time_ms
+            "db_response_time_ms": db_response_time_ms,
+            "redis_response_time_ms": redis_response_time_ms
         }
     });
 
-    Ok(HttpResponse::Ok()
+    // Determine overall health status for response
+    let overall_status = if database_status == "connected"
+        && (redis_status == "connected" || redis_status == "not_configured")
+    {
+        "healthy"
+    } else {
+        "unhealthy"
+    };
+
+    let mut status_code = if overall_status == "healthy" {
+        HttpResponse::Ok()
+    } else {
+        HttpResponse::ServiceUnavailable()
+    };
+
+    Ok(status_code
         .insert_header(("Cache-Control", "no-cache, no-store, must-revalidate"))
-        .insert_header(("X-API-Status", database_status))
+        .insert_header(("X-API-Status", overall_status))
+        .insert_header(("X-DB-Status", database_status))
+        .insert_header(("X-Redis-Status", redis_status))
         .insert_header(("X-Response-Time-MS", check_duration.as_millis().to_string()))
         .insert_header(("X-Origin-Server", "self-sensored-api"))
         .insert_header(("Connection", "keep-alive"))
@@ -126,12 +156,119 @@ pub async fn liveness_probe() -> Result<HttpResponse> {
 }
 
 /// Readiness probe endpoint - includes basic connectivity checks
-pub async fn readiness_probe(_pool: web::Data<PgPool>) -> Result<HttpResponse> {
-    Ok(HttpResponse::Ok()
+pub async fn readiness_probe(pool: web::Data<PgPool>) -> Result<HttpResponse> {
+    let check_start = std::time::Instant::now();
+
+    // Perform quick health checks for readiness
+    let (db_status, db_time_ms) = check_database_health(&pool).await;
+    let (redis_status, redis_time_ms) = check_redis_health().await;
+
+    let check_duration = check_start.elapsed();
+
+    // Determine if service is ready
+    let is_ready = db_status == "connected"
+        && (redis_status == "connected" || redis_status == "not_configured");
+    let status = if is_ready { "ready" } else { "not_ready" };
+
+    let response = json!({
+        "status": status,
+        "timestamp": Utc::now().timestamp(),
+        "database": {
+            "status": db_status,
+            "response_time_ms": db_time_ms
+        },
+        "redis": {
+            "status": redis_status,
+            "response_time_ms": redis_time_ms
+        },
+        "ready": is_ready,
+        "check_duration_ms": check_duration.as_millis()
+    });
+
+    let mut status_code = if is_ready {
+        HttpResponse::Ok()
+    } else {
+        HttpResponse::ServiceUnavailable()
+    };
+
+    Ok(status_code
         .insert_header(("Cache-Control", "no-cache"))
-        .json(json!({
-            "status": "ready",
-            "timestamp": Utc::now().timestamp(),
-            "database": "ready"
-        })))
+        .insert_header(("X-Ready-Status", status))
+        .insert_header(("X-DB-Status", db_status))
+        .insert_header(("X-Redis-Status", redis_status))
+        .json(response))
+}
+
+/// Check database connectivity and measure response time
+async fn check_database_health(pool: &PgPool) -> (&'static str, u64) {
+    let start = std::time::Instant::now();
+
+    match sqlx::query!("SELECT 1 as health_check")
+        .fetch_one(pool)
+        .await
+    {
+        Ok(_) => {
+            let duration = start.elapsed();
+            info!("Database health check passed in {}ms", duration.as_millis());
+            ("connected", duration.as_millis() as u64)
+        }
+        Err(e) => {
+            let duration = start.elapsed();
+            error!(
+                "Database health check failed after {}ms: {}",
+                duration.as_millis(),
+                e
+            );
+            DB_CHECK_FAILURES.fetch_add(1, Ordering::Relaxed);
+            ("disconnected", duration.as_millis() as u64)
+        }
+    }
+}
+
+/// Check Redis connectivity and measure response time
+async fn check_redis_health() -> (&'static str, u64) {
+    let redis_url =
+        std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
+
+    // If Redis URL indicates it's disabled, skip the check
+    if redis_url.is_empty() || redis_url == "disabled" {
+        return ("not_configured", 0);
+    }
+
+    let start = std::time::Instant::now();
+
+    match RedisClient::open(redis_url.as_str()) {
+        Ok(client) => match client.get_async_connection().await {
+            Ok(mut conn) => match redis::cmd("PING").query_async::<_, String>(&mut conn).await {
+                Ok(_) => {
+                    let duration = start.elapsed();
+                    info!("Redis health check passed in {}ms", duration.as_millis());
+                    ("connected", duration.as_millis() as u64)
+                }
+                Err(e) => {
+                    let duration = start.elapsed();
+                    warn!("Redis PING failed after {}ms: {}", duration.as_millis(), e);
+                    ("disconnected", duration.as_millis() as u64)
+                }
+            },
+            Err(e) => {
+                let duration = start.elapsed();
+                warn!(
+                    "Redis connection failed after {}ms: {}",
+                    duration.as_millis(),
+                    e
+                );
+                ("disconnected", duration.as_millis() as u64)
+            }
+        },
+        Err(e) => {
+            let duration = start.elapsed();
+            warn!(
+                "Redis client creation failed after {}ms: {}",
+                duration.as_millis(),
+                e
+            );
+            ("disconnected", duration.as_millis() as u64)
+        }
+    }
 }
