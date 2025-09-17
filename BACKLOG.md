@@ -80,24 +80,6 @@ let response = IngestResponse {
 
 ---
 
-### **STORY-EMERGENCY-004: 🚨 CRITICAL - Production Config Parameter Violations**
-**Priority**: P0 - EMERGENCY (ALREADY IDENTIFIED IN STORY-CRITICAL-002)
-**Status**: READY FOR IMPLEMENTATION - Root cause confirmed
-**Files**: Multiple production config files
-
-**CONFIRMED VIOLATIONS**:
-- Activity: 7,000 chunk × 19 params = 133,000 > 65,535 limit (167% violation)
-- Sleep: 6,000 chunk × 10 params = 60,000 > 65,535 limit (14.4% violation)
-- Temperature: 8,000 chunk × 8 params = 64,000 > 65,535 limit (22.1% violation)
-
-**EMERGENCY DEPLOYMENT REQUIRED**:
-- [ ] Fix Activity chunk size: 7,000 → 2,700 in production config
-- [ ] Fix Sleep chunk size: 6,000 → 5,242 in default config
-- [ ] Fix Temperature chunk size: 8,000 → 6,553 in default config
-- [ ] Add parameter validation to prevent future violations
-- [ ] Deploy to production immediately to stop ongoing data loss
-
----
 
 ### **STORY-EMERGENCY-005: ✅ COMPLETED - Missing Environmental/AudioExposure Processing**
 **Priority**: P1 - HIGH (ALREADY IDENTIFIED IN STORY-CRITICAL-001)
