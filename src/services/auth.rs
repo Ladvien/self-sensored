@@ -6,9 +6,12 @@ use argon2::{
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use std::time::Duration;
 use thiserror::Error;
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
+use super::cache::{CacheKey, CacheService};
 use super::rate_limiter::{RateLimitError, RateLimiter};
 
 #[derive(Debug, Error)]
@@ -89,11 +92,35 @@ impl AuthContext {
     }
 }
 
+/// Cached authentication result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CachedAuthResult {
+    user: User,
+    api_key: ApiKey,
+    cached_at: DateTime<Utc>,
+}
+
+/// API key cache entry for fast lookup
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CachedApiKeyLookup {
+    api_key_data: ApiKeyLookupResult,
+    cached_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ApiKeyLookupResult {
+    api_key_info: ApiKey,
+    user_info: User,
+    key_hash: Option<String>, // Only for hashed keys
+}
+
 #[derive(Debug, Clone)]
 pub struct AuthService {
     pool: PgPool,
     argon2: Argon2<'static>,
     rate_limiter: Option<RateLimiter>,
+    cache_service: Option<CacheService>,
+    cache_prefix: String,
 }
 
 impl AuthService {
@@ -102,6 +129,14 @@ impl AuthService {
     }
 
     pub fn new_with_rate_limiter(pool: PgPool, rate_limiter: Option<RateLimiter>) -> Self {
+        Self::new_with_cache(pool, rate_limiter, None)
+    }
+
+    pub fn new_with_cache(
+        pool: PgPool,
+        rate_limiter: Option<RateLimiter>,
+        cache_service: Option<CacheService>,
+    ) -> Self {
         // Configure Argon2 with recommended settings for API key hashing
         let argon2 = Argon2::default();
 
@@ -109,12 +144,116 @@ impl AuthService {
             pool,
             argon2,
             rate_limiter,
+            cache_service,
+            cache_prefix: "health_export".to_string(),
         }
     }
 
     /// Get a reference to the database pool for testing purposes
     pub fn pool(&self) -> &PgPool {
         &self.pool
+    }
+
+    /// Generate cache key for API key authentication
+    fn generate_api_key_cache_key(&self, api_key: &str) -> String {
+        use sha2::{Digest, Sha256};
+        let mut hasher = Sha256::new();
+        hasher.update(api_key.as_bytes());
+        format!("{:x}", hasher.finalize())[..32].to_string()
+    }
+
+    /// Check authentication cache for API key
+    async fn check_auth_cache(&self, api_key: &str) -> Option<AuthContext> {
+        let cache_service = self.cache_service.as_ref()?;
+
+        let cache_key_hash = self.generate_api_key_cache_key(api_key);
+        let cache_key = CacheKey::ApiKeyAuth {
+            api_key_hash: cache_key_hash,
+        };
+
+        match cache_service
+            .get::<CachedAuthResult>(&cache_key, &self.cache_prefix)
+            .await
+        {
+            Some(cached_result) => {
+                // Check if cache entry is still valid (5 minutes)
+                let age = Utc::now() - cached_result.cached_at;
+                if age.num_seconds() < 300 {
+                    debug!("Authentication cache hit for API key");
+
+                    // Log cache hit for metrics
+                    debug!("Authentication cache hit - metrics would be incremented here");
+
+                    Some(AuthContext {
+                        user: cached_result.user,
+                        api_key: cached_result.api_key,
+                    })
+                } else {
+                    debug!("Authentication cache entry expired");
+                    // Clean up expired entry
+                    let _ = cache_service.delete(&cache_key, &self.cache_prefix).await;
+                    None
+                }
+            }
+            None => {
+                debug!("Authentication cache miss for API key");
+                None
+            }
+        }
+    }
+
+    /// Cache successful authentication result
+    async fn cache_auth_result(&self, api_key: &str, auth_context: &AuthContext) {
+        if let Some(ref cache_service) = self.cache_service {
+            let cache_key_hash = self.generate_api_key_cache_key(api_key);
+            let cache_key = CacheKey::ApiKeyAuth {
+                api_key_hash: cache_key_hash,
+            };
+
+            let cached_result = CachedAuthResult {
+                user: auth_context.user.clone(),
+                api_key: auth_context.api_key.clone(),
+                cached_at: Utc::now(),
+            };
+
+            // Cache for 5 minutes as specified in architecture
+            let ttl = Duration::from_secs(300);
+
+            if cache_service
+                .set(&cache_key, &self.cache_prefix, cached_result, Some(ttl))
+                .await
+            {
+                debug!("Cached authentication result for API key");
+            } else {
+                warn!("Failed to cache authentication result");
+            }
+        }
+    }
+
+    /// Invalidate authentication cache for a specific API key
+    async fn invalidate_auth_cache(&self, api_key: &str) {
+        if let Some(ref cache_service) = self.cache_service {
+            let cache_key_hash = self.generate_api_key_cache_key(api_key);
+            let cache_key = CacheKey::ApiKeyAuth {
+                api_key_hash: cache_key_hash,
+            };
+
+            if cache_service.delete(&cache_key, &self.cache_prefix).await {
+                debug!("Invalidated authentication cache for API key");
+            }
+        }
+    }
+
+    /// Invalidate all authentication caches for a user
+    pub async fn invalidate_user_auth_cache(&self, user_id: Uuid) {
+        if let Some(ref cache_service) = self.cache_service {
+            // This is a simplified implementation - in production you might want
+            // to track user->cache key mappings for more efficient invalidation
+            cache_service
+                .invalidate_user_cache(user_id, &self.cache_prefix)
+                .await;
+            info!(user_id = %user_id, "Invalidated user authentication cache");
+        }
     }
 
     /// Generate a new API key with secure random generation
@@ -222,12 +361,50 @@ impl AuthService {
     /// Includes comprehensive audit logging for all authentication attempts
     /// Enforces rate limiting per API key if rate limiter is configured
     /// Includes brute force protection for failed authentication attempts
+    /// Uses Redis caching with 5-minute TTL for performance optimization
     pub async fn authenticate(
         &self,
-        api_key: &str,
+        api_key_str: &str,
         ip_address: Option<std::net::IpAddr>,
         user_agent: Option<&str>,
     ) -> Result<AuthContext, AuthError> {
+        // Check cache first for performance optimization
+        if let Some(cached_auth) = self.check_auth_cache(api_key_str).await {
+            // Still need to check rate limiting even for cached results
+            if let Some(ref rate_limiter) = self.rate_limiter {
+                rate_limiter
+                    .check_rate_limit(cached_auth.api_key.id)
+                    .await?;
+            }
+
+            // Update last_used_at for cached authentications
+            self.update_last_used(cached_auth.api_key.id).await?;
+
+            // Log successful cached authentication
+            self.log_audit_event(
+                Some(cached_auth.user.id),
+                Some(cached_auth.api_key.id),
+                "authentication_success",
+                Some("cached_api_key"),
+                ip_address,
+                user_agent,
+                Some(serde_json::json!({
+                    "cache_hit": true,
+                    "key_name": cached_auth.api_key.name,
+                    "permissions": cached_auth.api_key.permissions
+                })),
+            )
+            .await
+            .ok(); // Don't fail auth on audit log failure
+
+            info!(
+                user_id = %cached_auth.user.id,
+                api_key_id = %cached_auth.api_key.id,
+                "API key authenticated from cache"
+            );
+
+            return Ok(cached_auth);
+        }
         // Apply IP-based rate limiting for authentication attempts to prevent brute force attacks
         if let Some(ref rate_limiter) = self.rate_limiter {
             if let Some(ip) = ip_address {
@@ -237,7 +414,7 @@ impl AuthService {
 
         // Check if the API key is a UUID (Auto Export format)
         // Auto Export sends the API key ID directly as the Bearer token
-        if let Ok(api_key_uuid) = Uuid::parse_str(api_key) {
+        if let Ok(api_key_uuid) = Uuid::parse_str(api_key_str) {
             // Direct UUID lookup for Auto Export compatibility
             let row = sqlx::query!(
                 r#"
@@ -352,12 +529,17 @@ impl AuthService {
                 .await
                 .ok(); // Don't fail auth on audit log failure
 
+                let auth_context = AuthContext { user, api_key };
+
+                // Cache the successful authentication result
+                self.cache_auth_result(api_key_str, &auth_context).await;
+
                 tracing::info!(
-                    user_id = %user.id,
-                    api_key_id = %api_key.id,
+                    user_id = %auth_context.user.id,
+                    api_key_id = %auth_context.api_key.id,
                     "Auto Export API key authenticated successfully"
                 );
-                return Ok(AuthContext { user, api_key });
+                return Ok(auth_context);
             } else {
                 // UUID not found in database - track failed attempt
                 if let Some(ref rate_limiter) = self.rate_limiter {
@@ -372,7 +554,7 @@ impl AuthService {
 
         // If not a UUID, check against hashed keys (for our generated keys)
         // This maintains backward compatibility with hashed API keys
-        if api_key.starts_with("hea_") {
+        if api_key_str.starts_with("hea_") {
             let api_keys = sqlx::query!(
                 r#"
                 SELECT 
@@ -415,7 +597,7 @@ impl AuthService {
                     continue;
                 }
 
-                match self.verify_api_key(api_key, &row.key_hash) {
+                match self.verify_api_key(api_key_str, &row.key_hash) {
                     Ok(true) => {
                         // Check if key is expired
                         if let Some(expires_at) = row.expires_at {
@@ -498,12 +680,17 @@ impl AuthService {
                         .await
                         .ok(); // Don't fail auth on audit log failure
 
+                        let auth_context = AuthContext { user, api_key };
+
+                        // Cache the successful authentication result
+                        self.cache_auth_result(api_key_str, &auth_context).await;
+
                         tracing::info!(
-                            user_id = %user.id,
-                            api_key_id = %api_key.id,
+                            user_id = %auth_context.user.id,
+                            api_key_id = %auth_context.api_key.id,
                             "Hashed API key authenticated successfully"
                         );
-                        return Ok(AuthContext { user, api_key });
+                        return Ok(auth_context);
                     }
                     Ok(false) => {
                         // Wrong password, continue to next key
@@ -528,9 +715,9 @@ impl AuthService {
             user_agent,
             Some(serde_json::json!({
                 "reason": "invalid_api_key",
-                "key_format": if api_key.len() == 36 && Uuid::parse_str(api_key).is_ok() {
+                "key_format": if api_key_str.len() == 36 && Uuid::parse_str(api_key_str).is_ok() {
                     "uuid"
-                } else if api_key.starts_with("hea_") {
+                } else if api_key_str.starts_with("hea_") {
                     "hashed"
                 } else {
                     "unknown"
@@ -551,9 +738,9 @@ impl AuthService {
 
         tracing::warn!(
             "Authentication failed for invalid API key with format: {}",
-            if api_key.len() == 36 && Uuid::parse_str(api_key).is_ok() {
+            if api_key_str.len() == 36 && Uuid::parse_str(api_key_str).is_ok() {
                 "uuid"
-            } else if api_key.starts_with("hea_") {
+            } else if api_key_str.starts_with("hea_") {
                 "hashed"
             } else {
                 "unknown"
@@ -681,7 +868,14 @@ impl AuthService {
         .execute(&self.pool)
         .await?;
 
-        Ok(result.rows_affected() > 0)
+        let was_revoked = result.rows_affected() > 0;
+
+        // Invalidate authentication cache for this user
+        if was_revoked {
+            self.invalidate_user_auth_cache(user_id).await;
+        }
+
+        Ok(was_revoked)
     }
 
     /// Log an audit event (using tracing since audit_log table doesn't exist in schema)
@@ -727,6 +921,20 @@ impl AuthService {
     /// Check if rate limiting is enabled
     pub fn is_rate_limiting_enabled(&self) -> bool {
         self.rate_limiter.is_some()
+    }
+
+    /// Check if authentication caching is enabled
+    pub fn is_caching_enabled(&self) -> bool {
+        self.cache_service.is_some()
+    }
+
+    /// Get cache statistics for authentication
+    pub async fn get_cache_stats(&self) -> Option<super::cache::CacheStats> {
+        if let Some(ref cache_service) = self.cache_service {
+            Some(cache_service.get_stats().await)
+        } else {
+            None
+        }
     }
 
     /// Check if a user has admin permissions

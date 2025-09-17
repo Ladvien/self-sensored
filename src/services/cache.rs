@@ -12,6 +12,16 @@ pub struct CacheService {
     enabled: bool,
 }
 
+impl std::fmt::Debug for CacheService {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CacheService")
+            .field("default_ttl", &self.default_ttl)
+            .field("enabled", &self.enabled)
+            .field("connection_manager", &"<RedisConnectionManager>")
+            .finish()
+    }
+}
+
 /// Cache configuration
 #[derive(Debug, Clone)]
 pub struct CacheConfig {
@@ -37,18 +47,65 @@ impl Default for CacheConfig {
 /// Cache key types for different data categories
 #[derive(Debug, Clone)]
 pub enum CacheKey {
-    HeartRateQuery { user_id: Uuid, hash: String },
-    BloodPressureQuery { user_id: Uuid, hash: String },
-    SleepQuery { user_id: Uuid, hash: String },
-    ActivityQuery { user_id: Uuid, hash: String },
-    WorkoutQuery { user_id: Uuid, hash: String },
-    MindfulnessQuery { user_id: Uuid, hash: String },
-    MentalHealthQuery { user_id: Uuid, hash: String },
-    MindfulnessInsights { user_id: Uuid, period: String },
-    MentalHealthInsights { user_id: Uuid, period: String },
-    MindfulnessTrends { user_id: Uuid, days: u32 },
-    HealthSummary { user_id: Uuid, date_range: String },
-    UserMetrics { user_id: Uuid, metric_type: String },
+    HeartRateQuery {
+        user_id: Uuid,
+        hash: String,
+    },
+    BloodPressureQuery {
+        user_id: Uuid,
+        hash: String,
+    },
+    SleepQuery {
+        user_id: Uuid,
+        hash: String,
+    },
+    ActivityQuery {
+        user_id: Uuid,
+        hash: String,
+    },
+    WorkoutQuery {
+        user_id: Uuid,
+        hash: String,
+    },
+    MindfulnessQuery {
+        user_id: Uuid,
+        hash: String,
+    },
+    MentalHealthQuery {
+        user_id: Uuid,
+        hash: String,
+    },
+    MindfulnessInsights {
+        user_id: Uuid,
+        period: String,
+    },
+    MentalHealthInsights {
+        user_id: Uuid,
+        period: String,
+    },
+    MindfulnessTrends {
+        user_id: Uuid,
+        days: u32,
+    },
+    HealthSummary {
+        user_id: Uuid,
+        date_range: String,
+    },
+    UserMetrics {
+        user_id: Uuid,
+        metric_type: String,
+    },
+    // Authentication cache keys
+    ApiKeyAuth {
+        api_key_hash: String,
+    },
+    ApiKeyLookup {
+        api_key_id: Uuid,
+    },
+    ApiKeyAuthHash {
+        key_prefix: String,
+        hash_suffix: String,
+    },
 }
 
 impl CacheKey {
@@ -92,6 +149,17 @@ impl CacheKey {
                 user_id,
                 metric_type,
             } => format!("{prefix}:metrics:{user_id}:{metric_type}"),
+            // Authentication cache keys
+            CacheKey::ApiKeyAuth { api_key_hash } => {
+                format!("{prefix}:auth:{api_key_hash}")
+            }
+            CacheKey::ApiKeyLookup { api_key_id } => {
+                format!("{prefix}:lookup:{api_key_id}")
+            }
+            CacheKey::ApiKeyAuthHash {
+                key_prefix,
+                hash_suffix,
+            } => format!("{prefix}:auth_hash:{key_prefix}:{hash_suffix}"),
         }
     }
 }
