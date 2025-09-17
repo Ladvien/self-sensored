@@ -112,6 +112,50 @@ pub async fn ingest_handler(
             "Large payload detected - processing asynchronously to avoid timeout"
         );
 
+        // CRITICAL FIX for STORY-EMERGENCY-002: Check for duplicate large payloads
+        // Calculate hash of raw bytes to detect duplicates before expensive processing
+        let payload_hash = format!("{:x}", Sha256::digest(raw_payload.as_ref()));
+        match check_duplicate_payload(&pool, auth.user.id, &payload_hash).await {
+            Ok(Some(existing_id)) => {
+                warn!(
+                    user_id = %auth.user.id,
+                    payload_hash = %payload_hash,
+                    existing_id = %existing_id,
+                    payload_size_mb = payload_size_mb,
+                    "Duplicate large payload detected - rejecting to prevent retry loops"
+                );
+                Metrics::record_error("duplicate_large_payload", "/api/v1/ingest", "error");
+
+                return Ok(HttpResponse::BadRequest().json(
+                    ApiResponse::<()>::error(
+                        format!(
+                            "Duplicate large payload detected ({:.1}MB). This exact payload was already processed. \
+                            Use the status API with raw_ingestion_id {} to check processing results. \
+                            To prevent client retry loops and server overload, identical large payloads are rejected.",
+                            payload_size_mb, existing_id
+                        )
+                    )
+                ));
+            }
+            Ok(None) => {
+                debug!(
+                    user_id = %auth.user.id,
+                    payload_hash = %payload_hash,
+                    payload_size_mb = payload_size_mb,
+                    "No duplicate large payload found - proceeding with async processing"
+                );
+            }
+            Err(e) => {
+                error!(
+                    user_id = %auth.user.id,
+                    error = %e,
+                    payload_size_mb = payload_size_mb,
+                    "Failed to check for duplicate large payload - continuing with processing"
+                );
+                // Don't block processing on duplicate check failure for large payloads
+            }
+        }
+
         // Store raw bytes immediately for audit and recovery
         let raw_id = match store_raw_payload_bytes(&pool, &auth, &raw_payload, &client_ip).await {
             Ok(id) => {
@@ -144,13 +188,14 @@ pub async fn ingest_handler(
             raw_id,
         );
 
-        // Return immediate success within seconds to prevent Cloudflare timeout
+        // Return immediate acceptance response to prevent Cloudflare timeout
+        // CRITICAL FIX for STORY-EMERGENCY-003: Clear async processing status
         let response = IngestResponse {
-            success: false,     // Processing not yet complete, only accepted
-            processed_count: 0, // Will be updated during background processing
-            failed_count: 0,
+            success: true,      // Request successfully accepted (not indicating processing completion)
+            processed_count: 0, // No metrics processed yet - processing is async
+            failed_count: 0,    // No failures yet - processing hasn't started
             processing_time_ms: start_time.elapsed().as_millis() as u64,
-            errors: vec![], // Will be populated during background processing
+            errors: vec![],     // No errors yet - processing is async
             processing_status: Some("accepted_for_processing".to_string()),
             raw_ingestion_id: Some(raw_id),
         };
@@ -166,8 +211,8 @@ pub async fn ingest_handler(
             HttpResponse::Accepted().json(ApiResponse::success_with_message(
                 response,
                 format!(
-                    "Large payload ({:.1}MB) accepted for background processing. Status: 'accepted_for_processing' - NO metrics have been processed yet (processed_count: 0). Use raw_ingestion_id {} to check processing status later.",
-                    payload_size_mb, raw_id
+                    "Payload accepted for background processing. Use raw_ingestion_id {} to check actual processing results via status API.",
+                    raw_id
                 ),
             )),
         );
@@ -209,6 +254,54 @@ pub async fn ingest_handler(
                 "Empty payload: no metrics or workouts provided. Please include at least one metric or workout.".to_string()
             )
         ));
+    }
+
+    // CRITICAL FIX for STORY-EMERGENCY-002: Check for duplicate payloads
+    // Calculate payload hash to detect duplicates before processing
+    let payload_json = serde_json::to_string(&internal_payload).map_err(|e| {
+        error!("Failed to serialize payload for duplicate check: {}", e);
+        actix_web::error::ErrorInternalServerError("Failed to process payload")
+    })?;
+    let payload_hash = format!("{:x}", Sha256::digest(payload_json.as_bytes()));
+
+    // Check for existing payload with same hash from this user within last 24 hours
+    match check_duplicate_payload(&pool, auth.user.id, &payload_hash).await {
+        Ok(Some(existing_id)) => {
+            warn!(
+                user_id = %auth.user.id,
+                payload_hash = %payload_hash,
+                existing_id = %existing_id,
+                "Duplicate payload detected - rejecting to prevent retry loops"
+            );
+            Metrics::record_error("duplicate_payload", "/api/v1/ingest", "error");
+
+            return Ok(HttpResponse::BadRequest().json(
+                ApiResponse::<()>::error(
+                    format!(
+                        "Duplicate payload detected. This exact payload was already processed. \
+                        Use the status API with raw_ingestion_id {} to check processing results. \
+                        To prevent client retry loops, identical payloads are rejected.",
+                        existing_id
+                    )
+                )
+            ));
+        }
+        Ok(None) => {
+            // No duplicate found, continue processing
+            debug!(
+                user_id = %auth.user.id,
+                payload_hash = %payload_hash,
+                "No duplicate payload found - proceeding with processing"
+            );
+        }
+        Err(e) => {
+            error!(
+                user_id = %auth.user.id,
+                error = %e,
+                "Failed to check for duplicate payload - continuing with processing"
+            );
+            // Don't block processing on duplicate check failure, just log the error
+        }
     }
 
     info!(
@@ -478,6 +571,32 @@ fn validate_single_workout(workout: &crate::models::WorkoutData) -> Result<(), S
     Ok(())
 }
 
+/// Check for duplicate payload based on hash within the last 24 hours
+/// Returns the UUID of the existing raw_ingestion if found, None if not a duplicate
+async fn check_duplicate_payload(
+    pool: &PgPool,
+    user_id: Uuid,
+    payload_hash: &str,
+) -> Result<Option<Uuid>, sqlx::Error> {
+    let result = sqlx::query!(
+        r#"
+        SELECT id
+        FROM raw_ingestions
+        WHERE user_id = $1
+          AND payload_hash = $2
+          AND created_at > NOW() - INTERVAL '24 hours'
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+        user_id,
+        payload_hash
+    )
+    .fetch_optional(pool)
+    .await?;
+
+    Ok(result.map(|row| row.id))
+}
+
 /// Store raw payload for backup and audit purposes
 async fn store_raw_payload(
     pool: &PgPool,
@@ -620,80 +739,146 @@ async fn update_processing_status(
     let actual_processed = result.processed_count;
     let has_explicit_errors = !result.errors.is_empty();
     let partial_failure = result.failed_count > 0;
+    let failed_count = result.failed_count;
 
-    // CRITICAL: Check for silent data loss - when expected count doesn't match processing
-    // This catches PostgreSQL parameter limit violations that don't generate explicit errors
-    let potential_data_loss = if original_metric_count > 0 {
-        let loss_percentage = ((original_metric_count - actual_processed) as f64 / original_metric_count as f64) * 100.0;
-        loss_percentage > 5.0 // Consider >5% loss as potential data loss
+    // Calculate detailed metrics for comprehensive data loss detection
+    let expected_count = original_metric_count;
+    let actual_count = actual_processed;
+    let failed_with_errors = failed_count;
+    let silent_failures = if expected_count > (actual_count + failed_with_errors) {
+        expected_count - (actual_count + failed_with_errors)
     } else {
-        false
+        0
     };
 
-    let status = if has_explicit_errors && actual_processed == 0 {
+    // Enhanced data loss detection with multiple thresholds
+    let loss_percentage = if expected_count > 0 {
+        (silent_failures as f64 / expected_count as f64) * 100.0
+    } else {
+        0.0
+    };
+
+    // CRITICAL: Multiple conditions for detecting data loss
+    let has_silent_failures = silent_failures > 0;
+    let significant_loss = loss_percentage > 1.0; // Even 1% loss is suspicious
+    let total_failure = actual_processed == 0 && expected_count > 0;
+    let postgresql_param_limit_violation = silent_failures > 50; // Large batch rejections
+
+    // Determine processing status with comprehensive logic
+    let status = if total_failure && has_explicit_errors {
         "error" // Complete failure with explicit errors
-    } else if potential_data_loss {
-        // CRITICAL FIX: Mark as error when significant data loss detected
-        "error" // Potential PostgreSQL parameter limit violation or silent failure
+    } else if postgresql_param_limit_violation {
+        // CRITICAL FIX: Likely PostgreSQL parameter limit violation
+        "error" // PostgreSQL parameter limit exceeded - silent rejection
+    } else if significant_loss {
+        // CRITICAL FIX: Mark as error when ANY significant data loss detected
+        "error" // Silent data loss detected - investigate immediately
+    } else if has_silent_failures {
+        // Even small amounts of silent failures should be flagged
+        "partial_success" // Some silent failures but not catastrophic
     } else if partial_failure || has_explicit_errors {
-        "partial_success" // Some items failed but no major data loss
+        "partial_success" // Some items failed but accounted for in errors
     } else if actual_processed > 0 {
         "processed" // All items processed successfully
     } else {
         "error" // No items processed (unexpected)
     };
 
-    // Enhanced logging for debugging data loss issues
-    if potential_data_loss {
-        let loss_percentage = ((original_metric_count - actual_processed) as f64 / original_metric_count as f64) * 100.0;
+    // Enhanced processing metadata for debugging and monitoring
+    let processing_metadata = serde_json::json!({
+        "expected_count": expected_count,
+        "actual_count": actual_count,
+        "failed_count": failed_with_errors,
+        "silent_failures": silent_failures,
+        "loss_percentage": loss_percentage,
+        "has_silent_failures": has_silent_failures,
+        "significant_loss": significant_loss,
+        "postgresql_param_limit_violation": postgresql_param_limit_violation,
+        "processing_time_ms": result.processing_time_ms,
+        "retry_attempts": result.retry_attempts,
+        "memory_peak_mb": result.memory_peak_mb,
+        "analysis_timestamp": chrono::Utc::now(),
+        "detection_logic": {
+            "silent_failure_threshold": 1,
+            "loss_percentage_threshold": 1.0,
+            "param_limit_threshold": 50
+        }
+    });
+
+    // Enhanced logging with detailed analysis
+    if has_silent_failures || significant_loss || postgresql_param_limit_violation {
         error!(
             raw_id = %raw_id,
-            original_metric_count = original_metric_count,
+            expected_count = expected_count,
             actual_processed = actual_processed,
+            failed_count = failed_with_errors,
+            silent_failures = silent_failures,
             loss_percentage = loss_percentage,
-            "CRITICAL: Potential data loss detected - marking as error"
+            postgresql_param_limit_violation = postgresql_param_limit_violation,
+            "CRITICAL: Data loss detected - marking payload as failed"
         );
     }
 
     info!(
         raw_id = %raw_id,
         status = %status,
-        processed_count = actual_processed,
-        failed_count = result.failed_count,
+        expected_count = expected_count,
+        actual_processed = actual_processed,
+        failed_count = failed_with_errors,
+        silent_failures = silent_failures,
+        loss_percentage = loss_percentage,
         errors_count = result.errors.len(),
-        original_metric_count = original_metric_count,
-        potential_data_loss = potential_data_loss,
-        "Processing status determined with data loss detection"
+        "Processing status determined with comprehensive data loss detection"
     );
-    let processing_errors = if result.errors.is_empty() {
-        None
+    // Combine processing errors with metadata for comprehensive tracking
+    let processing_data = if result.errors.is_empty() && !has_silent_failures {
+        // No errors and no silent failures - just store metadata
+        Some(serde_json::json!({
+            "processing_metadata": processing_metadata,
+            "errors": []
+        }))
     } else {
-        Some(
-            serde_json::to_value(
-                result
-                    .errors
-                    .iter()
-                    .map(|e| {
-                        serde_json::json!({
-                            "metric_type": e.metric_type,
-                            "error_message": e.error_message
-                        })
-                    })
-                    .collect::<Vec<_>>(),
-            )
-            .unwrap(),
-        )
+        // Store both errors and metadata
+        let error_list: Vec<serde_json::Value> = result
+            .errors
+            .iter()
+            .map(|e| {
+                serde_json::json!({
+                    "metric_type": e.metric_type,
+                    "error_message": e.error_message
+                })
+            })
+            .collect();
+
+        Some(serde_json::json!({
+            "processing_metadata": processing_metadata,
+            "errors": error_list,
+            "data_loss_detected": has_silent_failures || significant_loss,
+            "analysis_summary": {
+                "status_reason": if postgresql_param_limit_violation {
+                    "PostgreSQL parameter limit violation detected"
+                } else if significant_loss {
+                    "Significant data loss detected"
+                } else if has_silent_failures {
+                    "Silent failures detected"
+                } else if has_explicit_errors {
+                    "Explicit processing errors"
+                } else {
+                    "All metrics processed successfully"
+                }
+            }
+        }))
     };
 
     sqlx::query!(
         r#"
-        UPDATE raw_ingestions 
+        UPDATE raw_ingestions
         SET processed_at = NOW(), processing_status = $2, processing_errors = $3
         WHERE id = $1
         "#,
         raw_id,
         status,
-        processing_errors
+        processing_data
     )
     .execute(pool)
     .await?;
