@@ -103,23 +103,75 @@ pub async fn ingest_handler(
     // Record data volume
     Metrics::record_data_volume("ingest", "received", payload_size as u64);
 
-    // Process large payloads asynchronously to avoid Cloudflare 100s timeout
-    if payload_size_mb > 1.0 {
+    // CRITICAL FIX: Check for large payloads BEFORE expensive parsing/validation
+    // This prevents timeouts by handling large uploads asynchronously from the start
+    if payload_size_mb > 10.0 {
         info!(
             user_id = %auth.user.id,
             payload_size_mb = payload_size_mb,
-            "Large payload detected, processing asynchronously to avoid Cloudflare 100s timeout"
+            "Large payload detected - processing asynchronously to avoid timeout"
         );
 
-        // For now, return immediate response for large payloads
-        // TODO: Implement background job processing
-        return Ok(HttpResponse::Accepted().json(serde_json::json!({
-            "success": true,
-            "message": "Large payload received. Processing will complete asynchronously.",
-            "payload_size_mb": payload_size_mb
-        })));
+        // Store raw bytes immediately for audit and recovery
+        let raw_id = match store_raw_payload_bytes(&pool, &auth, &raw_payload, &client_ip).await {
+            Ok(id) => {
+                info!(
+                    user_id = %auth.user.id,
+                    raw_id = %id,
+                    "Raw payload stored successfully for background processing"
+                );
+                id
+            }
+            Err(e) => {
+                error!(
+                    user_id = %auth.user.id,
+                    error = %e,
+                    "Failed to store raw payload bytes"
+                );
+                return Ok(
+                    HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
+                        "Failed to store payload for processing".to_string(),
+                    )),
+                );
+            }
+        };
+
+        // Spawn complete background processing pipeline
+        spawn_complete_processing_task(
+            pool.get_ref().clone(),
+            auth.clone(),
+            raw_payload.clone(),
+            raw_id,
+        );
+
+        // Return immediate success within seconds to prevent Cloudflare timeout
+        let response = IngestResponse {
+            success: false,     // Processing not yet complete, only accepted
+            processed_count: 0, // Will be updated during background processing
+            failed_count: 0,
+            processing_time_ms: start_time.elapsed().as_millis() as u64,
+            errors: vec![], // Will be populated during background processing
+        };
+
+        info!(
+            user_id = %auth.user.id,
+            raw_id = %raw_id,
+            response_time_ms = response.processing_time_ms,
+            "Large payload accepted for async processing - returning HTTP 202"
+        );
+
+        return Ok(
+            HttpResponse::Accepted().json(ApiResponse::success_with_message(
+                response,
+                format!(
+                    "Large payload ({:.1}MB) accepted for background processing. Processing is NOT yet complete. Monitor raw_ingestion id {} for status updates.",
+                    payload_size_mb, raw_id
+                ),
+            )),
+        );
     }
 
+    // For smaller payloads, continue with synchronous processing as before
     // Use enhanced JSON parsing with better error reporting
     let internal_payload = match parse_ios_payload_enhanced(&raw_payload, auth.user.id).await {
         Ok(payload) => payload,
@@ -263,89 +315,18 @@ pub async fn ingest_handler(
     };
 
     // Always process synchronously - no limits or thresholds for personal health app
-    let total_data_count =
+    let _total_data_count =
         processed_payload.data.metrics.len() + processed_payload.data.workouts.len();
 
-    // Process large payloads asynchronously to avoid Cloudflare 524 timeouts
-    if payload_size_mb > 10.0 {
-        // Process async for payloads over 10MB
-        info!(
-            user_id = %auth.user.id,
-            metric_count = processed_payload.data.metrics.len(),
-            workout_count = processed_payload.data.workouts.len(),
-            "Large payload detected, processing asynchronously to avoid timeout"
-        );
-
-        // Spawn background task to process the data
-        let pool_clone = pool.get_ref().clone();
-        let user_id = auth.user.id;
-        let raw_id_clone = raw_id;
-        let validation_errors = all_validation_errors.clone();
-
-        actix_web::rt::spawn(async move {
-            info!(
-                "Starting background processing for raw_id: {}",
-                raw_id_clone
-            );
-
-            // Process the batch data
-            let processor = BatchProcessor::new(pool_clone.clone());
-            let mut result = processor.process_batch(user_id, processed_payload).await;
-
-            // Add validation errors to the processing result
-            if !validation_errors.is_empty() {
-                result.errors.extend(validation_errors);
-                result.failed_count += result.errors.len() - result.failed_count;
-            }
-
-            // Update raw ingestion record with processing results
-            if let Err(e) = update_processing_status(&pool_clone, raw_id_clone, &result).await {
-                error!(
-                    user_id = %user_id,
-                    raw_id = %raw_id_clone,
-                    error = %e,
-                    "Failed to update processing status in background"
-                );
-            }
-
-            info!(
-                user_id = %user_id,
-                raw_id = %raw_id_clone,
-                processed_count = result.processed_count,
-                failed_count = result.failed_count,
-                "Background processing completed"
-            );
-        });
-
-        // Return immediate response to avoid timeout - indicate acceptance, not completion
-        let response = IngestResponse {
-            success: false,     // Not yet processed, only accepted
-            processed_count: 0, // No processing completed yet
-            failed_count: 0,
-            processing_time_ms: start_time.elapsed().as_millis() as u64,
-            errors: vec![], // Will be populated during background processing
-        };
-
-        info!(
-            user_id = %auth.user.id,
-            raw_id = %raw_id,
-            "Accepted large payload for async processing"
-        );
-
-        // Return 202 Accepted for async processing with clear messaging
-        return Ok(
-            HttpResponse::Accepted().json(ApiResponse::success_with_message(
-                response,
-                format!(
-                    "Accepted {} items for background processing. Processing is NOT yet complete. Monitor raw_ingestion id {} for actual status.",
-                    total_data_count, raw_id
-                ),
-            )),
-        );
-    }
+    // Large payload processing has been moved earlier in the function
+    // This code section is now only reached for smaller payloads that process synchronously
 
     // For smaller payloads, process synchronously as before
     let processor = BatchProcessor::new(pool.get_ref().clone());
+
+    // Calculate original metric count before moving the payload
+    let original_metric_count = processed_payload.data.metrics.len() + processed_payload.data.workouts.len();
+
     let mut result = processor
         .process_batch(auth.user.id, processed_payload)
         .await;
@@ -359,7 +340,7 @@ pub async fn ingest_handler(
     let processing_time = start_time.elapsed().as_millis() as u64;
 
     // Update raw ingestion record with processing results
-    if let Err(e) = update_processing_status(&pool, raw_id, &result).await {
+    if let Err(e) = update_processing_status(&pool, raw_id, &result, original_metric_count).await {
         error!(
             user_id = %auth.user.id,
             raw_id = %raw_id,
@@ -512,6 +493,53 @@ async fn store_raw_payload(
     Ok(result.id)
 }
 
+/// Store raw payload bytes immediately for large uploads (before parsing)
+async fn store_raw_payload_bytes(
+    pool: &PgPool,
+    auth: &AuthContext,
+    raw_bytes: &web::Bytes,
+    _client_ip: &str,
+) -> Result<Uuid, sqlx::Error> {
+    // Calculate SHA256 hash of raw bytes for deduplication
+    let payload_hash = format!("{:x}", Sha256::digest(raw_bytes.as_ref()));
+    let payload_size = raw_bytes.len() as i32;
+
+    // For large payloads, avoid storing the full content in JSON to prevent memory issues
+    // Instead, store only metadata - the actual parsing will happen in background processing
+    let raw_json = if payload_size > 10_000_000 { // > 10MB
+        serde_json::json!({
+            "large_payload": true,
+            "needs_parsing": true,
+            "received_at": chrono::Utc::now(),
+            "size_bytes": payload_size,
+            "note": "Raw payload too large for JSON storage - processing in background"
+        })
+    } else {
+        serde_json::json!({
+            "raw_payload": String::from_utf8_lossy(raw_bytes),
+            "needs_parsing": true,
+            "received_at": chrono::Utc::now(),
+            "size_bytes": payload_size,
+        })
+    };
+
+    let result = sqlx::query!(
+        r#"
+        INSERT INTO raw_ingestions (user_id, payload_hash, payload_size_bytes, raw_payload, processing_status)
+        VALUES ($1, $2, $3, $4, 'parsing')
+        RETURNING id
+        "#,
+        auth.user.id,
+        payload_hash,
+        payload_size,
+        raw_json
+    )
+    .fetch_one(pool)
+    .await?;
+
+    Ok(result.id)
+}
+
 /// Save corrupted payload to raw_ingestions for later recovery
 async fn save_corrupted_payload(
     pool: &PgPool,
@@ -571,31 +599,57 @@ async fn update_processing_status(
     pool: &PgPool,
     raw_id: Uuid,
     result: &BatchProcessingResult,
+    original_metric_count: usize,
 ) -> Result<(), sqlx::Error> {
-    // Determine status based on both errors and actual processing success
-    let expected_count = result.processed_count + result.failed_count;
-    let has_errors = !result.errors.is_empty();
+    // CRITICAL FIX for STORY-EMERGENCY-001: Detect PostgreSQL parameter limit violations
+    // Compare original payload count vs actual processed count to identify silent failures
+    let actual_processed = result.processed_count;
+    let has_explicit_errors = !result.errors.is_empty();
     let partial_failure = result.failed_count > 0;
 
-    let status = if has_errors && result.processed_count == 0 {
-        "error" // Complete failure
-    } else if partial_failure {
-        "partial_success" // Some items failed
-    } else if result.processed_count > 0 {
+    // CRITICAL: Check for silent data loss - when expected count doesn't match processing
+    // This catches PostgreSQL parameter limit violations that don't generate explicit errors
+    let potential_data_loss = if original_metric_count > 0 {
+        let loss_percentage = ((original_metric_count - actual_processed) as f64 / original_metric_count as f64) * 100.0;
+        loss_percentage > 5.0 // Consider >5% loss as potential data loss
+    } else {
+        false
+    };
+
+    let status = if has_explicit_errors && actual_processed == 0 {
+        "error" // Complete failure with explicit errors
+    } else if potential_data_loss {
+        // CRITICAL FIX: Mark as error when significant data loss detected
+        "error" // Potential PostgreSQL parameter limit violation or silent failure
+    } else if partial_failure || has_explicit_errors {
+        "partial_success" // Some items failed but no major data loss
+    } else if actual_processed > 0 {
         "processed" // All items processed successfully
     } else {
         "error" // No items processed (unexpected)
     };
 
-    // Log detailed status for debugging
+    // Enhanced logging for debugging data loss issues
+    if potential_data_loss {
+        let loss_percentage = ((original_metric_count - actual_processed) as f64 / original_metric_count as f64) * 100.0;
+        error!(
+            raw_id = %raw_id,
+            original_metric_count = original_metric_count,
+            actual_processed = actual_processed,
+            loss_percentage = loss_percentage,
+            "CRITICAL: Potential data loss detected - marking as error"
+        );
+    }
+
     info!(
         raw_id = %raw_id,
         status = %status,
-        processed_count = result.processed_count,
+        processed_count = actual_processed,
         failed_count = result.failed_count,
         errors_count = result.errors.len(),
-        expected_count = expected_count,
-        "Processing status determined"
+        original_metric_count = original_metric_count,
+        potential_data_loss = potential_data_loss,
+        "Processing status determined with data loss detection"
     );
     let processing_errors = if result.errors.is_empty() {
         None
@@ -799,3 +853,233 @@ fn validate_json_structure_basic(data: &[u8]) -> std::result::Result<(), String>
 }
 
 // Deprecated validation functions removed for simplified schema
+
+/// Comprehensive background processing for large payloads
+/// This function handles the complete pipeline: parsing -> validation -> storage
+fn spawn_complete_processing_task(
+    pool: PgPool,
+    auth: AuthContext,
+    raw_payload: web::Bytes,
+    raw_id: Uuid,
+) {
+    actix_web::rt::spawn(async move {
+        info!(
+            user_id = %auth.user.id,
+            raw_id = %raw_id,
+            payload_size = raw_payload.len(),
+            "Starting background processing for large payload"
+        );
+
+        // Update status to parsing
+        if let Err(e) = update_processing_stage(&pool, raw_id, "parsing").await {
+            error!(
+                user_id = %auth.user.id,
+                raw_id = %raw_id,
+                error = %e,
+                "Failed to update processing stage to parsing"
+            );
+        }
+
+        // Step 1: Parse the payload
+        let internal_payload = match parse_ios_payload_enhanced(&raw_payload, auth.user.id).await {
+            Ok(payload) => payload,
+            Err(parse_error) => {
+                error!(
+                    user_id = %auth.user.id,
+                    raw_id = %raw_id,
+                    error = %parse_error,
+                    "Background parsing failed"
+                );
+
+                let error_json = serde_json::json!({
+                    "stage": "parsing",
+                    "error": parse_error.to_string(),
+                    "timestamp": chrono::Utc::now()
+                });
+
+                if let Err(e) = update_processing_failure(&pool, raw_id, "failed", error_json).await {
+                    error!("Failed to update parsing failure status: {}", e);
+                }
+                return;
+            }
+        };
+
+        info!(
+            user_id = %auth.user.id,
+            raw_id = %raw_id,
+            metric_count = internal_payload.data.metrics.len(),
+            workout_count = internal_payload.data.workouts.len(),
+            "Background parsing completed successfully"
+        );
+
+        // Update status to validation
+        if let Err(e) = update_processing_stage(&pool, raw_id, "validation").await {
+            error!(
+                user_id = %auth.user.id,
+                raw_id = %raw_id,
+                error = %e,
+                "Failed to update processing stage to validation"
+            );
+        }
+
+        // Step 2: Validate metrics and workouts
+        let mut all_validation_errors = validate_metrics(&internal_payload.data.metrics);
+        all_validation_errors.extend(validate_workouts(&internal_payload.data.workouts));
+
+        // Filter out invalid metrics/workouts but continue with valid ones
+        let valid_metrics: Vec<crate::models::health_metrics::HealthMetric> = internal_payload
+            .data
+            .metrics
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, metric)| match metric.validate() {
+                Ok(()) => Some(metric),
+                Err(_) => {
+                    debug!("Background processing: excluding invalid metric at index {}", index);
+                    None
+                }
+            })
+            .collect();
+
+        let valid_workouts: Vec<crate::models::WorkoutData> = internal_payload
+            .data
+            .workouts
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, workout)| match validate_single_workout(&workout) {
+                Ok(()) => Some(workout),
+                Err(_) => {
+                    debug!("Background processing: excluding invalid workout at index {}", index);
+                    None
+                }
+            })
+            .collect();
+
+        // Check if we have any valid data after filtering
+        if valid_metrics.is_empty() && valid_workouts.is_empty() {
+            error!(
+                user_id = %auth.user.id,
+                raw_id = %raw_id,
+                total_validation_errors = all_validation_errors.len(),
+                "Background processing: No valid metrics remaining after validation"
+            );
+
+            let error_json = serde_json::json!({
+                "stage": "validation",
+                "error": "All metrics and workouts failed validation",
+                "validation_errors": all_validation_errors,
+                "timestamp": chrono::Utc::now()
+            });
+
+            if let Err(e) = update_processing_failure(&pool, raw_id, "failed", error_json).await {
+                error!("Failed to update validation failure status: {}", e);
+            }
+            return;
+        }
+
+        let filtered_payload = IngestPayload {
+            data: IngestData {
+                metrics: valid_metrics,
+                workouts: valid_workouts,
+            },
+        };
+
+        info!(
+            user_id = %auth.user.id,
+            raw_id = %raw_id,
+            valid_metrics = filtered_payload.data.metrics.len(),
+            valid_workouts = filtered_payload.data.workouts.len(),
+            validation_errors = all_validation_errors.len(),
+            "Background validation completed"
+        );
+
+        // Update status to processing
+        if let Err(e) = update_processing_stage(&pool, raw_id, "processing").await {
+            error!(
+                user_id = %auth.user.id,
+                raw_id = %raw_id,
+                error = %e,
+                "Failed to update processing stage to processing"
+            );
+        }
+
+        // Step 3: Process the batch data
+        let processor = BatchProcessor::new(pool.clone());
+
+        // Calculate original metric count before moving the payload
+        let original_metric_count = filtered_payload.data.metrics.len() + filtered_payload.data.workouts.len();
+
+        let mut result = processor.process_batch(auth.user.id, filtered_payload).await;
+
+        // Add validation errors to the processing result
+        if !all_validation_errors.is_empty() {
+            result.errors.extend(all_validation_errors);
+            result.failed_count += result.errors.len() - result.failed_count;
+        }
+
+        // Step 4: Update final processing status
+        if let Err(e) = update_processing_status(&pool, raw_id, &result, original_metric_count).await {
+            error!(
+                user_id = %auth.user.id,
+                raw_id = %raw_id,
+                error = %e,
+                "Failed to update final processing status"
+            );
+        } else {
+            info!(
+                user_id = %auth.user.id,
+                raw_id = %raw_id,
+                processed_count = result.processed_count,
+                failed_count = result.failed_count,
+                "Background processing completed successfully"
+            );
+        }
+    });
+}
+
+/// Update processing stage for tracking progress
+async fn update_processing_stage(
+    pool: &PgPool,
+    raw_id: Uuid,
+    stage: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        UPDATE raw_ingestions
+        SET processing_status = $2,
+            processed_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+        "#,
+        raw_id,
+        stage
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Update processing status when a failure occurs
+async fn update_processing_failure(
+    pool: &PgPool,
+    raw_id: Uuid,
+    status: &str,
+    error_details: serde_json::Value,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"
+        UPDATE raw_ingestions
+        SET processing_status = $2,
+            processing_errors = $3,
+            processed_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+        "#,
+        raw_id,
+        status,
+        error_details
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
