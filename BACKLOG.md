@@ -315,19 +315,6 @@ Analysis revealed the architecture was already correctly implemented:
 
 **Expected Fix**: Improves DATA.md compliance for symptoms
 
-#### **SUB-010: MEDIUM - Mobility Metrics Integration**
-**Priority**: P2 - MEDIUM
-**Lines of Code**: ~125
-**Files**: Activity and mobility handlers
-**DATA.md Ref**: Lines 189-202 (Mobility Metrics)
-
-**Tasks**:
-- [ ] Add walking speed, step length, asymmetry tracking
-- [ ] Implement stair ascent/descent speed metrics
-- [ ] Add running dynamics support
-- [ ] Test mobility metric collection
-
-**Expected Fix**: Adds new DATA.md supported metrics
 
 #### **SUB-011: LOW - Cycling Metrics Support**
 **Priority**: P3 - LOW
