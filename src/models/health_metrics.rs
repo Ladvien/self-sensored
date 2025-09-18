@@ -825,19 +825,6 @@ pub struct SymptomMetric {
     pub created_at: DateTime<Utc>,
 }
 
-/// Symptom analysis result for health insights and medical assessment
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct SymptomAnalysis {
-    pub symptom_type: SymptomType,
-    pub severity: SymptomSeverity,
-    pub category: String,
-    pub is_emergency: bool,
-    pub requires_attention: bool,
-    pub severity_score: i32,
-    pub duration_hours: Option<f64>,
-    pub recommendations: Vec<String>,
-}
-
 /// Tagged union for all health metric types
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(tag = "type")]

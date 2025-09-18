@@ -25,6 +25,51 @@
 
 ---
 
+## ✅ SUB-005: HIGH - Audio Exposure Table Architecture (Completed: 2025-09-18)
+**Agent**: Database Architect Agent | **Priority**: P1 - HIGH | **Status**: ✅ COMPLETED | **Time**: 2 hours
+
+**DESIGN ARCHITECTURE ISSUES RESOLVED**: ✅ Fixed AudioExposureMetric struct alignment with database schema
+- **Database Schema**: Dedicated `audio_exposure_metrics` table properly designed (lines 848-880 in schema.sql)
+- **WHO/NIOSH Compliance**: Constraints for hearing health monitoring (0-140 dB range)
+- **Scalability**: Monthly partitioning and time-series optimized BRIN indexes
+- **PostGIS Integration**: Spatial support for location context in noise mapping
+
+**CRITICAL FIXES IMPLEMENTED**:
+1. ✅ **AudioExposureMetric Struct Completion**: Added 7 missing fields to match database schema:
+   - hearing_protection_used: Option<bool> - Track protective equipment usage
+   - environment_type: Option<String> - Context: 'concert', 'workplace', 'commute', 'home', 'gym', 'outdoor', 'other'
+   - activity_during_exposure: Option<String> - Activity: 'music_listening', 'call', 'workout', 'commute', 'work', 'entertainment', 'other'
+   - daily_noise_dose_percentage: Option<f64> - OSHA/NIOSH 8-hour exposure limit compliance
+   - weekly_exposure_hours: Option<f64> - Long-term exposure tracking
+   - location_latitude/longitude: Option<f64> - GPS coordinates for noise mapping
+2. ✅ **Handler Implementation Verified**: `store_audio_exposure_metric()` and `get_audio_exposure_data()` include ALL 16 database fields
+3. ✅ **iOS Models Integration**: Updated AudioExposureMetric creation in ios_models.rs (both environmental and headphone audio exposure)
+4. ✅ **Table Separation Verified**: Proper separation between Environmental and AudioExposure metrics (no field contamination)
+5. ✅ **Database Operations**: INSERT and SELECT queries properly handle all fields with COALESCE for conflict resolution
+
+**ARCHITECTURE VERIFICATION**:
+- ✅ **Database Design**: audio_exposure_metrics table properly implemented with proper field definitions
+- ✅ **Indexes**: BRIN for time-series queries, GiST for spatial queries, specialized indexes for dangerous levels
+- ✅ **Struct Alignment**: AudioExposureMetric includes all 16 database fields (id, user_id, recorded_at, exposure levels, context, risk assessment, location, metadata)
+- ✅ **Handler Queries**: Complete field mapping in both storage and retrieval operations
+- ✅ **Type Safety**: SQLx compile-time verification passes for all queries
+
+**HEALTH DATA COMPLIANCE**:
+- ✅ **WHO Standards**: Environmental audio exposure constraints (0-140 dB safe range)
+- ✅ **NIOSH Standards**: Daily noise dose percentage tracking for workplace safety
+- ✅ **Medical Context**: Activity and environment tracking for clinical analysis
+- ✅ **Location Intelligence**: GPS coordinates for noise pollution mapping and analysis
+
+**TECHNICAL IMPACT**:
+- ✅ **Compilation Success**: AudioExposureMetric field alignment issues completely resolved
+- ✅ **Data Integrity**: Complete hearing health data capture with WHO/NIOSH compliance
+- ✅ **Architecture Clarity**: Clean separation between Environmental and AudioExposure metrics
+- ✅ **Future-Proof**: Extensible design supporting advanced hearing health analytics
+
+**Building on STORY-DATA-003**: Confirmed that basic table architecture was correct, but SUB-005 identified and resolved critical struct-to-database field alignment issues causing compilation failures.
+
+---
+
 ## ✅ SUB-001: CRITICAL - EnvironmentalMetric Field Alignment (Completed: 2025-09-18)
 **Agent**: Data Processor Agent | **Priority**: P0 - BLOCKING | **Status**: ✅ COMPLETED | **Time**: 1.5 hours
 
