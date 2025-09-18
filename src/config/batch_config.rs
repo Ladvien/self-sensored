@@ -405,7 +405,8 @@ impl BatchConfig {
             // Optimization opportunity: could increase chunk size significantly
             else if total_params < (SAFE_PARAM_LIMIT * 70 / 100) {
                 let potential_increase = ((max_safe_chunk_size - chunk_size) * 100) / chunk_size;
-                if potential_increase > 5 { // Only suggest if >5% improvement
+                if potential_increase > 5 {
+                    // Only suggest if >5% improvement
                     optimizations.push(format!(
                         "🚀 OPTIMIZATION: {metric_type} could increase from {chunk_size} to {max_safe_chunk_size} (+{potential_increase}% throughput)\n\
                         📈 Current: {total_params} params ({usage_percentage}% of limit) | Potential: {max_safe_chunk_size} chunks"
@@ -449,18 +450,57 @@ impl BatchConfig {
     /// and safety validations for STORY-OPTIMIZATION-001
     pub fn performance_benchmark(&self) -> String {
         let metrics = vec![
-            ("Heart Rate", self.heart_rate_chunk_size, HEART_RATE_PARAMS_PER_RECORD, 4200),
-            ("Blood Pressure", self.blood_pressure_chunk_size, BLOOD_PRESSURE_PARAMS_PER_RECORD, 8000),
-            ("Sleep", self.sleep_chunk_size, SLEEP_PARAMS_PER_RECORD, 6000), // Note: was unsafe
-            ("Activity", self.activity_chunk_size, ACTIVITY_PARAMS_PER_RECORD, 1700),
-            ("Body Measurement", self.body_measurement_chunk_size, BODY_MEASUREMENT_PARAMS_PER_RECORD, 3000),
-            ("Temperature", self.temperature_chunk_size, TEMPERATURE_PARAMS_PER_RECORD, 8000), // Note: was unsafe
-            ("Respiratory", self.respiratory_chunk_size, RESPIRATORY_PARAMS_PER_RECORD, 7000),
+            (
+                "Heart Rate",
+                self.heart_rate_chunk_size,
+                HEART_RATE_PARAMS_PER_RECORD,
+                4200,
+            ),
+            (
+                "Blood Pressure",
+                self.blood_pressure_chunk_size,
+                BLOOD_PRESSURE_PARAMS_PER_RECORD,
+                8000,
+            ),
+            (
+                "Sleep",
+                self.sleep_chunk_size,
+                SLEEP_PARAMS_PER_RECORD,
+                6000,
+            ), // Note: was unsafe
+            (
+                "Activity",
+                self.activity_chunk_size,
+                ACTIVITY_PARAMS_PER_RECORD,
+                1700,
+            ),
+            (
+                "Body Measurement",
+                self.body_measurement_chunk_size,
+                BODY_MEASUREMENT_PARAMS_PER_RECORD,
+                3000,
+            ),
+            (
+                "Temperature",
+                self.temperature_chunk_size,
+                TEMPERATURE_PARAMS_PER_RECORD,
+                8000,
+            ), // Note: was unsafe
+            (
+                "Respiratory",
+                self.respiratory_chunk_size,
+                RESPIRATORY_PARAMS_PER_RECORD,
+                7000,
+            ),
         ];
 
         let mut report = String::new();
-        report.push_str("🚀 STORY-OPTIMIZATION-001: Batch Processing Parameter Optimization Results\n");
-        report.push_str("═══════════════════════════════════════════════════════════════════════════\n\n");
+        report.push_str(
+            "🚀 STORY-OPTIMIZATION-001: Batch Processing Parameter Optimization Results\n",
+        );
+        report.push_str(
+            "═══════════════════════════════════════════════════════════════════════════\n\n",
+        );
 
         report.push_str("📊 OPTIMIZATION SUMMARY:\n");
 
@@ -503,14 +543,26 @@ impl BatchConfig {
             ));
 
             if throughput_change != "No change" && throughput_change != "SAFETY FIX" {
-                report.push_str(&format!("                   | Improvement: {} (max possible: {})\n", throughput_change, max_safe_chunk));
+                report.push_str(&format!(
+                    "                   | Improvement: {} (max possible: {})\n",
+                    throughput_change, max_safe_chunk
+                ));
             }
         }
 
         report.push_str(&format!("\n🎯 IMPACT ANALYSIS:\n"));
-        report.push_str(&format!("  • Safety Fixes Applied: {} critical PostgreSQL parameter violations resolved\n", safety_fixes));
-        report.push_str(&format!("  • Performance Optimizations: {} metric types improved\n", optimizations));
-        report.push_str(&format!("  • Average Throughput Gain: {:.1}% across optimized metrics\n", total_throughput_improvement / optimizations as f64));
+        report.push_str(&format!(
+            "  • Safety Fixes Applied: {} critical PostgreSQL parameter violations resolved\n",
+            safety_fixes
+        ));
+        report.push_str(&format!(
+            "  • Performance Optimizations: {} metric types improved\n",
+            optimizations
+        ));
+        report.push_str(&format!(
+            "  • Average Throughput Gain: {:.1}% across optimized metrics\n",
+            total_throughput_improvement / optimizations as f64
+        ));
 
         report.push_str(&format!("\n📈 POSTGRESQL PARAMETER USAGE:\n"));
         for (name, chunk_size, params_per_record, _) in &metrics {
@@ -526,15 +578,24 @@ impl BatchConfig {
 
         report.push_str(&format!("\n✅ VALIDATION RESULTS:\n"));
         match self.validate() {
-            Ok(_) => report.push_str("  All chunk sizes are within safe PostgreSQL parameter limits\n"),
+            Ok(_) => {
+                report.push_str("  All chunk sizes are within safe PostgreSQL parameter limits\n")
+            }
             Err(e) => report.push_str(&format!("  ❌ Validation failed: {}\n", e)),
         }
 
         report.push_str(&format!("\n🔬 DETAILED ANALYSIS:\n"));
         report.push_str(&format!("  • PostgreSQL Max Parameters: 65,535\n"));
-        report.push_str(&format!("  • Safe Parameter Limit (80%): {:>5}\n", SAFE_PARAM_LIMIT));
-        report.push_str(&format!("  • Safety Margin Strategy: 20% buffer for query complexity\n"));
-        report.push_str(&format!("  • Optimization Target: Maximum throughput within safety limits\n"));
+        report.push_str(&format!(
+            "  • Safe Parameter Limit (80%): {:>5}\n",
+            SAFE_PARAM_LIMIT
+        ));
+        report.push_str(&format!(
+            "  • Safety Margin Strategy: 20% buffer for query complexity\n"
+        ));
+        report.push_str(&format!(
+            "  • Optimization Target: Maximum throughput within safety limits\n"
+        ));
 
         report
     }
@@ -547,7 +608,9 @@ mod tests {
     #[test]
     fn test_optimized_chunk_sizes_are_safe() {
         let config = BatchConfig::default();
-        config.validate().expect("Optimized chunk sizes should be safe");
+        config
+            .validate()
+            .expect("Optimized chunk sizes should be safe");
     }
 
     #[test]
@@ -556,13 +619,37 @@ mod tests {
 
         // Test that all chunk sizes stay within safe limits
         let test_cases = vec![
-            ("heart_rate", config.heart_rate_chunk_size, HEART_RATE_PARAMS_PER_RECORD),
-            ("blood_pressure", config.blood_pressure_chunk_size, BLOOD_PRESSURE_PARAMS_PER_RECORD),
+            (
+                "heart_rate",
+                config.heart_rate_chunk_size,
+                HEART_RATE_PARAMS_PER_RECORD,
+            ),
+            (
+                "blood_pressure",
+                config.blood_pressure_chunk_size,
+                BLOOD_PRESSURE_PARAMS_PER_RECORD,
+            ),
             ("sleep", config.sleep_chunk_size, SLEEP_PARAMS_PER_RECORD),
-            ("activity", config.activity_chunk_size, ACTIVITY_PARAMS_PER_RECORD),
-            ("body_measurement", config.body_measurement_chunk_size, BODY_MEASUREMENT_PARAMS_PER_RECORD),
-            ("temperature", config.temperature_chunk_size, TEMPERATURE_PARAMS_PER_RECORD),
-            ("respiratory", config.respiratory_chunk_size, RESPIRATORY_PARAMS_PER_RECORD),
+            (
+                "activity",
+                config.activity_chunk_size,
+                ACTIVITY_PARAMS_PER_RECORD,
+            ),
+            (
+                "body_measurement",
+                config.body_measurement_chunk_size,
+                BODY_MEASUREMENT_PARAMS_PER_RECORD,
+            ),
+            (
+                "temperature",
+                config.temperature_chunk_size,
+                TEMPERATURE_PARAMS_PER_RECORD,
+            ),
+            (
+                "respiratory",
+                config.respiratory_chunk_size,
+                RESPIRATORY_PARAMS_PER_RECORD,
+            ),
         ];
 
         for (metric_name, chunk_size, params_per_record) in test_cases {
@@ -570,7 +657,11 @@ mod tests {
             assert!(
                 total_params <= SAFE_PARAM_LIMIT,
                 "{} chunk size {} * {} params = {} exceeds safe limit {}",
-                metric_name, chunk_size, params_per_record, total_params, SAFE_PARAM_LIMIT
+                metric_name,
+                chunk_size,
+                params_per_record,
+                total_params,
+                SAFE_PARAM_LIMIT
             );
         }
     }

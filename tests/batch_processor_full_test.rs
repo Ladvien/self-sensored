@@ -3,12 +3,16 @@ use sqlx::PgPool;
 use std::time::Instant;
 use uuid::Uuid;
 
-use self_sensored::config::{BatchConfig, HEART_RATE_PARAMS_PER_RECORD, BLOOD_PRESSURE_PARAMS_PER_RECORD, SAFE_PARAM_LIMIT, SLEEP_PARAMS_PER_RECORD, ACTIVITY_PARAMS_PER_RECORD, WORKOUT_PARAMS_PER_RECORD};
+use self_sensored::config::{
+    BatchConfig, ACTIVITY_PARAMS_PER_RECORD, BLOOD_PRESSURE_PARAMS_PER_RECORD,
+    HEART_RATE_PARAMS_PER_RECORD, SAFE_PARAM_LIMIT, SLEEP_PARAMS_PER_RECORD,
+    WORKOUT_PARAMS_PER_RECORD,
+};
+use self_sensored::models::enums::{ActivityContext, WorkoutType};
 use self_sensored::models::{
     ActivityMetric, BloodPressureMetric, HealthMetric, HeartRateMetric, IngestData, IngestPayload,
     SleepMetric, WorkoutData,
 };
-use self_sensored::models::enums::{ActivityContext, WorkoutType};
 use self_sensored::services::batch_processor::BatchProcessor;
 
 /// Test helper to create a test database pool
@@ -51,11 +55,7 @@ async fn cleanup_test_data(pool: &PgPool, user_id: Uuid) {
 
     for table in tables {
         let query = format!("DELETE FROM {} WHERE user_id = $1", table);
-        sqlx::query(&query)
-            .bind(user_id)
-            .execute(pool)
-            .await
-            .ok(); // Ignore errors for cleanup
+        sqlx::query(&query).bind(user_id).execute(pool).await.ok(); // Ignore errors for cleanup
     }
 
     // Also clean up users table
@@ -118,7 +118,7 @@ fn create_sample_sleep_metrics(count: usize) -> Vec<HealthMetric> {
                 user_id: Uuid::new_v4(), // Will be overwritten in processing
                 sleep_start,
                 sleep_end,
-                duration_minutes: Some(420), // 7 hours
+                duration_minutes: Some(420),  // 7 hours
                 deep_sleep_minutes: Some(90), // 1.5 hours
                 rem_sleep_minutes: Some(90),
                 light_sleep_minutes: Some(240), // 4 hours
@@ -300,10 +300,7 @@ async fn test_process_batch_multiple_metric_types() {
     let workouts = create_sample_workouts(2);
 
     let payload = IngestPayload {
-        data: IngestData {
-            metrics,
-            workouts,
-        },
+        data: IngestData { metrics, workouts },
     };
 
     let result = processor.process_batch(user_id, payload).await;
@@ -373,7 +370,9 @@ async fn test_process_batch_parallel_vs_sequential() {
     };
 
     let _start_parallel = Instant::now();
-    let result_parallel = processor_parallel.process_batch(user_id, payload_parallel).await;
+    let result_parallel = processor_parallel
+        .process_batch(user_id, payload_parallel)
+        .await;
 
     cleanup_test_data(&pool, user_id).await;
 
@@ -392,7 +391,9 @@ async fn test_process_batch_parallel_vs_sequential() {
     };
 
     let _start_sequential = Instant::now();
-    let result_sequential = processor_sequential.process_batch(user_id, payload_sequential).await;
+    let result_sequential = processor_sequential
+        .process_batch(user_id, payload_sequential)
+        .await;
 
     // Both should process the same number of records successfully
     assert_eq!(result_parallel.processed_count, 50);
@@ -516,7 +517,10 @@ async fn test_parameter_limit_edge_cases() {
     };
 
     let validation_result = boundary_config.validate();
-    assert!(validation_result.is_ok(), "Boundary chunk sizes should be valid");
+    assert!(
+        validation_result.is_ok(),
+        "Boundary chunk sizes should be valid"
+    );
 
     // Test chunk sizes just over the boundary
     let over_boundary_config = BatchConfig {
@@ -525,7 +529,10 @@ async fn test_parameter_limit_edge_cases() {
     };
 
     let validation_result = over_boundary_config.validate();
-    assert!(validation_result.is_err(), "Over-boundary chunk sizes should be invalid");
+    assert!(
+        validation_result.is_err(),
+        "Over-boundary chunk sizes should be invalid"
+    );
 }
 
 #[tokio::test]
@@ -734,10 +741,7 @@ async fn test_all_metric_types_processing() {
     let workouts = create_sample_workouts(2);
 
     let payload = IngestPayload {
-        data: IngestData {
-            metrics,
-            workouts,
-        },
+        data: IngestData { metrics, workouts },
     };
 
     let result = processor.process_batch(user_id, payload).await;
@@ -760,23 +764,21 @@ async fn test_error_handling_and_recovery() {
     let processor = BatchProcessor::new(pool.clone());
 
     // Create metrics with invalid data that might cause database errors
-    let invalid_metrics = vec![
-        HealthMetric::HeartRate(HeartRateMetric {
-            id: Uuid::new_v4(),
-            user_id: Uuid::new_v4(),
-            recorded_at: Utc::now(),
-            heart_rate: Some(-1), // Invalid heart rate
-            resting_heart_rate: Some(60),
-            heart_rate_variability: Some(40.0),
-            walking_heart_rate_average: Some(90),
-            heart_rate_recovery_one_minute: Some(20),
-            atrial_fibrillation_burden_percentage: None,
-            vo2_max_ml_kg_min: None,
-            source_device: Some("Test".to_string()),
-            context: Some(ActivityContext::Resting),
-            created_at: Utc::now(),
-        }),
-    ];
+    let invalid_metrics = vec![HealthMetric::HeartRate(HeartRateMetric {
+        id: Uuid::new_v4(),
+        user_id: Uuid::new_v4(),
+        recorded_at: Utc::now(),
+        heart_rate: Some(-1), // Invalid heart rate
+        resting_heart_rate: Some(60),
+        heart_rate_variability: Some(40.0),
+        walking_heart_rate_average: Some(90),
+        heart_rate_recovery_one_minute: Some(20),
+        atrial_fibrillation_burden_percentage: None,
+        vo2_max_ml_kg_min: None,
+        source_device: Some("Test".to_string()),
+        context: Some(ActivityContext::Resting),
+        created_at: Utc::now(),
+    })];
 
     let payload = IngestPayload {
         data: IngestData {

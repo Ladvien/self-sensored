@@ -149,7 +149,8 @@ async fn test_async_processing_response_fields_large_payload() {
 
     // Parse response body
     let body_bytes = test::read_body(resp).await;
-    let response_text = String::from_utf8(body_bytes.to_vec()).expect("Response should be valid UTF-8");
+    let response_text =
+        String::from_utf8(body_bytes.to_vec()).expect("Response should be valid UTF-8");
     let api_response: ApiResponse<IngestResponse> =
         serde_json::from_str(&response_text).expect("Response should be valid JSON");
 
@@ -255,7 +256,8 @@ async fn test_synchronous_processing_response_fields_small_payload() {
 
     // Parse response body
     let body_bytes = test::read_body(resp).await;
-    let response_text = String::from_utf8(body_bytes.to_vec()).expect("Response should be valid UTF-8");
+    let response_text =
+        String::from_utf8(body_bytes.to_vec()).expect("Response should be valid UTF-8");
     let api_response: ApiResponse<IngestResponse> =
         serde_json::from_str(&response_text).expect("Response should be valid JSON");
 
@@ -431,7 +433,8 @@ async fn test_async_processing_database_state() {
 
     // Parse response to get raw_ingestion_id
     let body_bytes = test::read_body(resp).await;
-    let response_text = String::from_utf8(body_bytes.to_vec()).expect("Response should be valid UTF-8");
+    let response_text =
+        String::from_utf8(body_bytes.to_vec()).expect("Response should be valid UTF-8");
     let api_response: ApiResponse<IngestResponse> =
         serde_json::from_str(&response_text).expect("Response should be valid JSON");
 
@@ -452,7 +455,8 @@ async fn test_async_processing_database_state() {
         "Raw ingestion ID should match"
     );
     assert_eq!(
-        raw_ingestion.processing_status, Some("parsing".to_string()),
+        raw_ingestion.processing_status,
+        Some("parsing".to_string()),
         "Initial processing status should be 'parsing' for async processing"
     );
     assert!(

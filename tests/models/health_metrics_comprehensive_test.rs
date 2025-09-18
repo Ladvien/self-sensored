@@ -1,9 +1,10 @@
-use chrono::{DateTime, Utc, NaiveDate};
-use serde_json::json;
+use chrono::{DateTime, NaiveDate, Utc};
 use self_sensored::models::{
-    HeartRateMetric, BloodPressureMetric, SleepMetric, ActivityMetric, 
-    WorkoutData, GpsCoordinate, HealthMetric, enums::{ActivityContext, WorkoutType}
+    enums::{ActivityContext, WorkoutType},
+    ActivityMetric, BloodPressureMetric, GpsCoordinate, HealthMetric, HeartRateMetric, SleepMetric,
+    WorkoutData,
 };
+use serde_json::json;
 use uuid::Uuid;
 
 /// Comprehensive tests for HeartRateMetric validation and processing
@@ -82,9 +83,7 @@ mod heart_rate_tests {
 
     #[test]
     fn test_heart_rate_context_validation() {
-        let contexts = vec![
-            "rest", "exercise", "sleep", "stress", "recovery"
-        ];
+        let contexts = vec!["rest", "exercise", "sleep", "stress", "recovery"];
 
         for context in contexts {
             let metric = HeartRateMetric {
@@ -95,7 +94,11 @@ mod heart_rate_tests {
                 source: Some("test".to_string()),
                 context: Some(context.to_string()),
             };
-            assert!(metric.validate().is_ok(), "Context '{}' should be valid", context);
+            assert!(
+                metric.validate().is_ok(),
+                "Context '{}' should be valid",
+                context
+            );
         }
     }
 }
@@ -229,7 +232,7 @@ mod sleep_tests {
     fn test_sleep_metric_validation_valid() {
         let start = Utc::now() - Duration::hours(8);
         let end = Utc::now();
-        
+
         let metric = SleepMetric {
             recorded_at: end,
             sleep_start: start,
@@ -249,7 +252,7 @@ mod sleep_tests {
     fn test_sleep_efficiency_calculation() {
         let start = Utc::now() - Duration::hours(8);
         let end = Utc::now();
-        
+
         let metric = SleepMetric {
             recorded_at: end,
             sleep_start: start,
@@ -273,7 +276,7 @@ mod sleep_tests {
     fn test_sleep_component_validation() {
         let start = Utc::now() - Duration::hours(8);
         let end = Utc::now();
-        
+
         // Components exceed total duration - should fail
         let invalid_components = SleepMetric {
             recorded_at: end,
@@ -281,8 +284,8 @@ mod sleep_tests {
             sleep_end: end,
             total_sleep_minutes: 420,
             deep_sleep_minutes: Some(300), // 5 hours
-            rem_sleep_minutes: Some(200), // 3.3 hours  
-            awake_minutes: Some(100), // 1.7 hours - total > 8 hours
+            rem_sleep_minutes: Some(200),  // 3.3 hours
+            awake_minutes: Some(100),      // 1.7 hours - total > 8 hours
             efficiency_percentage: None,
             source: Some("test".to_string()),
         };
@@ -379,7 +382,7 @@ mod workout_tests {
     fn test_workout_validation_valid() {
         let start = Utc::now() - Duration::hours(1);
         let end = Utc::now();
-        
+
         let workout = WorkoutData {
             workout_type: "running".to_string(),
             start_time: start,
@@ -429,7 +432,7 @@ mod workout_tests {
     fn test_workout_with_gps_route() {
         let start = Utc::now() - Duration::hours(1);
         let end = Utc::now();
-        
+
         let route_points = vec![
             GpsCoordinate {
                 latitude: 37.7749,
@@ -464,7 +467,7 @@ mod workout_tests {
         };
 
         assert!(workout.validate().is_ok());
-        
+
         // Test LINESTRING generation
         let linestring = workout.route_to_linestring();
         assert!(linestring.is_some());
@@ -475,16 +478,14 @@ mod workout_tests {
     fn test_workout_gps_timing_validation() {
         let start = Utc::now() - Duration::hours(1);
         let end = Utc::now();
-        
+
         // GPS point outside workout duration - should fail
-        let invalid_route_points = vec![
-            GpsCoordinate {
-                latitude: 37.7749,
-                longitude: -122.4194,
-                altitude_meters: Some(50.0),
-                recorded_at: start - Duration::minutes(10), // Before workout start
-            },
-        ];
+        let invalid_route_points = vec![GpsCoordinate {
+            latitude: 37.7749,
+            longitude: -122.4194,
+            altitude_meters: Some(50.0),
+            recorded_at: start - Duration::minutes(10), // Before workout start
+        }];
 
         let workout = WorkoutData {
             workout_type: "running".to_string(),
@@ -505,7 +506,7 @@ mod workout_tests {
     fn test_workout_heart_rate_validation() {
         let start = Utc::now() - Duration::hours(1);
         let end = Utc::now();
-        
+
         // Invalid heart rate - too high
         let invalid_hr = WorkoutData {
             workout_type: "running".to_string(),
@@ -610,7 +611,7 @@ mod health_metric_integration_tests {
 
         let serialized = serde_json::to_string(&heart_rate).unwrap();
         let deserialized: HealthMetric = serde_json::from_str(&serialized).unwrap();
-        
+
         assert_eq!(heart_rate.metric_type(), deserialized.metric_type());
         assert!(deserialized.validate().is_ok());
     }

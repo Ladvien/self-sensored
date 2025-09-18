@@ -1,6 +1,6 @@
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use self_sensored::config::ValidationConfig;
-use self_sensored::models::{HealthMetric, RespiratoryMetric};
+use self_sensored::models::RespiratoryMetric;
 use uuid::Uuid;
 
 /// Respiratory metrics integration tests

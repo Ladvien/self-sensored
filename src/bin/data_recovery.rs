@@ -5,7 +5,7 @@ use sqlx::{PgPool, Row};
 use std::collections::HashMap;
 use std::env;
 use std::time::{Duration, Instant};
-use tracing::{error, info, warn, instrument};
+use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
 use self_sensored::config::BatchConfig;
@@ -97,7 +97,10 @@ impl DataRecoveryService {
     pub async fn run_recovery(&mut self) -> Result<RecoveryStats, Box<dyn std::error::Error>> {
         let start_time = Instant::now();
 
-        info!("🚀 Starting data recovery process with configuration: {:?}", self.config);
+        info!(
+            "🚀 Starting data recovery process with configuration: {:?}",
+            self.config
+        );
 
         // Phase 1: Discover failed records
         let failed_records = self.discover_failed_records().await?;
@@ -108,7 +111,10 @@ impl DataRecoveryService {
             return Ok(self.stats.clone());
         }
 
-        info!("📊 Discovered {} failed records for recovery", failed_records.len());
+        info!(
+            "📊 Discovered {} failed records for recovery",
+            failed_records.len()
+        );
 
         // Phase 2: Pre-recovery verification
         if self.config.verification_enabled {
@@ -136,7 +142,7 @@ impl DataRecoveryService {
     async fn discover_failed_records(&self) -> Result<Vec<FailedRecord>, sqlx::Error> {
         let mut query_builder = sqlx::QueryBuilder::new(
             "SELECT id, user_id, raw_payload, processing_errors, processing_status,
-             payload_size_bytes, created_at FROM raw_ingestions WHERE "
+             payload_size_bytes, created_at FROM raw_ingestions WHERE ",
         );
 
         // Build dynamic WHERE clause based on config
@@ -144,7 +150,9 @@ impl DataRecoveryService {
 
         // Filter by processing status
         if !self.config.target_status.is_empty() {
-            let status_list = self.config.target_status
+            let status_list = self
+                .config
+                .target_status
                 .iter()
                 .map(|s| format!("'{}'", s))
                 .collect::<Vec<_>>()
@@ -168,7 +176,7 @@ impl DataRecoveryService {
               processing_errors::text ILIKE '%too many arguments%' OR
               processing_errors::text ILIKE '%exceeding safe limit%' OR
               processing_errors::text ILIKE '%chunk size%')"
-                .to_string()
+                .to_string(),
         );
 
         let where_clause = conditions.join(" AND ");
@@ -176,7 +184,8 @@ impl DataRecoveryService {
         query_builder.push(" ORDER BY created_at DESC");
 
         if self.config.batch_size > 0 {
-            query_builder.push(&format!(" LIMIT {}", self.config.batch_size * 10)); // Allow for multiple batches
+            query_builder.push(&format!(" LIMIT {}", self.config.batch_size * 10));
+            // Allow for multiple batches
         }
 
         let query = query_builder.build();
@@ -201,7 +210,10 @@ impl DataRecoveryService {
 
     /// Verify the state before recovery starts
     #[instrument(skip(self, records))]
-    async fn verify_pre_recovery_state(&mut self, records: &[FailedRecord]) -> Result<(), Box<dyn std::error::Error>> {
+    async fn verify_pre_recovery_state(
+        &mut self,
+        records: &[FailedRecord],
+    ) -> Result<(), Box<dyn std::error::Error>> {
         info!("🔍 Performing pre-recovery verification...");
 
         // Count existing metrics for each user before recovery
@@ -209,13 +221,15 @@ impl DataRecoveryService {
             let existing_counts = self.count_existing_metrics(record.user_id).await?;
             let checksum = self.calculate_payload_checksum(&record.raw_payload)?;
 
-            self.stats.verification_checksums.insert(
-                format!("pre_recovery_{}", record.id),
-                checksum,
-            );
+            self.stats
+                .verification_checksums
+                .insert(format!("pre_recovery_{}", record.id), checksum);
 
-            info!("✅ Pre-recovery verification for record {}: {} existing metrics",
-                  record.id, existing_counts.total());
+            info!(
+                "✅ Pre-recovery verification for record {}: {} existing metrics",
+                record.id,
+                existing_counts.total()
+            );
         }
 
         Ok(())
@@ -223,17 +237,33 @@ impl DataRecoveryService {
 
     /// Process failed records in manageable batches
     #[instrument(skip(self, records))]
-    async fn process_recovery_batches(&mut self, records: Vec<FailedRecord>) -> Result<(), Box<dyn std::error::Error>> {
+    async fn process_recovery_batches(
+        &mut self,
+        records: Vec<FailedRecord>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let total_batches = (records.len() + self.config.batch_size - 1) / self.config.batch_size;
-        info!("📦 Processing {} records in {} batches of {} records each",
-              records.len(), total_batches, self.config.batch_size);
+        info!(
+            "📦 Processing {} records in {} batches of {} records each",
+            records.len(),
+            total_batches,
+            self.config.batch_size
+        );
 
         for (batch_idx, batch) in records.chunks(self.config.batch_size).enumerate() {
-            info!("🔄 Processing batch {}/{} ({} records)", batch_idx + 1, total_batches, batch.len());
+            info!(
+                "🔄 Processing batch {}/{} ({} records)",
+                batch_idx + 1,
+                total_batches,
+                batch.len()
+            );
 
             for (record_idx, record) in batch.iter().enumerate() {
-                if (self.stats.processed_records + self.stats.failed_records + self.stats.skipped_records)
-                    % self.config.progress_report_interval == 0 {
+                if (self.stats.processed_records
+                    + self.stats.failed_records
+                    + self.stats.skipped_records)
+                    % self.config.progress_report_interval
+                    == 0
+                {
                     self.report_progress().await;
                 }
 
@@ -263,8 +293,14 @@ impl DataRecoveryService {
 
     /// Process a single failed record
     #[instrument(skip(self, record))]
-    async fn process_single_record(&self, record: &FailedRecord) -> Result<RecoveryResult, Box<dyn std::error::Error>> {
-        info!("🔄 Processing record {} for user {}", record.id, record.user_id);
+    async fn process_single_record(
+        &self,
+        record: &FailedRecord,
+    ) -> Result<RecoveryResult, Box<dyn std::error::Error>> {
+        info!(
+            "🔄 Processing record {} for user {}",
+            record.id, record.user_id
+        );
 
         // Parse the raw payload back to IngestPayload
         let payload: IngestPayload = serde_json::from_value(record.raw_payload.clone())
@@ -273,7 +309,10 @@ impl DataRecoveryService {
         let expected_metrics = payload.data.metrics.len() + payload.data.workouts.len();
 
         if self.config.dry_run {
-            info!("🧪 DRY RUN: Would reprocess {} metrics for record {}", expected_metrics, record.id);
+            info!(
+                "🧪 DRY RUN: Would reprocess {} metrics for record {}",
+                expected_metrics, record.id
+            );
             return Ok(RecoveryResult {
                 metrics_processed: expected_metrics,
                 metrics_failed: 0,
@@ -286,7 +325,10 @@ impl DataRecoveryService {
         let before_counts = self.count_existing_metrics(record.user_id).await?;
 
         // Process the payload with the corrected batch configuration
-        let batch_result = self.batch_processor.process_batch(record.user_id, payload).await;
+        let batch_result = self
+            .batch_processor
+            .process_batch(record.user_id, payload)
+            .await;
 
         // Count metrics after processing
         let after_counts = self.count_existing_metrics(record.user_id).await?;
@@ -307,8 +349,10 @@ impl DataRecoveryService {
             .execute(&self.pool)
             .await?;
 
-            info!("✅ Successfully recovered record {}: {} metrics processed, {} metrics recovered",
-                  record.id, batch_result.processed_count, metrics_recovered);
+            info!(
+                "✅ Successfully recovered record {}: {} metrics processed, {} metrics recovered",
+                record.id, batch_result.processed_count, metrics_recovered
+            );
         } else {
             // Update with new errors but mark as attempted recovery
             let errors_json = serde_json::to_value(&batch_result.errors)?;
@@ -324,15 +368,23 @@ impl DataRecoveryService {
             .execute(&self.pool)
             .await?;
 
-            warn!("⚠️ Recovery attempt for record {} completed with {} errors: {} metrics processed",
-                  record.id, batch_result.errors.len(), batch_result.processed_count);
+            warn!(
+                "⚠️ Recovery attempt for record {} completed with {} errors: {} metrics processed",
+                record.id,
+                batch_result.errors.len(),
+                batch_result.processed_count
+            );
         }
 
         Ok(RecoveryResult {
             metrics_processed: batch_result.processed_count,
             metrics_failed: batch_result.failed_count,
             processing_successful,
-            errors: batch_result.errors.iter().map(|e| e.error_message.clone()).collect(),
+            errors: batch_result
+                .errors
+                .iter()
+                .map(|e| e.error_message.clone())
+                .collect(),
         })
     }
 
@@ -342,27 +394,40 @@ impl DataRecoveryService {
         let heart_rate = sqlx::query_scalar!(
             "SELECT COUNT(*) FROM heart_rate_metrics WHERE user_id = $1",
             user_id
-        ).fetch_one(&self.pool).await?.unwrap_or(0) as usize;
+        )
+        .fetch_one(&self.pool)
+        .await?
+        .unwrap_or(0) as usize;
 
         let blood_pressure = sqlx::query_scalar!(
             "SELECT COUNT(*) FROM blood_pressure_metrics WHERE user_id = $1",
             user_id
-        ).fetch_one(&self.pool).await?.unwrap_or(0) as usize;
+        )
+        .fetch_one(&self.pool)
+        .await?
+        .unwrap_or(0) as usize;
 
         let sleep = sqlx::query_scalar!(
             "SELECT COUNT(*) FROM sleep_metrics WHERE user_id = $1",
             user_id
-        ).fetch_one(&self.pool).await?.unwrap_or(0) as usize;
+        )
+        .fetch_one(&self.pool)
+        .await?
+        .unwrap_or(0) as usize;
 
         let activity = sqlx::query_scalar!(
             "SELECT COUNT(*) FROM activity_metrics WHERE user_id = $1",
             user_id
-        ).fetch_one(&self.pool).await?.unwrap_or(0) as usize;
+        )
+        .fetch_one(&self.pool)
+        .await?
+        .unwrap_or(0) as usize;
 
-        let workouts = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM workouts WHERE user_id = $1",
-            user_id
-        ).fetch_one(&self.pool).await?.unwrap_or(0) as usize;
+        let workouts =
+            sqlx::query_scalar!("SELECT COUNT(*) FROM workouts WHERE user_id = $1", user_id)
+                .fetch_one(&self.pool)
+                .await?
+                .unwrap_or(0) as usize;
 
         Ok(MetricCounts {
             heart_rate,
@@ -374,7 +439,10 @@ impl DataRecoveryService {
     }
 
     /// Calculate SHA256 checksum of payload for verification
-    fn calculate_payload_checksum(&self, payload: &serde_json::Value) -> Result<String, Box<dyn std::error::Error>> {
+    fn calculate_payload_checksum(
+        &self,
+        payload: &serde_json::Value,
+    ) -> Result<String, Box<dyn std::error::Error>> {
         let payload_bytes = serde_json::to_vec(payload)?;
         let mut hasher = Sha256::new();
         hasher.update(&payload_bytes);
@@ -403,13 +471,16 @@ impl DataRecoveryService {
 
         info!("📊 Post-recovery processing status breakdown:");
         for stat in recovery_stats {
-            let avg_size = stat.avg_size_mb
+            let avg_size = stat
+                .avg_size_mb
                 .map(|bd| bd.to_string().parse::<f64>().unwrap_or(0.0))
                 .unwrap_or(0.0);
-            info!("  {}: {} records (avg {:.2} MB)",
-                  stat.processing_status.unwrap_or("unknown".to_string()),
-                  stat.count.unwrap_or(0),
-                  avg_size);
+            info!(
+                "  {}: {} records (avg {:.2} MB)",
+                stat.processing_status.unwrap_or("unknown".to_string()),
+                stat.count.unwrap_or(0),
+                avg_size
+            );
         }
 
         // Verify no data loss occurred during recovery
@@ -423,7 +494,10 @@ impl DataRecoveryService {
         .unwrap_or(0);
 
         if potential_data_loss > 0 {
-            warn!("⚠️ {} records still show potential data loss after recovery", potential_data_loss);
+            warn!(
+                "⚠️ {} records still show potential data loss after recovery",
+                potential_data_loss
+            );
         } else {
             info!("✅ No data loss detected in recovered records");
         }
@@ -440,14 +514,17 @@ impl DataRecoveryService {
         let errors_to_process = result.errors.clone();
 
         // Update per-user stats
-        let user_stats = self.stats.user_recovery_stats
+        let user_stats = self
+            .stats
+            .user_recovery_stats
             .entry(record.user_id)
             .or_insert_with(UserRecoveryStats::default);
 
         user_stats.records_processed += 1;
         user_stats.metrics_recovered += result.metrics_processed;
         user_stats.metrics_failed += result.metrics_failed;
-        user_stats.largest_payload_mb = user_stats.largest_payload_mb
+        user_stats.largest_payload_mb = user_stats
+            .largest_payload_mb
             .max(record.payload_size_bytes as f64 / (1024.0 * 1024.0));
 
         for error in &errors_to_process {
@@ -482,24 +559,37 @@ impl DataRecoveryService {
             "Other"
         };
 
-        *self.stats.error_breakdown.entry(error_category.to_string()).or_insert(0) += 1;
+        *self
+            .stats
+            .error_breakdown
+            .entry(error_category.to_string())
+            .or_insert(0) += 1;
     }
 
     /// Report current progress
     async fn report_progress(&self) {
-        let total_processed = self.stats.processed_records + self.stats.failed_records + self.stats.skipped_records;
+        let total_processed =
+            self.stats.processed_records + self.stats.failed_records + self.stats.skipped_records;
         let progress_percentage = if self.stats.total_records > 0 {
             (total_processed as f64 / self.stats.total_records as f64) * 100.0
         } else {
             0.0
         };
 
-        info!("📈 Progress: {}/{} records ({:.1}%) - {} recovered, {} failed, {} skipped",
-              total_processed, self.stats.total_records, progress_percentage,
-              self.stats.processed_records, self.stats.failed_records, self.stats.skipped_records);
+        info!(
+            "📈 Progress: {}/{} records ({:.1}%) - {} recovered, {} failed, {} skipped",
+            total_processed,
+            self.stats.total_records,
+            progress_percentage,
+            self.stats.processed_records,
+            self.stats.failed_records,
+            self.stats.skipped_records
+        );
 
-        info!("📊 Metrics: {} recovered, {} failed",
-              self.stats.total_metrics_recovered, self.stats.total_metrics_failed);
+        info!(
+            "📊 Metrics: {} recovered, {} failed",
+            self.stats.total_metrics_recovered, self.stats.total_metrics_failed
+        );
     }
 
     /// Generate comprehensive recovery report
@@ -510,12 +600,24 @@ impl DataRecoveryService {
         info!("🎯 === DATA RECOVERY COMPLETION REPORT ===");
         info!("📊 Overall Statistics:");
         info!("  • Total records processed: {}", self.stats.total_records);
-        info!("  • Successfully recovered: {}", self.stats.processed_records);
+        info!(
+            "  • Successfully recovered: {}",
+            self.stats.processed_records
+        );
         info!("  • Failed recovery: {}", self.stats.failed_records);
         info!("  • Skipped records: {}", self.stats.skipped_records);
-        info!("  • Total metrics recovered: {}", self.stats.total_metrics_recovered);
-        info!("  • Total metrics failed: {}", self.stats.total_metrics_failed);
-        info!("  • Processing time: {} seconds", self.stats.processing_time_seconds);
+        info!(
+            "  • Total metrics recovered: {}",
+            self.stats.total_metrics_recovered
+        );
+        info!(
+            "  • Total metrics failed: {}",
+            self.stats.total_metrics_failed
+        );
+        info!(
+            "  • Processing time: {} seconds",
+            self.stats.processing_time_seconds
+        );
 
         let success_rate = if self.stats.total_records > 0 {
             (self.stats.processed_records as f64 / self.stats.total_records as f64) * 100.0
@@ -531,17 +633,23 @@ impl DataRecoveryService {
 
         info!("👥 Per-User Recovery Summary:");
         for (user_id, user_stats) in &self.stats.user_recovery_stats {
-            info!("  • User {}: {} records, {} metrics recovered, {:.1}% data loss",
-                  user_id, user_stats.records_processed, user_stats.metrics_recovered,
-                  user_stats.data_loss_percentage);
+            info!(
+                "  • User {}: {} records, {} metrics recovered, {:.1}% data loss",
+                user_id,
+                user_stats.records_processed,
+                user_stats.metrics_recovered,
+                user_stats.data_loss_percentage
+            );
         }
 
         // Generate JSON report for automated monitoring
         let report_json = serde_json::to_string_pretty(&self.stats)?;
 
         // Save report to file for auditing
-        let report_filename = format!("data_recovery_report_{}.json",
-                                     chrono::Utc::now().format("%Y%m%d_%H%M%S"));
+        let report_filename = format!(
+            "data_recovery_report_{}.json",
+            chrono::Utc::now().format("%Y%m%d_%H%M%S")
+        );
         tokio::fs::write(&report_filename, report_json).await?;
 
         info!("📄 Detailed report saved to: {}", report_filename);
@@ -629,8 +737,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Get database URL from environment
-    let database_url = env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     // Create database connection pool
     let pool = PgPool::connect(&database_url).await?;

@@ -13,11 +13,10 @@ use uuid::Uuid;
 use crate::config::{
     BatchConfig, ACTIVITY_PARAMS_PER_RECORD, AUDIO_EXPOSURE_PARAMS_PER_RECORD,
     BLOOD_PRESSURE_PARAMS_PER_RECORD, BODY_MEASUREMENT_PARAMS_PER_RECORD,
-    ENVIRONMENTAL_PARAMS_PER_RECORD, HEART_RATE_PARAMS_PER_RECORD, SAFE_PARAM_LIMIT,
-    SLEEP_PARAMS_PER_RECORD, WORKOUT_PARAMS_PER_RECORD,
-    SAFETY_EVENT_PARAMS_PER_RECORD, MINDFULNESS_PARAMS_PER_RECORD,
-    MENTAL_HEALTH_PARAMS_PER_RECORD, SYMPTOM_PARAMS_PER_RECORD,
-    HYGIENE_PARAMS_PER_RECORD,
+    ENVIRONMENTAL_PARAMS_PER_RECORD, HEART_RATE_PARAMS_PER_RECORD, HYGIENE_PARAMS_PER_RECORD,
+    MENTAL_HEALTH_PARAMS_PER_RECORD, MINDFULNESS_PARAMS_PER_RECORD, SAFETY_EVENT_PARAMS_PER_RECORD,
+    SAFE_PARAM_LIMIT, SLEEP_PARAMS_PER_RECORD, SYMPTOM_PARAMS_PER_RECORD,
+    WORKOUT_PARAMS_PER_RECORD,
 };
 use crate::middleware::metrics::Metrics;
 use crate::models::{HealthMetric, IngestPayload, ProcessingError};
@@ -2005,8 +2004,16 @@ impl BatchProcessor {
                     .push_bind(metric.heart_rate_variability)
                     .push_bind(metric.walking_heart_rate_average)
                     .push_bind(metric.heart_rate_recovery_one_minute)
-                    .push_bind(metric.atrial_fibrillation_burden_percentage.map(|d| d.to_string().parse::<f64>().unwrap_or(0.0)))
-                    .push_bind(metric.vo2_max_ml_kg_min.map(|d| d.to_string().parse::<f64>().unwrap_or(0.0)))
+                    .push_bind(
+                        metric
+                            .atrial_fibrillation_burden_percentage
+                            .map(|d| d.to_string().parse::<f64>().unwrap_or(0.0)),
+                    )
+                    .push_bind(
+                        metric
+                            .vo2_max_ml_kg_min
+                            .map(|d| d.to_string().parse::<f64>().unwrap_or(0.0)),
+                    )
                     .push_bind(metric.context)
                     .push_bind(&metric.source_device);
             });
@@ -2039,7 +2046,7 @@ impl BatchProcessor {
                             "Some HeartRate records were skipped - likely due to conflicts (ON CONFLICT DO NOTHING)"
                         );
                     }
-                },
+                }
                 Err(e) => {
                     error!(
                         chunk_index = chunk_idx + 1,
@@ -4237,8 +4244,7 @@ impl BatchProcessor {
             return Ok(0);
         }
 
-        let chunks: Vec<&[crate::models::SafetyEventMetric]> =
-            metrics.chunks(chunk_size).collect();
+        let chunks: Vec<&[crate::models::SafetyEventMetric]> = metrics.chunks(chunk_size).collect();
         let mut total_inserted = 0;
         let max_params_per_chunk = chunk_size * SAFETY_EVENT_PARAMS_PER_RECORD;
 
@@ -4322,8 +4328,7 @@ impl BatchProcessor {
             return Ok(0);
         }
 
-        let chunks: Vec<&[crate::models::MindfulnessMetric]> =
-            metrics.chunks(chunk_size).collect();
+        let chunks: Vec<&[crate::models::MindfulnessMetric]> = metrics.chunks(chunk_size).collect();
         let mut total_inserted = 0;
         let max_params_per_chunk = chunk_size * MINDFULNESS_PARAMS_PER_RECORD;
 
@@ -4524,8 +4529,7 @@ impl BatchProcessor {
             return Ok(0);
         }
 
-        let chunks: Vec<&[crate::models::SymptomMetric]> =
-            metrics.chunks(chunk_size).collect();
+        let chunks: Vec<&[crate::models::SymptomMetric]> = metrics.chunks(chunk_size).collect();
         let mut total_inserted = 0;
         let max_params_per_chunk = chunk_size * SYMPTOM_PARAMS_PER_RECORD;
 
@@ -4554,12 +4558,14 @@ impl BatchProcessor {
                     .push_bind(&metric.source_device);
             });
 
-            query_builder.push(" ON CONFLICT (user_id, recorded_at, symptom_type) DO UPDATE SET
+            query_builder.push(
+                " ON CONFLICT (user_id, recorded_at, symptom_type) DO UPDATE SET
                 severity = EXCLUDED.severity,
                 duration_minutes = COALESCE(EXCLUDED.duration_minutes, symptoms.duration_minutes),
                 notes = COALESCE(EXCLUDED.notes, symptoms.notes),
                 episode_id = COALESCE(EXCLUDED.episode_id, symptoms.episode_id),
-                source_device = COALESCE(EXCLUDED.source_device, symptoms.source_device)");
+                source_device = COALESCE(EXCLUDED.source_device, symptoms.source_device)",
+            );
 
             let query = query_builder.build();
 
@@ -4607,8 +4613,7 @@ impl BatchProcessor {
             return Ok(0);
         }
 
-        let chunks: Vec<&[crate::models::HygieneMetric]> =
-            metrics.chunks(chunk_size).collect();
+        let chunks: Vec<&[crate::models::HygieneMetric]> = metrics.chunks(chunk_size).collect();
         let mut total_inserted = 0;
         let max_params_per_chunk = chunk_size * HYGIENE_PARAMS_PER_RECORD;
 

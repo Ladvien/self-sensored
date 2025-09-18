@@ -132,14 +132,14 @@ pub struct ActivityMetric {
     pub running_speed_m_per_s: Option<f64>,
 
     // Cycling Metrics (iOS 17+ HealthKit)
-    pub cycling_speed_kmh: Option<f64>,               // Cycling speed in km/h
-    pub cycling_power_watts: Option<f64>,             // Cycling power in watts
-    pub cycling_cadence_rpm: Option<f64>,             // Cycling cadence in RPM
+    pub cycling_speed_kmh: Option<f64>,   // Cycling speed in km/h
+    pub cycling_power_watts: Option<f64>, // Cycling power in watts
+    pub cycling_cadence_rpm: Option<f64>, // Cycling cadence in RPM
     pub functional_threshold_power_watts: Option<f64>, // Cycling FTP in watts
 
     // Underwater Metrics (iOS 16+ HealthKit)
-    pub underwater_depth_meters: Option<f64>,         // Underwater depth in meters
-    pub diving_duration_seconds: Option<i32>,         // Diving session duration in seconds
+    pub underwater_depth_meters: Option<f64>, // Underwater depth in meters
+    pub diving_duration_seconds: Option<i32>, // Diving session duration in seconds
 
     // Metadata
     pub source_device: Option<String>,

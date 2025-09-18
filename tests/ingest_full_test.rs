@@ -15,7 +15,6 @@
 /// - Duplicate detection
 /// - Async processing
 /// - Edge cases
-
 use actix_web::{http::header, test, web};
 use chrono::Utc;
 use sqlx::PgPool;
@@ -27,10 +26,10 @@ use self_sensored::{
     models::{
         enums::{ActivityContext, WorkoutType},
         health_metrics::{
-            ActivityMetric, BloodPressureMetric, HeartRateMetric, HealthMetric, SleepMetric,
+            ActivityMetric, BloodPressureMetric, HealthMetric, HeartRateMetric, SleepMetric,
         },
-        IngestData, IngestPayload, IosIngestData, IosIngestPayload,
-        IosMetric, IosMetricData, IosWorkout, WorkoutData,
+        IngestData, IngestPayload, IosIngestData, IosIngestPayload, IosMetric, IosMetricData,
+        IosWorkout, WorkoutData,
     },
     services::auth::AuthContext,
 };
@@ -94,7 +93,9 @@ impl TestFixtures {
                         heart_rate_variability: Some(35.2),
                         walking_heart_rate_average: Some(85),
                         heart_rate_recovery_one_minute: Some(20),
-                        atrial_fibrillation_burden_percentage: Some(rust_decimal::Decimal::new(0, 0)),
+                        atrial_fibrillation_burden_percentage: Some(rust_decimal::Decimal::new(
+                            0, 0,
+                        )),
                         vo2_max_ml_kg_min: Some(rust_decimal::Decimal::new(4500, 2)), // 45.00
                         context: Some(ActivityContext::Resting),
                         source_device: Some("Apple Watch".to_string()),
@@ -248,8 +249,8 @@ impl TestFixtures {
                         id: Uuid::new_v4(),
                         user_id,
                         recorded_at: now,
-                        systolic: 10,  // Invalid: too low
-                        diastolic: 300, // Invalid: too high
+                        systolic: 10,     // Invalid: too low
+                        diastolic: 300,   // Invalid: too high
                         pulse: Some(400), // Invalid: too high for pulse
                         source_device: Some("Test Device".to_string()),
                         created_at: now,
@@ -433,7 +434,8 @@ async fn test_empty_payload_rejection() {
 async fn test_invalid_json_format() {
     let config = IngestTestConfig::new().await;
 
-    let corrupted_json = r#"{"data": {"metrics": [{"type": "heart_rate", "value": 75, "unclosed": true"#;
+    let corrupted_json =
+        r#"{"data": {"metrics": [{"type": "heart_rate", "value": 75, "unclosed": true"#;
     let payload_bytes = web::Bytes::from(corrupted_json);
 
     let req = test::TestRequest::post()

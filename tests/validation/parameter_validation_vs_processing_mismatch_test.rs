@@ -1,15 +1,3 @@
-///! STORY-DATA-004: Parameter Validation vs Processing Mismatch Detection
-///!
-///! This test suite provides automated validation to detect mismatches between:
-///! 1. HealthMetric enum variants
-///! 2. GroupedMetrics struct fields
-///! 3. group_metrics_by_type() match arms
-///! 4. Batch processing implementations
-///!
-///! Purpose: Prevent data loss when new HealthMetric types are added without
-///! corresponding batch processing support.
-
-use crate::models::health_metrics::HealthMetric;
 
 /// Compile-time validation that ensures every HealthMetric enum variant
 /// has a corresponding field in GroupedMetrics struct

@@ -1,15 +1,14 @@
-use chrono::{DateTime, Utc, NaiveDate, Duration};
+use chrono::{DateTime, Duration, NaiveDate, Utc};
 use serde_json::json;
 use uuid::Uuid;
 
 use self_sensored::models::{
-    HeartRateMetric, BloodPressureMetric, SleepMetric, ActivityMetric, 
-    WorkoutData, GpsCoordinate, HealthMetric, IngestPayload, IngestData
+    ActivityMetric, BloodPressureMetric, GpsCoordinate, HealthMetric, HeartRateMetric, IngestData,
+    IngestPayload, SleepMetric, WorkoutData,
 };
 
 use self_sensored::models::db::{
-    HeartRateRecord, BloodPressureRecord, SleepRecord, ActivityRecord,
-    WorkoutRecord
+    ActivityRecord, BloodPressureRecord, HeartRateRecord, SleepRecord, WorkoutRecord,
 };
 
 /// Integration tests with realistic Auto Health Export data samples
@@ -21,7 +20,7 @@ mod realistic_data_tests {
         let base_date = Utc::now().date_naive();
         let morning = base_date.and_hms_opt(7, 30, 0).unwrap().and_utc();
         let evening = base_date.and_hms_opt(22, 15, 0).unwrap().and_utc();
-        
+
         // Heart rate data throughout the day
         let heart_rate_metrics = vec![
             HealthMetric::HeartRate(HeartRateMetric {
@@ -69,34 +68,30 @@ mod realistic_data_tests {
         ];
 
         // Sleep data from previous night
-        let sleep_start = morning - Duration::hours(9);  // 10:30 PM previous night
+        let sleep_start = morning - Duration::hours(9); // 10:30 PM previous night
         let sleep_end = morning - Duration::minutes(30); // 7:00 AM
-        let sleep_metrics = vec![
-            HealthMetric::Sleep(SleepMetric {
-                recorded_at: sleep_end,
-                sleep_start,
-                sleep_end,
-                total_sleep_minutes: 420, // 7 hours of actual sleep
-                deep_sleep_minutes: Some(95),
-                rem_sleep_minutes: Some(88),
-                awake_minutes: Some(27),
-                efficiency_percentage: Some(84.2), // Good sleep efficiency
-                source: Some("Apple Health".to_string()),
-            }),
-        ];
+        let sleep_metrics = vec![HealthMetric::Sleep(SleepMetric {
+            recorded_at: sleep_end,
+            sleep_start,
+            sleep_end,
+            total_sleep_minutes: 420, // 7 hours of actual sleep
+            deep_sleep_minutes: Some(95),
+            rem_sleep_minutes: Some(88),
+            awake_minutes: Some(27),
+            efficiency_percentage: Some(84.2), // Good sleep efficiency
+            source: Some("Apple Health".to_string()),
+        })];
 
         // Daily activity summary
-        let activity_metrics = vec![
-            HealthMetric::Activity(ActivityMetric {
-                date: base_date,
-                steps: Some(12547),
-                distance_meters: Some(8942.3),
-                calories_burned: Some(612.5),
-                active_minutes: Some(73),
-                flights_climbed: Some(18),
-                source: Some("iPhone Health".to_string()),
-            }),
-        ];
+        let activity_metrics = vec![HealthMetric::Activity(ActivityMetric {
+            date: base_date,
+            steps: Some(12547),
+            distance_meters: Some(8942.3),
+            calories_burned: Some(612.5),
+            active_minutes: Some(73),
+            flights_climbed: Some(18),
+            source: Some("iPhone Health".to_string()),
+        })];
 
         let mut all_metrics = Vec::new();
         all_metrics.extend(heart_rate_metrics);
@@ -107,7 +102,7 @@ mod realistic_data_tests {
         // Morning run workout with GPS
         let run_start = morning + Duration::hours(8);
         let run_end = run_start + Duration::minutes(32);
-        
+
         let run_route = vec![
             GpsCoordinate {
                 latitude: 40.7831,
@@ -169,41 +164,49 @@ mod realistic_data_tests {
             data: IngestData {
                 metrics: all_metrics,
                 workouts: vec![morning_run],
-            }
+            },
         }
     }
 
     #[test]
     fn test_realistic_payload_validation() {
         let payload = create_realistic_daily_sample();
-        
+
         // Validate all metrics
         for metric in &payload.data.metrics {
-            assert!(metric.validate().is_ok(), 
-                "Metric {:?} should validate successfully", metric.metric_type());
+            assert!(
+                metric.validate().is_ok(),
+                "Metric {:?} should validate successfully",
+                metric.metric_type()
+            );
         }
-        
+
         // Validate all workouts
         for workout in &payload.data.workouts {
-            assert!(workout.validate().is_ok(), 
-                "Workout should validate successfully");
+            assert!(
+                workout.validate().is_ok(),
+                "Workout should validate successfully"
+            );
         }
     }
 
     #[test]
     fn test_realistic_heart_rate_conversion() {
         let payload = create_realistic_daily_sample();
-        
+
         // Find heart rate metrics and convert them
-        let heart_rate_metrics: Vec<_> = payload.data.metrics.iter()
+        let heart_rate_metrics: Vec<_> = payload
+            .data
+            .metrics
+            .iter()
             .filter_map(|m| match m {
                 HealthMetric::HeartRate(hr) => Some(hr),
                 _ => None,
             })
             .collect();
-        
+
         assert!(!heart_rate_metrics.is_empty());
-        
+
         for hr_metric in heart_rate_metrics {
             let record: HeartRateRecord = hr_metric.clone().into();
             assert!(record.heart_rate >= 20);
@@ -216,16 +219,19 @@ mod realistic_data_tests {
     #[test]
     fn test_realistic_blood_pressure_conversion() {
         let payload = create_realistic_daily_sample();
-        
-        let bp_metrics: Vec<_> = payload.data.metrics.iter()
+
+        let bp_metrics: Vec<_> = payload
+            .data
+            .metrics
+            .iter()
             .filter_map(|m| match m {
                 HealthMetric::BloodPressure(bp) => Some(bp),
                 _ => None,
             })
             .collect();
-        
+
         assert!(!bp_metrics.is_empty());
-        
+
         for bp_metric in bp_metrics {
             let record: BloodPressureRecord = bp_metric.clone().into();
             assert!(record.systolic >= 50);
@@ -239,28 +245,36 @@ mod realistic_data_tests {
     #[test]
     fn test_realistic_sleep_conversion_and_efficiency() {
         let payload = create_realistic_daily_sample();
-        
-        let sleep_metrics: Vec<_> = payload.data.metrics.iter()
+
+        let sleep_metrics: Vec<_> = payload
+            .data
+            .metrics
+            .iter()
             .filter_map(|m| match m {
                 HealthMetric::Sleep(sleep) => Some(sleep),
                 _ => None,
             })
             .collect();
-        
+
         assert!(!sleep_metrics.is_empty());
-        
+
         for sleep_metric in sleep_metrics {
             let record: SleepRecord = sleep_metric.clone().into();
-            
+
             // Verify sleep efficiency calculation
             assert!(record.sleep_efficiency.is_some());
-            let efficiency = record.sleep_efficiency.unwrap().to_string().parse::<f32>().unwrap();
+            let efficiency = record
+                .sleep_efficiency
+                .unwrap()
+                .to_string()
+                .parse::<f32>()
+                .unwrap();
             assert!(efficiency >= 0.0);
             assert!(efficiency <= 100.0);
-            
+
             // For our test data, should be around 84.2%
             assert!((efficiency - 84.2).abs() < 1.0);
-            
+
             // Check sleep components are reasonable
             assert!(record.deep_sleep_minutes.unwrap_or(0) >= 0);
             assert!(record.rem_sleep_minutes.unwrap_or(0) >= 0);
@@ -271,19 +285,22 @@ mod realistic_data_tests {
     #[test]
     fn test_realistic_activity_aggregation() {
         let payload = create_realistic_daily_sample();
-        
-        let activity_metrics: Vec<_> = payload.data.metrics.iter()
+
+        let activity_metrics: Vec<_> = payload
+            .data
+            .metrics
+            .iter()
             .filter_map(|m| match m {
                 HealthMetric::Activity(activity) => Some(activity),
                 _ => None,
             })
             .collect();
-        
+
         assert!(!activity_metrics.is_empty());
-        
+
         for activity_metric in activity_metrics {
             let mut record1: ActivityRecord = activity_metric.clone().into();
-            
+
             // Simulate a second activity reading for the same day (common with multiple data sources)
             let additional_activity = ActivityMetric {
                 date: activity_metric.date,
@@ -294,15 +311,25 @@ mod realistic_data_tests {
                 flights_climbed: Some(3), // Additional flights
                 source: Some("Apple Watch".to_string()),
             };
-            
+
             let record2: ActivityRecord = additional_activity.into();
-            
+
             // Test aggregation
             record1.aggregate_with(&record2);
-            
+
             // Check aggregated totals are reasonable
             assert_eq!(record1.steps, Some(15000)); // 12547 + 2453
-            assert!((record1.distance_meters.unwrap().to_string().parse::<f64>().unwrap() - 10625.0).abs() < 0.1);
+            assert!(
+                (record1
+                    .distance_meters
+                    .unwrap()
+                    .to_string()
+                    .parse::<f64>()
+                    .unwrap()
+                    - 10625.0)
+                    .abs()
+                    < 0.1
+            );
             assert!((record1.calories_burned.unwrap() as f64 - 702.0).abs() < 0.1); // 612.5 + 89.5
             assert_eq!(record1.active_minutes, Some(85)); // 73 + 12
             assert_eq!(record1.flights_climbed, Some(21)); // 18 + 3
@@ -312,12 +339,12 @@ mod realistic_data_tests {
     #[test]
     fn test_realistic_workout_with_gps() {
         let payload = create_realistic_daily_sample();
-        
+
         assert!(!payload.data.workouts.is_empty());
-        
+
         for workout in &payload.data.workouts {
             let record: WorkoutRecord = workout.clone().into();
-            
+
             // Check basic workout data
             assert_eq!(record.workout_type, "running");
             assert!(record.total_energy_kcal.is_some());
@@ -325,18 +352,18 @@ mod realistic_data_tests {
             assert!(record.average_heart_rate.is_some());
             assert!(record.max_heart_rate.is_some());
             assert_eq!(record.duration_seconds, Some(1920)); // 32 minutes
-            
+
             // Check GPS route conversion
             assert!(record.route_geometry.is_some());
             let linestring = record.route_geometry.unwrap();
             assert!(linestring.starts_with("LINESTRING("));
             assert!(linestring.contains("-73.9712")); // Start/end longitude
             assert!(linestring.contains("40.7831")); // Start/end latitude
-            
+
             // Check route points conversion
             let route_points = record.route_points(workout);
             assert_eq!(route_points.len(), 7); // 7 GPS points in our test route
-            
+
             // Verify route points are properly ordered
             for (i, point) in route_points.iter().enumerate() {
                 assert_eq!(point.point_order, i as i32);
@@ -353,7 +380,7 @@ mod realistic_data_tests {
     #[test]
     fn test_realistic_raw_json_preservation() {
         let payload = create_realistic_daily_sample();
-        
+
         // Test with heart rate metric
         if let Some(HealthMetric::HeartRate(hr_metric)) = payload.data.metrics.first() {
             let original_json = json!({
@@ -365,16 +392,14 @@ mod realistic_data_tests {
                     "activity_level": "moderate"
                 }
             });
-            
-            let record = HeartRateRecord::from_metric_with_raw(
-                hr_metric.clone(), 
-                original_json.clone()
-            );
-            
+
+            let record =
+                HeartRateRecord::from_metric_with_raw(hr_metric.clone(), original_json.clone());
+
             assert_eq!(record.raw_data, Some(original_json));
             assert_eq!(record.heart_rate, hr_metric.avg_bpm.unwrap() as i32);
         }
-        
+
         // Test with workout
         if let Some(workout) = payload.data.workouts.first() {
             let workout_json = json!({
@@ -388,12 +413,10 @@ mod realistic_data_tests {
                 "route_accuracy": "high",
                 "total_route_points": 147
             });
-            
-            let record = WorkoutRecord::from_workout_with_raw(
-                workout.clone(),
-                workout_json.clone()
-            );
-            
+
+            let record =
+                WorkoutRecord::from_workout_with_raw(workout.clone(), workout_json.clone());
+
             assert_eq!(record.raw_data, Some(workout_json));
             assert_eq!(record.workout_type, workout.workout_type);
         }
@@ -413,7 +436,7 @@ mod edge_case_tests {
             pulse: None,
             source: None,
         });
-        
+
         assert!(invalid_bp.validate().is_err());
     }
 
@@ -421,15 +444,13 @@ mod edge_case_tests {
     fn test_workout_with_invalid_gps() {
         let start = Utc::now() - Duration::hours(1);
         let end = Utc::now();
-        
-        let invalid_route_points = vec![
-            GpsCoordinate {
-                latitude: 91.0, // Invalid - over 90 degrees
-                longitude: -122.4194,
-                altitude_meters: Some(50.0),
-                recorded_at: start + Duration::minutes(10),
-            },
-        ];
+
+        let invalid_route_points = vec![GpsCoordinate {
+            latitude: 91.0, // Invalid - over 90 degrees
+            longitude: -122.4194,
+            altitude_meters: Some(50.0),
+            recorded_at: start + Duration::minutes(10),
+        }];
 
         let workout = WorkoutData {
             workout_type: "running".to_string(),
@@ -450,7 +471,7 @@ mod edge_case_tests {
     fn test_sleep_with_impossible_efficiency() {
         let start = Utc::now() - Duration::hours(4);
         let end = Utc::now();
-        
+
         let sleep_metric = SleepMetric {
             recorded_at: end,
             sleep_start: start,
@@ -473,11 +494,11 @@ mod edge_case_tests {
             data: IngestData {
                 metrics: Vec::new(),
                 workouts: Vec::new(),
-            }
+            },
         };
-        
+
         let base_time = Utc::now() - Duration::days(1);
-        
+
         // Generate 1000 heart rate readings over 24 hours
         for i in 0..1000 {
             let reading_time = base_time + Duration::minutes(i as i64 * 1.44); // ~1.44 minutes apart
@@ -491,31 +512,34 @@ mod edge_case_tests {
             });
             large_payload.data.metrics.push(hr_metric);
         }
-        
+
         // Validate all metrics can be processed
         let mut valid_count = 0;
         let mut invalid_count = 0;
-        
+
         for metric in &large_payload.data.metrics {
             match metric.validate() {
                 Ok(_) => valid_count += 1,
                 Err(_) => invalid_count += 1,
             }
         }
-        
+
         assert_eq!(valid_count, 1000);
         assert_eq!(invalid_count, 0);
-        
+
         // Test conversion to database records
-        let heart_rate_metrics: Vec<_> = large_payload.data.metrics.iter()
+        let heart_rate_metrics: Vec<_> = large_payload
+            .data
+            .metrics
+            .iter()
             .filter_map(|m| match m {
                 HealthMetric::HeartRate(hr) => Some(hr),
                 _ => None,
             })
             .collect();
-        
+
         assert_eq!(heart_rate_metrics.len(), 1000);
-        
+
         // Convert a sample to verify database model conversion works
         for hr in heart_rate_metrics.iter().take(10) {
             let record: HeartRateRecord = (*hr).clone().into();

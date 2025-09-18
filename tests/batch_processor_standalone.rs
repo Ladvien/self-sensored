@@ -1,4 +1,5 @@
 // Simple tests for batch processor without depending on other modules
+mod common;
 #[tokio::test]
 async fn test_postgresql_parameter_limits_validation() {
     use self_sensored::config::BatchConfig;
@@ -63,8 +64,7 @@ async fn test_batch_processor_compilation() {
 
     let config = BatchConfig::default();
     assert_eq!(config.max_retries, 3);
-    assert!(config.enable_parallel_processing);
-    assert_eq!(config.chunk_size, 1000);
+    assert!(config.enable_parallel);
     assert_eq!(config.memory_limit_mb, 500.0);
 
     // Test ProcessingStatus enum
@@ -86,47 +86,22 @@ async fn test_batch_processor_compilation() {
 
 #[tokio::test]
 async fn test_batch_config_custom() {
+    use crate::common::fixtures::create_test_batch_config;
     use self_sensored::config::BatchConfig;
 
-    let config = BatchConfig {
-        max_retries: 5,
-        initial_backoff_ms: 200,
-        max_backoff_ms: 10000,
-        enable_parallel_processing: false,
-        chunk_size: 2000,
-        memory_limit_mb: 1000.0,
-        // Use SAFE chunk sizes to prevent PostgreSQL parameter limit violations
-        heart_rate_chunk_size: 4200, // 10 params: 42,000 total params (safe)
-        blood_pressure_chunk_size: 8000, // 6 params: 48,000 total params (safe)
-        sleep_chunk_size: 5200,      // 10 params: 52,000 total params (safe)
-        activity_chunk_size: 2700,   // 19 params: 51,300 total params (safe)
-        body_measurement_chunk_size: 3000,
-        temperature_chunk_size: 6500, // 8 params: 52,000 total params (safe)
-        respiratory_chunk_size: 7000,
-        workout_chunk_size: 5000,
-        blood_glucose_chunk_size: 6500,
-        nutrition_chunk_size: 1600,
-        menstrual_chunk_size: 6500,
-        fertility_chunk_size: 4300,
-        environmental_chunk_size: 3700, // 14 params: 51,800 total params (safe)
-        audio_exposure_chunk_size: 7000, // 7 params: 49,000 total params (safe)
-        safety_event_chunk_size: 6500,  // 8 params: 52,000 total params (safe)
-        mindfulness_chunk_size: 5800,   // 9 params: 52,200 total params (safe)
-        mental_health_chunk_size: 5200, // 10 params: 52,000 total params (safe)
-        symptom_chunk_size: 5800,       // 9 params: 52,200 total params (safe)
-        hygiene_chunk_size: 6500,       // 8 params: 52,000 total params (safe)
-        enable_progress_tracking: true,
-        enable_intra_batch_deduplication: false,
-        enable_dual_write_activity_metrics: false,
-        enable_reproductive_health_encryption: true,
-        reproductive_health_audit_logging: true,
-    };
+    let mut config = create_test_batch_config();
+
+    // Customize specific fields for this test
+    config.max_retries = 5;
+    config.initial_backoff_ms = 200;
+    config.max_backoff_ms = 10000;
+    config.enable_parallel = false;
+    config.memory_limit_mb = 1000.0;
 
     assert_eq!(config.max_retries, 5);
     assert_eq!(config.initial_backoff_ms, 200);
     assert_eq!(config.max_backoff_ms, 10000);
-    assert!(!config.enable_parallel_processing);
-    assert_eq!(config.chunk_size, 2000);
+    assert!(!config.enable_parallel);
     assert_eq!(config.memory_limit_mb, 1000.0);
 }
 

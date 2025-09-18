@@ -1,7 +1,11 @@
+pub mod fixtures;
+
 use serde_json::Value;
 use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::env;
 use uuid::Uuid;
+
+pub use fixtures::*;
 
 pub async fn setup_test_db() -> PgPool {
     dotenv::dotenv().ok();

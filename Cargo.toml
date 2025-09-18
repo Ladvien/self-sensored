@@ -116,3 +116,7 @@ path = "tests/integration/load_test.rs"
 name = "api_endpoints_test"
 path = "tests/integration/api_endpoints_test.rs"
 
+[[test]]
+name = "database_full_test"
+path = "tests/db/database_full_test.rs"
+

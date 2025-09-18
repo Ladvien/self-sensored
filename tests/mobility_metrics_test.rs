@@ -1,8 +1,14 @@
+mod common;
+
 use chrono::Utc;
 use serde_json::json;
 use uuid::Uuid;
 
-use self_sensored::models::{ios_models::IosIngestPayload, ActivityMetric, HealthMetric};
+use common::fixtures::create_minimal_activity_metric;
+use self_sensored::models::{
+    health_metrics::{ActivityMetric, HealthMetric},
+    ios_models::IosIngestPayload,
+};
 
 #[test]
 fn test_mobility_metrics_ios_conversion() {
@@ -95,7 +101,10 @@ fn test_mobility_metrics_ios_conversion() {
             match activity_metric.walking_step_length_cm {
                 Some(step_length) => {
                     assert_eq!(step_length, 65.5);
-                    println!("✅ Walking step length correctly mapped: {} cm", step_length);
+                    println!(
+                        "✅ Walking step length correctly mapped: {} cm",
+                        step_length
+                    );
                 }
                 None => {}
             }
@@ -111,7 +120,10 @@ fn test_mobility_metrics_ios_conversion() {
             match activity_metric.stair_ascent_speed_m_per_s {
                 Some(stair_speed) => {
                     assert_eq!(stair_speed, 0.8);
-                    println!("✅ Stair ascent speed correctly mapped: {} m/s", stair_speed);
+                    println!(
+                        "✅ Stair ascent speed correctly mapped: {} m/s",
+                        stair_speed
+                    );
                 }
                 None => {}
             }
@@ -132,46 +144,23 @@ fn test_mobility_metrics_ios_conversion() {
 #[test]
 fn test_activity_metric_database_fields() {
     // Test that all new mobility fields are properly defined
-    let activity_metric = ActivityMetric {
-        id: Uuid::new_v4(),
-        user_id: Uuid::new_v4(),
-        recorded_at: Utc::now(),
-        step_count: None,
-        distance_meters: None,
-        active_energy_burned_kcal: None,
-        basal_energy_burned_kcal: None,
-        flights_climbed: None,
-        distance_cycling_meters: None,
-        distance_swimming_meters: None,
-        distance_wheelchair_meters: None,
-        distance_downhill_snow_sports_meters: None,
-        push_count: None,
-        swimming_stroke_count: None,
-        nike_fuel_points: None,
-        apple_exercise_time_minutes: None,
-        apple_stand_time_minutes: None,
-        apple_move_time_minutes: None,
-        apple_stand_hour_achieved: None,
+    let mut activity_metric = create_minimal_activity_metric(Uuid::new_v4());
 
-        // Test all new mobility metrics fields
-        walking_speed_m_per_s: Some(1.3),
-        walking_step_length_cm: Some(67.8),
-        walking_asymmetry_percent: Some(12.5),
-        walking_double_support_percent: Some(25.0),
-        six_minute_walk_test_distance_m: Some(450.0),
+    // Test all new mobility metrics fields
+    activity_metric.walking_speed_m_per_s = Some(1.3);
+    activity_metric.walking_step_length_cm = Some(67.8);
+    activity_metric.walking_asymmetry_percent = Some(12.5);
+    activity_metric.walking_double_support_percent = Some(25.0);
+    activity_metric.six_minute_walk_test_distance_m = Some(450.0);
 
-        stair_ascent_speed_m_per_s: Some(0.9),
-        stair_descent_speed_m_per_s: Some(1.1),
+    activity_metric.stair_ascent_speed_m_per_s = Some(0.9);
+    activity_metric.stair_descent_speed_m_per_s = Some(1.1);
 
-        ground_contact_time_ms: Some(280.0),
-        vertical_oscillation_cm: Some(8.5),
-        running_stride_length_m: Some(1.45),
-        running_power_watts: Some(275.0),
-        running_speed_m_per_s: Some(3.2),
-
-        source_device: Some("Apple Watch Series 8".to_string()),
-        created_at: Utc::now(),
-    };
+    activity_metric.ground_contact_time_ms = Some(280.0);
+    activity_metric.vertical_oscillation_cm = Some(8.5);
+    activity_metric.running_stride_length_m = Some(1.45);
+    activity_metric.running_power_watts = Some(275.0);
+    activity_metric.running_speed_m_per_s = Some(3.2);
 
     // Verify all fields are accessible
     assert_eq!(activity_metric.walking_speed_m_per_s, Some(1.3));

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::env;
-use tracing::{error, info, warn, instrument};
+use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
 /// Monitoring metrics for data processing integrity
@@ -56,10 +56,10 @@ pub struct AlertThresholds {
 impl Default for AlertThresholds {
     fn default() -> Self {
         Self {
-            data_loss_percentage_critical: 10.0,  // >10% data loss is critical
+            data_loss_percentage_critical: 10.0, // >10% data loss is critical
             data_loss_percentage_warning: 5.0,   // >5% data loss is warning
             processing_failure_rate_critical: 20.0, // >20% processing failures critical
-            processing_failure_rate_warning: 10.0,  // >10% processing failures warning
+            processing_failure_rate_warning: 10.0, // >10% processing failures warning
             max_acceptable_processing_delay_hours: 24, // Payloads pending >24h need attention
             minimum_user_success_rate: 80.0,     // Users with <80% success rate need help
         }
@@ -77,7 +77,9 @@ impl ProcessingMonitor {
 
     /// Run comprehensive monitoring analysis
     #[instrument(skip(self))]
-    pub async fn run_monitoring_analysis(&self) -> Result<ProcessingMonitorMetrics, Box<dyn std::error::Error>> {
+    pub async fn run_monitoring_analysis(
+        &self,
+    ) -> Result<ProcessingMonitorMetrics, Box<dyn std::error::Error>> {
         info!("🔍 Starting processing integrity monitoring analysis");
 
         let since_timestamp = Utc::now() - Duration::hours(self.monitoring_window_hours);
@@ -86,7 +88,9 @@ impl ProcessingMonitor {
         let raw_stats = self.gather_raw_ingestion_stats(since_timestamp).await?;
         let user_impact = self.analyze_user_impact(since_timestamp).await?;
         let error_patterns = self.analyze_error_patterns(since_timestamp).await?;
-        let recovery_recommendations = self.generate_recovery_recommendations(&raw_stats, &user_impact, &error_patterns).await;
+        let recovery_recommendations = self
+            .generate_recovery_recommendations(&raw_stats, &user_impact, &error_patterns)
+            .await;
 
         let metrics = ProcessingMonitorMetrics {
             timestamp: Utc::now(),
@@ -115,7 +119,10 @@ impl ProcessingMonitor {
 
     /// Gather raw ingestion statistics
     #[instrument(skip(self))]
-    async fn gather_raw_ingestion_stats(&self, since: DateTime<Utc>) -> Result<RawIngestionStats, sqlx::Error> {
+    async fn gather_raw_ingestion_stats(
+        &self,
+        since: DateTime<Utc>,
+    ) -> Result<RawIngestionStats, sqlx::Error> {
         let stats = sqlx::query!(
             r#"
             SELECT
@@ -166,17 +173,27 @@ impl ProcessingMonitor {
             recovered: stats.recovered.unwrap_or(0),
             recovery_failed: stats.recovery_failed.unwrap_or(0),
             data_loss_detected: data_loss_count,
-            avg_processing_time_mins: stats.avg_processing_time_mins
+            avg_processing_time_mins: stats
+                .avg_processing_time_mins
                 .map(|bd| bd.to_string().parse::<f64>().unwrap_or(0.0))
                 .unwrap_or(0.0),
-            largest_payload_mb: stats.max_payload_mb.map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
-            smallest_payload_mb: stats.min_payload_mb.map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
+            largest_payload_mb: stats
+                .max_payload_mb
+                .map(|d| d.to_string().parse().unwrap_or(0.0))
+                .unwrap_or(0.0),
+            smallest_payload_mb: stats
+                .min_payload_mb
+                .map(|d| d.to_string().parse().unwrap_or(0.0))
+                .unwrap_or(0.0),
         })
     }
 
     /// Analyze per-user impact
     #[instrument(skip(self))]
-    async fn analyze_user_impact(&self, since: DateTime<Utc>) -> Result<HashMap<Uuid, UserImpactStats>, sqlx::Error> {
+    async fn analyze_user_impact(
+        &self,
+        since: DateTime<Utc>,
+    ) -> Result<HashMap<Uuid, UserImpactStats>, sqlx::Error> {
         let user_stats = sqlx::query!(
             r#"
             SELECT
@@ -203,23 +220,27 @@ impl ProcessingMonitor {
             let user_id = stat.user_id;
             let total = stat.total_payloads.unwrap_or(0) as f64;
             let failed = stat.failed_payloads.unwrap_or(0) as f64;
-            let data_loss_percentage = if total > 0.0 { (failed / total) * 100.0 } else { 0.0 };
+            let data_loss_percentage = if total > 0.0 {
+                (failed / total) * 100.0
+            } else {
+                0.0
+            };
 
-            let days_since_success = stat.days_since_success
+            let days_since_success = stat
+                .days_since_success
                 .as_ref()
                 .map(|bd| bd.to_string().parse::<i64>().unwrap_or(999))
                 .unwrap_or(999);
 
-            let recommended_action = self.recommend_user_action(
-                data_loss_percentage,
-                days_since_success
-            );
+            let recommended_action =
+                self.recommend_user_action(data_loss_percentage, days_since_success);
 
             let impact = UserImpactStats {
                 total_payloads: total as i64,
                 failed_payloads: failed as i64,
                 data_loss_percentage,
-                largest_failed_payload_mb: stat.largest_failed_mb
+                largest_failed_payload_mb: stat
+                    .largest_failed_mb
                     .map(|d| d.to_string().parse().unwrap_or(0.0))
                     .unwrap_or(0.0),
                 days_since_last_success: days_since_success,
@@ -234,7 +255,10 @@ impl ProcessingMonitor {
 
     /// Analyze error patterns to identify systemic issues
     #[instrument(skip(self))]
-    async fn analyze_error_patterns(&self, since: DateTime<Utc>) -> Result<HashMap<String, i64>, sqlx::Error> {
+    async fn analyze_error_patterns(
+        &self,
+        since: DateTime<Utc>,
+    ) -> Result<HashMap<String, i64>, sqlx::Error> {
         let error_records = sqlx::query!(
             r#"
             SELECT processing_errors
@@ -256,7 +280,9 @@ impl ProcessingMonitor {
                     for error in errors_array {
                         let error_text = error.to_string().to_lowercase();
 
-                        let category = if error_text.contains("parameter") || error_text.contains("argument") {
+                        let category = if error_text.contains("parameter")
+                            || error_text.contains("argument")
+                        {
                             "PostgreSQL Parameter Limit"
                         } else if error_text.contains("validation") {
                             "Data Validation Error"
@@ -327,7 +353,9 @@ impl ProcessingMonitor {
         // Check for users with high data loss
         let high_impact_users = user_impact
             .iter()
-            .filter(|(_, stats)| stats.data_loss_percentage > self.alert_thresholds.minimum_user_success_rate)
+            .filter(|(_, stats)| {
+                stats.data_loss_percentage > self.alert_thresholds.minimum_user_success_rate
+            })
             .count();
 
         if high_impact_users > 0 {
@@ -354,7 +382,8 @@ impl ProcessingMonitor {
         }
 
         if recommendations.is_empty() {
-            recommendations.push("No critical issues detected. System processing normally.".to_string());
+            recommendations
+                .push("No critical issues detected. System processing normally.".to_string());
         }
 
         recommendations
@@ -370,15 +399,19 @@ impl ProcessingMonitor {
             "MEDIUM: Monitor and recover if trend continues"
         } else {
             "LOW: Normal processing"
-        }.to_string()
+        }
+        .to_string()
     }
 
     /// Evaluate thresholds and generate alerts
     #[instrument(skip(self, metrics))]
     async fn evaluate_and_report_alerts(&self, metrics: &ProcessingMonitorMetrics) {
-        let total_processed = metrics.processed_successfully + metrics.processing_errors + metrics.partial_success;
+        let total_processed =
+            metrics.processed_successfully + metrics.processing_errors + metrics.partial_success;
         let failure_rate = if total_processed > 0 {
-            ((metrics.processing_errors + metrics.data_loss_detected) as f64 / total_processed as f64) * 100.0
+            ((metrics.processing_errors + metrics.data_loss_detected) as f64
+                / total_processed as f64)
+                * 100.0
         } else {
             0.0
         };
@@ -390,37 +423,58 @@ impl ProcessingMonitor {
         }
 
         if metrics.data_loss_detected > 0 {
-            error!("🚨 CRITICAL ALERT: Data loss detected in {} payloads", metrics.data_loss_detected);
+            error!(
+                "🚨 CRITICAL ALERT: Data loss detected in {} payloads",
+                metrics.data_loss_detected
+            );
         }
 
         if metrics.pending_processing > (total_processed / 10).max(100) {
-            error!("🚨 CRITICAL ALERT: {} payloads pending processing (backlog)", metrics.pending_processing);
+            error!(
+                "🚨 CRITICAL ALERT: {} payloads pending processing (backlog)",
+                metrics.pending_processing
+            );
         }
 
         // Warning alerts
         if failure_rate > self.alert_thresholds.processing_failure_rate_warning {
-            warn!("⚠️ WARNING: Processing failure rate {:.1}% exceeds warning threshold {:.1}%",
-                 failure_rate, self.alert_thresholds.processing_failure_rate_warning);
+            warn!(
+                "⚠️ WARNING: Processing failure rate {:.1}% exceeds warning threshold {:.1}%",
+                failure_rate, self.alert_thresholds.processing_failure_rate_warning
+            );
         }
 
         // User-specific alerts
-        let high_impact_users = metrics.user_impact_stats.iter()
-            .filter(|(_, stats)| stats.data_loss_percentage > self.alert_thresholds.minimum_user_success_rate)
+        let high_impact_users = metrics
+            .user_impact_stats
+            .iter()
+            .filter(|(_, stats)| {
+                stats.data_loss_percentage > self.alert_thresholds.minimum_user_success_rate
+            })
             .count();
 
         if high_impact_users > 0 {
-            warn!("⚠️ WARNING: {} users experiencing high data loss rates", high_impact_users);
+            warn!(
+                "⚠️ WARNING: {} users experiencing high data loss rates",
+                high_impact_users
+            );
         }
 
         // Success metrics
         if failure_rate < self.alert_thresholds.processing_failure_rate_warning {
-            info!("✅ System processing normally: {:.1}% failure rate", failure_rate);
+            info!(
+                "✅ System processing normally: {:.1}% failure rate",
+                failure_rate
+            );
         }
     }
 
     /// Save monitoring metrics for historical analysis
     #[instrument(skip(self, metrics))]
-    async fn save_monitoring_metrics(&self, metrics: &ProcessingMonitorMetrics) -> Result<(), Box<dyn std::error::Error>> {
+    async fn save_monitoring_metrics(
+        &self,
+        metrics: &ProcessingMonitorMetrics,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let metrics_json = serde_json::to_value(metrics)?;
 
         // Try to save to monitoring_metrics table if it exists
@@ -432,7 +486,7 @@ impl ProcessingMonitor {
                 metrics_data,
                 created_at
             ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
-            "#
+            "#,
         )
         .bind(metrics.timestamp)
         .bind("processing_monitor")
@@ -446,8 +500,13 @@ impl ProcessingMonitor {
             }
             Err(e) => {
                 // If table doesn't exist, just log and continue
-                warn!("Could not save monitoring metrics to database (table may not exist): {}", e);
-                info!("💡 To enable historical monitoring, create monitoring_metrics table in schema");
+                warn!(
+                    "Could not save monitoring metrics to database (table may not exist): {}",
+                    e
+                );
+                info!(
+                    "💡 To enable historical monitoring, create monitoring_metrics table in schema"
+                );
             }
         }
 
@@ -457,7 +516,8 @@ impl ProcessingMonitor {
     /// Generate detailed report for operations team
     #[instrument(skip(self, metrics))]
     pub async fn generate_operations_report(&self, metrics: &ProcessingMonitorMetrics) -> String {
-        let mut report = format!("
+        let mut report = format!(
+            "
 === PROCESSING MONITORING REPORT ===
 Timestamp: {}
 Monitoring Window: {} hours
@@ -499,7 +559,9 @@ Monitoring Window: {} hours
         }
 
         report.push_str("\n👥 USER IMPACT ANALYSIS:\n");
-        let high_impact_users: Vec<_> = metrics.user_impact_stats.iter()
+        let high_impact_users: Vec<_> = metrics
+            .user_impact_stats
+            .iter()
             .filter(|(_, stats)| stats.data_loss_percentage > 10.0)
             .collect();
 
@@ -509,7 +571,10 @@ Monitoring Window: {} hours
             for (user_id, stats) in high_impact_users {
                 report.push_str(&format!(
                     "  • User {}: {:.1}% data loss, {} days since success, Action: {}\n",
-                    user_id, stats.data_loss_percentage, stats.days_since_last_success, stats.recommended_action
+                    user_id,
+                    stats.data_loss_percentage,
+                    stats.days_since_last_success,
+                    stats.recommended_action
                 ));
             }
         }
@@ -557,8 +622,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Get database URL from environment
-    let database_url = env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     // Create database connection pool
     let pool = PgPool::connect(&database_url).await?;
@@ -576,15 +640,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", report);
 
     // Save report to file
-    let report_filename = format!("processing_monitor_report_{}.txt",
-                                 chrono::Utc::now().format("%Y%m%d_%H%M%S"));
+    let report_filename = format!(
+        "processing_monitor_report_{}.txt",
+        chrono::Utc::now().format("%Y%m%d_%H%M%S")
+    );
     tokio::fs::write(&report_filename, &report).await?;
 
     info!("📄 Report saved to: {}", report_filename);
 
     // Exit with appropriate code based on critical issues
-    if metrics.data_loss_detected > 0 ||
-       metrics.processing_errors > (metrics.total_raw_ingestions / 10).max(10) {
+    if metrics.data_loss_detected > 0
+        || metrics.processing_errors > (metrics.total_raw_ingestions / 10).max(10)
+    {
         std::process::exit(1);
     } else {
         std::process::exit(0);

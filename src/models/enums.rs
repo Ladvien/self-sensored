@@ -1064,7 +1064,9 @@ impl SymptomType {
 
             // Additional HealthKit-supported symptoms from DATA.md
             "acne" | "pimples" | "breakouts" => Some(Self::Acne),
-            "appetite_changes" | "appetitechanges" | "eating_changes" => Some(Self::AppetiteChanges),
+            "appetite_changes" | "appetitechanges" | "eating_changes" => {
+                Some(Self::AppetiteChanges)
+            }
             "bladder_incontinence" | "bladderincontinence" | "urinary_incontinence" => {
                 Some(Self::BladderIncontinence)
             }
@@ -1078,7 +1080,9 @@ impl SymptomType {
             "memory_lapse" | "memorylapse" | "forgetfulness" | "memory_loss" => {
                 Some(Self::MemoryLapse)
             }
-            "sinus_congestion" | "sinuscongestion" | "sinus_pressure" => Some(Self::SinusCongestion),
+            "sinus_congestion" | "sinuscongestion" | "sinus_pressure" => {
+                Some(Self::SinusCongestion)
+            }
             "sleep_changes" | "sleepchanges" | "sleep_pattern_changes" => Some(Self::SleepChanges),
             "skipped_heartbeat" | "skippedheartbeat" | "missed_heartbeat" | "heart_skip" => {
                 Some(Self::SkippedHeartbeat)

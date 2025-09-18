@@ -6,7 +6,9 @@
 
 #[cfg(test)]
 mod parameter_limit_tests {
-    use self_sensored::config::batch_config::{BatchConfig, SAFE_PARAM_LIMIT, ACTIVITY_PARAMS_PER_RECORD};
+    use self_sensored::config::batch_config::{
+        BatchConfig, ACTIVITY_PARAMS_PER_RECORD, SAFE_PARAM_LIMIT,
+    };
 
     #[test]
     fn test_activity_chunk_size_fix_validation() {
@@ -17,13 +19,20 @@ mod parameter_limit_tests {
         };
 
         let result = fixed_config.validate();
-        assert!(result.is_ok(), "Fixed activity chunk size should pass validation");
+        assert!(
+            result.is_ok(),
+            "Fixed activity chunk size should pass validation"
+        );
 
         // Verify the calculation manually
         let total_params = 2700 * ACTIVITY_PARAMS_PER_RECORD;
-        assert!(total_params <= SAFE_PARAM_LIMIT,
+        assert!(
+            total_params <= SAFE_PARAM_LIMIT,
             "Activity: 2700 * {} = {} should be <= {}",
-            ACTIVITY_PARAMS_PER_RECORD, total_params, SAFE_PARAM_LIMIT);
+            ACTIVITY_PARAMS_PER_RECORD,
+            total_params,
+            SAFE_PARAM_LIMIT
+        );
     }
 
     #[test]
@@ -35,12 +44,24 @@ mod parameter_limit_tests {
         };
 
         let result = dangerous_config.validate();
-        assert!(result.is_err(), "Dangerous activity chunk size should fail validation");
+        assert!(
+            result.is_err(),
+            "Dangerous activity chunk size should fail validation"
+        );
 
         let error_message = result.unwrap_err();
-        assert!(error_message.contains("activity"), "Error should mention activity metric");
-        assert!(error_message.contains("CRITICAL"), "Error should be marked as critical");
-        assert!(error_message.contains("SILENT DATA LOSS"), "Error should warn about data loss");
+        assert!(
+            error_message.contains("activity"),
+            "Error should mention activity metric"
+        );
+        assert!(
+            error_message.contains("CRITICAL"),
+            "Error should be marked as critical"
+        );
+        assert!(
+            error_message.contains("SILENT DATA LOSS"),
+            "Error should warn about data loss"
+        );
     }
 
     #[test]
@@ -48,8 +69,11 @@ mod parameter_limit_tests {
         let config = BatchConfig::default();
         let result = config.validate();
 
-        assert!(result.is_ok(), "Default configuration should be safe: {}",
-            result.unwrap_err());
+        assert!(
+            result.is_ok(),
+            "Default configuration should be safe: {}",
+            result.unwrap_err()
+        );
     }
 
     #[test]
@@ -58,26 +82,55 @@ mod parameter_limit_tests {
 
         // Test each metric type at the exact safe limit
         let edge_cases = vec![
-            ("heart_rate", SAFE_PARAM_LIMIT / HEART_RATE_PARAMS_PER_RECORD, HEART_RATE_PARAMS_PER_RECORD),
-            ("blood_pressure", SAFE_PARAM_LIMIT / BLOOD_PRESSURE_PARAMS_PER_RECORD, BLOOD_PRESSURE_PARAMS_PER_RECORD),
-            ("sleep", SAFE_PARAM_LIMIT / SLEEP_PARAMS_PER_RECORD, SLEEP_PARAMS_PER_RECORD),
-            ("activity", SAFE_PARAM_LIMIT / ACTIVITY_PARAMS_PER_RECORD, ACTIVITY_PARAMS_PER_RECORD),
-            ("temperature", SAFE_PARAM_LIMIT / TEMPERATURE_PARAMS_PER_RECORD, TEMPERATURE_PARAMS_PER_RECORD),
+            (
+                "heart_rate",
+                SAFE_PARAM_LIMIT / HEART_RATE_PARAMS_PER_RECORD,
+                HEART_RATE_PARAMS_PER_RECORD,
+            ),
+            (
+                "blood_pressure",
+                SAFE_PARAM_LIMIT / BLOOD_PRESSURE_PARAMS_PER_RECORD,
+                BLOOD_PRESSURE_PARAMS_PER_RECORD,
+            ),
+            (
+                "sleep",
+                SAFE_PARAM_LIMIT / SLEEP_PARAMS_PER_RECORD,
+                SLEEP_PARAMS_PER_RECORD,
+            ),
+            (
+                "activity",
+                SAFE_PARAM_LIMIT / ACTIVITY_PARAMS_PER_RECORD,
+                ACTIVITY_PARAMS_PER_RECORD,
+            ),
+            (
+                "temperature",
+                SAFE_PARAM_LIMIT / TEMPERATURE_PARAMS_PER_RECORD,
+                TEMPERATURE_PARAMS_PER_RECORD,
+            ),
         ];
 
         for (metric_name, max_safe_chunk, params_per_record) in edge_cases {
             let total_params = max_safe_chunk * params_per_record;
 
             // Should be at or just under the safe limit
-            assert!(total_params <= SAFE_PARAM_LIMIT,
+            assert!(
+                total_params <= SAFE_PARAM_LIMIT,
                 "{}: max chunk {} * {} params = {} should be <= {}",
-                metric_name, max_safe_chunk, params_per_record, total_params, SAFE_PARAM_LIMIT);
+                metric_name,
+                max_safe_chunk,
+                params_per_record,
+                total_params,
+                SAFE_PARAM_LIMIT
+            );
 
             // Test that one more record would exceed the limit
             let over_limit_params = (max_safe_chunk + 1) * params_per_record;
-            assert!(over_limit_params > SAFE_PARAM_LIMIT,
+            assert!(
+                over_limit_params > SAFE_PARAM_LIMIT,
                 "{}: {} + 1 chunk should exceed safe limit",
-                metric_name, max_safe_chunk);
+                metric_name,
+                max_safe_chunk
+            );
         }
     }
 
@@ -95,9 +148,18 @@ mod parameter_limit_tests {
         assert!(result.is_err(), "Multi-violation config should fail");
 
         let error_message = result.unwrap_err();
-        assert!(error_message.contains("activity"), "Should mention activity violation");
-        assert!(error_message.contains("sleep"), "Should mention sleep violation");
-        assert!(error_message.contains("temperature"), "Should mention temperature violation");
+        assert!(
+            error_message.contains("activity"),
+            "Should mention activity violation"
+        );
+        assert!(
+            error_message.contains("sleep"),
+            "Should mention sleep violation"
+        );
+        assert!(
+            error_message.contains("temperature"),
+            "Should mention temperature violation"
+        );
     }
 
     #[test]
@@ -115,8 +177,10 @@ mod parameter_limit_tests {
 
         // This should still fail because we use a safety margin
         let result = dangerous_config.validate();
-        assert!(result.is_err(),
-            "Configuration at PostgreSQL limit should fail due to safety margin");
+        assert!(
+            result.is_err(),
+            "Configuration at PostgreSQL limit should fail due to safety margin"
+        );
     }
 
     #[test]
@@ -128,8 +192,10 @@ mod parameter_limit_tests {
         let result = config.validate();
 
         // Even if env var sets dangerous value, validation should catch it
-        assert!(result.is_err(),
-            "Environment variables with dangerous values should fail validation");
+        assert!(
+            result.is_err(),
+            "Environment variables with dangerous values should fail validation"
+        );
 
         std::env::remove_var("BATCH_ACTIVITY_CHUNK_SIZE");
     }
@@ -144,7 +210,9 @@ mod parameter_limit_tests {
         // nike_fuel_points, apple_exercise_time_minutes, apple_stand_time_minutes,
         // apple_move_time_minutes, apple_stand_hour_achieved, source_device
 
-        assert_eq!(ACTIVITY_PARAMS_PER_RECORD, 19,
-            "Activity parameter count should match database schema");
+        assert_eq!(
+            ACTIVITY_PARAMS_PER_RECORD, 19,
+            "Activity parameter count should match database schema"
+        );
     }
 }

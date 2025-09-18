@@ -150,7 +150,11 @@ fn test_sleep_validation() {
             sleep_stage: Some(stage.to_string()),
             efficiency: Some(0.80),
         };
-        assert!(sleep_metric.validate().is_ok(), "Stage '{}' should be valid", stage);
+        assert!(
+            sleep_metric.validate().is_ok(),
+            "Stage '{}' should be valid",
+            stage
+        );
     }
 
     // Test invalid sleep stage
@@ -205,7 +209,15 @@ fn test_activity_validation() {
     assert!(negative_distance.validate().is_err());
 
     // Test valid activity types
-    let valid_types = ["walking", "running", "cycling", "swimming", "weightlifting", "yoga", "other"];
+    let valid_types = [
+        "walking",
+        "running",
+        "cycling",
+        "swimming",
+        "weightlifting",
+        "yoga",
+        "other",
+    ];
     for activity_type in valid_types {
         let activity = HealthMetric::Activity {
             recorded_at: Utc::now(),
@@ -214,7 +226,11 @@ fn test_activity_validation() {
             calories_burned: Some(100),
             distance_meters: Some(1000),
         };
-        assert!(activity.validate().is_ok(), "Activity type '{}' should be valid", activity_type);
+        assert!(
+            activity.validate().is_ok(),
+            "Activity type '{}' should be valid",
+            activity_type
+        );
     }
 }
 
@@ -304,7 +320,15 @@ fn test_workout_validation() {
     assert!(invalid_type.validate().is_err());
 
     // Test valid workout types
-    let valid_types = ["running", "cycling", "swimming", "walking", "weightlifting", "yoga", "other"];
+    let valid_types = [
+        "running",
+        "cycling",
+        "swimming",
+        "walking",
+        "weightlifting",
+        "yoga",
+        "other",
+    ];
     for workout_type in valid_types {
         let workout = Workout {
             workout_type: workout_type.to_string(),
@@ -315,7 +339,11 @@ fn test_workout_validation() {
             distance_meters: Some(3000),
             route_data: None,
         };
-        assert!(workout.validate().is_ok(), "Workout type '{}' should be valid", workout_type);
+        assert!(
+            workout.validate().is_ok(),
+            "Workout type '{}' should be valid",
+            workout_type
+        );
     }
 }
 
@@ -408,7 +436,8 @@ fn test_health_metric_deserialization_errors() {
     assert!(result.is_err());
 
     // Test invalid field types
-    let invalid_types = r#"{"HeartRate": {"recorded_at": "2024-01-01T00:00:00Z", "heart_rate": "invalid"}}"#;
+    let invalid_types =
+        r#"{"HeartRate": {"recorded_at": "2024-01-01T00:00:00Z", "heart_rate": "invalid"}}"#;
     let result: Result<HealthMetric, _> = serde_json::from_str(invalid_types);
     assert!(result.is_err());
 }
@@ -439,7 +468,7 @@ fn test_future_date_validation() {
 fn test_confidence_validation() {
     // Valid confidence values
     let valid_confidences = [0.0, 0.5, 0.95, 1.0];
-    
+
     for confidence in valid_confidences {
         let heart_rate = HealthMetric::HeartRate {
             recorded_at: Utc::now(),
@@ -447,12 +476,16 @@ fn test_confidence_validation() {
             context: Some("test".to_string()),
             confidence: Some(confidence),
         };
-        assert!(heart_rate.validate().is_ok(), "Confidence {} should be valid", confidence);
+        assert!(
+            heart_rate.validate().is_ok(),
+            "Confidence {} should be valid",
+            confidence
+        );
     }
 
     // Invalid confidence values
     let invalid_confidences = [-0.1, 1.1, 2.0];
-    
+
     for confidence in invalid_confidences {
         let heart_rate = HealthMetric::HeartRate {
             recorded_at: Utc::now(),
@@ -460,7 +493,11 @@ fn test_confidence_validation() {
             context: Some("test".to_string()),
             confidence: Some(confidence),
         };
-        assert!(heart_rate.validate().is_err(), "Confidence {} should be invalid", confidence);
+        assert!(
+            heart_rate.validate().is_err(),
+            "Confidence {} should be invalid",
+            confidence
+        );
     }
 }
 
@@ -468,7 +505,7 @@ fn test_confidence_validation() {
 fn test_context_validation() {
     // Valid contexts for heart rate
     let valid_contexts = ["rest", "exercise", "sleep", "stress", "recovery"];
-    
+
     for context in valid_contexts {
         let heart_rate = HealthMetric::HeartRate {
             recorded_at: Utc::now(),
@@ -476,7 +513,11 @@ fn test_context_validation() {
             context: Some(context.to_string()),
             confidence: Some(0.95),
         };
-        assert!(heart_rate.validate().is_ok(), "Context '{}' should be valid", context);
+        assert!(
+            heart_rate.validate().is_ok(),
+            "Context '{}' should be valid",
+            context
+        );
     }
 
     // Empty context should be invalid

@@ -172,7 +172,7 @@ async fn test_hygiene_events_ingest_comprehensive() {
         .to_request();
 
     // Add auth context to request extensions
-    let mut req = req;
+    let req = req;
     req.extensions_mut().insert(auth);
 
     let resp = test::call_service(&app, req).await;
@@ -290,7 +290,7 @@ async fn test_hygiene_data_retrieval_with_filters() {
     // Test 1: Get all hygiene data
     let req = test::TestRequest::get().uri("/data/hygiene").to_request();
 
-    let mut req = req;
+    let req = req;
     req.extensions_mut().insert(auth.clone());
 
     let resp = test::call_service(&app, req).await;
@@ -311,7 +311,7 @@ async fn test_hygiene_data_retrieval_with_filters() {
         .uri("/data/hygiene?event_type=handwashing")
         .to_request();
 
-    let mut req = req;
+    let req = req;
     req.extensions_mut().insert(auth.clone());
 
     let resp = test::call_service(&app, req).await;
@@ -330,7 +330,7 @@ async fn test_hygiene_data_retrieval_with_filters() {
         .uri("/data/hygiene?compliance_only=true")
         .to_request();
 
-    let mut req = req;
+    let req = req;
     req.extensions_mut().insert(auth.clone());
 
     let resp = test::call_service(&app, req).await;
@@ -352,7 +352,7 @@ async fn test_hygiene_data_retrieval_with_filters() {
         .uri("/data/hygiene?crisis_period=true")
         .to_request();
 
-    let mut req = req;
+    let req = req;
     req.extensions_mut().insert(auth);
 
     let resp = test::call_service(&app, req).await;
@@ -416,7 +416,7 @@ async fn test_hygiene_events_validation_and_error_handling() {
         .set_json(&invalid_payload)
         .to_request();
 
-    let mut req = req;
+    let req = req;
     req.extensions_mut().insert(auth.clone());
 
     let resp = test::call_service(&app, req).await;
@@ -447,7 +447,7 @@ async fn test_hygiene_events_validation_and_error_handling() {
         .set_json(&invalid_duration_payload)
         .to_request();
 
-    let mut req = req;
+    let req = req;
     req.extensions_mut().insert(auth.clone());
 
     let resp = test::call_service(&app, req).await;
@@ -477,7 +477,7 @@ async fn test_hygiene_events_validation_and_error_handling() {
         .set_json(&invalid_rating_payload)
         .to_request();
 
-    let mut req = req;
+    let req = req;
     req.extensions_mut().insert(auth.clone());
 
     let resp = test::call_service(&app, req).await;
@@ -500,7 +500,7 @@ async fn test_hygiene_events_validation_and_error_handling() {
         .set_json(&empty_payload)
         .to_request();
 
-    let mut req = req;
+    let req = req;
     req.extensions_mut().insert(auth);
 
     let resp = test::call_service(&app, req).await;
@@ -596,7 +596,7 @@ async fn test_hygiene_compliance_analysis() {
         .set_json(&payload)
         .to_request();
 
-    let mut req = req;
+    let req = req;
     req.extensions_mut().insert(auth);
 
     let resp = test::call_service(&app, req).await;
@@ -889,7 +889,7 @@ async fn test_hygiene_smart_device_integration() {
         .set_json(&payload)
         .to_request();
 
-    let mut req = req;
+    let req = req;
     req.extensions_mut().insert(auth);
 
     let resp = test::call_service(&app, req).await;

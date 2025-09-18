@@ -1,4 +1,3 @@
-use self_sensored::services::auth::AuthService;
 use self_sensored::services::cache::{CacheConfig, CacheService};
 
 #[tokio::test]

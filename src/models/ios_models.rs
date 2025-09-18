@@ -1,5 +1,5 @@
-use crate::models::enums::WorkoutType;
 use crate::middleware::metrics::Metrics;
+use crate::models::enums::WorkoutType;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 

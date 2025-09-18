@@ -981,7 +981,7 @@ impl Metrics {
     /// Record iOS metrics hitting fallback cases
     #[instrument(skip_all)]
     pub fn record_ios_fallback_case(
-        fallback_type: &str,     // "wildcard_match", "default_case", "partial_match"
+        fallback_type: &str,      // "wildcard_match", "default_case", "partial_match"
         ios_metric_pattern: &str, // Pattern that matched the fallback
     ) {
         IOS_FALLBACK_CASES_TOTAL
@@ -1012,7 +1012,7 @@ impl Metrics {
     /// Record iOS metric data loss
     #[instrument(skip_all)]
     pub fn record_ios_metric_data_loss(
-        loss_reason: &str,     // "unsupported_type", "conversion_error", "validation_failed"
+        loss_reason: &str, // "unsupported_type", "conversion_error", "validation_failed"
         ios_metric_type: &str,
         severity: &str, // "low", "medium", "high", "critical"
     ) {
@@ -1199,7 +1199,7 @@ impl Metrics {
                 Self::record_unsupported_health_metric_variant(
                     variant,
                     "completeness_check",
-                    "critical"
+                    "critical",
                 );
             }
         }

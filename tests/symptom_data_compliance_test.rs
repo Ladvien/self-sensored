@@ -1,6 +1,6 @@
+use chrono::Utc;
 use self_sensored::models::enums::{SymptomSeverity, SymptomType};
 use self_sensored::models::health_metrics::SymptomMetric;
-use chrono::Utc;
 use uuid::Uuid;
 
 /// Test comprehensive DATA.md symptom type compliance
@@ -38,19 +38,31 @@ fn test_new_data_md_symptom_types() {
         };
 
         // Test validation
-        assert!(symptom.validate().is_ok(), "Symptom {symptom_type} should validate");
+        assert!(
+            symptom.validate().is_ok(),
+            "Symptom {symptom_type} should validate"
+        );
 
         // Test category assignment
         let category = symptom.get_category();
-        assert!(!category.is_empty(), "Symptom {symptom_type} should have a category");
+        assert!(
+            !category.is_empty(),
+            "Symptom {symptom_type} should have a category"
+        );
 
         // Test urgency level
         let urgency = symptom.get_urgency_level();
-        assert!(urgency > 0, "Symptom {symptom_type} should have urgency > 0");
+        assert!(
+            urgency > 0,
+            "Symptom {symptom_type} should have urgency > 0"
+        );
 
         // Test recommendations
         let recommendations = symptom.generate_recommendations();
-        assert!(!recommendations.is_empty(), "Symptom {symptom_type} should have recommendations");
+        assert!(
+            !recommendations.is_empty(),
+            "Symptom {symptom_type} should have recommendations"
+        );
 
         println!("✅ {symptom_type}: category={category}, urgency={urgency}");
     }
@@ -126,7 +138,10 @@ fn test_critical_symptom_detection() {
             "Medical emergency should have maximum urgency level"
         );
 
-        println!("✅ Critical symptom {symptom_type}: emergency={}", symptom.is_medical_emergency());
+        println!(
+            "✅ Critical symptom {symptom_type}: emergency={}",
+            symptom.is_medical_emergency()
+        );
     }
 }
 

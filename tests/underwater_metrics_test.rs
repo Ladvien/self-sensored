@@ -1,8 +1,8 @@
+use chrono::Utc;
 use self_sensored::models::{
     health_metrics::ActivityMetric,
     ios_models::{IosMetric, IosMetricData},
 };
-use chrono::Utc;
 use uuid::Uuid;
 
 #[test]
@@ -193,9 +193,7 @@ fn test_ios_16_plus_compatibility() {
 
     // Verify this is the only underwater metric in DATA.md
     // (no other underwater metrics listed in lines 208-209)
-    let underwater_identifiers = vec![
-        "HKQuantityTypeIdentifierUnderwaterDepth"
-    ];
+    let underwater_identifiers = vec!["HKQuantityTypeIdentifierUnderwaterDepth"];
     assert_eq!(underwater_identifiers.len(), 1);
     assert_eq!(underwater_identifiers[0], ios_identifier);
 }
@@ -212,9 +210,9 @@ fn test_underwater_metrics_with_apple_watch_ultra() {
 
         // Scuba diving session metrics
         distance_swimming_meters: Some(500.0), // 500m horizontal distance
-        swimming_stroke_count: Some(200), // Fin kicks
-        underwater_depth_meters: Some(18.3), // 18.3m depth (recreational limit)
-        diving_duration_seconds: Some(2700), // 45 minute dive
+        swimming_stroke_count: Some(200),      // Fin kicks
+        underwater_depth_meters: Some(18.3),   // 18.3m depth (recreational limit)
+        diving_duration_seconds: Some(2700),   // 45 minute dive
 
         // All other fields None for focused test
         step_count: None,

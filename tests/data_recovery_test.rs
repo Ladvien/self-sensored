@@ -6,7 +6,7 @@ use tracing::info;
 use uuid::Uuid;
 
 use self_sensored::config::BatchConfig;
-use self_sensored::models::{HealthMetric, IngestPayload, DataPayload};
+use self_sensored::models::{DataPayload, HealthMetric, IngestPayload};
 
 /// Integration tests for data recovery functionality
 #[cfg(test)]
@@ -79,20 +79,18 @@ mod data_recovery_tests {
     /// Helper to create test health metrics
     fn create_test_health_metrics(user_id: Uuid, count: usize) -> Vec<HealthMetric> {
         (0..count)
-            .map(|i| {
-                HealthMetric::HeartRate {
-                    user_id,
-                    recorded_at: Utc::now(),
-                    heart_rate: Some(70 + (i % 30) as i32),
-                    resting_heart_rate: Some(60),
-                    heart_rate_variability: Some(50.0),
-                    walking_heart_rate_average: None,
-                    heart_rate_recovery_one_minute: None,
-                    atrial_fibrillation_burden_percentage: None,
-                    vo2_max_ml_kg_min: None,
-                    context: None,
-                    source_device: Some("test_device".to_string()),
-                }
+            .map(|i| HealthMetric::HeartRate {
+                user_id,
+                recorded_at: Utc::now(),
+                heart_rate: Some(70 + (i % 30) as i32),
+                resting_heart_rate: Some(60),
+                heart_rate_variability: Some(50.0),
+                walking_heart_rate_average: None,
+                heart_rate_recovery_one_minute: None,
+                atrial_fibrillation_burden_percentage: None,
+                vo2_max_ml_kg_min: None,
+                context: None,
+                source_device: Some("test_device".to_string()),
             })
             .collect()
     }
@@ -118,7 +116,8 @@ mod data_recovery_tests {
             user_id,
             &test_payload,
             "PostgreSQL parameter limit exceeded",
-        ).await;
+        )
+        .await;
 
         // Count metrics before recovery
         let before_count = count_user_metrics(&pool, user_id).await;
@@ -126,7 +125,10 @@ mod data_recovery_tests {
 
         // Run recovery using corrected batch configuration
         let batch_config = BatchConfig::from_env();
-        assert!(batch_config.validate().is_ok(), "Batch config should be valid");
+        assert!(
+            batch_config.validate().is_ok(),
+            "Batch config should be valid"
+        );
 
         let batch_processor = self_sensored::services::batch_processor::BatchProcessor::with_config(
             pool.clone(),
@@ -137,8 +139,15 @@ mod data_recovery_tests {
         let result = batch_processor.process_batch(user_id, test_payload).await;
 
         // Verify recovery was successful
-        assert!(result.errors.is_empty(), "Recovery should have no errors: {:?}", result.errors);
-        assert_eq!(result.processed_count, 10000, "Should process all 10000 metrics");
+        assert!(
+            result.errors.is_empty(),
+            "Recovery should have no errors: {:?}",
+            result.errors
+        );
+        assert_eq!(
+            result.processed_count, 10000,
+            "Should process all 10000 metrics"
+        );
 
         // Count metrics after recovery
         let after_count = count_user_metrics(&pool, user_id).await;
@@ -191,12 +200,8 @@ mod data_recovery_tests {
         let checksum1 = format!("{:x}", hasher.finalize());
 
         // Create failed raw ingestion
-        let raw_id = create_failed_raw_ingestion(
-            &pool,
-            user_id,
-            &test_payload,
-            "validation_error",
-        ).await;
+        let raw_id =
+            create_failed_raw_ingestion(&pool, user_id, &test_payload, "validation_error").await;
 
         // Verify payload integrity with checksum
         let stored_payload = sqlx::query!(
@@ -220,7 +225,11 @@ mod data_recovery_tests {
         let recovered_payload: IngestPayload = serde_json::from_value(stored_payload.raw_payload)
             .expect("Should be able to parse stored payload");
 
-        assert_eq!(recovered_payload.data.metrics.len(), 100, "Should have same metric count");
+        assert_eq!(
+            recovered_payload.data.metrics.len(),
+            100,
+            "Should have same metric count"
+        );
 
         // Cleanup
         cleanup_test_data(&pool, user_id, raw_id).await;
@@ -243,12 +252,9 @@ mod data_recovery_tests {
                 },
             };
 
-            let raw_id = create_failed_raw_ingestion(
-                &pool,
-                user_id,
-                &test_payload,
-                "chunk_size_error",
-            ).await;
+            let raw_id =
+                create_failed_raw_ingestion(&pool, user_id, &test_payload, "chunk_size_error")
+                    .await;
             raw_ids.push(raw_id);
         }
 
@@ -280,7 +286,11 @@ mod data_recovery_tests {
         .await
         .expect("Should be able to discover failed records");
 
-        assert_eq!(discoverable_records.len(), 5, "Should discover all 5 failed records");
+        assert_eq!(
+            discoverable_records.len(),
+            5,
+            "Should discover all 5 failed records"
+        );
 
         // Verify each record can be parsed and processed
         let batch_config = BatchConfig::from_env();
@@ -298,17 +308,26 @@ mod data_recovery_tests {
             let result = batch_processor.process_batch(user_id, payload).await;
 
             assert!(result.errors.is_empty(), "Processing should succeed");
-            assert_eq!(result.processed_count, expected_count, "Should process all metrics");
+            assert_eq!(
+                result.processed_count, expected_count,
+                "Should process all metrics"
+            );
 
             total_recovered += result.processed_count;
         }
 
         // Verify total recovery
         let total_expected = 10 + 20 + 30 + 40 + 50; // Sum of metric counts
-        assert_eq!(total_recovered, total_expected, "Should recover all metrics");
+        assert_eq!(
+            total_recovered, total_expected,
+            "Should recover all metrics"
+        );
 
         let final_count = count_user_metrics(&pool, user_id).await;
-        assert_eq!(final_count, total_expected, "Database should have all metrics");
+        assert_eq!(
+            final_count, total_expected,
+            "Database should have all metrics"
+        );
 
         // Cleanup
         for raw_id in raw_ids {
@@ -389,7 +408,10 @@ mod data_recovery_tests {
         .expect("Should be able to count data loss indicators")
         .unwrap_or(0);
 
-        assert_eq!(data_loss_count, 4, "Should detect all 4 data loss scenarios");
+        assert_eq!(
+            data_loss_count, 4,
+            "Should detect all 4 data loss scenarios"
+        );
 
         // Test error pattern analysis
         let error_patterns = sqlx::query!(
@@ -494,9 +516,12 @@ mod data_recovery_tests {
         let _ = sqlx::query!("DELETE FROM heart_rate_metrics WHERE user_id = $1", user_id)
             .execute(pool)
             .await;
-        let _ = sqlx::query!("DELETE FROM blood_pressure_metrics WHERE user_id = $1", user_id)
-            .execute(pool)
-            .await;
+        let _ = sqlx::query!(
+            "DELETE FROM blood_pressure_metrics WHERE user_id = $1",
+            user_id
+        )
+        .execute(pool)
+        .await;
         let _ = sqlx::query!("DELETE FROM sleep_metrics WHERE user_id = $1", user_id)
             .execute(pool)
             .await;
