@@ -1944,7 +1944,7 @@ impl BatchProcessor {
         }
 
         // Use safe default chunking to prevent parameter limit errors
-        let chunk_size = 8000; // Safe default for heart rate (6 params per record)
+        let chunk_size = 4766; // Safe default for heart rate (11 params per record)
 
         Self::insert_heart_rates_chunked(pool, user_id, metrics, chunk_size).await
     }
@@ -1988,7 +1988,7 @@ impl BatchProcessor {
 
         for (chunk_idx, chunk) in chunks.iter().enumerate() {
             let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
-                "INSERT INTO heart_rate_metrics (user_id, recorded_at, heart_rate, resting_heart_rate, context, source_device) "
+                "INSERT INTO heart_rate_metrics (user_id, recorded_at, heart_rate, resting_heart_rate, heart_rate_variability, walking_heart_rate_average, heart_rate_recovery_one_minute, atrial_fibrillation_burden_percentage, vo2_max_ml_kg_min, context, source_device) "
             );
 
             query_builder.push_values(chunk.iter(), |mut b, metric| {
@@ -1999,23 +1999,55 @@ impl BatchProcessor {
                     .push_bind(metric.recorded_at)
                     .push_bind(heart_rate)
                     .push_bind(resting_heart_rate)
+                    .push_bind(metric.heart_rate_variability)
+                    .push_bind(metric.walking_heart_rate_average)
+                    .push_bind(metric.heart_rate_recovery_one_minute)
+                    .push_bind(metric.atrial_fibrillation_burden_percentage.map(|d| d.to_string().parse::<f64>().unwrap_or(0.0)))
+                    .push_bind(metric.vo2_max_ml_kg_min.map(|d| d.to_string().parse::<f64>().unwrap_or(0.0)))
                     .push_bind(metric.context)
                     .push_bind(&metric.source_device);
             });
 
             query_builder.push(" ON CONFLICT (user_id, recorded_at) DO NOTHING");
 
-            let result = query_builder.build().execute(pool).await?;
-            let chunk_inserted = result.rows_affected() as usize;
-            total_inserted += chunk_inserted;
+            let result = query_builder.build().execute(pool).await;
+            match result {
+                Ok(query_result) => {
+                    let chunk_inserted = query_result.rows_affected() as usize;
+                    total_inserted += chunk_inserted;
 
-            info!(
-                chunk_index = chunk_idx + 1,
-                chunk_records = chunk.len(),
-                chunk_inserted = chunk_inserted,
-                total_inserted = total_inserted,
-                "Heart rate chunk processed"
-            );
+                    // Log successful inserts with complete cardiovascular data
+                    info!(
+                        chunk_index = chunk_idx + 1,
+                        chunk_records = chunk.len(),
+                        chunk_inserted = chunk_inserted,
+                        total_inserted = total_inserted,
+                        "Successfully inserted HeartRate chunk with ALL cardiovascular fields"
+                    );
+
+                    // Warn if not all records were inserted (could indicate conflicts or validation failures)
+                    if chunk_inserted < chunk.len() {
+                        warn!(
+                            chunk_index = chunk_idx + 1,
+                            chunk_records = chunk.len(),
+                            chunk_inserted = chunk_inserted,
+                            skipped_records = chunk.len() - chunk_inserted,
+                            user_id = %user_id,
+                            "Some HeartRate records were skipped - likely due to conflicts (ON CONFLICT DO NOTHING)"
+                        );
+                    }
+                },
+                Err(e) => {
+                    error!(
+                        chunk_index = chunk_idx + 1,
+                        chunk_records = chunk.len(),
+                        error = %e,
+                        user_id = %user_id,
+                        "🚨 CRITICAL: Failed to insert HeartRate metrics chunk - CARDIOVASCULAR DATA LOSS!"
+                    );
+                    return Err(e);
+                }
+            }
         }
 
         Ok(total_inserted)
@@ -2277,7 +2309,7 @@ impl BatchProcessor {
 
         for (chunk_idx, chunk) in chunks.iter().enumerate() {
             let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
-                "INSERT INTO activity_metrics (user_id, recorded_at, step_count, distance_meters, active_energy_burned_kcal, basal_energy_burned_kcal, flights_climbed, distance_cycling_meters, distance_swimming_meters, distance_wheelchair_meters, distance_downhill_snow_sports_meters, push_count, swimming_stroke_count, nike_fuel_points, apple_exercise_time_minutes, apple_stand_time_minutes, apple_move_time_minutes, apple_stand_hour_achieved, walking_speed_m_per_s, walking_step_length_cm, walking_asymmetry_percent, walking_double_support_percent, six_minute_walk_test_distance_m, stair_ascent_speed_m_per_s, stair_descent_speed_m_per_s, ground_contact_time_ms, vertical_oscillation_cm, running_stride_length_m, running_power_watts, running_speed_m_per_s, source_device) "
+                "INSERT INTO activity_metrics (user_id, recorded_at, step_count, distance_meters, active_energy_burned_kcal, basal_energy_burned_kcal, flights_climbed, distance_cycling_meters, distance_swimming_meters, distance_wheelchair_meters, distance_downhill_snow_sports_meters, push_count, swimming_stroke_count, nike_fuel_points, apple_exercise_time_minutes, apple_stand_time_minutes, apple_move_time_minutes, apple_stand_hour_achieved, walking_speed_m_per_s, walking_step_length_cm, walking_asymmetry_percent, walking_double_support_percent, six_minute_walk_test_distance_m, stair_ascent_speed_m_per_s, stair_descent_speed_m_per_s, ground_contact_time_ms, vertical_oscillation_cm, running_stride_length_m, running_power_watts, running_speed_m_per_s, cycling_speed_kmh, cycling_power_watts, cycling_cadence_rpm, functional_threshold_power_watts, underwater_depth_meters, diving_duration_seconds, source_device) "
             );
 
             query_builder.push_values(chunk.iter(), |mut b, metric| {
@@ -2311,6 +2343,12 @@ impl BatchProcessor {
                     .push_bind(metric.running_stride_length_m)
                     .push_bind(metric.running_power_watts)
                     .push_bind(metric.running_speed_m_per_s)
+                    .push_bind(metric.cycling_speed_kmh)
+                    .push_bind(metric.cycling_power_watts)
+                    .push_bind(metric.cycling_cadence_rpm)
+                    .push_bind(metric.functional_threshold_power_watts)
+                    .push_bind(metric.underwater_depth_meters)
+                    .push_bind(metric.diving_duration_seconds)
                     .push_bind(&metric.source_device);
             });
 

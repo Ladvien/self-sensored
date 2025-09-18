@@ -288,6 +288,10 @@ impl IosIngestPayload {
                     | "HKQuantityTypeIdentifierRunningStrideLength"
                     | "HKQuantityTypeIdentifierRunningPower"
                     | "HKQuantityTypeIdentifierRunningSpeed"
+                    | "HKQuantityTypeIdentifierCyclingSpeed"
+                    | "HKQuantityTypeIdentifierCyclingPower"
+                    | "HKQuantityTypeIdentifierCyclingCadence"
+                    | "HKQuantityTypeIdentifierCyclingFunctionalThresholdPower"
                     | "steps"
                     | "step_count"
                     | "distance_walking_running"
@@ -498,6 +502,36 @@ impl IosIngestPayload {
                                     } else {
                                         None
                                     },
+
+                                    // Cycling Metrics (iOS 17+ HealthKit)
+                                    cycling_speed_kmh: if ios_metric.name == "HKQuantityTypeIdentifierCyclingSpeed" {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    cycling_power_watts: if ios_metric.name == "HKQuantityTypeIdentifierCyclingPower" {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    cycling_cadence_rpm: if ios_metric.name == "HKQuantityTypeIdentifierCyclingCadence" {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    functional_threshold_power_watts: if ios_metric.name == "HKQuantityTypeIdentifierCyclingFunctionalThresholdPower" {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+
+                                    // Underwater Metrics (iOS 16+ HealthKit)
+                                    underwater_depth_meters: if ios_metric.name == "HKQuantityTypeIdentifierUnderwaterDepth" {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    diving_duration_seconds: None, // Duration will be calculated from workout data, not individual metric points
 
                                     source_device: data_point.source.clone(),
                                     created_at: Utc::now(),

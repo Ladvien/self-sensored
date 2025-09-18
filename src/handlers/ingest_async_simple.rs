@@ -183,10 +183,10 @@ pub async fn ingest_async_optimized_handler(
             chunk_size: 1000,
             memory_limit_mb: 1000.0,
             // Optimized chunk sizes for large batches - FIXED to prevent PostgreSQL parameter limit violations
-            heart_rate_chunk_size: 4200, // 10 params: 42,000 total params (safe)
+            heart_rate_chunk_size: 4766, // 11 params: 52,426 total params (safe with complete cardiovascular data)
             blood_pressure_chunk_size: 8000, // 6 params: 48,000 total params (safe)
             sleep_chunk_size: 5200,      // 10 params: 52,000 total params (safe) - FIXED from 5000
-            activity_chunk_size: 1700, // 30 params: 51,000 total params (safe with mobility metrics) - UPDATED FOR MOBILITY
+            activity_chunk_size: 1450, // 36 params: 52,200 total params (safe with mobility + cycling + underwater metrics)
             respiratory_chunk_size: 7000,
             body_measurement_chunk_size: 3500,
             temperature_chunk_size: 6500, // 8 params: 52,000 total params (safe) - FIXED from 8000

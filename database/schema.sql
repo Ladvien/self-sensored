@@ -278,6 +278,16 @@ CREATE TABLE activity_metrics (
     running_power_watts DOUBLE PRECISION CHECK (running_power_watts IS NULL OR running_power_watts >= 0.0),
     running_speed_m_per_s DOUBLE PRECISION CHECK (running_speed_m_per_s IS NULL OR running_speed_m_per_s >= 0.0),
 
+    -- Cycling Metrics (iOS 17+ HealthKit)
+    cycling_speed_kmh DOUBLE PRECISION CHECK (cycling_speed_kmh IS NULL OR cycling_speed_kmh >= 0.0), -- Cycling speed in km/h
+    cycling_power_watts DOUBLE PRECISION CHECK (cycling_power_watts IS NULL OR cycling_power_watts >= 0.0), -- Cycling power in watts
+    cycling_cadence_rpm DOUBLE PRECISION CHECK (cycling_cadence_rpm IS NULL OR cycling_cadence_rpm >= 0.0), -- Cycling cadence in RPM
+    functional_threshold_power_watts DOUBLE PRECISION CHECK (functional_threshold_power_watts IS NULL OR functional_threshold_power_watts >= 0.0), -- Cycling FTP in watts
+
+    -- Underwater Metrics (iOS 16+ HealthKit)
+    underwater_depth_meters DOUBLE PRECISION CHECK (underwater_depth_meters IS NULL OR (underwater_depth_meters >= 0.0 AND underwater_depth_meters <= 1000.0)), -- Underwater depth in meters (recreational diving limit ~60m, technical diving ~300m, record ~1000m)
+    diving_duration_seconds INTEGER CHECK (diving_duration_seconds IS NULL OR (diving_duration_seconds >= 0 AND diving_duration_seconds <= 86400)), -- Diving session duration in seconds (max 24 hours for safety)
+
     -- Metadata
     source_device VARCHAR(255),
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
