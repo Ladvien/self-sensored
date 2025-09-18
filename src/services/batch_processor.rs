@@ -15,6 +15,9 @@ use crate::config::{
     BLOOD_PRESSURE_PARAMS_PER_RECORD, BODY_MEASUREMENT_PARAMS_PER_RECORD,
     ENVIRONMENTAL_PARAMS_PER_RECORD, HEART_RATE_PARAMS_PER_RECORD, SAFE_PARAM_LIMIT,
     SLEEP_PARAMS_PER_RECORD, WORKOUT_PARAMS_PER_RECORD,
+    SAFETY_EVENT_PARAMS_PER_RECORD, MINDFULNESS_PARAMS_PER_RECORD,
+    MENTAL_HEALTH_PARAMS_PER_RECORD, SYMPTOM_PARAMS_PER_RECORD,
+    HYGIENE_PARAMS_PER_RECORD,
 };
 use crate::middleware::metrics::Metrics;
 use crate::models::{HealthMetric, IngestPayload, ProcessingError};
@@ -3918,79 +3921,129 @@ impl BatchProcessor {
         .await
     }
 
-    /// STUB: Insert safety event metrics - TODO: Implement full database operations
+    /// Insert safety event metrics with chunked processing for PostgreSQL parameter limits
     async fn insert_safety_event_metrics(
         &self,
         user_id: uuid::Uuid,
         metrics: Vec<crate::models::SafetyEventMetric>,
     ) -> Result<usize, sqlx::Error> {
-        warn!(
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        info!(
             user_id = %user_id,
             count = metrics.len(),
-            "STUB: Safety event metrics processing not yet implemented - data being lost!"
+            "Processing safety event metrics insertion"
         );
-        // TODO: Implement actual database insertion
-        Ok(0)
+
+        Self::insert_safety_event_metrics_chunked(
+            &self.pool,
+            user_id,
+            metrics,
+            self.config.safety_event_chunk_size,
+        )
+        .await
     }
 
-    /// STUB: Insert mindfulness metrics - TODO: Implement full database operations
+    /// Insert mindfulness metrics with chunked processing for PostgreSQL parameter limits
     async fn insert_mindfulness_metrics(
         &self,
         user_id: uuid::Uuid,
         metrics: Vec<crate::models::MindfulnessMetric>,
     ) -> Result<usize, sqlx::Error> {
-        warn!(
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        info!(
             user_id = %user_id,
             count = metrics.len(),
-            "STUB: Mindfulness metrics processing not yet implemented - data being lost!"
+            "Processing mindfulness metrics insertion"
         );
-        // TODO: Implement actual database insertion
-        Ok(0)
+
+        Self::insert_mindfulness_metrics_chunked(
+            &self.pool,
+            user_id,
+            metrics,
+            self.config.mindfulness_chunk_size,
+        )
+        .await
     }
 
-    /// STUB: Insert mental health metrics - TODO: Implement full database operations
+    /// Insert mental health metrics with chunked processing for PostgreSQL parameter limits
     async fn insert_mental_health_metrics(
         &self,
         user_id: uuid::Uuid,
         metrics: Vec<crate::models::MentalHealthMetric>,
     ) -> Result<usize, sqlx::Error> {
-        warn!(
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        info!(
             user_id = %user_id,
             count = metrics.len(),
-            "STUB: Mental health metrics processing not yet implemented - data being lost!"
+            "Processing mental health metrics insertion"
         );
-        // TODO: Implement actual database insertion
-        Ok(0)
+
+        Self::insert_mental_health_metrics_chunked(
+            &self.pool,
+            user_id,
+            metrics,
+            self.config.mental_health_chunk_size,
+        )
+        .await
     }
 
-    /// STUB: Insert symptom metrics - TODO: Implement full database operations
+    /// Insert symptom metrics with chunked processing for PostgreSQL parameter limits
     async fn insert_symptom_metrics(
         &self,
         user_id: uuid::Uuid,
         metrics: Vec<crate::models::SymptomMetric>,
     ) -> Result<usize, sqlx::Error> {
-        warn!(
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        info!(
             user_id = %user_id,
             count = metrics.len(),
-            "STUB: Symptom metrics processing not yet implemented - data being lost!"
+            "Processing symptom metrics insertion"
         );
-        // TODO: Implement actual database insertion
-        Ok(0)
+
+        Self::insert_symptom_metrics_chunked(
+            &self.pool,
+            user_id,
+            metrics,
+            self.config.symptom_chunk_size,
+        )
+        .await
     }
 
-    /// STUB: Insert hygiene metrics - TODO: Implement full database operations
+    /// Insert hygiene metrics with chunked processing for PostgreSQL parameter limits
     async fn insert_hygiene_metrics(
         &self,
         user_id: uuid::Uuid,
         metrics: Vec<crate::models::HygieneMetric>,
     ) -> Result<usize, sqlx::Error> {
-        warn!(
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        info!(
             user_id = %user_id,
             count = metrics.len(),
-            "STUB: Hygiene metrics processing not yet implemented - data being lost!"
+            "Processing hygiene metrics insertion"
         );
-        // TODO: Implement actual database insertion
-        Ok(0)
+
+        Self::insert_hygiene_metrics_chunked(
+            &self.pool,
+            user_id,
+            metrics,
+            self.config.hygiene_chunk_size,
+        )
+        .await
     }
 
     /// Batch insert environmental metrics in optimized chunks
@@ -4164,6 +4217,471 @@ impl BatchProcessor {
                         chunk_idx = chunk_idx,
                         chunk_size = chunk.len(),
                         "Failed to insert audio exposure metrics chunk"
+                    );
+                    return Err(e);
+                }
+            }
+        }
+
+        Ok(total_inserted)
+    }
+
+    /// Batch insert safety event metrics in optimized chunks for emergency response tracking
+    async fn insert_safety_event_metrics_chunked(
+        pool: &PgPool,
+        user_id: Uuid,
+        metrics: Vec<crate::models::SafetyEventMetric>,
+        chunk_size: usize,
+    ) -> Result<usize, sqlx::Error> {
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        let chunks: Vec<&[crate::models::SafetyEventMetric]> =
+            metrics.chunks(chunk_size).collect();
+        let mut total_inserted = 0;
+        let max_params_per_chunk = chunk_size * SAFETY_EVENT_PARAMS_PER_RECORD;
+
+        info!(
+            metric_type = "safety_event",
+            total_records = metrics.len(),
+            chunk_count = chunks.len(),
+            chunk_size = chunk_size,
+            max_params_per_chunk = max_params_per_chunk,
+            "Processing safety event metrics in chunks"
+        );
+
+        for (chunk_idx, chunk) in chunks.iter().enumerate() {
+            let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
+                "INSERT INTO safety_event_metrics (user_id, recorded_at, event_type, severity_level, location_latitude, location_longitude, emergency_contacts_notified, resolution_status, source_device) "
+            );
+
+            query_builder.push_values(chunk.iter(), |mut b, metric| {
+                b.push_bind(user_id)
+                    .push_bind(metric.recorded_at)
+                    .push_bind(&metric.event_type)
+                    .push_bind(metric.severity_level)
+                    .push_bind(metric.location_latitude)
+                    .push_bind(metric.location_longitude)
+                    .push_bind(metric.emergency_contacts_notified)
+                    .push_bind(&metric.resolution_status)
+                    .push_bind(&metric.source_device);
+            });
+
+            query_builder.push(" ON CONFLICT (user_id, recorded_at, event_type) DO UPDATE SET
+                severity_level = COALESCE(EXCLUDED.severity_level, safety_event_metrics.severity_level),
+                location_latitude = COALESCE(EXCLUDED.location_latitude, safety_event_metrics.location_latitude),
+                location_longitude = COALESCE(EXCLUDED.location_longitude, safety_event_metrics.location_longitude),
+                emergency_contacts_notified = EXCLUDED.emergency_contacts_notified OR safety_event_metrics.emergency_contacts_notified,
+                resolution_status = COALESCE(EXCLUDED.resolution_status, safety_event_metrics.resolution_status),
+                source_device = COALESCE(EXCLUDED.source_device, safety_event_metrics.source_device)");
+
+            let query = query_builder.build();
+
+            debug!(
+                chunk_index = chunk_idx,
+                chunk_size = chunk.len(),
+                estimated_params = chunk.len() * SAFETY_EVENT_PARAMS_PER_RECORD,
+                "Executing safety event metrics chunk insertion"
+            );
+
+            match query.execute(pool).await {
+                Ok(result) => {
+                    let rows_affected = result.rows_affected() as usize;
+                    total_inserted += rows_affected;
+                    debug!(
+                        chunk_index = chunk_idx,
+                        rows_inserted = rows_affected,
+                        total_so_far = total_inserted,
+                        "Safety event chunk inserted successfully"
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        chunk_index = chunk_idx,
+                        chunk_size = chunk.len(),
+                        error = %e,
+                        "Failed to insert safety event metrics chunk"
+                    );
+                    return Err(e);
+                }
+            }
+        }
+
+        Ok(total_inserted)
+    }
+
+    /// Batch insert mindfulness metrics in optimized chunks for meditation tracking
+    async fn insert_mindfulness_metrics_chunked(
+        pool: &PgPool,
+        user_id: Uuid,
+        metrics: Vec<crate::models::MindfulnessMetric>,
+        chunk_size: usize,
+    ) -> Result<usize, sqlx::Error> {
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        let chunks: Vec<&[crate::models::MindfulnessMetric]> =
+            metrics.chunks(chunk_size).collect();
+        let mut total_inserted = 0;
+        let max_params_per_chunk = chunk_size * MINDFULNESS_PARAMS_PER_RECORD;
+
+        info!(
+            metric_type = "mindfulness",
+            total_records = metrics.len(),
+            chunk_count = chunks.len(),
+            chunk_size = chunk_size,
+            max_params_per_chunk = max_params_per_chunk,
+            "Processing mindfulness metrics in chunks"
+        );
+
+        for (chunk_idx, chunk) in chunks.iter().enumerate() {
+            let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
+                "INSERT INTO mindfulness_metrics (user_id, recorded_at, session_duration_minutes, meditation_type, session_quality_rating, mindful_minutes_today, mindful_minutes_week, breathing_rate_breaths_per_min, heart_rate_variability_during_session, focus_rating, guided_session_instructor, meditation_app, background_sounds, location_type, session_notes, source_device) "
+            );
+
+            query_builder.push_values(chunk.iter(), |mut b, metric| {
+                b.push_bind(user_id)
+                    .push_bind(metric.recorded_at)
+                    .push_bind(metric.session_duration_minutes)
+                    .push_bind(&metric.meditation_type)
+                    .push_bind(metric.session_quality_rating)
+                    .push_bind(metric.mindful_minutes_today)
+                    .push_bind(metric.mindful_minutes_week)
+                    .push_bind(metric.breathing_rate_breaths_per_min)
+                    .push_bind(metric.heart_rate_variability_during_session)
+                    .push_bind(metric.focus_rating)
+                    .push_bind(&metric.guided_session_instructor)
+                    .push_bind(&metric.meditation_app)
+                    .push_bind(&metric.background_sounds)
+                    .push_bind(&metric.location_type)
+                    .push_bind(&metric.session_notes)
+                    .push_bind(&metric.source_device);
+            });
+
+            query_builder.push(" ON CONFLICT (user_id, recorded_at) DO UPDATE SET
+                session_duration_minutes = COALESCE(EXCLUDED.session_duration_minutes, mindfulness_metrics.session_duration_minutes),
+                meditation_type = COALESCE(EXCLUDED.meditation_type, mindfulness_metrics.meditation_type),
+                session_quality_rating = COALESCE(EXCLUDED.session_quality_rating, mindfulness_metrics.session_quality_rating),
+                mindful_minutes_today = COALESCE(EXCLUDED.mindful_minutes_today, mindfulness_metrics.mindful_minutes_today),
+                mindful_minutes_week = COALESCE(EXCLUDED.mindful_minutes_week, mindfulness_metrics.mindful_minutes_week),
+                breathing_rate_breaths_per_min = COALESCE(EXCLUDED.breathing_rate_breaths_per_min, mindfulness_metrics.breathing_rate_breaths_per_min),
+                heart_rate_variability_during_session = COALESCE(EXCLUDED.heart_rate_variability_during_session, mindfulness_metrics.heart_rate_variability_during_session),
+                focus_rating = COALESCE(EXCLUDED.focus_rating, mindfulness_metrics.focus_rating),
+                guided_session_instructor = COALESCE(EXCLUDED.guided_session_instructor, mindfulness_metrics.guided_session_instructor),
+                meditation_app = COALESCE(EXCLUDED.meditation_app, mindfulness_metrics.meditation_app),
+                background_sounds = COALESCE(EXCLUDED.background_sounds, mindfulness_metrics.background_sounds),
+                location_type = COALESCE(EXCLUDED.location_type, mindfulness_metrics.location_type),
+                session_notes = COALESCE(EXCLUDED.session_notes, mindfulness_metrics.session_notes),
+                source_device = COALESCE(EXCLUDED.source_device, mindfulness_metrics.source_device)");
+
+            let query = query_builder.build();
+
+            debug!(
+                chunk_index = chunk_idx,
+                chunk_size = chunk.len(),
+                estimated_params = chunk.len() * MINDFULNESS_PARAMS_PER_RECORD,
+                "Executing mindfulness metrics chunk insertion"
+            );
+
+            match query.execute(pool).await {
+                Ok(result) => {
+                    let rows_affected = result.rows_affected() as usize;
+                    total_inserted += rows_affected;
+                    debug!(
+                        chunk_index = chunk_idx,
+                        rows_inserted = rows_affected,
+                        total_so_far = total_inserted,
+                        "Mindfulness chunk inserted successfully"
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        chunk_index = chunk_idx,
+                        chunk_size = chunk.len(),
+                        error = %e,
+                        "Failed to insert mindfulness metrics chunk"
+                    );
+                    return Err(e);
+                }
+            }
+        }
+
+        Ok(total_inserted)
+    }
+
+    /// Batch insert mental health metrics in optimized chunks for psychological wellness tracking
+    async fn insert_mental_health_metrics_chunked(
+        pool: &PgPool,
+        user_id: Uuid,
+        metrics: Vec<crate::models::MentalHealthMetric>,
+        chunk_size: usize,
+    ) -> Result<usize, sqlx::Error> {
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        let chunks: Vec<&[crate::models::MentalHealthMetric]> =
+            metrics.chunks(chunk_size).collect();
+        let mut total_inserted = 0;
+        let max_params_per_chunk = chunk_size * MENTAL_HEALTH_PARAMS_PER_RECORD;
+
+        info!(
+            metric_type = "mental_health",
+            total_records = metrics.len(),
+            chunk_count = chunks.len(),
+            chunk_size = chunk_size,
+            max_params_per_chunk = max_params_per_chunk,
+            "Processing mental health metrics in chunks"
+        );
+
+        for (chunk_idx, chunk) in chunks.iter().enumerate() {
+            let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
+                "INSERT INTO mental_health_metrics (user_id, recorded_at, state_of_mind_valence, state_of_mind_labels, reflection_prompt, mood_rating, anxiety_level, stress_level, energy_level, depression_screening_score, anxiety_screening_score, sleep_quality_impact, trigger_event, coping_strategy, medication_taken, therapy_session_today, source_device) "
+            );
+
+            query_builder.push_values(chunk.iter(), |mut b, metric| {
+                b.push_bind(user_id)
+                    .push_bind(metric.recorded_at)
+                    .push_bind(metric.state_of_mind_valence)
+                    .push_bind(&metric.state_of_mind_labels)
+                    .push_bind(&metric.reflection_prompt)
+                    .push_bind(metric.mood_rating)
+                    .push_bind(metric.anxiety_level)
+                    .push_bind(metric.stress_level)
+                    .push_bind(metric.energy_level)
+                    .push_bind(metric.depression_screening_score)
+                    .push_bind(metric.anxiety_screening_score)
+                    .push_bind(metric.sleep_quality_impact)
+                    .push_bind(&metric.trigger_event)
+                    .push_bind(&metric.coping_strategy)
+                    .push_bind(metric.medication_taken)
+                    .push_bind(metric.therapy_session_today)
+                    .push_bind(&metric.source_device);
+            });
+
+            query_builder.push(" ON CONFLICT (user_id, recorded_at) DO UPDATE SET
+                state_of_mind_valence = COALESCE(EXCLUDED.state_of_mind_valence, mental_health_metrics.state_of_mind_valence),
+                state_of_mind_labels = COALESCE(EXCLUDED.state_of_mind_labels, mental_health_metrics.state_of_mind_labels),
+                reflection_prompt = COALESCE(EXCLUDED.reflection_prompt, mental_health_metrics.reflection_prompt),
+                mood_rating = COALESCE(EXCLUDED.mood_rating, mental_health_metrics.mood_rating),
+                anxiety_level = COALESCE(EXCLUDED.anxiety_level, mental_health_metrics.anxiety_level),
+                stress_level = COALESCE(EXCLUDED.stress_level, mental_health_metrics.stress_level),
+                energy_level = COALESCE(EXCLUDED.energy_level, mental_health_metrics.energy_level),
+                depression_screening_score = COALESCE(EXCLUDED.depression_screening_score, mental_health_metrics.depression_screening_score),
+                anxiety_screening_score = COALESCE(EXCLUDED.anxiety_screening_score, mental_health_metrics.anxiety_screening_score),
+                sleep_quality_impact = COALESCE(EXCLUDED.sleep_quality_impact, mental_health_metrics.sleep_quality_impact),
+                trigger_event = COALESCE(EXCLUDED.trigger_event, mental_health_metrics.trigger_event),
+                coping_strategy = COALESCE(EXCLUDED.coping_strategy, mental_health_metrics.coping_strategy),
+                medication_taken = COALESCE(EXCLUDED.medication_taken, mental_health_metrics.medication_taken),
+                therapy_session_today = COALESCE(EXCLUDED.therapy_session_today, mental_health_metrics.therapy_session_today),
+                source_device = COALESCE(EXCLUDED.source_device, mental_health_metrics.source_device)");
+
+            let query = query_builder.build();
+
+            debug!(
+                chunk_index = chunk_idx,
+                chunk_size = chunk.len(),
+                estimated_params = chunk.len() * MENTAL_HEALTH_PARAMS_PER_RECORD,
+                "Executing mental health metrics chunk insertion"
+            );
+
+            match query.execute(pool).await {
+                Ok(result) => {
+                    let rows_affected = result.rows_affected() as usize;
+                    total_inserted += rows_affected;
+                    debug!(
+                        chunk_index = chunk_idx,
+                        rows_inserted = rows_affected,
+                        total_so_far = total_inserted,
+                        "Mental health chunk inserted successfully"
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        chunk_index = chunk_idx,
+                        chunk_size = chunk.len(),
+                        error = %e,
+                        "Failed to insert mental health metrics chunk"
+                    );
+                    return Err(e);
+                }
+            }
+        }
+
+        Ok(total_inserted)
+    }
+
+    /// Batch insert symptom metrics in optimized chunks for health monitoring
+    async fn insert_symptom_metrics_chunked(
+        pool: &PgPool,
+        user_id: Uuid,
+        metrics: Vec<crate::models::SymptomMetric>,
+        chunk_size: usize,
+    ) -> Result<usize, sqlx::Error> {
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        let chunks: Vec<&[crate::models::SymptomMetric]> =
+            metrics.chunks(chunk_size).collect();
+        let mut total_inserted = 0;
+        let max_params_per_chunk = chunk_size * SYMPTOM_PARAMS_PER_RECORD;
+
+        info!(
+            metric_type = "symptom",
+            total_records = metrics.len(),
+            chunk_count = chunks.len(),
+            chunk_size = chunk_size,
+            max_params_per_chunk = max_params_per_chunk,
+            "Processing symptom metrics in chunks"
+        );
+
+        for (chunk_idx, chunk) in chunks.iter().enumerate() {
+            let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
+                "INSERT INTO symptoms (user_id, recorded_at, symptom_type, severity, duration_minutes, notes, episode_id, source_device) "
+            );
+
+            query_builder.push_values(chunk.iter(), |mut b, metric| {
+                b.push_bind(user_id)
+                    .push_bind(metric.recorded_at)
+                    .push_bind(&metric.symptom_type)
+                    .push_bind(&metric.severity)
+                    .push_bind(metric.duration_minutes)
+                    .push_bind(&metric.notes)
+                    .push_bind(metric.episode_id)
+                    .push_bind(&metric.source_device);
+            });
+
+            query_builder.push(" ON CONFLICT (user_id, recorded_at, symptom_type) DO UPDATE SET
+                severity = EXCLUDED.severity,
+                duration_minutes = COALESCE(EXCLUDED.duration_minutes, symptoms.duration_minutes),
+                notes = COALESCE(EXCLUDED.notes, symptoms.notes),
+                episode_id = COALESCE(EXCLUDED.episode_id, symptoms.episode_id),
+                source_device = COALESCE(EXCLUDED.source_device, symptoms.source_device)");
+
+            let query = query_builder.build();
+
+            debug!(
+                chunk_index = chunk_idx,
+                chunk_size = chunk.len(),
+                estimated_params = chunk.len() * SYMPTOM_PARAMS_PER_RECORD,
+                "Executing symptom metrics chunk insertion"
+            );
+
+            match query.execute(pool).await {
+                Ok(result) => {
+                    let rows_affected = result.rows_affected() as usize;
+                    total_inserted += rows_affected;
+                    debug!(
+                        chunk_index = chunk_idx,
+                        rows_inserted = rows_affected,
+                        total_so_far = total_inserted,
+                        "Symptom chunk inserted successfully"
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        chunk_index = chunk_idx,
+                        chunk_size = chunk.len(),
+                        error = %e,
+                        "Failed to insert symptom metrics chunk"
+                    );
+                    return Err(e);
+                }
+            }
+        }
+
+        Ok(total_inserted)
+    }
+
+    /// Batch insert hygiene metrics in optimized chunks for personal care tracking
+    async fn insert_hygiene_metrics_chunked(
+        pool: &PgPool,
+        user_id: Uuid,
+        metrics: Vec<crate::models::HygieneMetric>,
+        chunk_size: usize,
+    ) -> Result<usize, sqlx::Error> {
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        let chunks: Vec<&[crate::models::HygieneMetric]> =
+            metrics.chunks(chunk_size).collect();
+        let mut total_inserted = 0;
+        let max_params_per_chunk = chunk_size * HYGIENE_PARAMS_PER_RECORD;
+
+        info!(
+            metric_type = "hygiene",
+            total_records = metrics.len(),
+            chunk_count = chunks.len(),
+            chunk_size = chunk_size,
+            max_params_per_chunk = max_params_per_chunk,
+            "Processing hygiene metrics in chunks"
+        );
+
+        for (chunk_idx, chunk) in chunks.iter().enumerate() {
+            let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
+                "INSERT INTO hygiene_events (user_id, recorded_at, event_type, duration_seconds, quality_rating, meets_who_guidelines, frequency_compliance_rating, device_detected, device_effectiveness_score, trigger_event, location_context, compliance_motivation, health_crisis_enhanced, source_device) "
+            );
+
+            query_builder.push_values(chunk.iter(), |mut b, metric| {
+                b.push_bind(user_id)
+                    .push_bind(metric.recorded_at)
+                    .push_bind(&metric.event_type)
+                    .push_bind(metric.duration_seconds)
+                    .push_bind(metric.quality_rating)
+                    .push_bind(metric.meets_who_guidelines)
+                    .push_bind(metric.frequency_compliance_rating)
+                    .push_bind(metric.device_detected)
+                    .push_bind(metric.device_effectiveness_score)
+                    .push_bind(&metric.trigger_event)
+                    .push_bind(&metric.location_context)
+                    .push_bind(&metric.compliance_motivation)
+                    .push_bind(metric.health_crisis_enhanced)
+                    .push_bind(&metric.source_device);
+            });
+
+            query_builder.push(" ON CONFLICT (user_id, recorded_at, event_type) DO UPDATE SET
+                duration_seconds = COALESCE(EXCLUDED.duration_seconds, hygiene_events.duration_seconds),
+                quality_rating = COALESCE(EXCLUDED.quality_rating, hygiene_events.quality_rating),
+                meets_who_guidelines = COALESCE(EXCLUDED.meets_who_guidelines, hygiene_events.meets_who_guidelines),
+                frequency_compliance_rating = COALESCE(EXCLUDED.frequency_compliance_rating, hygiene_events.frequency_compliance_rating),
+                device_detected = COALESCE(EXCLUDED.device_detected, hygiene_events.device_detected),
+                device_effectiveness_score = COALESCE(EXCLUDED.device_effectiveness_score, hygiene_events.device_effectiveness_score),
+                trigger_event = COALESCE(EXCLUDED.trigger_event, hygiene_events.trigger_event),
+                location_context = COALESCE(EXCLUDED.location_context, hygiene_events.location_context),
+                compliance_motivation = COALESCE(EXCLUDED.compliance_motivation, hygiene_events.compliance_motivation),
+                health_crisis_enhanced = COALESCE(EXCLUDED.health_crisis_enhanced, hygiene_events.health_crisis_enhanced),
+                source_device = COALESCE(EXCLUDED.source_device, hygiene_events.source_device)");
+
+            let query = query_builder.build();
+
+            debug!(
+                chunk_index = chunk_idx,
+                chunk_size = chunk.len(),
+                estimated_params = chunk.len() * HYGIENE_PARAMS_PER_RECORD,
+                "Executing hygiene metrics chunk insertion"
+            );
+
+            match query.execute(pool).await {
+                Ok(result) => {
+                    let rows_affected = result.rows_affected() as usize;
+                    total_inserted += rows_affected;
+                    debug!(
+                        chunk_index = chunk_idx,
+                        rows_inserted = rows_affected,
+                        total_so_far = total_inserted,
+                        "Hygiene chunk inserted successfully"
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        chunk_index = chunk_idx,
+                        chunk_size = chunk.len(),
+                        error = %e,
+                        "Failed to insert hygiene metrics chunk"
                     );
                     return Err(e);
                 }

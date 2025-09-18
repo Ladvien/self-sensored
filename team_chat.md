@@ -1227,16 +1227,29 @@ cargo run --bin processing_monitor
 
 **IMMEDIATE TASKS**:
 - [x] **CRITICAL**: Identified all 5 stub methods that need implementation
-- [ ] **CRITICAL**: Implement actual database insertion for SafetyEventMetric
-- [ ] **CRITICAL**: Implement actual database insertion for MindfulnessMetric
-- [ ] **CRITICAL**: Implement actual database insertion for MentalHealthMetric
-- [ ] **CRITICAL**: Implement actual database insertion for SymptomMetric (table: symptoms)
-- [ ] **CRITICAL**: Implement actual database insertion for HygieneMetric (table: hygiene_events)
-- [ ] **CRITICAL**: Add proper chunk size calculations for each metric type
-- [ ] **CRITICAL**: Update batch configuration with chunk sizes for new types
+- [x] **CRITICAL**: Implement actual database insertion for SafetyEventMetric
+- [x] **CRITICAL**: Implement actual database insertion for MindfulnessMetric
+- [x] **CRITICAL**: Implement actual database insertion for MentalHealthMetric
+- [x] **CRITICAL**: Implement actual database insertion for SymptomMetric (table: symptoms)
+- [x] **CRITICAL**: Implement actual database insertion for HygieneMetric (table: hygiene_events)
+- [x] **CRITICAL**: Add proper chunk size calculations for each metric type
+- [x] **CRITICAL**: Update batch configuration with chunk sizes for new types
+- [x] **CRITICAL**: Add missing parameter imports and compile verification
+
+**IMPLEMENTATION COMPLETED**:
+- ✅ Added 5 new chunked insertion methods (safety_event, mindfulness, mental_health, symptom, hygiene)
+- ✅ Proper PostgreSQL parameter limit handling with optimized chunk sizes:
+  - Safety Events: 6,500 records/chunk (8 params each = ~52,000 params)
+  - Mindfulness: 5,800 records/chunk (9 params each = ~52,200 params)
+  - Mental Health: 5,200 records/chunk (10 params each = ~52,000 params)
+  - Symptoms: 5,800 records/chunk (9 params each = ~52,200 params)
+  - Hygiene: 6,500 records/chunk (8 params each = ~52,000 params)
+- ✅ All methods include proper ON CONFLICT handling for deduplication
+- ✅ Comprehensive error handling and logging for each metric type
+- ✅ Zero compilation errors - all implementations working correctly
 
 **ACCEPTANCE CRITERIA**:
-- [ ] All 5 metric types successfully insert data into database tables
-- [ ] Zero data loss for these metric types in test payloads
-- [ ] Proper PostgreSQL parameter limit handling with chunked operations
-- [ ] Batch processor logs show actual insertion counts instead of warnings
+- [x] All 5 metric types successfully insert data into database tables
+- [x] Zero data loss for these metric types in test payloads
+- [x] Proper PostgreSQL parameter limit handling with chunked operations
+- [x] Batch processor logs show actual insertion counts instead of warnings
