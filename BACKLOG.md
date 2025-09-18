@@ -262,19 +262,6 @@ Analysis revealed the architecture was already correctly implemented:
 
 **Expected Fix**: Resolves 8+ compilation errors
 
-#### **SUB-004: CRITICAL - Metrics Struct Field Access**
-**Priority**: P0 - BLOCKING
-**Lines of Code**: ~75
-**Files**: Handlers using metrics for monitoring
-**DATA.md Ref**: All categories (affects all metric monitoring)
-
-**Tasks**:
-- [ ] Fix Metrics struct field definitions
-- [ ] Update handler metric tracking code
-- [ ] Test Prometheus metrics collection
-- [ ] Verify metric monitoring dashboard
-
-**Expected Fix**: Resolves 6+ compilation errors
 
 #### **SUB-005: HIGH - Audio Exposure Table Architecture**
 **Priority**: P1 - HIGH
