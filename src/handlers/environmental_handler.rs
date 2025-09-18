@@ -492,13 +492,22 @@ async fn store_audio_exposure_metric(
         INSERT INTO audio_exposure_metrics (
             id, user_id, recorded_at, environmental_audio_exposure_db,
             headphone_audio_exposure_db, exposure_duration_minutes,
-            audio_exposure_event, source_device, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            audio_exposure_event, hearing_protection_used, environment_type,
+            activity_during_exposure, daily_noise_dose_percentage, weekly_exposure_hours,
+            location_latitude, location_longitude, source_device, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         ON CONFLICT (user_id, recorded_at) DO UPDATE SET
             environmental_audio_exposure_db = COALESCE(EXCLUDED.environmental_audio_exposure_db, audio_exposure_metrics.environmental_audio_exposure_db),
             headphone_audio_exposure_db = COALESCE(EXCLUDED.headphone_audio_exposure_db, audio_exposure_metrics.headphone_audio_exposure_db),
             exposure_duration_minutes = COALESCE(EXCLUDED.exposure_duration_minutes, audio_exposure_metrics.exposure_duration_minutes),
             audio_exposure_event = COALESCE(EXCLUDED.audio_exposure_event, audio_exposure_metrics.audio_exposure_event),
+            hearing_protection_used = COALESCE(EXCLUDED.hearing_protection_used, audio_exposure_metrics.hearing_protection_used),
+            environment_type = COALESCE(EXCLUDED.environment_type, audio_exposure_metrics.environment_type),
+            activity_during_exposure = COALESCE(EXCLUDED.activity_during_exposure, audio_exposure_metrics.activity_during_exposure),
+            daily_noise_dose_percentage = COALESCE(EXCLUDED.daily_noise_dose_percentage, audio_exposure_metrics.daily_noise_dose_percentage),
+            weekly_exposure_hours = COALESCE(EXCLUDED.weekly_exposure_hours, audio_exposure_metrics.weekly_exposure_hours),
+            location_latitude = COALESCE(EXCLUDED.location_latitude, audio_exposure_metrics.location_latitude),
+            location_longitude = COALESCE(EXCLUDED.location_longitude, audio_exposure_metrics.location_longitude),
             source_device = COALESCE(EXCLUDED.source_device, audio_exposure_metrics.source_device)
         "#,
         metric.id,
@@ -508,6 +517,13 @@ async fn store_audio_exposure_metric(
         metric.headphone_audio_exposure_db,
         metric.exposure_duration_minutes,
         metric.audio_exposure_event,
+        metric.hearing_protection_used,
+        metric.environment_type,
+        metric.activity_during_exposure,
+        metric.daily_noise_dose_percentage,
+        metric.weekly_exposure_hours,
+        metric.location_latitude,
+        metric.location_longitude,
         metric.source_device,
         metric.created_at
     )
@@ -566,8 +582,6 @@ async fn get_environmental_data(
             time_in_daylight_minutes, ambient_temperature_celsius,
             humidity_percent, air_pressure_hpa, altitude_meters,
             location_latitude, location_longitude,
-            NULL::double precision as environmental_audio_exposure_db,
-            NULL::double precision as headphone_audio_exposure_db,
             source_device, created_at::timestamptz as "created_at!"
         FROM environmental_metrics
         WHERE user_id = $1 AND recorded_at BETWEEN $2 AND $3
@@ -613,6 +627,9 @@ async fn get_audio_exposure_data(
             id, user_id, recorded_at::timestamptz as "recorded_at!",
             environmental_audio_exposure_db, headphone_audio_exposure_db,
             exposure_duration_minutes, audio_exposure_event,
+            hearing_protection_used, environment_type, activity_during_exposure,
+            daily_noise_dose_percentage, weekly_exposure_hours,
+            location_latitude, location_longitude,
             source_device, created_at::timestamptz as "created_at!"
         FROM audio_exposure_metrics
         WHERE user_id = $1 AND recorded_at BETWEEN $2 AND $3

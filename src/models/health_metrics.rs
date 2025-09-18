@@ -113,6 +113,24 @@ pub struct ActivityMetric {
     pub apple_move_time_minutes: Option<i32>,
     pub apple_stand_hour_achieved: Option<bool>,
 
+    // Mobility Metrics (iOS 14+ HealthKit)
+    pub walking_speed_m_per_s: Option<f64>,
+    pub walking_step_length_cm: Option<f64>,
+    pub walking_asymmetry_percent: Option<f64>,
+    pub walking_double_support_percent: Option<f64>,
+    pub six_minute_walk_test_distance_m: Option<f64>,
+
+    // Stair Metrics
+    pub stair_ascent_speed_m_per_s: Option<f64>,
+    pub stair_descent_speed_m_per_s: Option<f64>,
+
+    // Running Dynamics
+    pub ground_contact_time_ms: Option<f64>,
+    pub vertical_oscillation_cm: Option<f64>,
+    pub running_stride_length_m: Option<f64>,
+    pub running_power_watts: Option<f64>,
+    pub running_speed_m_per_s: Option<f64>,
+
     // Metadata
     pub source_device: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -554,9 +572,6 @@ pub struct EnvironmentalMetric {
     pub id: uuid::Uuid,
     pub user_id: uuid::Uuid,
     pub recorded_at: DateTime<Utc>,
-    // Audio exposure fields for hearing health monitoring
-    pub environmental_audio_exposure_db: Option<f64>,
-    pub headphone_audio_exposure_db: Option<f64>,
     // UV exposure fields
     pub uv_index: Option<f64>,
     pub uv_exposure_minutes: Option<i32>,
@@ -579,10 +594,23 @@ pub struct AudioExposureMetric {
     pub id: uuid::Uuid,
     pub user_id: uuid::Uuid,
     pub recorded_at: DateTime<Utc>,
+    // Audio Exposure Levels (WHO/NIOSH standards)
     pub environmental_audio_exposure_db: Option<f64>,
     pub headphone_audio_exposure_db: Option<f64>,
+    // Exposure Duration and Event Tracking
     pub exposure_duration_minutes: i32,
     pub audio_exposure_event: bool, // true if dangerous level detected
+    // Hearing Health Context
+    pub hearing_protection_used: Option<bool>,
+    pub environment_type: Option<String>, // 'concert', 'workplace', 'commute', 'home', 'gym', 'outdoor', 'other'
+    pub activity_during_exposure: Option<String>, // 'music_listening', 'call', 'workout', 'commute', 'work', 'entertainment', 'other'
+    // Risk Assessment
+    pub daily_noise_dose_percentage: Option<f64>, // OSHA/NIOSH 8-hour exposure limit
+    pub weekly_exposure_hours: Option<f64>,
+    // Location Context (for noise mapping)
+    pub location_latitude: Option<f64>,
+    pub location_longitude: Option<f64>,
+    // Metadata
     pub source_device: Option<String>,
     pub created_at: DateTime<Utc>,
 }
@@ -2112,6 +2140,39 @@ impl AudioExposureMetric {
         if let Some(hp_db) = self.headphone_audio_exposure_db {
             if hp_db >= 85.0 && self.exposure_duration_minutes > 60 && !self.audio_exposure_event {
                 return Err("audio_exposure_event should be true for prolonged high-volume headphone exposure".to_string());
+            }
+        }
+
+        // Validate daily noise dose percentage (0-1000% per OSHA standards)
+        if let Some(dose) = self.daily_noise_dose_percentage {
+            if !(0.0..=1000.0).contains(&dose) {
+                return Err(format!(
+                    "daily_noise_dose_percentage {dose} is out of range (0-1000)"
+                ));
+            }
+        }
+
+        // Validate weekly exposure hours (reasonable range)
+        if let Some(hours) = self.weekly_exposure_hours {
+            if !(0.0..=168.0).contains(&hours) {
+                // max 168 hours per week
+                return Err(format!(
+                    "weekly_exposure_hours {hours} is out of range (0-168)"
+                ));
+            }
+        }
+
+        // Validate environment type (if provided)
+        if let Some(env_type) = &self.environment_type {
+            if env_type.is_empty() {
+                return Err("environment_type cannot be empty".to_string());
+            }
+        }
+
+        // Validate activity type (if provided)
+        if let Some(activity) = &self.activity_during_exposure {
+            if activity.is_empty() {
+                return Err("activity_during_exposure cannot be empty".to_string());
             }
         }
 

@@ -2277,7 +2277,7 @@ impl BatchProcessor {
 
         for (chunk_idx, chunk) in chunks.iter().enumerate() {
             let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
-                "INSERT INTO activity_metrics (user_id, recorded_at, step_count, distance_meters, active_energy_burned_kcal, basal_energy_burned_kcal, flights_climbed, distance_cycling_meters, distance_swimming_meters, distance_wheelchair_meters, distance_downhill_snow_sports_meters, push_count, swimming_stroke_count, nike_fuel_points, apple_exercise_time_minutes, apple_stand_time_minutes, apple_move_time_minutes, apple_stand_hour_achieved, source_device) "
+                "INSERT INTO activity_metrics (user_id, recorded_at, step_count, distance_meters, active_energy_burned_kcal, basal_energy_burned_kcal, flights_climbed, distance_cycling_meters, distance_swimming_meters, distance_wheelchair_meters, distance_downhill_snow_sports_meters, push_count, swimming_stroke_count, nike_fuel_points, apple_exercise_time_minutes, apple_stand_time_minutes, apple_move_time_minutes, apple_stand_hour_achieved, walking_speed_m_per_s, walking_step_length_cm, walking_asymmetry_percent, walking_double_support_percent, six_minute_walk_test_distance_m, stair_ascent_speed_m_per_s, stair_descent_speed_m_per_s, ground_contact_time_ms, vertical_oscillation_cm, running_stride_length_m, running_power_watts, running_speed_m_per_s, source_device) "
             );
 
             query_builder.push_values(chunk.iter(), |mut b, metric| {
@@ -2299,6 +2299,18 @@ impl BatchProcessor {
                     .push_bind(metric.apple_stand_time_minutes)
                     .push_bind(metric.apple_move_time_minutes)
                     .push_bind(metric.apple_stand_hour_achieved)
+                    .push_bind(metric.walking_speed_m_per_s)
+                    .push_bind(metric.walking_step_length_cm)
+                    .push_bind(metric.walking_asymmetry_percent)
+                    .push_bind(metric.walking_double_support_percent)
+                    .push_bind(metric.six_minute_walk_test_distance_m)
+                    .push_bind(metric.stair_ascent_speed_m_per_s)
+                    .push_bind(metric.stair_descent_speed_m_per_s)
+                    .push_bind(metric.ground_contact_time_ms)
+                    .push_bind(metric.vertical_oscillation_cm)
+                    .push_bind(metric.running_stride_length_m)
+                    .push_bind(metric.running_power_watts)
+                    .push_bind(metric.running_speed_m_per_s)
                     .push_bind(&metric.source_device);
             });
 
@@ -3970,14 +3982,12 @@ impl BatchProcessor {
 
         for (chunk_idx, chunk) in chunks.iter().enumerate() {
             let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
-                "INSERT INTO environmental_metrics (user_id, recorded_at, environmental_audio_exposure_db, headphone_audio_exposure_db, uv_index, uv_exposure_minutes, ambient_temperature_celsius, humidity_percent, air_pressure_hpa, altitude_meters, time_in_daylight_minutes, location_latitude, location_longitude, source_device) "
+                "INSERT INTO environmental_metrics (user_id, recorded_at, uv_index, uv_exposure_minutes, ambient_temperature_celsius, humidity_percent, air_pressure_hpa, altitude_meters, time_in_daylight_minutes, location_latitude, location_longitude, source_device) "
             );
 
             query_builder.push_values(chunk.iter(), |mut b, metric| {
                 b.push_bind(user_id)
                     .push_bind(metric.recorded_at)
-                    .push_bind(metric.environmental_audio_exposure_db)
-                    .push_bind(metric.headphone_audio_exposure_db)
                     .push_bind(metric.uv_index)
                     .push_bind(metric.uv_exposure_minutes)
                     .push_bind(metric.ambient_temperature_celsius)
@@ -3991,8 +4001,6 @@ impl BatchProcessor {
             });
 
             query_builder.push(" ON CONFLICT (user_id, recorded_at) DO UPDATE SET
-                environmental_audio_exposure_db = COALESCE(EXCLUDED.environmental_audio_exposure_db, environmental_metrics.environmental_audio_exposure_db),
-                headphone_audio_exposure_db = COALESCE(EXCLUDED.headphone_audio_exposure_db, environmental_metrics.headphone_audio_exposure_db),
                 uv_index = COALESCE(EXCLUDED.uv_index, environmental_metrics.uv_index),
                 uv_exposure_minutes = COALESCE(EXCLUDED.uv_exposure_minutes, environmental_metrics.uv_exposure_minutes),
                 ambient_temperature_celsius = COALESCE(EXCLUDED.ambient_temperature_celsius, environmental_metrics.ambient_temperature_celsius),
@@ -4062,7 +4070,7 @@ impl BatchProcessor {
 
         for (chunk_idx, chunk) in chunks.iter().enumerate() {
             let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
-                "INSERT INTO audio_exposure_metrics (user_id, recorded_at, environmental_audio_exposure_db, headphone_audio_exposure_db, exposure_duration_minutes, audio_exposure_event, source_device) "
+                "INSERT INTO audio_exposure_metrics (user_id, recorded_at, environmental_audio_exposure_db, headphone_audio_exposure_db, exposure_duration_minutes, audio_exposure_event, hearing_protection_used, environment_type, activity_during_exposure, daily_noise_dose_percentage, weekly_exposure_hours, location_latitude, location_longitude, source_device) "
             );
 
             query_builder.push_values(chunk.iter(), |mut b, metric| {
@@ -4072,6 +4080,13 @@ impl BatchProcessor {
                     .push_bind(metric.headphone_audio_exposure_db)
                     .push_bind(metric.exposure_duration_minutes)
                     .push_bind(metric.audio_exposure_event)
+                    .push_bind(metric.hearing_protection_used)
+                    .push_bind(&metric.environment_type)
+                    .push_bind(&metric.activity_during_exposure)
+                    .push_bind(metric.daily_noise_dose_percentage)
+                    .push_bind(metric.weekly_exposure_hours)
+                    .push_bind(metric.location_latitude)
+                    .push_bind(metric.location_longitude)
                     .push_bind(&metric.source_device);
             });
 
@@ -4080,6 +4095,13 @@ impl BatchProcessor {
                 headphone_audio_exposure_db = COALESCE(EXCLUDED.headphone_audio_exposure_db, audio_exposure_metrics.headphone_audio_exposure_db),
                 exposure_duration_minutes = EXCLUDED.exposure_duration_minutes,
                 audio_exposure_event = EXCLUDED.audio_exposure_event,
+                hearing_protection_used = COALESCE(EXCLUDED.hearing_protection_used, audio_exposure_metrics.hearing_protection_used),
+                environment_type = COALESCE(EXCLUDED.environment_type, audio_exposure_metrics.environment_type),
+                activity_during_exposure = COALESCE(EXCLUDED.activity_during_exposure, audio_exposure_metrics.activity_during_exposure),
+                daily_noise_dose_percentage = COALESCE(EXCLUDED.daily_noise_dose_percentage, audio_exposure_metrics.daily_noise_dose_percentage),
+                weekly_exposure_hours = COALESCE(EXCLUDED.weekly_exposure_hours, audio_exposure_metrics.weekly_exposure_hours),
+                location_latitude = COALESCE(EXCLUDED.location_latitude, audio_exposure_metrics.location_latitude),
+                location_longitude = COALESCE(EXCLUDED.location_longitude, audio_exposure_metrics.location_longitude),
                 source_device = COALESCE(EXCLUDED.source_device, audio_exposure_metrics.source_device),
                 updated_at = NOW()");
 
