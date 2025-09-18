@@ -205,11 +205,14 @@ impl ProcessingMonitor {
             let failed = stat.failed_payloads.unwrap_or(0) as f64;
             let data_loss_percentage = if total > 0.0 { (failed / total) * 100.0 } else { 0.0 };
 
+            let days_since_success = stat.days_since_success
+                .as_ref()
+                .map(|bd| bd.to_string().parse::<i64>().unwrap_or(999))
+                .unwrap_or(999);
+
             let recommended_action = self.recommend_user_action(
                 data_loss_percentage,
-                stat.days_since_success
-                    .map(|bd| bd.to_string().parse::<i64>().unwrap_or(999))
-                    .unwrap_or(999)
+                days_since_success
             );
 
             let impact = UserImpactStats {
@@ -219,9 +222,7 @@ impl ProcessingMonitor {
                 largest_failed_payload_mb: stat.largest_failed_mb
                     .map(|d| d.to_string().parse().unwrap_or(0.0))
                     .unwrap_or(0.0),
-                days_since_last_success: stat.days_since_success
-                    .map(|bd| bd.to_string().parse::<i64>().unwrap_or(999))
-                    .unwrap_or(999),
+                days_since_last_success: days_since_success,
                 recommended_action,
             };
 
@@ -423,7 +424,7 @@ impl ProcessingMonitor {
         let metrics_json = serde_json::to_value(metrics)?;
 
         // Try to save to monitoring_metrics table if it exists
-        let save_result = sqlx::query!(
+        let save_result = sqlx::query(
             r#"
             INSERT INTO monitoring_metrics (
                 timestamp,
@@ -431,11 +432,11 @@ impl ProcessingMonitor {
                 metrics_data,
                 created_at
             ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
-            "#,
-            metrics.timestamp,
-            "processing_monitor",
-            metrics_json
+            "#
         )
+        .bind(metrics.timestamp)
+        .bind("processing_monitor")
+        .bind(metrics_json)
         .execute(&self.pool)
         .await;
 

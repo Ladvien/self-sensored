@@ -9,9 +9,7 @@
 ///! Purpose: Prevent data loss when new HealthMetric types are added without
 ///! corresponding batch processing support.
 
-use std::collections::HashSet;
-
-use self_sensored::models::health_metrics::HealthMetric;
+use crate::models::health_metrics::HealthMetric;
 
 /// Compile-time validation that ensures every HealthMetric enum variant
 /// has a corresponding field in GroupedMetrics struct
@@ -117,7 +115,7 @@ fn test_no_wildcard_fallback_in_group_metrics_by_type() {
 
     println!(" VALIDATION PASSED: All {} HealthMetric variants have explicit match arms",
              required_match_arms.len());
-    println!("   =¨ ALERT: If you add a new HealthMetric variant, you MUST:");
+    println!("   ðŸš¨ ALERT: If you add a new HealthMetric variant, you MUST:");
     println!("   1. Add corresponding field to GroupedMetrics struct");
     println!("   2. Add explicit match arm to group_metrics_by_type()");
     println!("   3. Implement batch processing method");
@@ -156,7 +154,7 @@ fn test_grouped_metrics_struct_completeness() {
     // This test provides compile-time validation that GroupedMetrics
     // has all necessary fields by attempting to construct it
 
-    use self_sensored::models::{
+    use crate::models::{
         HeartRateMetric, BloodPressureMetric, SleepMetric, ActivityMetric,
         BodyMeasurementMetric, TemperatureMetric, BloodGlucoseMetric, MetabolicMetric,
         RespiratoryMetric, NutritionMetric, WorkoutData, EnvironmentalMetric,
@@ -219,7 +217,7 @@ struct GroupedMetricsValidator {
 /// Documentation and monitoring requirements for new HealthMetric variants
 #[test]
 fn test_documentation_requirements_for_new_health_metrics() {
-    println!("=Ë DOCUMENTATION REQUIREMENTS FOR NEW HEALTH METRIC VARIANTS:");
+    println!("=ï¿½ DOCUMENTATION REQUIREMENTS FOR NEW HEALTH METRIC VARIANTS:");
     println!("   1.  Add variant to HealthMetric enum in health_metrics.rs");
     println!("   2.  Add corresponding field to GroupedMetrics struct in batch_processor.rs");
     println!("   3.  Add explicit match arm to group_metrics_by_type() function");
@@ -231,7 +229,7 @@ fn test_documentation_requirements_for_new_health_metrics() {
     println!("   9.  Update parameter count constants and PostgreSQL limit validation");
     println!("  10.  Update this validation test with new variant");
 
-    println!("\n=¨ FAILURE TO FOLLOW THESE STEPS WILL RESULT IN DATA LOSS!");
+    println!("\n=ï¿½ FAILURE TO FOLLOW THESE STEPS WILL RESULT IN DATA LOSS!");
     println!("   Metrics of new types will be silently dropped during batch processing.");
     println!("   This test suite will detect most mismatches and alert developers.");
 }
@@ -239,7 +237,7 @@ fn test_documentation_requirements_for_new_health_metrics() {
 /// Monitoring alert configuration for unsupported metric types
 #[test]
 fn test_monitoring_alert_configuration() {
-    println!("=Ê MONITORING ALERT CONFIGURATION:");
+    println!("=ï¿½ MONITORING ALERT CONFIGURATION:");
     println!("   1.  Prometheus metric: health_export_unsupported_metric_types_total");
     println!("   2.  Alert threshold: > 0 unsupported metrics in 5 minutes");
     println!("   3.  Alert severity: CRITICAL (data loss risk)");
