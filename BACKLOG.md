@@ -318,19 +318,6 @@ Analysis revealed the architecture was already correctly implemented:
 
 
 
-#### **SUB-012: LOW - Underwater Metrics Support**
-**Priority**: P3 - LOW
-**Lines of Code**: ~50
-**Files**: Activity or specialized metrics handlers
-**DATA.md Ref**: Lines 208-209 (Underwater)
-
-**Tasks**:
-- [ ] Add underwater depth tracking support
-- [ ] Implement diving metric collection
-- [ ] Test underwater activity tracking
-- [ ] Verify iOS 16+ compatibility
-
-**Expected Fix**: Adds niche but supported DATA.md metric
 
 ### **Validation Criteria:**
 

@@ -89,6 +89,18 @@ testing = ["reqwest"]
 name = "self-sensored"
 path = "src/main.rs"
 
+[[bin]]
+name = "data_recovery"
+path = "src/bin/data_recovery.rs"
+
+[[bin]]
+name = "processing_monitor"
+path = "src/bin/processing_monitor.rs"
+
+[[bin]]
+name = "reprocess_failed"
+path = "src/bin/reprocess_failed.rs"
+
 # Test configuration for migration scripts
 
 # Integration test configurations

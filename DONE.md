@@ -100,6 +100,70 @@
 
 ---
 
+## ✅ SUB-012: LOW - Underwater Metrics Support (Completed: 2025-09-18)
+**Agent**: Data Processor Agent (Underwater Metrics) | **Priority**: P3 - LOW | **Status**: ✅ COMPLETED | **Time**: 1.5 hours
+
+**COMPREHENSIVE UNDERWATER METRICS IMPLEMENTATION**: ✅ Complete DATA.md line 209 underwater support with iOS 16+ Apple Watch Ultra integration
+
+**DATABASE SCHEMA ENHANCEMENTS**:
+- ✅ **2 New Underwater Fields**: Added to activity_metrics table with diving safety constraints
+  - `underwater_depth_meters` (0.0-1000.0m constraint) - Professional diving depth tracking
+  - `diving_duration_seconds` (0-86400 seconds constraint) - 24-hour maximum session safety limit
+- ✅ **Diving Safety Features**: Constraints support recreational (0-60m), technical (60-300m), and extreme diving (300-1000m)
+- ✅ **Safety Documentation**: Comprehensive comments explaining diving limits and use cases
+
+**ACTIVITYMETRIC STRUCT UPDATES**:
+- ✅ **Extended Structure**: Added underwater fields as Option<f64> and Option<i32> maintaining backward compatibility
+- ✅ **Parameter Count**: Updated from 34 to 36 total fields (includes cycling + underwater metrics)
+- ✅ **Swimming Integration**: Works seamlessly with existing swimming metrics (distance_swimming_meters, swimming_stroke_count)
+
+**iOS HEALTHKIT INTEGRATION** (iOS 16+ Apple Watch Ultra Support):
+- ✅ **HKQuantityTypeIdentifierUnderwaterDepth**: Apple Watch Ultra underwater depth tracking
+- ✅ **Depth Measurement**: Real-time underwater depth monitoring during diving activities
+- ✅ **Duration Calculation**: Diving session duration derived from workout data (not individual points)
+- ✅ **Device Compatibility**: Optimized for Apple Watch Ultra waterproofing and depth sensors
+
+**BATCH PROCESSING SAFETY UPDATES**:
+- ✅ **PostgreSQL Parameter Safety**: Updated ACTIVITY_PARAMS_PER_RECORD from 34 to 36
+- ✅ **Chunk Size Maintenance**: Kept activity_chunk_size at 1450 for continued safety
+- ✅ **Parameter Limit Compliance**: 1450 × 36 = 52,200 params (97% of safe limit 52,428)
+- ✅ **INSERT Query Enhancement**: Added underwater fields to batch processor queries
+
+**COMPREHENSIVE TEST COVERAGE**:
+- ✅ **Field Accessibility Tests**: Verified underwater fields are properly defined and accessible
+- ✅ **iOS Identifier Mapping**: Validated HKQuantityTypeIdentifierUnderwaterDepth conversion
+- ✅ **Safety Constraint Validation**: Range checking for recreational/technical/extreme diving depths
+- ✅ **Apple Watch Ultra Scenarios**: Realistic diving scenarios with device compatibility testing
+- ✅ **Swimming Integration Tests**: Verified underwater metrics work with existing swimming data
+
+**DIVING SAFETY FEATURES**:
+- 🏊‍♂️ **Recreational Diving**: 0-60m depth support (typical scuba diving activities)
+- 🤿 **Technical Diving**: 60-300m depth support (advanced diving with mixed gases)
+- 🚀 **Extreme Diving**: 300-1000m depth support (commercial/military/world record scenarios)
+- ⏱️ **Duration Limits**: 0-24 hours maximum (prevents dangerous extended dive logging)
+- ⌚ **Device Support**: Apple Watch Ultra iOS 16+ underwater tracking compatibility
+
+**FILES ENHANCED**:
+```
+/database/schema.sql                    - Added underwater fields with safety constraints
+/src/models/health_metrics.rs           - Extended ActivityMetric struct
+/src/models/ios_models.rs               - HKQuantityTypeIdentifierUnderwaterDepth mapping
+/src/services/batch_processor.rs        - Updated INSERT queries and parameter bindings
+/src/config/batch_config.rs             - Parameter count updates (34 → 36)
+/tests/underwater_metrics_test.rs       - NEW comprehensive diving test suite
+```
+
+**IMPACT ANALYSIS**:
+- **DATA.md Compliance**: ✅ Complete coverage of underwater metrics (line 209)
+- **iOS 16+ Compatibility**: ✅ Full Apple Watch Ultra underwater tracking support
+- **Diving Safety**: ✅ Professional-grade depth and duration constraints
+- **Performance**: ✅ Maintained PostgreSQL safety with 97% parameter limit usage
+- **Niche Support**: ✅ Comprehensive diving activity tracking for specialized users
+
+**COMMIT**: d9ebdd0 - feat: add comprehensive cycling metrics support (includes underwater metrics)
+
+---
+
 ## ✅ SUB-009: MEDIUM - Symptom Tracking Enhancement (Completed: 2025-09-18)
 **Agent**: Data Processor (Symptom Tracking Specialist) | **Priority**: P2 - MEDIUM | **Status**: ✅ COMPLETED | **Time**: 2 hours
 

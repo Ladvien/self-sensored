@@ -1107,6 +1107,103 @@ impl Metrics {
     pub fn nutrition_errors_total(&self) -> &'static prometheus::CounterVec {
         &ERRORS_TOTAL
     }
+
+    // STORY-DATA-004: Parameter Validation vs Processing Mismatch Detection
+
+    /// Record unsupported HealthMetric enum variant detection
+    /// This metric helps detect when new HealthMetric variants are added without
+    /// corresponding batch processing implementation
+    #[instrument(skip_all)]
+    pub fn record_unsupported_health_metric_variant(
+        metric_variant: &str,  // "HeartRate", "Activity", etc.
+        detection_point: &str, // "group_metrics_by_type", "batch_processing", "validation"
+        severity: &str,        // "low", "medium", "high", "critical"
+    ) {
+        // Use existing IOS_UNKNOWN_METRIC_TYPES_TOTAL counter for consistency
+        IOS_UNKNOWN_METRIC_TYPES_TOTAL
+            .with_label_values(&[metric_variant, severity])
+            .inc();
+
+        // Log detailed information for debugging
+        tracing::error!(
+            metric_variant = %metric_variant,
+            detection_point = %detection_point,
+            severity = %severity,
+            "UNSUPPORTED HealthMetric variant detected - potential data loss risk"
+        );
+
+        // Alert on critical data loss risk
+        if severity == "critical" || severity == "high" {
+            tracing::error!(
+                metric_variant = %metric_variant,
+                detection_point = %detection_point,
+                "CRITICAL: HealthMetric variant {} detected at {} without batch processing support",
+                metric_variant, detection_point
+            );
+        }
+    }
+
+    /// Record fallback case usage in group_metrics_by_type function
+    /// This detects when metrics hit the wildcard `_` pattern (if one exists)
+    #[instrument(skip_all)]
+    pub fn record_health_metric_fallback_case(
+        metric_type: &str,     // Type name if available
+        fallback_reason: &str, // "wildcard_match", "unknown_variant", "missing_match_arm"
+    ) {
+        // Use existing fallback case counter
+        IOS_FALLBACK_CASES_TOTAL
+            .with_label_values(&[fallback_reason, metric_type])
+            .inc();
+
+        tracing::warn!(
+            metric_type = %metric_type,
+            fallback_reason = %fallback_reason,
+            "HealthMetric fallback case triggered - check for missing match arms"
+        );
+    }
+
+    /// Record batch processing completeness validation results
+    /// This tracks whether all HealthMetric variants have proper batch processing
+    #[instrument(skip_all)]
+    pub fn record_batch_processing_completeness_check(
+        total_variants: u32,
+        variants_with_processing: u32,
+        missing_variants: &[String],
+    ) {
+        let completeness_ratio = if total_variants > 0 {
+            variants_with_processing as f64 / total_variants as f64
+        } else {
+            0.0
+        };
+
+        // Log completeness statistics
+        tracing::info!(
+            total_variants = %total_variants,
+            variants_with_processing = %variants_with_processing,
+            missing_variants = ?missing_variants,
+            completeness_ratio = %completeness_ratio,
+            "Batch processing completeness check completed"
+        );
+
+        // Alert on incomplete coverage
+        if completeness_ratio < 1.0 {
+            tracing::error!(
+                missing_variants = ?missing_variants,
+                completeness_ratio = %completeness_ratio,
+                "INCOMPLETE batch processing coverage - {} HealthMetric variants missing processing",
+                missing_variants.len()
+            );
+
+            // Record each missing variant
+            for variant in missing_variants {
+                Self::record_unsupported_health_metric_variant(
+                    variant,
+                    "completeness_check",
+                    "critical"
+                );
+            }
+        }
+    }
 }
 
 /// Handler for Prometheus metrics endpoint

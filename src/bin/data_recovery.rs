@@ -9,7 +9,7 @@ use tracing::{error, info, warn, instrument};
 use uuid::Uuid;
 
 use self_sensored::config::BatchConfig;
-use self_sensored::models::{HealthMetric, IngestPayload};
+use self_sensored::models::IngestPayload;
 use self_sensored::services::batch_processor::BatchProcessor;
 
 /// Recovery statistics for tracking progress and results
@@ -332,7 +332,7 @@ impl DataRecoveryService {
             metrics_processed: batch_result.processed_count,
             metrics_failed: batch_result.failed_count,
             processing_successful,
-            errors: batch_result.errors.iter().map(|e| e.message.clone()).collect(),
+            errors: batch_result.errors.iter().map(|e| e.error_message.clone()).collect(),
         })
     }
 
@@ -360,7 +360,7 @@ impl DataRecoveryService {
         ).fetch_one(&self.pool).await?.unwrap_or(0) as usize;
 
         let workouts = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM workout_metrics WHERE user_id = $1",
+            "SELECT COUNT(*) FROM workouts WHERE user_id = $1",
             user_id
         ).fetch_one(&self.pool).await?.unwrap_or(0) as usize;
 
@@ -436,6 +436,9 @@ impl DataRecoveryService {
         self.stats.total_metrics_recovered += result.metrics_processed;
         self.stats.total_metrics_failed += result.metrics_failed;
 
+        // Collect errors to process separately
+        let errors_to_process = result.errors.clone();
+
         // Update per-user stats
         let user_stats = self.stats.user_recovery_stats
             .entry(record.user_id)
@@ -447,9 +450,8 @@ impl DataRecoveryService {
         user_stats.largest_payload_mb = user_stats.largest_payload_mb
             .max(record.payload_size_bytes as f64 / (1024.0 * 1024.0));
 
-        for error in result.errors {
+        for error in &errors_to_process {
             user_stats.processing_errors.push(error.clone());
-            self.add_error_to_breakdown(error);
         }
 
         // Calculate data loss percentage
@@ -457,6 +459,11 @@ impl DataRecoveryService {
         if total_attempted > 0 {
             user_stats.data_loss_percentage =
                 (user_stats.metrics_failed as f64 / total_attempted as f64) * 100.0;
+        }
+
+        // Process errors for breakdown after user stats update
+        for error in errors_to_process {
+            self.add_error_to_breakdown(error);
         }
     }
 

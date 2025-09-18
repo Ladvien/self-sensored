@@ -166,7 +166,9 @@ impl ProcessingMonitor {
             recovered: stats.recovered.unwrap_or(0),
             recovery_failed: stats.recovery_failed.unwrap_or(0),
             data_loss_detected: data_loss_count,
-            avg_processing_time_mins: stats.avg_processing_time_mins.unwrap_or(0.0),
+            avg_processing_time_mins: stats.avg_processing_time_mins
+                .map(|bd| bd.to_string().parse::<f64>().unwrap_or(0.0))
+                .unwrap_or(0.0),
             largest_payload_mb: stats.max_payload_mb.map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
             smallest_payload_mb: stats.min_payload_mb.map(|d| d.to_string().parse().unwrap_or(0.0)).unwrap_or(0.0),
         })
@@ -205,7 +207,9 @@ impl ProcessingMonitor {
 
             let recommended_action = self.recommend_user_action(
                 data_loss_percentage,
-                stat.days_since_success.unwrap_or(999) as i64
+                stat.days_since_success
+                    .map(|bd| bd.to_string().parse::<i64>().unwrap_or(999))
+                    .unwrap_or(999)
             );
 
             let impact = UserImpactStats {
@@ -215,7 +219,9 @@ impl ProcessingMonitor {
                 largest_failed_payload_mb: stat.largest_failed_mb
                     .map(|d| d.to_string().parse().unwrap_or(0.0))
                     .unwrap_or(0.0),
-                days_since_last_success: stat.days_since_success.unwrap_or(999) as i64,
+                days_since_last_success: stat.days_since_success
+                    .map(|bd| bd.to_string().parse::<i64>().unwrap_or(999))
+                    .unwrap_or(999),
                 recommended_action,
             };
 
@@ -318,7 +324,7 @@ impl ProcessingMonitor {
         }
 
         // Check for users with high data loss
-        let high_impact_users: Vec<_> = user_impact
+        let high_impact_users = user_impact
             .iter()
             .filter(|(_, stats)| stats.data_loss_percentage > self.alert_thresholds.minimum_user_success_rate)
             .count();
@@ -416,7 +422,8 @@ impl ProcessingMonitor {
     async fn save_monitoring_metrics(&self, metrics: &ProcessingMonitorMetrics) -> Result<(), Box<dyn std::error::Error>> {
         let metrics_json = serde_json::to_value(metrics)?;
 
-        sqlx::query!(
+        // Try to save to monitoring_metrics table if it exists
+        let save_result = sqlx::query!(
             r#"
             INSERT INTO monitoring_metrics (
                 timestamp,
@@ -430,12 +437,18 @@ impl ProcessingMonitor {
             metrics_json
         )
         .execute(&self.pool)
-        .await
-        .map_err(|e| {
-            // If table doesn't exist, just log and continue
-            warn!("Could not save monitoring metrics to database: {}", e);
-            Box::new(e) as Box<dyn std::error::Error>
-        })?;
+        .await;
+
+        match save_result {
+            Ok(_) => {
+                info!("📊 Monitoring metrics saved to database");
+            }
+            Err(e) => {
+                // If table doesn't exist, just log and continue
+                warn!("Could not save monitoring metrics to database (table may not exist): {}", e);
+                info!("💡 To enable historical monitoring, create monitoring_metrics table in schema");
+            }
+        }
 
         Ok(())
     }
