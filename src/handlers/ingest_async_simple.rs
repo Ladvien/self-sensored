@@ -192,6 +192,7 @@ pub async fn ingest_async_optimized_handler(
             temperature_chunk_size: 6500, // 8 params: 52,000 total params (safe) - FIXED from 8000
             workout_chunk_size: 5000,
             blood_glucose_chunk_size: 6500,
+            metabolic_chunk_size: 8700, // 6 params: optimized for metabolic data
             nutrition_chunk_size: 1600,
             // Reproductive Health Batch Processing (Privacy-Optimized for Large Batches)
             menstrual_chunk_size: 6500, // 8 params: optimized for high-frequency tracking

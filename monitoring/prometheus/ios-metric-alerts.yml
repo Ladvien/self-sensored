@@ -1,0 +1,192 @@
+# STORY-DATA-005: iOS Metric Type Coverage Monitoring Alerts
+# Prometheus alerting rules for iOS metric type coverage and data loss prevention
+
+groups:
+  - name: ios_metric_coverage
+    rules:
+      # Critical: New unknown iOS metric types detected
+      - alert: iOSUnknownMetricTypeCritical
+        expr: increase(health_export_ios_unknown_metric_types_total{criticality_level="critical"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          team: health-export
+          category: data_loss
+        annotations:
+          summary: "Critical unknown iOS metric type detected"
+          description: "Unknown iOS metric type '{{ $labels.ios_metric_type }}' with critical priority detected. This is a known HealthKit identifier that needs immediate implementation to prevent data loss."
+          runbook_url: "https://docs.health-export.com/runbooks/ios-metric-mapping"
+          action: "Implement mapping for {{ $labels.ios_metric_type }} immediately"
+
+      # High: Unknown iOS metric types with high priority
+      - alert: iOSUnknownMetricTypeHigh
+        expr: increase(health_export_ios_unknown_metric_types_total{criticality_level="high"}[15m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+          team: health-export
+          category: data_loss
+        annotations:
+          summary: "High-priority unknown iOS metric type detected"
+          description: "Unknown iOS metric type '{{ $labels.ios_metric_type }}' with high priority detected. This should be implemented soon to prevent data loss."
+          action: "Add {{ $labels.ios_metric_type }} to implementation backlog"
+
+      # Data loss events - critical severity
+      - alert: iOSMetricDataLossCritical
+        expr: increase(health_export_ios_metric_data_loss_total{severity="critical"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          team: health-export
+          category: data_loss
+        annotations:
+          summary: "Critical iOS metric data loss detected"
+          description: "Critical data loss for iOS metric type '{{ $labels.ios_metric_type }}' due to '{{ $labels.loss_reason }}'. {{ $value }} metrics lost in last 5 minutes."
+          action: "Investigate and fix {{ $labels.loss_reason }} for {{ $labels.ios_metric_type }}"
+
+      # Data loss events - high severity
+      - alert: iOSMetricDataLossHigh
+        expr: increase(health_export_ios_metric_data_loss_total{severity="high"}[15m]) > 10
+        for: 1m
+        labels:
+          severity: warning
+          team: health-export
+          category: data_loss
+        annotations:
+          summary: "High iOS metric data loss rate"
+          description: "{{ $value }} high-severity data loss events for iOS metric '{{ $labels.ios_metric_type }}' in last 15 minutes due to '{{ $labels.loss_reason }}'."
+          action: "Review and improve handling for {{ $labels.ios_metric_type }}"
+
+      # Coverage ratio too low
+      - alert: iOSMetricCoverageLow
+        expr: health_export_ios_metric_type_coverage_ratio < 0.8
+        for: 5m
+        labels:
+          severity: warning
+          team: health-export
+          category: coverage
+        annotations:
+          summary: "iOS metric type coverage below threshold"
+          description: "iOS metric type coverage ratio is {{ $value | humanizePercentage }}. Many iOS metric types are unsupported."
+          action: "Review and implement missing iOS metric type mappings"
+
+      # Conversion success rate dropping
+      - alert: iOSConversionSuccessRateLow
+        expr: avg(health_export_ios_metric_conversion_success_rate) < 0.9
+        for: 10m
+        labels:
+          severity: warning
+          team: health-export
+          category: conversion
+        annotations:
+          summary: "iOS metric conversion success rate low"
+          description: "Average iOS metric conversion success rate is {{ $value | humanizePercentage }}. Check for conversion errors."
+          action: "Investigate conversion failures and improve error handling"
+
+      # Spike in unknown metric types
+      - alert: iOSUnknownMetricTypeSpike
+        expr: increase(health_export_ios_unknown_metric_types_total[10m]) > 50
+        for: 2m
+        labels:
+          severity: warning
+          team: health-export
+          category: monitoring
+        annotations:
+          summary: "Spike in unknown iOS metric types"
+          description: "{{ $value }} unknown iOS metric types detected in last 10 minutes. New iOS app version or configuration change?"
+          action: "Check for new iOS app release or investigate unusual payload patterns"
+
+      # Too many fallback cases
+      - alert: iOSFallbackCasesHigh
+        expr: increase(health_export_ios_fallback_cases_total[30m]) > 100
+        for: 5m
+        labels:
+          severity: info
+          team: health-export
+          category: monitoring
+        annotations:
+          summary: "High number of iOS metric fallback cases"
+          description: "{{ $value }} iOS metrics hit fallback cases in last 30 minutes for pattern '{{ $labels.ios_metric_pattern }}'."
+          action: "Review fallback patterns and consider adding explicit mappings"
+
+      # Significant change in metric distribution
+      - alert: iOSMetricDistributionChange
+        expr: |
+          (
+            increase(health_export_ios_metric_type_distribution_total{processing_result="dropped"}[1h])
+            /
+            increase(health_export_ios_metric_type_distribution_total[1h])
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: health-export
+          category: monitoring
+        annotations:
+          summary: "Significant change in iOS metric distribution"
+          description: "More than 10% of iOS metrics are being dropped. Check for new unsupported metric types."
+          action: "Investigate dropped metrics and update mappings as needed"
+
+  - name: ios_metric_health
+    rules:
+      # HealthKit identifier usage monitoring
+      - alert: iOSLegacyMetricNamesPrevalent
+        expr: |
+          (
+            increase(health_export_ios_healthkit_identifier_usage_total{identifier_type="simplified_name"}[1h])
+            /
+            increase(health_export_ios_healthkit_identifier_usage_total[1h])
+          ) > 0.7
+        for: 10m
+        labels:
+          severity: info
+          team: health-export
+          category: monitoring
+        annotations:
+          summary: "High usage of legacy iOS metric names"
+          description: "{{ $value | humanizePercentage }} of iOS metrics use simplified names instead of HealthKit identifiers."
+          action: "Consider encouraging iOS app updates to use HealthKit identifiers"
+
+      # No iOS metrics received recently
+      - alert: iOSMetricsNotReceived
+        expr: increase(health_export_ios_metric_type_distribution_total[30m]) == 0
+        for: 30m
+        labels:
+          severity: warning
+          team: health-export
+          category: monitoring
+        annotations:
+          summary: "No iOS metrics received recently"
+          description: "No iOS metrics have been processed in the last 30 minutes. Check iOS app connectivity."
+          action: "Investigate iOS app connectivity or server issues"
+
+  - name: ios_metric_performance
+    rules:
+      # High volume of data loss
+      - alert: iOSDataLossVolumeHigh
+        expr: increase(health_export_ios_metric_data_loss_total[1h]) > 1000
+        for: 5m
+        labels:
+          severity: critical
+          team: health-export
+          category: data_loss
+        annotations:
+          summary: "High volume of iOS metric data loss"
+          description: "{{ $value }} iOS metrics lost in the last hour. Critical data integrity issue."
+          action: "URGENT: Investigate and fix data loss causes immediately"
+
+      # Multiple unknown metric types from same source
+      - alert: iOSUnknownMetricTypeBurst
+        expr: |
+          count by (ios_metric_type) (
+            increase(health_export_ios_unknown_metric_types_total[5m]) > 0
+          ) > 5
+        for: 1m
+        labels:
+          severity: warning
+          team: health-export
+          category: monitoring
+        annotations:
+          summary: "Multiple unknown iOS metric types detected"
+          description: "{{ $value }} different unknown iOS metric types detected in last 5 minutes."
+          action: "Check for new iOS Health app version or bulk data import"

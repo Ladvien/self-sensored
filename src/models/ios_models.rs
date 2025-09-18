@@ -1,4 +1,5 @@
 use crate::models::enums::WorkoutType;
+use crate::middleware::metrics::Metrics;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -93,6 +94,9 @@ impl IosIngestPayload {
                     ios_metric.units
                 );
 
+                // STORY-DATA-005: Track iOS metric type distribution for monitoring
+                Metrics::record_ios_metric_type(&ios_metric.name, "encountered");
+
                 // Convert based on metric name - now supporting ALL HealthKit identifiers from DATA.md
                 // CRITICAL: Handle both HealthKit identifiers (HKQuantityTypeIdentifierHeartRate)
                 // and simplified names (heart_rate) for backward compatibility
@@ -144,6 +148,18 @@ impl IosIngestPayload {
                                     created_at: Utc::now(),
                                 };
                                 internal_metrics.push(HealthMetric::HeartRate(metric));
+
+                                // STORY-DATA-005: Track successful conversion
+                                Metrics::record_ios_metric_type(&ios_metric.name, "converted");
+                                Metrics::update_ios_conversion_success_rate(&ios_metric.name, "heart_rate", 1.0);
+
+                                // Track HealthKit identifier usage patterns
+                                let identifier_type = if ios_metric.name.starts_with("HKQuantityTypeIdentifier") {
+                                    "healthkit_identifier"
+                                } else {
+                                    "simplified_name"
+                                };
+                                Metrics::record_ios_healthkit_identifier_usage(identifier_type, "heart_rate");
                             }
                         }
                     }
@@ -155,6 +171,15 @@ impl IosIngestPayload {
                             let timestamp_key = recorded_at.to_rfc3339();
                             let entry = bp_readings.entry(timestamp_key).or_default();
                             entry.0 = Some(qty as i16);
+
+                            // STORY-DATA-005: Track blood pressure conversion
+                            Metrics::record_ios_metric_type(&ios_metric.name, "converted");
+                            let identifier_type = if ios_metric.name.starts_with("HKQuantityTypeIdentifier") {
+                                "healthkit_identifier"
+                            } else {
+                                "simplified_name"
+                            };
+                            Metrics::record_ios_healthkit_identifier_usage(identifier_type, "blood_pressure");
                         }
                     }
                     "HKQuantityTypeIdentifierBloodPressureDiastolic"
@@ -164,6 +189,15 @@ impl IosIngestPayload {
                             let timestamp_key = recorded_at.to_rfc3339();
                             let entry = bp_readings.entry(timestamp_key).or_default();
                             entry.1 = Some(qty as i16);
+
+                            // STORY-DATA-005: Track blood pressure conversion
+                            Metrics::record_ios_metric_type(&ios_metric.name, "converted");
+                            let identifier_type = if ios_metric.name.starts_with("HKQuantityTypeIdentifier") {
+                                "healthkit_identifier"
+                            } else {
+                                "simplified_name"
+                            };
+                            Metrics::record_ios_healthkit_identifier_usage(identifier_type, "blood_pressure");
                         }
                     }
                     // SLEEP METRICS - HealthKit identifiers + backward compatibility
@@ -210,6 +244,17 @@ impl IosIngestPayload {
                                 created_at: Utc::now(),
                             };
                             internal_metrics.push(HealthMetric::Sleep(metric));
+
+                            // STORY-DATA-005: Track successful sleep conversion
+                            Metrics::record_ios_metric_type(&ios_metric.name, "converted");
+                            Metrics::update_ios_conversion_success_rate(&ios_metric.name, "sleep", 1.0);
+
+                            let identifier_type = if ios_metric.name.starts_with("HKCategoryTypeIdentifier") {
+                                "healthkit_identifier"
+                            } else {
+                                "simplified_name"
+                            };
+                            Metrics::record_ios_healthkit_identifier_usage(identifier_type, "sleep");
                         }
                     }
                     // ACTIVITY METRICS - HealthKit identifiers + backward compatibility
@@ -377,6 +422,17 @@ impl IosIngestPayload {
                                     created_at: Utc::now(),
                                 };
                                 internal_metrics.push(HealthMetric::Activity(metric));
+
+                                // STORY-DATA-005: Track successful activity conversion
+                                Metrics::record_ios_metric_type(&ios_metric.name, "converted");
+                                Metrics::update_ios_conversion_success_rate(&ios_metric.name, "activity", 1.0);
+
+                                let identifier_type = if ios_metric.name.starts_with("HKQuantityTypeIdentifier") || ios_metric.name.starts_with("HKCategoryTypeIdentifier") {
+                                    "healthkit_identifier"
+                                } else {
+                                    "simplified_name"
+                                };
+                                Metrics::record_ios_healthkit_identifier_usage(identifier_type, "activity");
                             }
                         }
                     }
@@ -788,6 +844,9 @@ impl IosIngestPayload {
                             data_point.qty
                         );
 
+                        // STORY-DATA-005: Track unknown iOS metric type for monitoring
+                        Metrics::record_ios_metric_type(&ios_metric.name, "dropped");
+
                         // Log detailed information for iOS metric analysis
                         tracing::info!(
                             "Unknown metric details - Source: {:?}, Date: {:?}, Start: {:?}, End: {:?}, Extra fields: {:?}",
@@ -848,6 +907,10 @@ impl IosIngestPayload {
                                 "🔥 CRITICAL: Missing mapping for high-priority HealthKit identifier '{}' - This is a known iOS metric type that needs immediate implementation!",
                                 ios_metric.name
                             );
+
+                            // STORY-DATA-005: Track critical missing HealthKit identifiers
+                            Metrics::record_ios_unknown_metric_type(&ios_metric.name, "critical");
+                            Metrics::record_ios_metric_data_loss("missing_mapping", &ios_metric.name, "critical");
                         }
 
                         // Check if it might be a supported but unmapped metric type
@@ -858,6 +921,12 @@ impl IosIngestPayload {
                                 "💀 CRITICAL DATA LOSS: Valid HealthKit identifier '{}' has no mapping! This metric will be completely lost.",
                                 ios_metric.name
                             );
+
+                            // STORY-DATA-005: Track unmapped HealthKit identifiers as high severity
+                            if !critical_missing_identifiers.contains(&ios_metric.name.as_str()) {
+                                Metrics::record_ios_unknown_metric_type(&ios_metric.name, "high");
+                                Metrics::record_ios_metric_data_loss("unmapped_healthkit_identifier", &ios_metric.name, "high");
+                            }
                         }
 
                         // Log patterns for future implementation
@@ -866,11 +935,19 @@ impl IosIngestPayload {
                                 "Missing nutrition metric mapping: '{}'",
                                 ios_metric.name
                             );
+                            // STORY-DATA-005: Track nutrition metrics as medium priority
+                            Metrics::record_ios_unknown_metric_type(&ios_metric.name, "medium");
+                            Metrics::record_ios_metric_data_loss("missing_nutrition_mapping", &ios_metric.name, "medium");
+                            Metrics::record_ios_fallback_case("nutrition_pattern", "dietary");
                         } else if ios_metric.name.to_lowercase().contains("symptom")
                             || ios_metric.name.to_lowercase().contains("headache")
                             || ios_metric.name.to_lowercase().contains("nausea")
                         {
                             tracing::warn!("Missing symptom metric mapping: '{}'", ios_metric.name);
+                            // STORY-DATA-005: Track symptom metrics as high priority (medical importance)
+                            Metrics::record_ios_unknown_metric_type(&ios_metric.name, "high");
+                            Metrics::record_ios_metric_data_loss("missing_symptom_mapping", &ios_metric.name, "high");
+                            Metrics::record_ios_fallback_case("symptom_pattern", "symptom_related");
                         } else if ios_metric.name.to_lowercase().contains("menstrual")
                             || ios_metric.name.to_lowercase().contains("ovulation")
                         {
@@ -878,11 +955,24 @@ impl IosIngestPayload {
                                 "Missing reproductive health metric mapping: '{}'",
                                 ios_metric.name
                             );
+                            // STORY-DATA-005: Track reproductive health as medium priority
+                            Metrics::record_ios_unknown_metric_type(&ios_metric.name, "medium");
+                            Metrics::record_ios_metric_data_loss("missing_reproductive_mapping", &ios_metric.name, "medium");
+                            Metrics::record_ios_fallback_case("reproductive_pattern", "reproductive_health");
                         } else if ios_metric.name.to_lowercase().contains("mindful") {
                             tracing::warn!(
                                 "Missing mindfulness metric mapping: '{}'",
                                 ios_metric.name
                             );
+                            // STORY-DATA-005: Track mindfulness metrics as low priority
+                            Metrics::record_ios_unknown_metric_type(&ios_metric.name, "low");
+                            Metrics::record_ios_metric_data_loss("missing_mindfulness_mapping", &ios_metric.name, "low");
+                            Metrics::record_ios_fallback_case("mindfulness_pattern", "mindful");
+                        } else {
+                            // STORY-DATA-005: Track other unknown metrics as medium priority
+                            Metrics::record_ios_unknown_metric_type(&ios_metric.name, "medium");
+                            Metrics::record_ios_metric_data_loss("unknown_metric_type", &ios_metric.name, "medium");
+                            Metrics::record_ios_fallback_case("unknown_pattern", "other");
                         }
 
                         // Count unmapped metrics for monitoring
@@ -990,6 +1080,29 @@ impl IosIngestPayload {
             internal_metrics.len(),
             internal_workouts.len()
         );
+
+        // STORY-DATA-005: Calculate and report iOS metric type coverage statistics
+        let total_ios_metrics = self.data.metrics.len();
+        let total_internal_metrics = internal_metrics.len();
+
+        if total_ios_metrics > 0 {
+            let conversion_rate = total_internal_metrics as f64 / total_ios_metrics as f64;
+
+            tracing::info!(
+                total_ios_metric_types = %total_ios_metrics,
+                total_internal_metrics = %total_internal_metrics,
+                conversion_rate = %conversion_rate,
+                "iOS metric conversion statistics"
+            );
+
+            // Update aggregate metrics for dashboard monitoring
+            Metrics::calculate_ios_metric_coverage_stats(
+                total_ios_metrics as u64,
+                total_internal_metrics as u64, // Successfully converted
+                total_internal_metrics as u64, // Same as converted for now
+                (total_ios_metrics - total_internal_metrics) as u64, // Lost metrics
+            );
+        }
 
         IngestPayload {
             data: IngestData {

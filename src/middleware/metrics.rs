@@ -311,6 +311,76 @@ static DUAL_WRITE_OPERATIONS_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
     .expect("Failed to create dual-write operations counter")
 });
 
+// STORY-DATA-005: iOS Metric Type Coverage Monitoring
+static IOS_METRIC_TYPE_DISTRIBUTION: Lazy<CounterVec> = Lazy::new(|| {
+    register_counter_vec_with_registry!(
+        "health_export_ios_metric_type_distribution_total",
+        "Total count of iOS metric types processed by type name",
+        &["ios_metric_type", "processing_result"],
+        METRICS_REGISTRY.clone()
+    )
+    .expect("Failed to create iOS metric type distribution counter")
+});
+
+static IOS_METRIC_CONVERSION_SUCCESS_RATE: Lazy<GaugeVec> = Lazy::new(|| {
+    register_gauge_vec_with_registry!(
+        "health_export_ios_metric_conversion_success_rate",
+        "Success rate of iOS metric type conversions (0.0 = all failed, 1.0 = all succeeded)",
+        &["ios_metric_type", "internal_metric_type"],
+        METRICS_REGISTRY.clone()
+    )
+    .expect("Failed to create iOS metric conversion success rate gauge")
+});
+
+static IOS_UNKNOWN_METRIC_TYPES_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
+    register_counter_vec_with_registry!(
+        "health_export_ios_unknown_metric_types_total",
+        "Total count of unknown iOS metric types encountered (potential data loss)",
+        &["ios_metric_type", "criticality_level"],
+        METRICS_REGISTRY.clone()
+    )
+    .expect("Failed to create iOS unknown metric types counter")
+});
+
+static IOS_FALLBACK_CASES_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
+    register_counter_vec_with_registry!(
+        "health_export_ios_fallback_cases_total",
+        "Total count of iOS metrics hitting fallback cases (wildcard matches)",
+        &["fallback_type", "ios_metric_pattern"],
+        METRICS_REGISTRY.clone()
+    )
+    .expect("Failed to create iOS fallback cases counter")
+});
+
+static IOS_METRIC_TYPE_COVERAGE_RATIO: Lazy<Gauge> = Lazy::new(|| {
+    register_gauge_with_registry!(
+        "health_export_ios_metric_type_coverage_ratio",
+        "Ratio of supported iOS metric types vs total encountered (coverage quality metric)",
+        METRICS_REGISTRY.clone()
+    )
+    .expect("Failed to create iOS metric type coverage ratio gauge")
+});
+
+static IOS_METRIC_DATA_LOSS_TOTAL: Lazy<CounterVec> = Lazy::new(|| {
+    register_counter_vec_with_registry!(
+        "health_export_ios_metric_data_loss_total",
+        "Total count of iOS metrics lost due to unsupported types or conversion failures",
+        &["loss_reason", "ios_metric_type", "severity"],
+        METRICS_REGISTRY.clone()
+    )
+    .expect("Failed to create iOS metric data loss counter")
+});
+
+static IOS_HEALTHKIT_IDENTIFIER_USAGE: Lazy<CounterVec> = Lazy::new(|| {
+    register_counter_vec_with_registry!(
+        "health_export_ios_healthkit_identifier_usage_total",
+        "Usage statistics for HealthKit identifiers vs simplified names",
+        &["identifier_type", "metric_category"],
+        METRICS_REGISTRY.clone()
+    )
+    .expect("Failed to create iOS HealthKit identifier usage counter")
+});
+
 static DUAL_WRITE_DURATION_SECONDS: Lazy<HistogramVec> = Lazy::new(|| {
     register_histogram_vec_with_registry!(
         "health_export_dual_write_duration_seconds",
@@ -847,6 +917,167 @@ impl Metrics {
         DUAL_WRITE_DURATION_SECONDS
             .with_label_values(&[table, "rollback"])
             .observe(duration.as_secs_f64());
+    }
+
+    // STORY-DATA-005: iOS Metric Type Coverage Monitoring Methods
+
+    /// Record iOS metric type distribution for coverage monitoring
+    #[instrument(skip_all)]
+    pub fn record_ios_metric_type(
+        ios_metric_type: &str,
+        processing_result: &str, // "converted", "fallback", "dropped", "error"
+    ) {
+        IOS_METRIC_TYPE_DISTRIBUTION
+            .with_label_values(&[ios_metric_type, processing_result])
+            .inc();
+    }
+
+    /// Update iOS metric conversion success rate
+    #[instrument(skip_all)]
+    pub fn update_ios_conversion_success_rate(
+        ios_metric_type: &str,
+        internal_metric_type: &str,
+        success_rate: f64, // 0.0 to 1.0
+    ) {
+        IOS_METRIC_CONVERSION_SUCCESS_RATE
+            .with_label_values(&[ios_metric_type, internal_metric_type])
+            .set(success_rate);
+    }
+
+    /// Record unknown iOS metric type encountered
+    #[instrument(skip_all)]
+    pub fn record_ios_unknown_metric_type(
+        ios_metric_type: &str,
+        criticality_level: &str, // "low", "medium", "high", "critical"
+    ) {
+        IOS_UNKNOWN_METRIC_TYPES_TOTAL
+            .with_label_values(&[ios_metric_type, criticality_level])
+            .inc();
+
+        // Also log for immediate visibility
+        match criticality_level {
+            "critical" => {
+                tracing::error!(
+                    ios_metric_type = %ios_metric_type,
+                    "CRITICAL: Unknown iOS metric type - immediate implementation required"
+                );
+            }
+            "high" => {
+                tracing::warn!(
+                    ios_metric_type = %ios_metric_type,
+                    "HIGH: Unknown iOS metric type - should be implemented soon"
+                );
+            }
+            _ => {
+                tracing::info!(
+                    ios_metric_type = %ios_metric_type,
+                    criticality = %criticality_level,
+                    "Unknown iOS metric type encountered"
+                );
+            }
+        }
+    }
+
+    /// Record iOS metrics hitting fallback cases
+    #[instrument(skip_all)]
+    pub fn record_ios_fallback_case(
+        fallback_type: &str,     // "wildcard_match", "default_case", "partial_match"
+        ios_metric_pattern: &str, // Pattern that matched the fallback
+    ) {
+        IOS_FALLBACK_CASES_TOTAL
+            .with_label_values(&[fallback_type, ios_metric_pattern])
+            .inc();
+
+        tracing::debug!(
+            fallback_type = %fallback_type,
+            ios_metric_pattern = %ios_metric_pattern,
+            "iOS metric hit fallback case"
+        );
+    }
+
+    /// Update iOS metric type coverage ratio
+    #[instrument(skip_all)]
+    pub fn update_ios_coverage_ratio(coverage_ratio: f64) {
+        IOS_METRIC_TYPE_COVERAGE_RATIO.set(coverage_ratio);
+
+        // Alert on low coverage
+        if coverage_ratio < 0.8 {
+            tracing::warn!(
+                coverage_ratio = %coverage_ratio,
+                "LOW iOS metric type coverage - many types unsupported"
+            );
+        }
+    }
+
+    /// Record iOS metric data loss
+    #[instrument(skip_all)]
+    pub fn record_ios_metric_data_loss(
+        loss_reason: &str,     // "unsupported_type", "conversion_error", "validation_failed"
+        ios_metric_type: &str,
+        severity: &str, // "low", "medium", "high", "critical"
+    ) {
+        IOS_METRIC_DATA_LOSS_TOTAL
+            .with_label_values(&[loss_reason, ios_metric_type, severity])
+            .inc();
+
+        // Alert on critical data loss
+        if severity == "critical" || severity == "high" {
+            tracing::error!(
+                loss_reason = %loss_reason,
+                ios_metric_type = %ios_metric_type,
+                severity = %severity,
+                "CRITICAL iOS metric data loss detected"
+            );
+        }
+    }
+
+    /// Record HealthKit identifier usage patterns
+    #[instrument(skip_all)]
+    pub fn record_ios_healthkit_identifier_usage(
+        identifier_type: &str, // "healthkit_identifier", "simplified_name", "legacy_format"
+        metric_category: &str, // "heart_rate", "activity", "sleep", etc.
+    ) {
+        IOS_HEALTHKIT_IDENTIFIER_USAGE
+            .with_label_values(&[identifier_type, metric_category])
+            .inc();
+    }
+
+    /// Calculate and update iOS metric type statistics
+    #[instrument(skip_all)]
+    pub fn calculate_ios_metric_coverage_stats(
+        total_encountered: u64,
+        total_supported: u64,
+        total_converted: u64,
+        total_lost: u64,
+    ) {
+        if total_encountered > 0 {
+            // Calculate coverage ratio
+            let coverage_ratio = total_supported as f64 / total_encountered as f64;
+            Self::update_ios_coverage_ratio(coverage_ratio);
+
+            // Calculate conversion success rate
+            let conversion_rate = total_converted as f64 / total_encountered as f64;
+
+            // Log statistics for monitoring
+            tracing::info!(
+                total_encountered = %total_encountered,
+                total_supported = %total_supported,
+                total_converted = %total_converted,
+                total_lost = %total_lost,
+                coverage_ratio = %coverage_ratio,
+                conversion_rate = %conversion_rate,
+                "iOS metric type coverage statistics calculated"
+            );
+
+            // Alert on concerning trends
+            if conversion_rate < 0.9 {
+                tracing::warn!(
+                    conversion_rate = %conversion_rate,
+                    total_lost = %total_lost,
+                    "Low iOS metric conversion rate detected"
+                );
+            }
+        }
     }
 
     // Nutrition-specific metrics methods

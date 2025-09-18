@@ -1380,12 +1380,12 @@ async fn test_reproductive_health_large_batch_parameter_limits() {
         enable_parallel_processing: true,
         chunk_size: 1000,
         memory_limit_mb: 500.0,
-        heart_rate_chunk_size: 8000,
-        blood_pressure_chunk_size: 8000,
-        sleep_chunk_size: 6000,
-        activity_chunk_size: 6500,
-        body_measurement_chunk_size: 3000,
-        temperature_chunk_size: 8000,
+        heart_rate_chunk_size: 4200, // 10 params: 42,000 total params (safe)
+        blood_pressure_chunk_size: 8000, // 6 params: 48,000 total params (safe)
+        sleep_chunk_size: 5200, // 10 params: 52,000 total params (safe) - FIXED from 6000
+        activity_chunk_size: 2700, // 19 params: 51,300 total params (safe) - FIXED from 6500
+        body_measurement_chunk_size: 3000, // 16 params: 48,000 total params (safe)
+        temperature_chunk_size: 6500, // 8 params: 52,000 total params (safe) - FIXED from 8000
         respiratory_chunk_size: 7000,
         workout_chunk_size: 5000,
         blood_glucose_chunk_size: 6500,

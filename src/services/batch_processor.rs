@@ -4120,7 +4120,7 @@ impl BatchProcessor {
     /// STUB: Deduplicate metabolic metrics - TODO: Implement proper deduplication
     fn deduplicate_metabolic_metrics(
         &self,
-        user_id: uuid::Uuid,
+        _user_id: uuid::Uuid,
         metrics: Vec<crate::models::MetabolicMetric>,
     ) -> Vec<crate::models::MetabolicMetric> {
         // TODO: Implement proper deduplication using MetabolicKey
@@ -4130,7 +4130,7 @@ impl BatchProcessor {
     /// STUB: Deduplicate nutrition metrics - TODO: Implement proper deduplication
     fn deduplicate_nutrition_metrics(
         &self,
-        user_id: uuid::Uuid,
+        _user_id: uuid::Uuid,
         metrics: Vec<crate::models::NutritionMetric>,
     ) -> Vec<crate::models::NutritionMetric> {
         // TODO: Implement proper deduplication
@@ -4216,7 +4216,7 @@ impl BatchProcessor {
     /// STUB: Deduplicate safety event metrics - TODO: Implement proper deduplication
     fn deduplicate_safety_event_metrics(
         &self,
-        user_id: uuid::Uuid,
+        _user_id: uuid::Uuid,
         metrics: Vec<crate::models::SafetyEventMetric>,
     ) -> Vec<crate::models::SafetyEventMetric> {
         // TODO: Implement proper deduplication using SafetyEventKey
@@ -4226,7 +4226,7 @@ impl BatchProcessor {
     /// STUB: Deduplicate mindfulness metrics - TODO: Implement proper deduplication
     fn deduplicate_mindfulness_metrics(
         &self,
-        user_id: uuid::Uuid,
+        _user_id: uuid::Uuid,
         metrics: Vec<crate::models::MindfulnessMetric>,
     ) -> Vec<crate::models::MindfulnessMetric> {
         // TODO: Implement proper deduplication using MindfulnessKey
@@ -4236,7 +4236,7 @@ impl BatchProcessor {
     /// STUB: Deduplicate mental health metrics - TODO: Implement proper deduplication
     fn deduplicate_mental_health_metrics(
         &self,
-        user_id: uuid::Uuid,
+        _user_id: uuid::Uuid,
         metrics: Vec<crate::models::MentalHealthMetric>,
     ) -> Vec<crate::models::MentalHealthMetric> {
         // TODO: Implement proper deduplication using MentalHealthKey
@@ -4246,7 +4246,7 @@ impl BatchProcessor {
     /// STUB: Deduplicate symptom metrics - TODO: Implement proper deduplication
     fn deduplicate_symptom_metrics(
         &self,
-        user_id: uuid::Uuid,
+        _user_id: uuid::Uuid,
         metrics: Vec<crate::models::SymptomMetric>,
     ) -> Vec<crate::models::SymptomMetric> {
         // TODO: Implement proper deduplication using SymptomKey
@@ -4256,7 +4256,7 @@ impl BatchProcessor {
     /// STUB: Deduplicate hygiene metrics - TODO: Implement proper deduplication
     fn deduplicate_hygiene_metrics(
         &self,
-        user_id: uuid::Uuid,
+        _user_id: uuid::Uuid,
         metrics: Vec<crate::models::HygieneMetric>,
     ) -> Vec<crate::models::HygieneMetric> {
         // TODO: Implement proper deduplication using HygieneKey

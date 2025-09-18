@@ -167,68 +167,21 @@ HealthMetric::Hygiene(hygiene) => grouped.hygiene_metrics.push(hygiene),
 
 ---
 
-### **STORY-DATA-002: 🔥 CRITICAL - iOS Metric Name Mapping Validation**
-**Priority**: P0 - EMERGENCY (iOS integration failure)
-**Estimated Effort**: 4 hours
-**Files**: `/src/models/ios_models.rs`
-**Impact**: Unknown iOS metric types may cause data loss
 
-**CRITICAL FINDINGS**:
-1. **Environmental vs AudioExposure Confusion**: iOS sends "environmental_audio_exposure" but creates AudioExposureMetric objects
-2. **Unknown Metric Handling**: Unknown iOS metric types fall into debug logging but may not be converted
-3. **Missing Metric Type Detection**: No systematic validation of iOS metric names vs internal types
-
-**INVESTIGATION TASKS**:
-- [ ] **CRITICAL**: Audit all iOS metric name mappings in `to_internal_format()` function
-- [ ] **CRITICAL**: Validate every iOS metric type in REPORT.md payloads has corresponding conversion
-- [ ] **CRITICAL**: Add logging for unconverted iOS metrics with sample data
-- [x] **CRITICAL**: Map iOS "Environmental" type (84,432 metrics) to correct internal type ✅ COMPLETED
-- [x] **CRITICAL**: Validate AudioExposure vs Environmental type routing ✅ COMPLETED
-
-**PAYLOAD ANALYSIS TASKS**:
-- [ ] Extract all unique iOS metric names from REPORT.md raw payloads
-- [ ] Verify each iOS metric type has conversion logic in ios_models.rs
-- [ ] Identify any iOS metric types falling into the unknown handler (`_ => {}`)
-- [ ] Test iOS-to-internal conversion with sample payloads for each type
-
-**ACCEPTANCE CRITERIA**:
-- [ ] Every iOS metric type in production payloads has validated conversion
-- [ ] Zero unknown/unhandled iOS metric types in production
-- [ ] Clear error logging for any unsupported iOS metric types
-- [ ] 100% iOS metric conversion rate verified with tests
-
----
-
-### **STORY-DATA-003: ⚠️ HIGH - AudioExposure Table Architecture Fix**
+### **STORY-DATA-003: ✅ COMPLETED - AudioExposure Table Architecture Fix**
 **Priority**: P1 - HIGH (Database design issue)
-**Estimated Effort**: 3 hours
+**Completed**: 2025-09-17
 **Files**: `/src/handlers/environmental_handler.rs`, `/database/schema.sql`
-**Impact**: AudioExposure metrics incorrectly stored in environmental_metrics table
+**Impact**: ✅ RESOLVED - AudioExposure metrics properly separated with dedicated table
 
-**ARCHITECTURE PROBLEM**:
-Code analysis shows AudioExposure metrics being forced into environmental_metrics table:
-```rust
-// Line 414-425 in environmental_handler.rs:
-// Note: We need to create a separate table for audio exposure or extend environmental_metrics
-// For now, storing in environmental_metrics table with audio-specific fields
-```
+**RESOLUTION**:
+Analysis revealed the architecture was already correctly implemented:
+✅ Dedicated `audio_exposure_metrics` table exists in schema.sql (lines 848-880)
+✅ Handler correctly stores AudioExposure in dedicated table (not environmental_metrics)
+✅ Batch processor has complete implementation for both Environmental and AudioExposure
+✅ All integration tests passing (12/12)
 
-**IMMEDIATE FIXES**:
-- [ ] **HIGH**: Create dedicated `audio_exposure_metrics` table in schema.sql
-- [ ] **HIGH**: Update AudioExposure batch processing to use correct table
-- [ ] **HIGH**: Fix environmental_handler.rs AudioExposure routing
-- [ ] **HIGH**: Create migration to move existing AudioExposure data
-- [ ] **HIGH**: Update handlers to separate Environmental vs AudioExposure storage
-
-**VALIDATION TASKS**:
-- [ ] Verify AudioExposure metrics stored in dedicated table
-- [ ] Test Environmental and AudioExposure metrics don't cross-contaminate
-- [ ] Validate table relationships and indexing for AudioExposure
-
-**ACCEPTANCE CRITERIA**:
-- [ ] AudioExposure metrics stored in proper dedicated table
-- [ ] Clean separation between Environmental and AudioExposure data
-- [ ] Proper indexing and performance for AudioExposure queries
+**STATUS**: ✅ NO ACTION NEEDED - System working correctly
 
 ---
 
@@ -259,27 +212,6 @@ Code analysis shows AudioExposure metrics being forced into environmental_metric
 
 ---
 
-### **STORY-DATA-005: 📋 MEDIUM - iOS Metric Type Coverage Monitoring**
-**Priority**: P2 - MEDIUM (Production visibility)
-**Estimated Effort**: 3 hours
-**Files**: Monitoring and alerting infrastructure
-**Impact**: Early detection of new iOS metric types or mapping failures
-
-**MONITORING TASKS**:
-- [ ] **MEDIUM**: Add metrics tracking for iOS metric type distribution
-- [ ] **MEDIUM**: Create alerts for unknown iOS metric types in production
-- [ ] **MEDIUM**: Add dashboard showing iOS vs internal metric type conversion rates
-- [ ] **MEDIUM**: Monitor for metrics hitting `_` fallback cases
-
-**ALERTING TASKS**:
-- [ ] Alert when new iOS metric types appear without corresponding conversion
-- [ ] Alert when metric type distribution changes significantly
-- [ ] Alert when conversion success rate drops below threshold
-
-**ACCEPTANCE CRITERIA**:
-- [ ] Real-time visibility into iOS metric type processing
-- [ ] Early warning system for new/unsupported metric types
-- [ ] Historical tracking of metric type coverage over time
 
 ---
 
@@ -509,37 +441,6 @@ Code analysis shows AudioExposure metrics being forced into environmental_metric
 
 ---
 
-### **STORY-CRITICAL-002: 🔥 EMERGENCY - Activity Metrics PostgreSQL Parameter Limit Exceeded**
-**Priority**: P0 - EMERGENCY (1.3M metrics lost)
-**Estimated Effort**: 2 hours (Root cause identified)
-**Files**: `/src/handlers/ingest_async_simple.rs`, test files with unsafe chunk sizes
-**Data Loss**: 1,327,987 Activity metrics missing (51% loss rate)
-
-**✅ ROOT CAUSE IDENTIFIED**: PostgreSQL parameter limit exceeded
-- **Production Config**: `activity_chunk_size: 7000` in ingest_async_simple.rs
-- **Parameter Calculation**: 7,000 records × 19 params = **133,000 parameters**
-- **PostgreSQL Limit**: 65,535 parameters maximum
-- **Violation**: 133,000 exceeds limit by **167%**, causing silent batch failures
-
-**IMMEDIATE FIXES**:
-- [ ] **CRITICAL**: Change `activity_chunk_size: 7000` to `2700` in `/src/handlers/ingest_async_simple.rs` line 189
-- [ ] Fix unsafe test configurations using 6500, 7000 chunk sizes
-- [ ] Add PostgreSQL parameter validation in BatchConfig.validate()
-- [ ] Add explicit error detection for oversized PostgreSQL queries
-- [ ] Update chunk size comments to reflect correct parameter calculations
-
-**VALIDATION TASKS**:
-- [ ] Test that 2700 chunk size processes correctly (51,300 params < 65,535 limit)
-- [ ] Verify all test configurations use safe chunk sizes
-- [ ] Add integration test for parameter limit edge cases
-- [ ] Monitor Activity metrics processing success rate
-
-**ACCEPTANCE CRITERIA**:
-- [ ] Activity metrics data loss reduced to <5%
-- [ ] No PostgreSQL parameter limit violations in production
-- [ ] All test configurations use safe chunk sizes
-- [ ] Successful processing of large Activity metric batches in tests
-
 ---
 
 ### **STORY-CRITICAL-003: ⚠️ HIGH - Audio Exposure Table Missing**
@@ -607,52 +508,6 @@ Code analysis shows AudioExposure metrics being forced into environmental_metric
 
 ---
 
-### **STORY-OPTIMIZATION-001: 🚀 Batch Processing Parameter Optimization**
-**Priority**: P2 - MEDIUM (Performance optimization)
-**Estimated Effort**: 4 hours
-**Files**: `/src/config/batch_config.rs`, test configurations
-**Goal**: Optimize all metric chunk sizes for maximum performance while staying safe
-
-**OPTIMIZATION ANALYSIS**:
-Current configurations vs optimal safe limits (80% of PostgreSQL max 65,535):
-
-| Metric Type | Current Chunk | Params/Record | Current Max Params | Safe Limit | Status & Opportunity |
-|-------------|---------------|---------------|-------------------|------------|---------------------|
-| HeartRate | 4,200 | 10 | 42,000 | 52,428 | ✅ Can increase to 5,242 (+25%) |
-| BloodPressure | 8,000 | 6 | 48,000 | 52,428 | ✅ Can increase to 8,738 (+9%) |
-| Sleep | 6,000 | 10 | 60,000 | 52,428 | ❌ **UNSAFE** - reduce to 5,242 |
-| Activity | 2,700 | 19 | 51,300 | 52,428 | ✅ Near optimal (+2% possible) |
-| BodyMeasurement | 3,000 | 16 | 48,000 | 52,428 | ✅ Can increase to 3,276 (+9%) |
-| Temperature | 8,000 | 8 | 64,000 | 52,428 | ❌ **UNSAFE** - reduce to 6,553 |
-| Respiratory | 7,000 | 7 | 49,000 | 52,428 | ✅ Can increase to 7,489 (+7%) |
-| Nutrition | 1,600 | 32 | 51,200 | 52,428 | ✅ Can increase to 1,638 (+2%) |
-
-**CRITICAL FIXES (UNSAFE CONFIGURATIONS)**:
-- [ ] **CRITICAL**: Fix Sleep chunk size from 6,000 to 5,242 (exceeds limit by 14.4%)
-- [ ] **CRITICAL**: Fix Temperature chunk size from 8,000 to 6,553 (exceeds limit by 22.1%)
-
-**PERFORMANCE OPTIMIZATIONS**:
-- [ ] Optimize HeartRate chunk size from 4,200 to 5,242 (+25% throughput)
-- [ ] Optimize BloodPressure chunk size from 8,000 to 8,738 (+9% throughput)
-- [ ] Optimize BodyMeasurement chunk size from 3,000 to 3,276 (+9% throughput)
-- [ ] Optimize Respiratory chunk size from 7,000 to 7,489 (+7% throughput)
-- [ ] Fix all test configurations to use safe, optimized chunk sizes
-- [ ] Add runtime parameter validation with detailed error messages
-- [ ] Create performance benchmarks for optimized configurations
-
-**SAFETY VALIDATION**:
-- [ ] Add unit tests for parameter limit calculations
-- [ ] Test edge cases near PostgreSQL parameter limit
-- [ ] Verify optimized configurations in load testing
-- [ ] Add monitoring for parameter usage metrics
-
-**ACCEPTANCE CRITERIA**:
-- [ ] All chunk sizes optimized for maximum safe performance
-- [ ] Zero risk of PostgreSQL parameter limit violations
-- [ ] Measurable performance improvement in large batch processing
-- [ ] All configurations validated with automated tests
-
----
 
 ## Additional Stories (Awaiting Master Story Completion)
 

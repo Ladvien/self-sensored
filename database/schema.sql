@@ -1796,5 +1796,117 @@ END;
 $$ LANGUAGE plpgsql STABLE;
 
 -- ============================================================================
+-- SAFETY EVENT METRICS TABLE
+-- ============================================================================
+
+-- Safety Event types for fall detection, emergency SOS, and health emergencies
+CREATE TYPE safety_event_type AS ENUM (
+    'fall_detected', 'emergency_sos', 'medical_emergency', 'location_alert',
+    'abnormal_heart_rate', 'irregular_rhythm', 'emergency_contact_triggered',
+    'crash_detection', 'hard_fall', 'medical_id_accessed', 'emergency_call',
+    'location_sharing_activated', 'panic_alert', 'health_threshold_exceeded'
+);
+
+-- Resolution status for safety events
+CREATE TYPE safety_resolution_status AS ENUM (
+    'pending', 'acknowledged', 'resolved', 'dismissed', 'false_positive',
+    'emergency_services_contacted', 'medical_attention_required'
+);
+
+-- Safety Event Metrics table for emergency detection and response tracking
+CREATE TABLE safety_event_metrics (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recorded_at TIMESTAMPTZ NOT NULL,
+
+    -- Event Classification
+    event_type safety_event_type NOT NULL,
+    severity_level SMALLINT CHECK (severity_level BETWEEN 1 AND 5), -- 1=low, 5=critical
+    confidence_score DOUBLE PRECISION CHECK (confidence_score BETWEEN 0.0 AND 1.0), -- Algorithm confidence
+
+    -- Location Context (if available)
+    location_latitude DOUBLE PRECISION CHECK (location_latitude BETWEEN -90.0 AND 90.0),
+    location_longitude DOUBLE PRECISION CHECK (location_longitude BETWEEN -180.0 AND 180.0),
+    location_accuracy_meters DOUBLE PRECISION CHECK (location_accuracy_meters > 0),
+    indoor_location BOOLEAN DEFAULT NULL, -- NULL=unknown, true=indoor, false=outdoor
+
+    -- Emergency Response
+    emergency_contacts_notified BOOLEAN DEFAULT false,
+    emergency_services_contacted BOOLEAN DEFAULT false,
+    medical_id_accessed BOOLEAN DEFAULT false,
+    auto_resolved BOOLEAN DEFAULT false, -- System auto-resolved without user intervention
+
+    -- Resolution Tracking
+    resolution_status safety_resolution_status DEFAULT 'pending',
+    resolution_time TIMESTAMPTZ, -- When event was resolved
+    resolution_method VARCHAR(100), -- 'user_dismissed', 'auto_timeout', 'emergency_response', 'medical_intervention'
+
+    -- Contextual Information
+    device_motion_data JSONB, -- Sensor data leading to detection (accelerometer, gyroscope)
+    vital_signs_context JSONB, -- Heart rate, blood pressure context at time of event
+    activity_context VARCHAR(100), -- 'walking', 'running', 'cycling', 'stationary', 'sleeping'
+    environmental_context VARCHAR(100), -- 'home', 'work', 'gym', 'outdoor', 'vehicle', 'unknown'
+
+    -- User Response
+    user_response VARCHAR(100), -- 'im_okay', 'need_help', 'false_alarm', 'no_response'
+    user_response_time_seconds INTEGER CHECK (user_response_time_seconds >= 0),
+    user_notes TEXT, -- User-provided context or notes
+
+    -- Device & Technical Information
+    detection_algorithm VARCHAR(100), -- Algorithm used for detection
+    source_device VARCHAR(255),
+    firmware_version VARCHAR(50),
+    app_version VARCHAR(50),
+
+    -- Privacy & Audit
+    shared_with_emergency_contacts BOOLEAN DEFAULT false,
+    shared_with_healthcare_providers BOOLEAN DEFAULT false,
+    privacy_level VARCHAR(20) DEFAULT 'standard', -- 'minimal', 'standard', 'detailed'
+
+    -- Metadata
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+
+    -- Constraints
+    UNIQUE(user_id, recorded_at, event_type), -- Prevent duplicate events
+    CONSTRAINT check_resolution_consistency CHECK (
+        (resolution_status = 'pending' AND resolution_time IS NULL) OR
+        (resolution_status != 'pending' AND resolution_time IS NOT NULL)
+    )
+);
+
+-- Indexes for safety event metrics
+CREATE INDEX idx_safety_events_user_date ON safety_event_metrics (user_id, recorded_at DESC);
+CREATE INDEX idx_safety_events_type_severity ON safety_event_metrics (event_type, severity_level, recorded_at DESC);
+CREATE INDEX idx_safety_events_pending ON safety_event_metrics (user_id, recorded_at DESC)
+    WHERE resolution_status = 'pending';
+CREATE INDEX idx_safety_events_emergency ON safety_event_metrics (user_id, recorded_at DESC)
+    WHERE emergency_contacts_notified = true OR emergency_services_contacted = true;
+CREATE INDEX idx_safety_events_location ON safety_event_metrics USING GIST (
+    ST_Point(location_longitude, location_latitude)
+) WHERE location_latitude IS NOT NULL AND location_longitude IS NOT NULL;
+CREATE INDEX idx_safety_events_confidence ON safety_event_metrics (confidence_score, event_type)
+    WHERE confidence_score > 0.8; -- High confidence events
+
+-- Function to auto-resolve stale safety events
+CREATE OR REPLACE FUNCTION auto_resolve_stale_safety_events()
+RETURNS INTEGER AS $$
+DECLARE
+    resolved_count INTEGER;
+BEGIN
+    UPDATE safety_event_metrics
+    SET resolution_status = 'auto_timeout',
+        resolution_time = CURRENT_TIMESTAMP,
+        resolution_method = 'auto_timeout_24h',
+        auto_resolved = true
+    WHERE resolution_status = 'pending'
+      AND recorded_at < CURRENT_TIMESTAMP - INTERVAL '24 hours'
+      AND severity_level <= 2; -- Only auto-resolve low-medium severity events
+
+    GET DIAGNOSTICS resolved_count = ROW_COUNT;
+    RETURN resolved_count;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================================================
 -- END OF SCHEMA
 -- ============================================================================
