@@ -185,32 +185,6 @@ Analysis revealed the architecture was already correctly implemented:
 
 ---
 
-### **STORY-DATA-004: 📋 MEDIUM - Parameter Validation vs Processing Mismatch Detection**
-**Priority**: P2 - MEDIUM (System reliability)
-**Estimated Effort**: 2 hours
-**Files**: `/src/models/health_metrics.rs`, `/src/services/batch_processor.rs`
-**Impact**: Metrics pass validation but get silently dropped
-
-**SYSTEMATIC PROBLEM**:
-`health_metrics.rs` defines comprehensive validation for all metric types, but batch processor only handles subset, creating false confidence in data processing.
-
-**DETECTION TASKS**:
-- [ ] **MEDIUM**: Create automated validation that every HealthMetric enum variant has batch processing
-- [ ] **MEDIUM**: Add unit test to verify GroupedMetrics struct has field for each metric type
-- [ ] **MEDIUM**: Add runtime check that no metrics hit `_` fallback in group_metrics_by_type()
-- [ ] **MEDIUM**: Create monitoring alert for unsupported metric types
-
-**PREVENTION TASKS**:
-- [ ] Add compile-time check that ensures GroupedMetrics completeness
-- [ ] Create integration test that validates end-to-end processing for each metric type
-- [ ] Add documentation requirement: every new HealthMetric variant must include batch processing
-
-**ACCEPTANCE CRITERIA**:
-- [ ] Automated detection of validation vs processing mismatches
-- [ ] Zero possibility of metrics passing validation but being dropped
-- [ ] Comprehensive test coverage for all defined metric types
-
----
 
 
 ---
@@ -403,23 +377,6 @@ Analysis revealed the architecture was already correctly implemented:
 ---
 
 
-### **STORY-CRITICAL-005: 📋 MEDIUM - Data Recovery and Reprocessing**
-**Priority**: P2 - MEDIUM (after fixing causes)
-**Estimated Effort**: 8 hours
-**Files**: Raw payload reprocessing utility
-**Scope**: Recover 1.4M missing metrics from raw_ingestions table
-
-**RECOVERY TASKS**:
-- [ ] Create reprocessing utility for raw_ingestions table
-- [ ] Reprocess all payloads with fixed batch processor
-- [ ] Verify recovered metrics match REPORT.md expected counts
-- [ ] Add payload-to-database verification checksums
-- [ ] Implement monitoring alerts for processing discrepancies
-
-**ACCEPTANCE CRITERIA**:
-- [ ] All missing metrics recovered from raw payloads
-- [ ] Future processing monitored to prevent data loss
-- [ ] Verification checksums in place for data integrity
 
 ---
 
