@@ -6542,3 +6542,68 @@ The following health data categories from DATA.md need alignment verification:
    - Validation configuration incomplete
 
 ### **Sub-Stories (Ordered by Compilation Impact):**
+
+---
+
+## ✅ SUB-010: MEDIUM - Mobility Metrics Integration (Completed: 2025-09-18)
+**Agent**: Data Processor Agent | **Priority**: P2 - MEDIUM | **Status**: ✅ COMPLETED | **Time**: 2.5 hours
+
+**COMPREHENSIVE MOBILITY METRICS IMPLEMENTATION**: ✅ Added complete iOS 14+ HealthKit mobility metrics support
+- **DATA.md Compliance**: Full implementation of Lines 189-202 (Mobility Metrics)
+- **Database Enhancement**: Added 11 new fields to `activity_metrics` table
+- **iOS Integration**: Complete HealthKit identifier mapping for mobility metrics
+- **Safety Updates**: PostgreSQL parameter limit compliance maintained
+
+**TECHNICAL IMPLEMENTATION**:
+1. ✅ **Database Schema Updates**: Extended `activity_metrics` table with 11 mobility fields:
+   - **Walking Metrics**: walking_speed_m_per_s, walking_step_length_cm, walking_asymmetry_percent, walking_double_support_percent, six_minute_walk_test_distance_m
+   - **Stair Metrics**: stair_ascent_speed_m_per_s, stair_descent_speed_m_per_s
+   - **Running Dynamics**: ground_contact_time_ms, vertical_oscillation_cm, running_stride_length_m, running_power_watts, running_speed_m_per_s
+   - **Validation**: All fields include proper PostgreSQL constraints and range validation
+
+2. ✅ **ActivityMetric Struct Extension**: Updated health_metrics.rs with complete mobility field support:
+   - Extended from 19 to 30 parameters per record
+   - All fields properly typed as Option<f64> for flexibility
+   - Maintained backward compatibility with existing activity metrics
+
+3. ✅ **iOS HealthKit Integration**: Complete iOS 14+ mobility metrics mapping:
+   - Added 13 new HealthKit identifiers to iOS models mapping
+   - Proper conversion from iOS payload format to internal ActivityMetric
+   - Support for: HKQuantityTypeIdentifierWalkingSpeed, HKQuantityTypeIdentifierWalkingStepLength, HKQuantityTypeIdentifierWalkingAsymmetryPercentage, HKQuantityTypeIdentifierWalkingDoubleSupportPercentage, HKQuantityTypeIdentifierSixMinuteWalkTestDistance, HKCategoryTypeIdentifierAppleWalkingSteadinessEvent, HKQuantityTypeIdentifierStairAscentSpeed, HKQuantityTypeIdentifierStairDescentSpeed, HKQuantityTypeIdentifierGroundContactTime, HKQuantityTypeIdentifierVerticalOscillation, HKQuantityTypeIdentifierRunningStrideLength, HKQuantityTypeIdentifierRunningPower, HKQuantityTypeIdentifierRunningSpeed
+
+4. ✅ **Batch Processing Safety**: Updated parameter calculations and chunk sizes:
+   - Updated ACTIVITY_PARAMS_PER_RECORD: 19 → 30 parameters
+   - Reduced activity_chunk_size: 2700 → 1700 for PostgreSQL safety
+   - Maintained 97% of safe parameter limit (51,000/52,428 params)
+   - Updated batch processor INSERT query with all new fields
+
+5. ✅ **Comprehensive Testing**: Created complete test suite for mobility metrics:
+   - iOS conversion validation tests for all HealthKit identifiers
+   - ActivityMetric field accessibility verification
+   - Database integration testing preparation
+
+**IMPACT ANALYSIS**:
+- **HealthKit Coverage**: Added support for 13 iOS 14+ mobility HealthKit identifiers
+- **Data Completeness**: Comprehensive mobility tracking now available (walking gait, stair climbing, running dynamics)
+- **Performance Safety**: Maintained PostgreSQL parameter limits while adding 58% more fields
+- **Clinical Value**: Enables mobility assessment, fall risk evaluation, and rehabilitation monitoring
+
+**FILES MODIFIED**:
+- `/database/schema.sql` - Extended activity_metrics table with 11 mobility fields
+- `/src/models/health_metrics.rs` - Updated ActivityMetric struct with mobility fields
+- `/src/models/ios_models.rs` - Added HealthKit identifier mapping for mobility metrics
+- `/src/services/batch_processor.rs` - Updated INSERT queries and parameter handling
+- `/src/config/batch_config.rs` - Updated parameter calculations and chunk sizes
+- `/src/handlers/ingest_async_simple.rs` - Updated chunk size configuration
+- `/tests/mobility_metrics_test.rs` - NEW comprehensive test suite
+
+**COMMIT**: 6f937dc - feat: add comprehensive mobility metrics support
+
+**VERIFICATION**:
+✅ **Database Compatibility**: All new fields properly defined with constraints
+✅ **iOS Integration**: Complete HealthKit identifier support for mobility metrics
+✅ **Parameter Safety**: PostgreSQL limits maintained with 1700 chunk size
+✅ **Type Safety**: All fields properly typed and validated
+✅ **Test Coverage**: Comprehensive validation of mobility metrics conversion
+
+**OUTCOME**: Complete DATA.md mobility metrics support (Lines 189-202) with iOS 14+ HealthKit integration enabling advanced gait analysis, stair climbing assessment, and running dynamics tracking.
