@@ -415,27 +415,6 @@ Analysis revealed the architecture was already correctly implemented:
 
 ---
 
-### **STORY-CRITICAL-004: ⚠️ HIGH - HeartRate Metrics 41% Data Loss**
-**Priority**: P1 - HIGH
-**Estimated Effort**: 4 hours
-**Files**: `/src/services/batch_processor.rs`
-**Data Loss**: 659 HeartRate metrics missing (41% loss rate)
-
-**Root Cause**: Similar to Activity metrics - likely batch processing or validation issues
-**Evidence**: REPORT.md shows 1,603 expected vs 944 in database
-
-**INVESTIGATION TASKS**:
-- [ ] Check HeartRate metrics chunk size and batch processing
-- [ ] Add error logging for HeartRate batch insert failures
-- [ ] Review HeartRate validation constraints
-- [ ] Test HeartRate deduplication logic for edge cases
-- [ ] Check for constraint violations on advanced cardiovascular fields
-
-**ACCEPTANCE CRITERIA**:
-- [ ] HeartRate metrics data loss reduced to <5%
-- [ ] Clear error logging for any failed HeartRate inserts
-
----
 
 ### **STORY-CRITICAL-005: 📋 MEDIUM - Data Recovery and Reprocessing**
 **Priority**: P2 - MEDIUM (after fixing causes)
