@@ -220,19 +220,6 @@ Analysis revealed the architecture was already correctly implemented:
 *Critical Data Loss Investigation: COMPLETE - Root causes identified*
 *Data Processor Analysis: COMPLETE - 7 missing metric types identified*
 
-#### **SUB-001: CRITICAL - EnvironmentalMetric Field Alignment**
-**Priority**: P0 - BLOCKING
-**Lines of Code**: ~50
-**Files**: `src/models/health_metrics.rs`, `src/handlers/environmental_handler.rs`
-**DATA.md Ref**: Lines 178-188 (Environmental & Safety)
-
-**Tasks**:
-- [ ] Add missing audio exposure fields to EnvironmentalMetric struct
-- [ ] Align with database schema `environmental_metrics` table
-- [ ] Fix handler query field mapping
-- [ ] Test audio exposure data ingestion
-
-**Expected Fix**: Resolves 4+ compilation errors
 
 #### **SUB-002: CRITICAL - DateTime Type Inference Fix**
 **Priority**: P0 - BLOCKING

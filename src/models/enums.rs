@@ -954,6 +954,20 @@ pub enum SymptomType {
     Rash,
     Itching,
     Swelling,
+
+    // Additional HealthKit-supported symptoms from DATA.md
+    Acne,
+    AppetiteChanges,
+    BladderIncontinence,
+    Fainting,
+    GeneralizedBodyAche,
+    LossOfSmell,
+    LossOfTaste,
+    LowerBackPain,
+    MemoryLapse,
+    SinusCongestion,
+    SleepChanges,
+    SkippedHeartbeat,
 }
 
 impl SymptomType {
@@ -1048,6 +1062,28 @@ impl SymptomType {
             "itching" | "itchy" | "pruritus" => Some(Self::Itching),
             "swelling" | "edema" | "inflammation" => Some(Self::Swelling),
 
+            // Additional HealthKit-supported symptoms from DATA.md
+            "acne" | "pimples" | "breakouts" => Some(Self::Acne),
+            "appetite_changes" | "appetitechanges" | "eating_changes" => Some(Self::AppetiteChanges),
+            "bladder_incontinence" | "bladderincontinence" | "urinary_incontinence" => {
+                Some(Self::BladderIncontinence)
+            }
+            "fainting" | "syncope" | "loss_of_consciousness" => Some(Self::Fainting),
+            "generalized_body_ache" | "generalizedbodyache" | "body_aches" | "all_over_pain" => {
+                Some(Self::GeneralizedBodyAche)
+            }
+            "loss_of_smell" | "lossofsmell" | "anosmia" => Some(Self::LossOfSmell),
+            "loss_of_taste" | "lossoftaste" | "ageusia" => Some(Self::LossOfTaste),
+            "lower_back_pain" | "lowerbackpain" | "lumbar_pain" => Some(Self::LowerBackPain),
+            "memory_lapse" | "memorylapse" | "forgetfulness" | "memory_loss" => {
+                Some(Self::MemoryLapse)
+            }
+            "sinus_congestion" | "sinuscongestion" | "sinus_pressure" => Some(Self::SinusCongestion),
+            "sleep_changes" | "sleepchanges" | "sleep_pattern_changes" => Some(Self::SleepChanges),
+            "skipped_heartbeat" | "skippedheartbeat" | "missed_heartbeat" | "heart_skip" => {
+                Some(Self::SkippedHeartbeat)
+            }
+
             _ => None,
         }
     }
@@ -1064,7 +1100,9 @@ impl SymptomType {
             | Self::MusclePain
             | Self::JointPain
             | Self::ToothPain
-            | Self::EyePain => "pain",
+            | Self::EyePain
+            | Self::LowerBackPain
+            | Self::GeneralizedBodyAche => "pain",
 
             Self::Coughing
             | Self::ShortnessOfBreath
@@ -1073,7 +1111,10 @@ impl SymptomType {
             | Self::RunnyNose
             | Self::Sneezing
             | Self::SoreThroat
-            | Self::ChestCongestion => "respiratory",
+            | Self::ChestCongestion
+            | Self::SinusCongestion
+            | Self::LossOfSmell
+            | Self::LossOfTaste => "respiratory",
 
             Self::Bloating
             | Self::Nausea
@@ -1082,7 +1123,8 @@ impl SymptomType {
             | Self::Constipation
             | Self::Heartburn
             | Self::LossOfAppetite
-            | Self::ExcessiveHunger => "digestive",
+            | Self::ExcessiveHunger
+            | Self::AppetiteChanges => "digestive",
 
             Self::Dizziness
             | Self::Fatigue
@@ -1092,13 +1134,17 @@ impl SymptomType {
             | Self::ConcentrationProblems
             | Self::Anxiety
             | Self::Depression
-            | Self::Irritability => "neurological",
+            | Self::Irritability
+            | Self::MemoryLapse
+            | Self::SleepChanges
+            | Self::Fainting => "neurological",
 
             Self::Palpitations
             | Self::RapidHeartRate
             | Self::ChestPain
             | Self::HighBloodPressure
-            | Self::ColdHandsOrFeet => "cardiovascular",
+            | Self::ColdHandsOrFeet
+            | Self::SkippedHeartbeat => "cardiovascular",
 
             Self::HotFlashes
             | Self::NightSweats
@@ -1117,7 +1163,9 @@ impl SymptomType {
             | Self::DrySkin
             | Self::Rash
             | Self::Itching
-            | Self::Swelling => "general_systemic",
+            | Self::Swelling
+            | Self::Acne
+            | Self::BladderIncontinence => "general_systemic",
         }
     }
 
@@ -1130,6 +1178,8 @@ impl SymptomType {
                 | Self::ChestPain
                 | Self::RapidHeartRate
                 | Self::HighBloodPressure
+                | Self::Fainting
+                | Self::SkippedHeartbeat
         )
     }
 }
@@ -1194,6 +1244,20 @@ impl fmt::Display for SymptomType {
             Self::Rash => "rash",
             Self::Itching => "itching",
             Self::Swelling => "swelling",
+
+            // Additional HealthKit-supported symptoms from DATA.md
+            Self::Acne => "acne",
+            Self::AppetiteChanges => "appetite_changes",
+            Self::BladderIncontinence => "bladder_incontinence",
+            Self::Fainting => "fainting",
+            Self::GeneralizedBodyAche => "generalized_body_ache",
+            Self::LossOfSmell => "loss_of_smell",
+            Self::LossOfTaste => "loss_of_taste",
+            Self::LowerBackPain => "lower_back_pain",
+            Self::MemoryLapse => "memory_lapse",
+            Self::SinusCongestion => "sinus_congestion",
+            Self::SleepChanges => "sleep_changes",
+            Self::SkippedHeartbeat => "skipped_heartbeat",
         };
         write!(f, "{s}")
     }

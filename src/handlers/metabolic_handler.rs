@@ -7,7 +7,7 @@ use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::middleware::metrics::Metrics;
-use crate::models::health_metrics::BloodGlucoseMetric;
+use crate::models::health_metrics::{BloodGlucoseMetric, MetabolicMetric};
 use crate::services::auth::AuthContext;
 
 /// Metabolic data ingestion payload
@@ -160,18 +160,7 @@ pub struct MetabolicDataResponse {
     pub glucose_summary: Option<BloodGlucoseAnalysis>,
 }
 
-/// Metabolic metric structure (for database storage)
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct MetabolicMetric {
-    pub id: Uuid,
-    pub user_id: Uuid,
-    pub recorded_at: DateTime<Utc>,
-    pub blood_alcohol_content: Option<f64>,
-    pub insulin_delivery_units: Option<f64>,
-    pub delivery_method: Option<String>,
-    pub source_device: Option<String>,
-    pub created_at: DateTime<Utc>,
-}
+// MetabolicMetric is now imported from crate::models::health_metrics
 
 /// Date range for queries
 #[derive(Debug, Serialize)]

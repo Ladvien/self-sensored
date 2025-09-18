@@ -260,6 +260,24 @@ CREATE TABLE activity_metrics (
     apple_move_time_minutes INTEGER CHECK (apple_move_time_minutes IS NULL OR apple_move_time_minutes >= 0),
     apple_stand_hour_achieved BOOLEAN DEFAULT false, -- Whether stand goal was achieved this hour
 
+    -- Mobility Metrics (iOS 14+ HealthKit)
+    walking_speed_m_per_s DOUBLE PRECISION CHECK (walking_speed_m_per_s IS NULL OR walking_speed_m_per_s >= 0.0),
+    walking_step_length_cm DOUBLE PRECISION CHECK (walking_step_length_cm IS NULL OR walking_step_length_cm >= 0.0),
+    walking_asymmetry_percent DOUBLE PRECISION CHECK (walking_asymmetry_percent IS NULL OR (walking_asymmetry_percent >= 0.0 AND walking_asymmetry_percent <= 100.0)),
+    walking_double_support_percent DOUBLE PRECISION CHECK (walking_double_support_percent IS NULL OR (walking_double_support_percent >= 0.0 AND walking_double_support_percent <= 100.0)),
+    six_minute_walk_test_distance_m DOUBLE PRECISION CHECK (six_minute_walk_test_distance_m IS NULL OR six_minute_walk_test_distance_m >= 0.0),
+
+    -- Stair Metrics
+    stair_ascent_speed_m_per_s DOUBLE PRECISION CHECK (stair_ascent_speed_m_per_s IS NULL OR stair_ascent_speed_m_per_s >= 0.0),
+    stair_descent_speed_m_per_s DOUBLE PRECISION CHECK (stair_descent_speed_m_per_s IS NULL OR stair_descent_speed_m_per_s >= 0.0),
+
+    -- Running Dynamics
+    ground_contact_time_ms DOUBLE PRECISION CHECK (ground_contact_time_ms IS NULL OR ground_contact_time_ms >= 0.0),
+    vertical_oscillation_cm DOUBLE PRECISION CHECK (vertical_oscillation_cm IS NULL OR vertical_oscillation_cm >= 0.0),
+    running_stride_length_m DOUBLE PRECISION CHECK (running_stride_length_m IS NULL OR running_stride_length_m >= 0.0),
+    running_power_watts DOUBLE PRECISION CHECK (running_power_watts IS NULL OR running_power_watts >= 0.0),
+    running_speed_m_per_s DOUBLE PRECISION CHECK (running_speed_m_per_s IS NULL OR running_speed_m_per_s >= 0.0),
+
     -- Metadata
     source_device VARCHAR(255),
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,

@@ -298,11 +298,11 @@ pub async fn get_temperature_data_handler(
                 TemperatureMetric,
                 r#"
                 SELECT id, user_id,
-                       recorded_at as "recorded_at!",
+                       recorded_at::timestamptz as "recorded_at!",
                        body_temperature, basal_body_temperature,
                        apple_sleeping_wrist_temperature, water_temperature,
                        temperature_source, source_device,
-                       created_at as "created_at!"
+                       created_at::timestamptz as "created_at!"
                 FROM temperature_metrics
                 WHERE user_id = $1
                   AND recorded_at >= $2
@@ -324,11 +324,11 @@ pub async fn get_temperature_data_handler(
                 TemperatureMetric,
                 r#"
                 SELECT id, user_id,
-                       recorded_at as "recorded_at!",
+                       recorded_at::timestamptz as "recorded_at!",
                        body_temperature, basal_body_temperature,
                        apple_sleeping_wrist_temperature, water_temperature,
                        temperature_source, source_device,
-                       created_at as "created_at!"
+                       created_at::timestamptz as "created_at!"
                 FROM temperature_metrics
                 WHERE user_id = $1
                   AND recorded_at >= $2
@@ -350,11 +350,11 @@ pub async fn get_temperature_data_handler(
                 TemperatureMetric,
                 r#"
                 SELECT id, user_id,
-                       recorded_at as "recorded_at!",
+                       recorded_at::timestamptz as "recorded_at!",
                        body_temperature, basal_body_temperature,
                        apple_sleeping_wrist_temperature, water_temperature,
                        temperature_source, source_device,
-                       created_at as "created_at!"
+                       created_at::timestamptz as "created_at!"
                 FROM temperature_metrics
                 WHERE user_id = $1
                   AND recorded_at >= $2
@@ -376,11 +376,11 @@ pub async fn get_temperature_data_handler(
                 TemperatureMetric,
                 r#"
                 SELECT id, user_id,
-                       recorded_at as "recorded_at!",
+                       recorded_at::timestamptz as "recorded_at!",
                        body_temperature, basal_body_temperature,
                        apple_sleeping_wrist_temperature, water_temperature,
                        temperature_source, source_device,
-                       created_at as "created_at!"
+                       created_at::timestamptz as "created_at!"
                 FROM temperature_metrics
                 WHERE user_id = $1
                   AND recorded_at >= $2
@@ -404,11 +404,11 @@ pub async fn get_temperature_data_handler(
                     TemperatureMetric,
                     r#"
                     SELECT id, user_id,
-                           recorded_at as "recorded_at!",
+                           recorded_at::timestamptz as "recorded_at!",
                            body_temperature, basal_body_temperature,
                            apple_sleeping_wrist_temperature, water_temperature,
                            temperature_source, source_device,
-                           created_at as "created_at!"
+                           created_at::timestamptz as "created_at!"
                     FROM temperature_metrics
                     WHERE user_id = $1
                       AND recorded_at >= $2
@@ -430,11 +430,11 @@ pub async fn get_temperature_data_handler(
                     TemperatureMetric,
                     r#"
                     SELECT id, user_id,
-                           recorded_at as "recorded_at!",
+                           recorded_at::timestamptz as "recorded_at!",
                            body_temperature, basal_body_temperature,
                            apple_sleeping_wrist_temperature, water_temperature,
                            temperature_source, source_device,
-                           created_at as "created_at!"
+                           created_at::timestamptz as "created_at!"
                     FROM temperature_metrics
                     WHERE user_id = $1
                       AND recorded_at >= $2

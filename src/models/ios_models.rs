@@ -274,6 +274,20 @@ impl IosIngestPayload {
                     | "HKQuantityTypeIdentifierAppleStandTime"
                     | "HKQuantityTypeIdentifierAppleMoveTime"
                     | "HKCategoryTypeIdentifierAppleStandHour"
+                    // MOBILITY METRICS - iOS 14+ HealthKit identifiers
+                    | "HKQuantityTypeIdentifierWalkingSpeed"
+                    | "HKQuantityTypeIdentifierWalkingStepLength"
+                    | "HKQuantityTypeIdentifierWalkingAsymmetryPercentage"
+                    | "HKQuantityTypeIdentifierWalkingDoubleSupportPercentage"
+                    | "HKQuantityTypeIdentifierSixMinuteWalkTestDistance"
+                    | "HKCategoryTypeIdentifierAppleWalkingSteadinessEvent"
+                    | "HKQuantityTypeIdentifierStairAscentSpeed"
+                    | "HKQuantityTypeIdentifierStairDescentSpeed"
+                    | "HKQuantityTypeIdentifierGroundContactTime"
+                    | "HKQuantityTypeIdentifierVerticalOscillation"
+                    | "HKQuantityTypeIdentifierRunningStrideLength"
+                    | "HKQuantityTypeIdentifierRunningPower"
+                    | "HKQuantityTypeIdentifierRunningSpeed"
                     | "steps"
                     | "step_count"
                     | "distance_walking_running"
@@ -418,6 +432,73 @@ impl IosIngestPayload {
                                     } else {
                                         None
                                     },
+
+                                    // Mobility Metrics (iOS 14+ HealthKit) - now mapped from iOS data
+                                    walking_speed_m_per_s: if ios_metric.name == "HKQuantityTypeIdentifierWalkingSpeed" {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    walking_step_length_cm: if ios_metric.name == "HKQuantityTypeIdentifierWalkingStepLength" {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    walking_asymmetry_percent: if ios_metric.name == "HKQuantityTypeIdentifierWalkingAsymmetryPercentage" {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    walking_double_support_percent: if ios_metric.name == "HKQuantityTypeIdentifierWalkingDoubleSupportPercentage" {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    six_minute_walk_test_distance_m: if ios_metric.name == "HKQuantityTypeIdentifierSixMinuteWalkTestDistance" {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+
+                                    // Stair Metrics - now mapped from iOS data
+                                    stair_ascent_speed_m_per_s: if ios_metric.name == "HKQuantityTypeIdentifierStairAscentSpeed" {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    stair_descent_speed_m_per_s: if ios_metric.name == "HKQuantityTypeIdentifierStairDescentSpeed" {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+
+                                    // Running Dynamics - now mapped from iOS data
+                                    ground_contact_time_ms: if ios_metric.name == "HKQuantityTypeIdentifierGroundContactTime" {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    vertical_oscillation_cm: if ios_metric.name == "HKQuantityTypeIdentifierVerticalOscillation" {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    running_stride_length_m: if ios_metric.name == "HKQuantityTypeIdentifierRunningStrideLength" {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    running_power_watts: if ios_metric.name == "HKQuantityTypeIdentifierRunningPower" {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+                                    running_speed_m_per_s: if ios_metric.name == "HKQuantityTypeIdentifierRunningSpeed" {
+                                        Some(qty)
+                                    } else {
+                                        None
+                                    },
+
                                     source_device: data_point.source.clone(),
                                     created_at: Utc::now(),
                                 };
@@ -514,8 +595,6 @@ impl IosIngestPayload {
                                     id: uuid::Uuid::new_v4(),
                                     user_id,
                                     recorded_at,
-                                    environmental_audio_exposure_db: None,
-                                    headphone_audio_exposure_db: None,
                                     uv_index: Some(qty),
                                     uv_exposure_minutes: None,
                                     time_in_daylight_minutes: None,
@@ -546,8 +625,6 @@ impl IosIngestPayload {
                                     id: uuid::Uuid::new_v4(),
                                     user_id,
                                     recorded_at,
-                                    environmental_audio_exposure_db: None,
-                                    headphone_audio_exposure_db: None,
                                     uv_index: None,
                                     uv_exposure_minutes: None,
                                     time_in_daylight_minutes: Some(qty as i32),
@@ -594,6 +671,13 @@ impl IosIngestPayload {
                                     headphone_audio_exposure_db: None,
                                     exposure_duration_minutes: duration_minutes,
                                     audio_exposure_event,
+                                    hearing_protection_used: None,
+                                    environment_type: None,
+                                    activity_during_exposure: None,
+                                    daily_noise_dose_percentage: None,
+                                    weekly_exposure_hours: None,
+                                    location_latitude: None,
+                                    location_longitude: None,
                                     source_device: data_point.source.clone(),
                                     created_at: Utc::now(),
                                 };
@@ -624,6 +708,13 @@ impl IosIngestPayload {
                                     headphone_audio_exposure_db: Some(qty),
                                     exposure_duration_minutes: duration_minutes,
                                     audio_exposure_event,
+                                    hearing_protection_used: None,
+                                    environment_type: None,
+                                    activity_during_exposure: None,
+                                    daily_noise_dose_percentage: None,
+                                    weekly_exposure_hours: None,
+                                    location_latitude: None,
+                                    location_longitude: None,
                                     source_device: data_point.source.clone(),
                                     created_at: Utc::now(),
                                 };

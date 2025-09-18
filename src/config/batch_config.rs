@@ -8,7 +8,7 @@ pub const SAFE_PARAM_LIMIT: usize = 52428; // 80% of max for safety margin
 pub const HEART_RATE_PARAMS_PER_RECORD: usize = 10; // user_id, recorded_at, heart_rate, resting_heart_rate, heart_rate_variability, walking_heart_rate_average, heart_rate_recovery_one_minute, atrial_fibrillation_burden_percentage, vo2_max_ml_kg_min, context, source_device
 pub const BLOOD_PRESSURE_PARAMS_PER_RECORD: usize = 6; // user_id, recorded_at, systolic, diastolic, pulse, source_device
 pub const SLEEP_PARAMS_PER_RECORD: usize = 10; // user_id, sleep_start, sleep_end, duration_minutes, deep_sleep_minutes, rem_sleep_minutes, light_sleep_minutes, awake_minutes, efficiency, source_device
-pub const ACTIVITY_PARAMS_PER_RECORD: usize = 19; // user_id, recorded_at, step_count, distance_meters, active_energy_burned_kcal, basal_energy_burned_kcal, flights_climbed, distance_cycling_meters, distance_swimming_meters, distance_wheelchair_meters, distance_downhill_snow_sports_meters, push_count, swimming_stroke_count, nike_fuel_points, apple_exercise_time_minutes, apple_stand_time_minutes, apple_move_time_minutes, apple_stand_hour_achieved, source_device
+pub const ACTIVITY_PARAMS_PER_RECORD: usize = 30; // user_id, recorded_at, step_count, distance_meters, active_energy_burned_kcal, basal_energy_burned_kcal, flights_climbed, distance_cycling_meters, distance_swimming_meters, distance_wheelchair_meters, distance_downhill_snow_sports_meters, push_count, swimming_stroke_count, nike_fuel_points, apple_exercise_time_minutes, apple_stand_time_minutes, apple_move_time_minutes, apple_stand_hour_achieved, walking_speed_m_per_s, walking_step_length_cm, walking_asymmetry_percent, walking_double_support_percent, six_minute_walk_test_distance_m, stair_ascent_speed_m_per_s, stair_descent_speed_m_per_s, ground_contact_time_ms, vertical_oscillation_cm, running_stride_length_m, running_power_watts, running_speed_m_per_s, source_device
 pub const BODY_MEASUREMENT_PARAMS_PER_RECORD: usize = 16; // user_id, recorded_at, body_weight_kg, body_mass_index, body_fat_percentage, lean_body_mass_kg, height_cm, waist_circumference_cm, hip_circumference_cm, chest_circumference_cm, arm_circumference_cm, thigh_circumference_cm, body_temperature_celsius, basal_body_temperature_celsius, measurement_source, source_device
 pub const TEMPERATURE_PARAMS_PER_RECORD: usize = 8; // user_id, recorded_at, body_temperature, basal_body_temperature, apple_sleeping_wrist_temperature, water_temperature, temperature_source, source_device
 pub const RESPIRATORY_PARAMS_PER_RECORD: usize = 7; // user_id, recorded_at, respiratory_rate, oxygen_saturation, forced_vital_capacity, forced_expiratory_volume_1, peak_expiratory_flow_rate, inhaler_usage, source_device
@@ -92,7 +92,7 @@ impl Default for BatchConfig {
             heart_rate_chunk_size: 5242, // 10 params: 52,420 params (max safe) - +25% throughput improvement
             blood_pressure_chunk_size: 8738, // 6 params: 52,428 params (max safe) - +9% throughput improvement
             sleep_chunk_size: 5242, // 10 params: 52,420 params (max safe) - Safety fix from unsafe 6000
-            activity_chunk_size: 2700, // 19 params: 51,300 params (safe) - ALREADY OPTIMIZED
+            activity_chunk_size: 1700, // 30 params: 51,000 params (safe with mobility metrics) - UPDATED FOR MOBILITY
             body_measurement_chunk_size: 3276, // 16 params: 52,416 params (max safe) - +9% throughput improvement
             temperature_chunk_size: 6553, // 8 params: 52,424 params (max safe) - Safety fix from unsafe 8000
             respiratory_chunk_size: 7489, // 7 params: 52,423 params (max safe) - +7% throughput improvement
@@ -452,7 +452,7 @@ impl BatchConfig {
             ("Heart Rate", self.heart_rate_chunk_size, HEART_RATE_PARAMS_PER_RECORD, 4200),
             ("Blood Pressure", self.blood_pressure_chunk_size, BLOOD_PRESSURE_PARAMS_PER_RECORD, 8000),
             ("Sleep", self.sleep_chunk_size, SLEEP_PARAMS_PER_RECORD, 6000), // Note: was unsafe
-            ("Activity", self.activity_chunk_size, ACTIVITY_PARAMS_PER_RECORD, 2700),
+            ("Activity", self.activity_chunk_size, ACTIVITY_PARAMS_PER_RECORD, 1700),
             ("Body Measurement", self.body_measurement_chunk_size, BODY_MEASUREMENT_PARAMS_PER_RECORD, 3000),
             ("Temperature", self.temperature_chunk_size, TEMPERATURE_PARAMS_PER_RECORD, 8000), // Note: was unsafe
             ("Respiratory", self.respiratory_chunk_size, RESPIRATORY_PARAMS_PER_RECORD, 7000),
