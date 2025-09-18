@@ -1,8 +1,8 @@
 use self_sensored::models::{
     health_metrics::ActivityMetric,
-    ios_models::{DataPoint, IoSMetric, MetricData},
+    ios_models::{IosMetric, IosMetricData},
 };
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use uuid::Uuid;
 
 #[test]
@@ -79,12 +79,17 @@ fn test_underwater_metrics_struct_fields() {
 #[test]
 fn test_ios_underwater_depth_conversion() {
     // Test iOS HealthKit identifier conversion for underwater depth
-    let ios_metric = IoSMetric {
+    let ios_metric = IosMetric {
         name: "HKQuantityTypeIdentifierUnderwaterDepth".to_string(),
-        data: vec![DataPoint {
-            date: "2024-09-18T10:30:00Z".to_string(),
-            qty: 12.3, // 12.3 meters depth
+        units: Some("m".to_string()),
+        data: vec![IosMetricData {
+            date: Some("2024-09-18T10:30:00Z".to_string()),
+            start: None,
+            end: None,
+            qty: Some(12.3), // 12.3 meters depth
+            value: None,
             source: Some("Apple Watch Ultra".to_string()),
+            extra: std::collections::HashMap::new(),
         }],
     };
 
@@ -92,8 +97,8 @@ fn test_ios_underwater_depth_conversion() {
     assert_eq!(ios_metric.name, "HKQuantityTypeIdentifierUnderwaterDepth");
 
     // Verify depth value is reasonable for recreational diving
-    assert!(ios_metric.data[0].qty > 0.0);
-    assert!(ios_metric.data[0].qty < 100.0); // Under technical diving limits
+    assert!(ios_metric.data[0].qty.unwrap() > 0.0);
+    assert!(ios_metric.data[0].qty.unwrap() < 100.0); // Under technical diving limits
 
     // Test that the source device supports underwater tracking
     assert!(ios_metric.data[0].source.is_some());

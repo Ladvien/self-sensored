@@ -317,19 +317,6 @@ Analysis revealed the architecture was already correctly implemented:
 **Expected Fix**: ✅ COMPLETED - Improved DATA.md compliance from 57 to 69 supported symptom types
 
 
-#### **SUB-011: LOW - Cycling Metrics Support**
-**Priority**: P3 - LOW
-**Lines of Code**: ~75
-**Files**: Activity handlers for cycling
-**DATA.md Ref**: Lines 203-207 (Cycling Metrics)
-
-**Tasks**:
-- [ ] Add cycling speed, power, cadence tracking
-- [ ] Implement functional threshold power support
-- [ ] Update cycling workout analysis
-- [ ] Test cycling-specific metrics
-
-**Expected Fix**: Completes DATA.md cycling support
 
 #### **SUB-012: LOW - Underwater Metrics Support**
 **Priority**: P3 - LOW
