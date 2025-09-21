@@ -2,11 +2,13 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use self_sensored::config::BatchConfig;
 use self_sensored::models::{
-    ActivityMetric, BloodPressureMetric, HealthMetric, HeartRateMetric, IngestPayload, 
+    ActivityMetric, BloodPressureMetric, HealthMetric, HeartRateMetric, IngestPayload,
     IngestData, SleepMetric, WorkoutData
 };
-use self_sensored::services::batch_processor::{BatchConfig, BatchProcessor, BatchProcessingResult};
+use self_sensored::models::enums::{ActivityContext, WorkoutType};
+use self_sensored::services::batch_processor::{BatchProcessor, BatchProcessingResult};
 
 /// Test helper to create a test database pool
 async fn create_test_pool() -> PgPool {

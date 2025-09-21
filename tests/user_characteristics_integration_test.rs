@@ -543,6 +543,27 @@ async fn test_wheelchair_user_validation_integration() {
         apple_stand_hour_achieved: None,
         source_device: Some("Apple Watch".to_string()),
         created_at: Utc::now(),
+        // Additional required fields (using correct field names)
+        walking_speed_m_per_s: None,
+        walking_asymmetry_percent: None,
+        walking_double_support_percent: None,
+        six_minute_walk_test_distance_m: None,
+        stair_ascent_speed_m_per_s: None,
+        stair_descent_speed_m_per_s: None,
+        ground_contact_time_ms: None,
+        vertical_oscillation_cm: None,
+        running_stride_length_m: None,
+        running_power_watts: None,
+        running_speed_m_per_s: None,
+        walking_step_length_cm: None,
+        // Cycling Metrics
+        cycling_speed_kmh: None,
+        cycling_power_watts: None,
+        cycling_cadence_rpm: None,
+        functional_threshold_power_watts: None,
+        // Underwater Metrics
+        underwater_depth_meters: None,
+        diving_duration_seconds: None,
     };
 
     // Should pass wheelchair-adapted validation

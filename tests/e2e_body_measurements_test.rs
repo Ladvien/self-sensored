@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 #[path = "../tests/common/mod.rs"]
 mod common;
-use common::{cleanup_test_db, setup_test_db};
+use common::{cleanup_test_data, setup_test_db};
 
 #[actix_web::test]
 async fn test_insert_basic_body_measurements() {
@@ -58,7 +58,7 @@ async fn test_insert_basic_body_measurements() {
     let calculated_bmi = 75.5 / (1.75 * 1.75);
     assert!((stored.body_mass_index.unwrap() - calculated_bmi).abs() < 0.01);
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -112,7 +112,7 @@ async fn test_body_composition_metrics() {
     assert_eq!(composition.lean_body_mass_kg, Some(64.0));
     assert!((composition.lean_body_mass_kg.unwrap() - expected_lean).abs() < 0.1);
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -178,7 +178,7 @@ async fn test_circumference_measurements() {
         "Waist-to-hip ratio should be 0.85"
     );
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -240,7 +240,7 @@ async fn test_body_temperature_measurements() {
     assert_eq!(temps[0].body_temperature_celsius, Some(36.8));
     assert_eq!(temps[1].basal_body_temperature_celsius, Some(36.2));
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -298,7 +298,7 @@ async fn test_body_measurements_over_time() {
     let weight_loss = trend.max_weight.unwrap() - trend.min_weight.unwrap();
     assert_eq!(weight_loss, 1.5, "Total weight loss should be 1.5 kg");
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -385,7 +385,7 @@ async fn test_load_body_measurement_fixture() {
         // This is acceptable as the fixture may only contain BMI without other required fields
     }
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -436,7 +436,7 @@ async fn test_partial_body_measurements() {
     assert_eq!(stored.height_cm, None); // Should be null
     assert_eq!(stored.measurement_source, Some("iOS".to_string()));
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 // Helper function to create test user

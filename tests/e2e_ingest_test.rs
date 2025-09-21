@@ -9,7 +9,7 @@ use self_sensored::middleware::auth::AuthMiddleware;
 use self_sensored::services::auth::AuthService;
 
 mod common;
-use common::{cleanup_test_db, load_test_fixture, setup_test_db};
+use common::{cleanup_test_data, load_test_fixture, setup_test_db};
 
 #[actix_web::test]
 async fn test_ingest_small_payload() {
@@ -49,7 +49,7 @@ async fn test_ingest_small_payload() {
     assert!(metrics_count > 0, "Expected metrics to be stored");
 
     // Cleanup
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -87,7 +87,7 @@ async fn test_ingest_medium_payload() {
         metrics_count
     );
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -125,7 +125,7 @@ async fn test_ingest_large_payload() {
         metrics_count
     );
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -176,7 +176,7 @@ async fn test_ingest_duplicate_handling() {
         "Duplicate data should not be inserted"
     );
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -244,7 +244,7 @@ async fn test_ingest_rate_limiting() {
 
     assert!(exceeded, "Rate limit should be enforced");
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -297,7 +297,7 @@ async fn test_ingest_partial_success() {
     let metrics_count = verify_metrics_stored(&pool, user_id).await;
     assert!(metrics_count > 0, "Valid metrics should be stored");
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 // Helper functions

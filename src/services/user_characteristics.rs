@@ -498,12 +498,27 @@ mod tests {
     // They are here as examples of how to test the service
 
     #[tokio::test]
-    #[ignore = "Requires database setup"]
     async fn test_create_user_characteristics() {
-        // This test would need proper database setup
-        let pool = PgPool::connect("postgresql://test").await.unwrap();
-        let service = UserCharacteristicsService::new(pool);
+        // Load database URL from environment
+        dotenv::dotenv().ok();
+        let database_url = std::env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://self_sensored:37om3i*t3XfSZ0@192.168.1.104:5432/self_sensored_test".to_string());
+
+        let pool = PgPool::connect(&database_url).await.unwrap();
+        let service = UserCharacteristicsService::new(pool.clone());
         let user_id = Uuid::new_v4();
+
+        // First create a test user since user_characteristics references users table
+        sqlx::query(
+            "INSERT INTO users (id, email, created_at, updated_at)
+             VALUES ($1, $2, NOW(), NOW())
+             ON CONFLICT (id) DO NOTHING"
+        )
+        .bind(user_id)
+        .bind(format!("test_{}@example.com", user_id))
+        .execute(&pool)
+        .await
+        .unwrap();
 
         let input = UserCharacteristicsInput {
             biological_sex: Some(BiologicalSex::Female),
@@ -521,14 +536,42 @@ mod tests {
         let result = service.create(user_id, input).await.unwrap();
         assert_eq!(result.user_id, user_id);
         assert_eq!(result.biological_sex, BiologicalSex::Female);
+
+        // Clean up test data
+        sqlx::query("DELETE FROM user_characteristics WHERE user_id = $1")
+            .bind(user_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user_id)
+            .execute(&pool)
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
-    #[ignore = "Requires database setup"]
     async fn test_get_validation_ranges() {
-        let pool = PgPool::connect("postgresql://test").await.unwrap();
-        let service = UserCharacteristicsService::new(pool);
+        // Load database URL from environment
+        dotenv::dotenv().ok();
+        let database_url = std::env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://self_sensored:37om3i*t3XfSZ0@192.168.1.104:5432/self_sensored_test".to_string());
+
+        let pool = PgPool::connect(&database_url).await.unwrap();
+        let service = UserCharacteristicsService::new(pool.clone());
         let user_id = Uuid::new_v4();
+
+        // First create a test user since user_characteristics references users table
+        sqlx::query(
+            "INSERT INTO users (id, email, created_at, updated_at)
+             VALUES ($1, $2, NOW(), NOW())
+             ON CONFLICT (id) DO NOTHING"
+        )
+        .bind(user_id)
+        .bind(format!("test_{}@example.com", user_id))
+        .execute(&pool)
+        .await
+        .unwrap();
 
         // Create test user characteristics
         let input = UserCharacteristicsInput {
@@ -555,5 +598,17 @@ mod tests {
             .unwrap();
         assert!(activity_ranges["wheelchair_adapted"].as_bool().unwrap());
         assert_eq!(activity_ranges["step_count_max"].as_u64().unwrap(), 10000);
+
+        // Clean up test data
+        sqlx::query("DELETE FROM user_characteristics WHERE user_id = $1")
+            .bind(user_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(user_id)
+            .execute(&pool)
+            .await
+            .unwrap();
     }
 }

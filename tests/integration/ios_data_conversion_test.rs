@@ -47,7 +47,7 @@ fn test_ios_source_field_mapping() {
     }) {
         if let self_sensored::models::HealthMetric::HeartRate(hr_metric) = heart_rate_metric {
             assert_eq!(
-                hr_metric.source_device, 
+                hr_metric.source_device,
                 Some("Apple Watch".to_string()),
                 "iOS 'source' field should be mapped to 'source_device' in internal model"
             );

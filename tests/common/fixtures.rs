@@ -67,6 +67,10 @@ pub fn create_test_activity_metric() -> ActivityMetric {
         // Underwater Metrics (iOS 16+ HealthKit)
         underwater_depth_meters: Some(5.0),
         diving_duration_seconds: Some(60),
+
+        // Metadata
+        source_device: Some("Apple Watch".to_string()),
+        created_at: Utc::now(),
     }
 }
 
@@ -112,6 +116,8 @@ pub fn create_minimal_activity_metric(user_id: Uuid) -> ActivityMetric {
         functional_threshold_power_watts: None,
         underwater_depth_meters: None,
         diving_duration_seconds: None,
+        source_device: None,
+        created_at: Utc::now(),
     }
 }
 
@@ -197,6 +203,7 @@ pub fn create_test_heart_rate_metric() -> HeartRateMetric {
         vo2_max_ml_kg_min: None,
         source_device: Some("Apple Watch".to_string()),
         context: None,
+        created_at: Utc::now(),
     }
 }
 

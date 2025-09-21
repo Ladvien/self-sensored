@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 #[path = "../tests/common/mod.rs"]
 mod common;
-use common::{cleanup_test_db, setup_test_db};
+use common::{cleanup_test_data, setup_test_db};
 
 #[actix_web::test]
 async fn test_insert_basic_activity_metrics() {
@@ -64,7 +64,7 @@ async fn test_insert_basic_activity_metrics() {
         "Should have inserted 5 activity metrics"
     );
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -117,7 +117,7 @@ async fn test_activity_energy_metrics() {
         + stored.basal_energy_burned_kcal.unwrap_or(0.0);
     assert_eq!(total_energy, 1970.5, "Total energy should be 1970.5 kcal");
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -177,7 +177,7 @@ async fn test_activity_distance_types() {
     assert_eq!(distances.distance_wheelchair_meters, Some(0.0));
     assert_eq!(distances.distance_downhill_snow_sports_meters, Some(3000.0));
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -235,7 +235,7 @@ async fn test_apple_specific_activity_metrics() {
     assert_eq!(apple_data.apple_move_time_minutes, Some(45));
     assert_eq!(apple_data.apple_stand_hour_achieved, Some(true));
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -298,7 +298,7 @@ async fn test_swimming_and_wheelchair_metrics() {
         "Should have 2 activity records"
     );
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -372,7 +372,7 @@ async fn test_load_activity_fixture() {
         "Should have inserted activity metrics from fixture"
     );
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -446,7 +446,7 @@ async fn test_activity_daily_aggregation() {
         "Should have 4 records"
     );
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 // Helper function to create test user

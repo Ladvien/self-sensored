@@ -10,7 +10,7 @@ use crate::models::{db::*, ApiResponse};
 use crate::services::auth::AuthContext;
 
 /// Query parameters for filtering health data
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct QueryParams {
     /// Start date for filtering (ISO 8601 format)
     pub start_date: Option<DateTime<Utc>>,

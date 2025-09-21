@@ -17,9 +17,9 @@ futures-util = "0.3"
 futures = "0.3"
 
 # Database
-sqlx = { version = "0.8.1", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json", "ipnetwork", "bigdecimal"] }
+sqlx = { version = "0.8.1", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json", "ipnetwork", "bigdecimal", "rust_decimal"] }
 bigdecimal = { version = "0.4", features = ["serde"] }
-rust_decimal = { version = "1.33", features = ["serde"] }
+rust_decimal = { version = "1.33", features = ["serde", "db-postgres"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -78,8 +78,23 @@ simd-json = "0.16.0"
 tokio-test = "0.4"
 reqwest = { version = "0.11", features = ["json"] }
 rand = "0.8"
-rust_decimal = { version = "1.33", features = ["serde"] }
+rust_decimal = { version = "1.33", features = ["serde", "db-postgres"] }
 dotenv = "0.15"
+criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
+sysinfo = "0.30"
+
+# Modern Testing Dependencies (2025)
+actix-rt = "2.8"
+proptest = "1.4"
+quickcheck = "1.0"
+quickcheck_macros = "1.0"
+rstest = "0.18"
+mockall = "0.12"
+wiremock = "0.5"
+tempfile = "3.8"
+assert_cmd = "2.0"
+predicates = "3.0"
+futures = "0.3"
 
 [features]
 default = []
@@ -119,4 +134,14 @@ path = "tests/integration/api_endpoints_test.rs"
 [[test]]
 name = "database_full_test"
 path = "tests/db/database_full_test.rs"
+
+# Benchmark configurations
+[[bench]]
+name = "db_performance"
+harness = false
+
+[[bench]]
+name = "api_throughput"
+harness = false
+
 

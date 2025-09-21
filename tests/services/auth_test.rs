@@ -126,8 +126,8 @@ async fn test_uuid_authentication_with_audit_logging() {
     assert_eq!(auth_context.api_key.name, "Auto Export Key");
     assert_eq!(auth_context.api_key.id, api_key_id);
     assert_eq!(
-        auth_context.api_key.scopes,
-        Some(vec!["read".to_string(), "write".to_string()])
+        auth_context.api_key.permissions,
+        Some(serde_json::json!(["read", "write"]))
     );
 
     // Verify audit log was created

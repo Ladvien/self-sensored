@@ -274,6 +274,31 @@ impl BatchConfig {
     /// stay under PostgreSQL's 65,535 parameter limit per query.
     /// Enhanced for STORY-OPTIMIZATION-001 with comprehensive error reporting.
     pub fn validate(&self) -> Result<(), String> {
+        // Basic validation for required fields
+        if self.max_retries == 0 {
+            return Err("max_retries must be greater than 0".to_string());
+        }
+
+        if self.max_retries > 50 {
+            return Err("max_retries must not exceed 50 (excessive retries can cause performance issues)".to_string());
+        }
+
+        if self.initial_backoff_ms == 0 {
+            return Err("initial_backoff_ms must be greater than 0".to_string());
+        }
+
+        if self.initial_backoff_ms > self.max_backoff_ms {
+            return Err("initial_backoff_ms must not exceed max_backoff_ms".to_string());
+        }
+
+        if self.memory_limit_mb <= 0.0 {
+            return Err("memory_limit_mb must be greater than 0".to_string());
+        }
+
+        if self.memory_limit_mb > 8192.0 {
+            return Err("memory_limit_mb must not exceed 8192 MB (8 GB)".to_string());
+        }
+
         let validations = vec![
             (
                 "heart_rate",
@@ -381,6 +406,15 @@ impl BatchConfig {
         let mut optimizations = Vec::new();
 
         for (metric_type, chunk_size, params_per_record) in validations {
+            // Check for invalid chunk sizes
+            if chunk_size == 0 {
+                errors.push(format!(
+                    "🚨 CRITICAL: {metric_type} chunk size is 0\n\
+                    ❌ Chunk size must be greater than 0 for batch processing to work"
+                ));
+                continue; // Skip further processing for this metric
+            }
+
             let total_params = chunk_size * params_per_record;
             let max_safe_chunk_size = SAFE_PARAM_LIMIT / params_per_record;
             let usage_percentage = (total_params * 100) / SAFE_PARAM_LIMIT;
@@ -403,7 +437,7 @@ impl BatchConfig {
                 ));
             }
             // Optimization opportunity: could increase chunk size significantly
-            else if total_params < (SAFE_PARAM_LIMIT * 70 / 100) {
+            else if total_params < (SAFE_PARAM_LIMIT * 70 / 100) && chunk_size > 0 {
                 let potential_increase = ((max_safe_chunk_size - chunk_size) * 100) / chunk_size;
                 if potential_increase > 5 {
                     // Only suggest if >5% improvement

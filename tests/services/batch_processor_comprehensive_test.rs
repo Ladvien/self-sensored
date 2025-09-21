@@ -29,7 +29,7 @@ use self_sensored::models::{
 };
 use self_sensored::models::enums::{
     WorkoutType, SafetyEventType, MindfulnessSessionType,
-    MoodRating, AudioExposureEvent,
+    MoodRating, AudioExposureEvent, ActivityContext,
 };
 use self_sensored::services::batch_processor::{BatchProcessor, BatchProcessingResult};
 
@@ -347,6 +347,7 @@ fn create_comprehensive_test_metrics(user_id: Uuid) -> Vec<HealthMetric> {
 
 fn create_heart_rate_metric(user_id: Uuid) -> HealthMetric {
     HealthMetric::HeartRate(HeartRateMetric {
+        id: uuid::Uuid::new_v4(),
         user_id,
         recorded_at: Utc::now(),
         heart_rate: Some(72),
@@ -354,10 +355,11 @@ fn create_heart_rate_metric(user_id: Uuid) -> HealthMetric {
         heart_rate_variability: Some(45.0),
         walking_heart_rate_average: Some(85),
         heart_rate_recovery_one_minute: Some(25),
-        atrial_fibrillation_burden_percentage: Some(0.1),
-        vo2_max_ml_kg_min: Some(35.5),
-        context: Some("test".to_string()),
-        source_device: "TestDevice".to_string(),
+        atrial_fibrillation_burden_percentage: Some(rust_decimal::Decimal::new(1, 3)), // 0.001
+        vo2_max_ml_kg_min: Some(rust_decimal::Decimal::new(355, 1)), // 35.5
+        context: Some(ActivityContext::Resting),
+        source_device: Some("TestDevice".to_string()),
+        created_at: Utc::now(),
     })
 }
 

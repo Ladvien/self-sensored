@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 #[path = "../tests/common/mod.rs"]
 mod common;
-use common::{cleanup_test_db, setup_test_db};
+use common::{cleanup_test_data, setup_test_db};
 
 #[actix_web::test]
 async fn test_insert_environmental_metrics() {
@@ -71,7 +71,7 @@ async fn test_insert_environmental_metrics() {
         "Should have inserted 4 environmental metrics"
     );
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -120,7 +120,7 @@ async fn test_environmental_location_data() {
     assert_eq!(stored.location_longitude, Some(-122.4194));
     assert_eq!(stored.altitude_meters, Some(16.0));
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -169,7 +169,7 @@ async fn test_environmental_air_quality() {
     assert_eq!(stored.humidity_percent, Some(65.0));
     assert_eq!(stored.ambient_temperature_celsius, Some(22.5));
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -245,7 +245,7 @@ async fn test_environmental_audio_exposure() {
         "Max headphone dB should be 95"
     );
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -322,7 +322,7 @@ async fn test_load_environmental_fixture() {
         "Should have inserted environmental metrics from fixture"
     );
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -394,7 +394,7 @@ async fn test_environmental_daily_summary() {
         "Temperature should increase during day"
     );
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 // Helper function to create test user

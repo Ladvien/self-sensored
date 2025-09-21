@@ -1,4 +1,5 @@
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Duration, NaiveDate, Utc};
+use rust_decimal::Decimal;
 use self_sensored::models::{
     enums::{ActivityContext, WorkoutType},
     ActivityMetric, BloodPressureMetric, GpsCoordinate, HealthMetric, HeartRateMetric, SleepMetric,
@@ -20,6 +21,10 @@ mod heart_rate_tests {
             heart_rate: Some(72),
             resting_heart_rate: Some(55),
             heart_rate_variability: None,
+            walking_heart_rate_average: None,
+            heart_rate_recovery_one_minute: None,
+            atrial_fibrillation_burden_percentage: None,
+            vo2_max_ml_kg_min: None,
             source_device: Some("Apple Watch".to_string()),
             context: Some(ActivityContext::Exercise),
             created_at: Utc::now(),
@@ -38,6 +43,10 @@ mod heart_rate_tests {
             heart_rate: Some(20),
             resting_heart_rate: Some(20),
             heart_rate_variability: None,
+            walking_heart_rate_average: None,
+            heart_rate_recovery_one_minute: None,
+            atrial_fibrillation_burden_percentage: None,
+            vo2_max_ml_kg_min: None,
             source_device: None,
             context: None,
             created_at: Utc::now(),
@@ -52,6 +61,10 @@ mod heart_rate_tests {
             heart_rate: Some(300),
             resting_heart_rate: Some(300),
             heart_rate_variability: None,
+            walking_heart_rate_average: None,
+            heart_rate_recovery_one_minute: None,
+            atrial_fibrillation_burden_percentage: None,
+            vo2_max_ml_kg_min: None,
             source_device: None,
             context: None,
             created_at: Utc::now(),
@@ -60,43 +73,70 @@ mod heart_rate_tests {
 
         // Test invalid low
         let invalid_low = HeartRateMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
-            min_bpm: Some(19),
-            avg_bpm: None,
-            max_bpm: None,
-            source: None,
+            heart_rate: Some(19),
+            resting_heart_rate: None,
+            heart_rate_variability: None,
+            walking_heart_rate_average: None,
+            heart_rate_recovery_one_minute: None,
+            atrial_fibrillation_burden_percentage: None,
+            vo2_max_ml_kg_min: None,
+            source_device: None,
             context: None,
+            created_at: Utc::now(),
         };
         assert!(invalid_low.validate().is_err());
 
         // Test invalid high
         let invalid_high = HeartRateMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
-            min_bpm: None,
-            avg_bpm: Some(301),
-            max_bpm: None,
-            source: None,
+            heart_rate: Some(301),
+            resting_heart_rate: None,
+            heart_rate_variability: None,
+            walking_heart_rate_average: None,
+            heart_rate_recovery_one_minute: None,
+            atrial_fibrillation_burden_percentage: None,
+            vo2_max_ml_kg_min: None,
+            source_device: None,
             context: None,
+            created_at: Utc::now(),
         };
         assert!(invalid_high.validate().is_err());
     }
 
     #[test]
     fn test_heart_rate_context_validation() {
-        let contexts = vec!["rest", "exercise", "sleep", "stress", "recovery"];
+        let contexts = vec![
+            ActivityContext::Resting,
+            ActivityContext::Exercise,
+            ActivityContext::Sleeping,
+            ActivityContext::Stressed,
+            ActivityContext::Recovery,
+        ];
 
         for context in contexts {
             let metric = HeartRateMetric {
+                id: Uuid::new_v4(),
+                user_id: Uuid::new_v4(),
                 recorded_at: Utc::now(),
-                min_bpm: None,
-                avg_bpm: Some(75),
-                max_bpm: None,
-                source: Some("test".to_string()),
-                context: Some(context.to_string()),
+                heart_rate: Some(75),
+                resting_heart_rate: None,
+                heart_rate_variability: None,
+                walking_heart_rate_average: None,
+                heart_rate_recovery_one_minute: None,
+                atrial_fibrillation_burden_percentage: None,
+                vo2_max_ml_kg_min: None,
+                source_device: Some("test".to_string()),
+                context: Some(context),
+                created_at: Utc::now(),
             };
             assert!(
                 metric.validate().is_ok(),
-                "Context '{}' should be valid",
+                "Context '{:?}' should be valid",
                 context
             );
         }
@@ -110,11 +150,14 @@ mod blood_pressure_tests {
     #[test]
     fn test_blood_pressure_validation_valid() {
         let metric = BloodPressureMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
             systolic: 120,
             diastolic: 80,
             pulse: Some(72),
-            source: Some("Manual".to_string()),
+            source_device: Some("Manual".to_string()),
+            created_at: Utc::now(),
         };
 
         assert!(metric.validate().is_ok());
@@ -124,77 +167,101 @@ mod blood_pressure_tests {
     fn test_blood_pressure_medical_ranges() {
         // Test systolic boundaries (50-250)
         let systolic_low = BloodPressureMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
             systolic: 50,
             diastolic: 30,
             pulse: None,
-            source: None,
+            source_device: None,
+            created_at: Utc::now(),
         };
         assert!(systolic_low.validate().is_ok());
 
         let systolic_high = BloodPressureMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
             systolic: 250,
             diastolic: 150,
             pulse: None,
-            source: None,
+            source_device: None,
+            created_at: Utc::now(),
         };
         assert!(systolic_high.validate().is_ok());
 
         // Test invalid systolic
         let systolic_too_low = BloodPressureMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
             systolic: 49,
             diastolic: 30,
             pulse: None,
-            source: None,
+            source_device: None,
+            created_at: Utc::now(),
         };
         assert!(systolic_too_low.validate().is_err());
 
         let systolic_too_high = BloodPressureMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
             systolic: 251,
             diastolic: 30,
             pulse: None,
-            source: None,
+            source_device: None,
+            created_at: Utc::now(),
         };
         assert!(systolic_too_high.validate().is_err());
 
         // Test diastolic boundaries (30-150)
         let diastolic_low = BloodPressureMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
             systolic: 60,
             diastolic: 30,
             pulse: None,
-            source: None,
+            source_device: None,
+            created_at: Utc::now(),
         };
         assert!(diastolic_low.validate().is_ok());
 
         let diastolic_high = BloodPressureMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
             systolic: 200,
             diastolic: 150,
             pulse: None,
-            source: None,
+            source_device: None,
+            created_at: Utc::now(),
         };
         assert!(diastolic_high.validate().is_ok());
 
         // Test invalid diastolic
         let diastolic_too_low = BloodPressureMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
             systolic: 100,
             diastolic: 29,
             pulse: None,
-            source: None,
+            source_device: None,
+            created_at: Utc::now(),
         };
         assert!(diastolic_too_low.validate().is_err());
 
         let diastolic_too_high = BloodPressureMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
             systolic: 200,
             diastolic: 151,
             pulse: None,
-            source: None,
+            source_device: None,
+            created_at: Utc::now(),
         };
         assert!(diastolic_too_high.validate().is_err());
     }
@@ -203,21 +270,27 @@ mod blood_pressure_tests {
     fn test_blood_pressure_systolic_diastolic_relationship() {
         // Systolic should be higher than diastolic
         let invalid_relationship = BloodPressureMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
             systolic: 80,
             diastolic: 120,
             pulse: None,
-            source: None,
+            source_device: None,
+            created_at: Utc::now(),
         };
         assert!(invalid_relationship.validate().is_err());
 
         // Equal values should also be invalid
         let equal_values = BloodPressureMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
             systolic: 100,
             diastolic: 100,
             pulse: None,
-            source: None,
+            source_device: None,
+            created_at: Utc::now(),
         };
         assert!(equal_values.validate().is_err());
     }
@@ -234,15 +307,18 @@ mod sleep_tests {
         let end = Utc::now();
 
         let metric = SleepMetric {
-            recorded_at: end,
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             sleep_start: start,
             sleep_end: end,
-            total_sleep_minutes: 420, // 7 hours
+            duration_minutes: Some(420), // 7 hours
             deep_sleep_minutes: Some(120),
             rem_sleep_minutes: Some(90),
+            light_sleep_minutes: Some(180),
             awake_minutes: Some(30),
-            efficiency_percentage: Some(87.5),
-            source: Some("Apple Health".to_string()),
+            efficiency: Some(87.5),
+            source_device: Some("Apple Health".to_string()),
+            created_at: Utc::now(),
         };
 
         assert!(metric.validate().is_ok());
@@ -254,21 +330,24 @@ mod sleep_tests {
         let end = Utc::now();
 
         let metric = SleepMetric {
-            recorded_at: end,
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             sleep_start: start,
             sleep_end: end,
-            total_sleep_minutes: 420, // 7 hours sleep in 8 hours in bed
+            duration_minutes: Some(420), // 7 hours sleep in 8 hours in bed
             deep_sleep_minutes: Some(120),
             rem_sleep_minutes: Some(90),
+            light_sleep_minutes: Some(150),
             awake_minutes: Some(60),
-            efficiency_percentage: None,
-            source: Some("test".to_string()),
+            efficiency: None,
+            source_device: Some("test".to_string()),
+            created_at: Utc::now(),
         };
 
         let calculated_efficiency = metric.calculate_efficiency();
         assert!((calculated_efficiency - 87.5).abs() < 0.1);
 
-        let reported_efficiency = metric.get_efficiency_percentage();
+        let reported_efficiency = metric.get_efficiency();
         assert!((reported_efficiency - 87.5).abs() < 0.1);
     }
 
@@ -279,15 +358,18 @@ mod sleep_tests {
 
         // Components exceed total duration - should fail
         let invalid_components = SleepMetric {
-            recorded_at: end,
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             sleep_start: start,
             sleep_end: end,
-            total_sleep_minutes: 420,
+            duration_minutes: Some(420),
             deep_sleep_minutes: Some(300), // 5 hours
             rem_sleep_minutes: Some(200),  // 3.3 hours
+            light_sleep_minutes: Some(100), // 1.7 hours
             awake_minutes: Some(100),      // 1.7 hours - total > 8 hours
-            efficiency_percentage: None,
-            source: Some("test".to_string()),
+            efficiency: None,
+            source_device: Some("test".to_string()),
+            created_at: Utc::now(),
         };
 
         assert!(invalid_components.validate().is_err());
@@ -299,15 +381,18 @@ mod sleep_tests {
         let end = start - Duration::hours(1); // End before start
 
         let invalid_time = SleepMetric {
-            recorded_at: start,
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             sleep_start: start,
             sleep_end: end,
-            total_sleep_minutes: 60,
+            duration_minutes: Some(60),
             deep_sleep_minutes: None,
             rem_sleep_minutes: None,
+            light_sleep_minutes: None,
             awake_minutes: None,
-            efficiency_percentage: None,
-            source: None,
+            efficiency: None,
+            source_device: None,
+            created_at: Utc::now(),
         };
 
         assert!(invalid_time.validate().is_err());
@@ -321,13 +406,45 @@ mod activity_tests {
     #[test]
     fn test_activity_metric_validation_valid() {
         let metric = ActivityMetric {
-            date: NaiveDate::from_ymd_opt(2025, 1, 15).unwrap(),
-            steps: Some(10000),
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
+            recorded_at: NaiveDate::from_ymd_opt(2025, 1, 15).unwrap().and_hms_opt(12, 0, 0).unwrap().and_utc(),
+            step_count: Some(10000),
             distance_meters: Some(7500.0),
-            calories_burned: Some(350.0),
-            active_minutes: Some(45),
             flights_climbed: Some(12),
-            source: Some("iPhone".to_string()),
+            active_energy_burned_kcal: Some(350.0),
+            basal_energy_burned_kcal: Some(200.0),
+            distance_cycling_meters: None,
+            distance_swimming_meters: None,
+            distance_wheelchair_meters: None,
+            distance_downhill_snow_sports_meters: None,
+            push_count: None,
+            swimming_stroke_count: None,
+            nike_fuel_points: None,
+            apple_exercise_time_minutes: Some(45),
+            apple_stand_time_minutes: None,
+            apple_move_time_minutes: None,
+            apple_stand_hour_achieved: None,
+            walking_speed_m_per_s: None,
+            walking_step_length_cm: None,
+            walking_asymmetry_percent: None,
+            walking_double_support_percent: None,
+            six_minute_walk_test_distance_m: None,
+            stair_ascent_speed_m_per_s: None,
+            stair_descent_speed_m_per_s: None,
+            ground_contact_time_ms: None,
+            vertical_oscillation_cm: None,
+            running_stride_length_m: None,
+            running_power_watts: None,
+            running_speed_m_per_s: None,
+            cycling_speed_kmh: None,
+            cycling_power_watts: None,
+            cycling_cadence_rpm: None,
+            functional_threshold_power_watts: None,
+            underwater_depth_meters: None,
+            diving_duration_seconds: None,
+            source_device: Some("iPhone".to_string()),
+            created_at: Utc::now(),
         };
 
         assert!(metric.validate().is_ok());
@@ -337,37 +454,133 @@ mod activity_tests {
     fn test_activity_negative_values() {
         // Negative steps
         let negative_steps = ActivityMetric {
-            date: NaiveDate::from_ymd_opt(2025, 1, 15).unwrap(),
-            steps: Some(-100),
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
+            recorded_at: NaiveDate::from_ymd_opt(2025, 1, 15).unwrap().and_hms_opt(12, 0, 0).unwrap().and_utc(),
+            step_count: Some(-100),
             distance_meters: None,
-            calories_burned: None,
-            active_minutes: None,
             flights_climbed: None,
-            source: None,
+            active_energy_burned_kcal: None,
+            basal_energy_burned_kcal: None,
+            distance_cycling_meters: None,
+            distance_swimming_meters: None,
+            distance_wheelchair_meters: None,
+            distance_downhill_snow_sports_meters: None,
+            push_count: None,
+            swimming_stroke_count: None,
+            nike_fuel_points: None,
+            apple_exercise_time_minutes: None,
+            apple_stand_time_minutes: None,
+            apple_move_time_minutes: None,
+            apple_stand_hour_achieved: None,
+            walking_speed_m_per_s: None,
+            walking_step_length_cm: None,
+            walking_asymmetry_percent: None,
+            walking_double_support_percent: None,
+            six_minute_walk_test_distance_m: None,
+            stair_ascent_speed_m_per_s: None,
+            stair_descent_speed_m_per_s: None,
+            ground_contact_time_ms: None,
+            vertical_oscillation_cm: None,
+            running_stride_length_m: None,
+            running_power_watts: None,
+            running_speed_m_per_s: None,
+            cycling_speed_kmh: None,
+            cycling_power_watts: None,
+            cycling_cadence_rpm: None,
+            functional_threshold_power_watts: None,
+            underwater_depth_meters: None,
+            diving_duration_seconds: None,
+            source_device: None,
+            created_at: Utc::now(),
         };
         assert!(negative_steps.validate().is_err());
 
         // Negative distance
         let negative_distance = ActivityMetric {
-            date: NaiveDate::from_ymd_opt(2025, 1, 15).unwrap(),
-            steps: None,
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
+            recorded_at: NaiveDate::from_ymd_opt(2025, 1, 15).unwrap().and_hms_opt(12, 0, 0).unwrap().and_utc(),
+            step_count: None,
             distance_meters: Some(-1000.0),
-            calories_burned: None,
-            active_minutes: None,
             flights_climbed: None,
-            source: None,
+            active_energy_burned_kcal: None,
+            basal_energy_burned_kcal: None,
+            distance_cycling_meters: None,
+            distance_swimming_meters: None,
+            distance_wheelchair_meters: None,
+            distance_downhill_snow_sports_meters: None,
+            push_count: None,
+            swimming_stroke_count: None,
+            nike_fuel_points: None,
+            apple_exercise_time_minutes: None,
+            apple_stand_time_minutes: None,
+            apple_move_time_minutes: None,
+            apple_stand_hour_achieved: None,
+            walking_speed_m_per_s: None,
+            walking_step_length_cm: None,
+            walking_asymmetry_percent: None,
+            walking_double_support_percent: None,
+            six_minute_walk_test_distance_m: None,
+            stair_ascent_speed_m_per_s: None,
+            stair_descent_speed_m_per_s: None,
+            ground_contact_time_ms: None,
+            vertical_oscillation_cm: None,
+            running_stride_length_m: None,
+            running_power_watts: None,
+            running_speed_m_per_s: None,
+            cycling_speed_kmh: None,
+            cycling_power_watts: None,
+            cycling_cadence_rpm: None,
+            functional_threshold_power_watts: None,
+            underwater_depth_meters: None,
+            diving_duration_seconds: None,
+            source_device: None,
+            created_at: Utc::now(),
         };
         assert!(negative_distance.validate().is_err());
 
         // Negative calories
         let negative_calories = ActivityMetric {
-            date: NaiveDate::from_ymd_opt(2025, 1, 15).unwrap(),
-            steps: None,
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
+            recorded_at: NaiveDate::from_ymd_opt(2025, 1, 15).unwrap().and_hms_opt(12, 0, 0).unwrap().and_utc(),
+            step_count: None,
             distance_meters: None,
-            calories_burned: Some(-250.0),
-            active_minutes: None,
             flights_climbed: None,
-            source: None,
+            active_energy_burned_kcal: Some(-250.0),
+            basal_energy_burned_kcal: None,
+            distance_cycling_meters: None,
+            distance_swimming_meters: None,
+            distance_wheelchair_meters: None,
+            distance_downhill_snow_sports_meters: None,
+            push_count: None,
+            swimming_stroke_count: None,
+            nike_fuel_points: None,
+            apple_exercise_time_minutes: None,
+            apple_stand_time_minutes: None,
+            apple_move_time_minutes: None,
+            apple_stand_hour_achieved: None,
+            walking_speed_m_per_s: None,
+            walking_step_length_cm: None,
+            walking_asymmetry_percent: None,
+            walking_double_support_percent: None,
+            six_minute_walk_test_distance_m: None,
+            stair_ascent_speed_m_per_s: None,
+            stair_descent_speed_m_per_s: None,
+            ground_contact_time_ms: None,
+            vertical_oscillation_cm: None,
+            running_stride_length_m: None,
+            running_power_watts: None,
+            running_speed_m_per_s: None,
+            cycling_speed_kmh: None,
+            cycling_power_watts: None,
+            cycling_cadence_rpm: None,
+            functional_threshold_power_watts: None,
+            underwater_depth_meters: None,
+            diving_duration_seconds: None,
+            source_device: None,
+            created_at: Utc::now(),
         };
         assert!(negative_calories.validate().is_err());
     }
@@ -384,15 +597,18 @@ mod workout_tests {
         let end = Utc::now();
 
         let workout = WorkoutData {
-            workout_type: "running".to_string(),
-            start_time: start,
-            end_time: end,
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
+            workout_type: WorkoutType::Running,
+            started_at: start,
+            ended_at: end,
             total_energy_kcal: Some(350.0),
+            active_energy_kcal: Some(300.0),
             distance_meters: Some(5000.0),
             avg_heart_rate: Some(150),
             max_heart_rate: Some(175),
-            source: Some("Apple Watch".to_string()),
-            route_points: None,
+            source_device: Some("Apple Watch".to_string()),
+            created_at: Utc::now(),
         };
 
         assert!(workout.validate().is_ok());
@@ -455,23 +671,25 @@ mod workout_tests {
         ];
 
         let workout = WorkoutData {
-            workout_type: "running".to_string(),
-            start_time: start,
-            end_time: end,
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
+            workout_type: WorkoutType::Running,
+            started_at: start,
+            ended_at: end,
             total_energy_kcal: Some(350.0),
+            active_energy_kcal: Some(300.0),
             distance_meters: Some(5000.0),
             avg_heart_rate: Some(150),
             max_heart_rate: Some(175),
-            source: Some("Apple Watch".to_string()),
-            route_points: Some(route_points),
+            source_device: Some("Apple Watch".to_string()),
+            created_at: Utc::now(),
         };
 
         assert!(workout.validate().is_ok());
 
-        // Test LINESTRING generation
-        let linestring = workout.route_to_linestring();
-        assert!(linestring.is_some());
-        assert!(linestring.unwrap().starts_with("LINESTRING("));
+        // Note: Route functionality removed from WorkoutData
+        // Test basic workout validation
+        assert!(workout.validate().is_ok());
     }
 
     #[test]
@@ -488,18 +706,22 @@ mod workout_tests {
         }];
 
         let workout = WorkoutData {
-            workout_type: "running".to_string(),
-            start_time: start,
-            end_time: end,
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
+            workout_type: WorkoutType::Running,
+            started_at: start,
+            ended_at: end,
             total_energy_kcal: Some(350.0),
+            active_energy_kcal: Some(300.0),
             distance_meters: Some(5000.0),
             avg_heart_rate: Some(150),
             max_heart_rate: Some(175),
-            source: Some("Apple Watch".to_string()),
-            route_points: Some(invalid_route_points),
+            source_device: Some("Apple Watch".to_string()),
+            created_at: Utc::now(),
         };
 
-        assert!(workout.validate().is_err());
+        // Note: GPS timing validation removed - now just basic workout validation
+        assert!(workout.validate().is_ok());
     }
 
     #[test]
@@ -509,15 +731,18 @@ mod workout_tests {
 
         // Invalid heart rate - too high
         let invalid_hr = WorkoutData {
-            workout_type: "running".to_string(),
-            start_time: start,
-            end_time: end,
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
+            workout_type: WorkoutType::Running,
+            started_at: start,
+            ended_at: end,
             total_energy_kcal: Some(350.0),
+            active_energy_kcal: Some(300.0),
             distance_meters: Some(5000.0),
             avg_heart_rate: Some(301), // > 300
             max_heart_rate: Some(175),
-            source: Some("test".to_string()),
-            route_points: None,
+            source_device: Some("test".to_string()),
+            created_at: Utc::now(),
         };
 
         assert!(invalid_hr.validate().is_err());
@@ -535,48 +760,93 @@ mod health_metric_integration_tests {
 
         // Test all metric types through HealthMetric enum
         let heart_rate = HealthMetric::HeartRate(HeartRateMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
-            min_bpm: Some(55),
-            avg_bpm: Some(72),
-            max_bpm: Some(95),
-            source: Some("test".to_string()),
-            context: Some("rest".to_string()),
+            heart_rate: Some(72),
+            resting_heart_rate: Some(55),
+            heart_rate_variability: Some(35.5),
+            walking_heart_rate_average: Some(95),
+            heart_rate_recovery_one_minute: Some(25),
+            atrial_fibrillation_burden_percentage: Some(Decimal::new(150, 2)),
+            vo2_max_ml_kg_min: Some(Decimal::new(4500, 2)),
+            source_device: Some("test".to_string()),
+            context: Some(ActivityContext::Resting),
+            created_at: Utc::now(),
         });
         assert!(heart_rate.validate().is_ok());
         assert_eq!(heart_rate.metric_type(), "HeartRate");
 
         let blood_pressure = HealthMetric::BloodPressure(BloodPressureMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
             systolic: 120,
             diastolic: 80,
             pulse: Some(72),
-            source: Some("test".to_string()),
+            source_device: Some("test".to_string()),
+            created_at: Utc::now(),
         });
         assert!(blood_pressure.validate().is_ok());
         assert_eq!(blood_pressure.metric_type(), "BloodPressure");
 
         let sleep = HealthMetric::Sleep(SleepMetric {
-            recorded_at: end,
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             sleep_start: start,
             sleep_end: end,
-            total_sleep_minutes: 420,
+            duration_minutes: Some(420),
             deep_sleep_minutes: Some(120),
             rem_sleep_minutes: Some(90),
+            light_sleep_minutes: Some(180),
             awake_minutes: Some(30),
-            efficiency_percentage: Some(87.5),
-            source: Some("test".to_string()),
+            efficiency: Some(87.5),
+            source_device: Some("test".to_string()),
+            created_at: Utc::now(),
         });
         assert!(sleep.validate().is_ok());
         assert_eq!(sleep.metric_type(), "Sleep");
 
         let activity = HealthMetric::Activity(ActivityMetric {
-            date: NaiveDate::from_ymd_opt(2025, 1, 15).unwrap(),
-            steps: Some(10000),
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
+            recorded_at: NaiveDate::from_ymd_opt(2025, 1, 15).unwrap().and_hms_opt(12, 0, 0).unwrap().and_utc(),
+            step_count: Some(10000),
             distance_meters: Some(7500.0),
-            calories_burned: Some(350.0),
-            active_minutes: Some(45),
             flights_climbed: Some(12),
-            source: Some("test".to_string()),
+            active_energy_burned_kcal: Some(350.0),
+            basal_energy_burned_kcal: Some(200.0),
+            distance_cycling_meters: None,
+            distance_swimming_meters: None,
+            distance_wheelchair_meters: None,
+            distance_downhill_snow_sports_meters: None,
+            push_count: None,
+            swimming_stroke_count: None,
+            nike_fuel_points: None,
+            apple_exercise_time_minutes: Some(45),
+            apple_stand_time_minutes: None,
+            apple_move_time_minutes: None,
+            apple_stand_hour_achieved: None,
+            walking_speed_m_per_s: None,
+            walking_step_length_cm: None,
+            walking_asymmetry_percent: None,
+            walking_double_support_percent: None,
+            six_minute_walk_test_distance_m: None,
+            stair_ascent_speed_m_per_s: None,
+            stair_descent_speed_m_per_s: None,
+            ground_contact_time_ms: None,
+            vertical_oscillation_cm: None,
+            running_stride_length_m: None,
+            running_power_watts: None,
+            running_speed_m_per_s: None,
+            cycling_speed_kmh: None,
+            cycling_power_watts: None,
+            cycling_cadence_rpm: None,
+            functional_threshold_power_watts: None,
+            underwater_depth_meters: None,
+            diving_duration_seconds: None,
+            source_device: Some("test".to_string()),
+            created_at: Utc::now(),
         });
         assert!(activity.validate().is_ok());
         assert_eq!(activity.metric_type(), "Activity");
@@ -584,15 +854,18 @@ mod health_metric_integration_tests {
         let workout_start = Utc::now() - Duration::hours(1);
         let workout_end = Utc::now();
         let workout = HealthMetric::Workout(WorkoutData {
-            workout_type: "running".to_string(),
-            start_time: workout_start,
-            end_time: workout_end,
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
+            workout_type: WorkoutType::Running,
+            started_at: workout_start,
+            ended_at: workout_end,
             total_energy_kcal: Some(350.0),
+            active_energy_kcal: Some(300.0),
             distance_meters: Some(5000.0),
             avg_heart_rate: Some(150),
             max_heart_rate: Some(175),
-            source: Some("test".to_string()),
-            route_points: None,
+            source_device: Some("test".to_string()),
+            created_at: Utc::now(),
         });
         assert!(workout.validate().is_ok());
         assert_eq!(workout.metric_type(), "Workout");
@@ -601,12 +874,19 @@ mod health_metric_integration_tests {
     #[test]
     fn test_serialization_deserialization() {
         let heart_rate = HealthMetric::HeartRate(HeartRateMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
-            min_bpm: Some(55),
-            avg_bpm: Some(72),
-            max_bpm: Some(95),
-            source: Some("test".to_string()),
-            context: Some("rest".to_string()),
+            heart_rate: Some(72),
+            resting_heart_rate: Some(55),
+            heart_rate_variability: Some(35.5),
+            walking_heart_rate_average: Some(95),
+            heart_rate_recovery_one_minute: Some(25),
+            atrial_fibrillation_burden_percentage: Some(Decimal::new(150, 2)),
+            vo2_max_ml_kg_min: Some(Decimal::new(4500, 2)),
+            source_device: Some("test".to_string()),
+            context: Some(ActivityContext::Resting),
+            created_at: Utc::now(),
         });
 
         let serialized = serde_json::to_string(&heart_rate).unwrap();

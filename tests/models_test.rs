@@ -11,7 +11,7 @@ use common::fixtures::{
 use self_sensored::models::{
     ActivityMetric, BloodPressureMetric, HealthMetric, HeartRateMetric, IngestData, IngestPayload,
     IosIngestData, IosIngestPayload, IosMetric, IosMetricData, SleepMetric, WorkoutData,
-    WorkoutType,
+    enums::{ActivityContext, WorkoutType},
 };
 
 #[test]
@@ -21,7 +21,7 @@ fn test_standard_payload_serialization() {
     // Create test metrics using fixtures
     let mut heart_rate_metric = create_test_heart_rate_metric();
     heart_rate_metric.user_id = user_id;
-    heart_rate_metric.heart_rate = 75;
+    heart_rate_metric.heart_rate = Some(75);
 
     let mut blood_pressure_metric = create_test_blood_pressure_metric();
     blood_pressure_metric.user_id = user_id;
@@ -38,7 +38,7 @@ fn test_standard_payload_serialization() {
 
     let mut workout_metric = create_test_workout_metric();
     workout_metric.user_id = user_id;
-    workout_metric.workout_type = "Running".to_string();
+    workout_metric.workout_type = WorkoutType::Running;
 
     let payload = IngestPayload {
         data: IngestData {
@@ -133,7 +133,7 @@ fn test_ios_payload_conversion() {
     assert_eq!(hr_metrics.len(), 1, "Should have heart rate metric");
 
     if let HealthMetric::HeartRate(hr) = &hr_metrics[0] {
-        assert_eq!(hr.heart_rate, 75);
+        assert_eq!(hr.heart_rate, Some(75));
     }
 }
 
@@ -144,14 +144,14 @@ fn test_metric_validation() {
     // Valid heart rate
     let mut valid_hr_metric = create_test_heart_rate_metric();
     valid_hr_metric.user_id = user_id;
-    valid_hr_metric.heart_rate = 75;
+    valid_hr_metric.heart_rate = Some(75);
     let valid_hr = HealthMetric::HeartRate(valid_hr_metric);
     assert!(valid_hr.validate().is_ok());
 
     // Invalid heart rate (too high)
     let mut invalid_hr_metric = create_test_heart_rate_metric();
     invalid_hr_metric.user_id = user_id;
-    invalid_hr_metric.heart_rate = 400; // Invalid
+    invalid_hr_metric.heart_rate = Some(400); // Invalid
     let invalid_hr = HealthMetric::HeartRate(invalid_hr_metric);
     assert!(invalid_hr.validate().is_err());
 
@@ -268,6 +268,24 @@ fn test_large_payload_performance() {
                     apple_stand_time_minutes: None,
                     apple_move_time_minutes: None,
                     apple_stand_hour_achieved: None,
+                    walking_speed_m_per_s: None,
+                    walking_step_length_cm: None,
+                    walking_asymmetry_percent: None,
+                    walking_double_support_percent: None,
+                    six_minute_walk_test_distance_m: None,
+                    stair_ascent_speed_m_per_s: None,
+                    stair_descent_speed_m_per_s: None,
+                    ground_contact_time_ms: None,
+                    vertical_oscillation_cm: None,
+                    running_stride_length_m: None,
+                    running_power_watts: None,
+                    running_speed_m_per_s: None,
+                    cycling_speed_kmh: None,
+                    cycling_power_watts: None,
+                    cycling_cadence_rpm: None,
+                    functional_threshold_power_watts: None,
+                    underwater_depth_meters: None,
+                    diving_duration_seconds: None,
                     source_device: Some("Performance Test".to_string()),
                     created_at: now,
                 }));
@@ -434,6 +452,24 @@ fn test_metric_type_identification() {
         apple_stand_time_minutes: None,
         apple_move_time_minutes: None,
         apple_stand_hour_achieved: None,
+        walking_speed_m_per_s: None,
+        walking_step_length_cm: None,
+        walking_asymmetry_percent: None,
+        walking_double_support_percent: None,
+        six_minute_walk_test_distance_m: None,
+        stair_ascent_speed_m_per_s: None,
+        stair_descent_speed_m_per_s: None,
+        ground_contact_time_ms: None,
+        vertical_oscillation_cm: None,
+        running_stride_length_m: None,
+        running_power_watts: None,
+        running_speed_m_per_s: None,
+        cycling_speed_kmh: None,
+        cycling_power_watts: None,
+        cycling_cadence_rpm: None,
+        functional_threshold_power_watts: None,
+        underwater_depth_meters: None,
+        diving_duration_seconds: None,
         source_device: Some("Test".to_string()),
         created_at: now,
     });

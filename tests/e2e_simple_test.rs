@@ -3,7 +3,7 @@ use uuid::Uuid;
 
 #[path = "../tests/common/mod.rs"]
 mod common;
-use common::{cleanup_test_db, setup_test_db};
+use common::{cleanup_test_data, setup_test_db};
 
 #[actix_web::test]
 async fn test_health_endpoint() {
@@ -60,7 +60,7 @@ async fn test_create_and_delete_user() {
     assert!(user.is_some());
 
     // Cleanup
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 
     // Verify user is deleted
     let deleted_user = sqlx::query!("SELECT id FROM users WHERE id = $1", user_id)
@@ -113,7 +113,7 @@ async fn test_insert_heart_rate_metric() {
     assert_eq!(count.count.unwrap_or(0), 1);
 
     // Cleanup
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -242,5 +242,5 @@ async fn test_load_and_process_fixture() {
     assert!(total_count > 0, "Should have inserted at least one metric");
 
     // Cleanup
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }

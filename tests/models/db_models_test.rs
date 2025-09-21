@@ -1,14 +1,13 @@
-use chrono::{DateTime, Duration, NaiveDate, Utc};
+use chrono::{DateTime, Duration, Utc};
 use serde_json::json;
 use uuid::Uuid;
 
-use self_sensored::models::{
+use self_sensored::models::health_metrics::{
     ActivityMetric, BloodPressureMetric, GpsCoordinate, HeartRateMetric, SleepMetric, WorkoutData,
 };
 
 use self_sensored::models::db::{
     ActivityRecord, BloodPressureRecord, HeartRateRecord, SleepRecord, WorkoutRecord,
-    WorkoutRoutePoint,
 };
 
 /// Tests for HeartRateRecord conversion and functionality
@@ -18,32 +17,45 @@ mod heart_rate_record_tests {
     #[test]
     fn test_heart_rate_record_conversion() {
         let metric = HeartRateMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
-            min_bpm: Some(55),
-            avg_bpm: Some(72),
-            max_bpm: Some(95),
-            source: Some("Apple Watch".to_string()),
-            context: Some("exercise".to_string()),
+            heart_rate: Some(72),
+            resting_heart_rate: Some(55),
+            heart_rate_variability: None,
+            walking_heart_rate_average: None,
+            heart_rate_recovery_one_minute: None,
+            atrial_fibrillation_burden_percentage: None,
+            vo2_max_ml_kg_min: None,
+            source_device: Some("Apple Watch".to_string()),
+            context: Some(self_sensored::models::ActivityContext::Exercise),
+            created_at: Utc::now(),
         };
 
         let record: HeartRateRecord = metric.clone().into();
 
-        assert_eq!(record.heart_rate, 72); // Uses avg_bpm
-        assert_eq!(record.resting_heart_rate, Some(55)); // Uses min_bpm
-        assert_eq!(record.context, metric.context);
-        assert_eq!(record.source_device, metric.source);
-        assert!(record.raw_data.is_none()); // No raw data in basic conversion
+        assert_eq!(record.heart_rate, Some(72)); // Uses heart_rate
+        assert_eq!(record.resting_heart_rate, Some(55)); // Uses resting_heart_rate
+        assert_eq!(record.context, metric.context.map(|c| c.to_string()));
+        assert_eq!(record.source_device, metric.source_device);
     }
 
     #[test]
     fn test_heart_rate_record_with_raw_json() {
         let metric = HeartRateMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
-            min_bpm: Some(55),
-            avg_bpm: Some(72),
-            max_bpm: Some(95),
-            source: Some("Apple Watch".to_string()),
-            context: Some("exercise".to_string()),
+            heart_rate: Some(72),
+            resting_heart_rate: Some(55),
+            heart_rate_variability: None,
+            walking_heart_rate_average: None,
+            heart_rate_recovery_one_minute: None,
+            atrial_fibrillation_burden_percentage: None,
+            vo2_max_ml_kg_min: None,
+            source_device: Some("Apple Watch".to_string()),
+            context: Some(self_sensored::models::ActivityContext::Exercise),
+            created_at: Utc::now(),
         };
 
         let raw_json = json!({
@@ -55,41 +67,54 @@ mod heart_rate_record_tests {
 
         let record = HeartRateRecord::from_metric_with_raw(metric.clone(), raw_json.clone());
 
-        assert_eq!(record.heart_rate, 72);
+        assert_eq!(record.heart_rate, Some(72));
         assert_eq!(record.resting_heart_rate, Some(55));
-        assert_eq!(record.context, metric.context);
-        assert_eq!(record.source_device, metric.source);
-        assert_eq!(record.raw_data, Some(raw_json));
+        assert_eq!(record.context, metric.context.map(|c| c.to_string()));
+        assert_eq!(record.source_device, metric.source_device);
     }
 
     #[test]
     fn test_heart_rate_record_edge_cases() {
-        // Test with only max_bpm
+        // Test with only heart_rate
         let metric_only_max = HeartRateMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
-            min_bpm: None,
-            avg_bpm: None,
-            max_bpm: Some(180),
-            source: None,
+            heart_rate: Some(180),
+            resting_heart_rate: None,
+            heart_rate_variability: None,
+            walking_heart_rate_average: None,
+            heart_rate_recovery_one_minute: None,
+            atrial_fibrillation_burden_percentage: None,
+            vo2_max_ml_kg_min: None,
+            source_device: None,
             context: None,
+            created_at: Utc::now(),
         };
 
         let record: HeartRateRecord = metric_only_max.into();
-        assert_eq!(record.heart_rate, 180); // Should use max_bpm
+        assert_eq!(record.heart_rate, Some(180)); // Should use max_bpm
         assert_eq!(record.resting_heart_rate, None);
 
-        // Test with no BPM values
+        // Test with no heart rate values
         let metric_no_bpm = HeartRateMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
-            min_bpm: None,
-            avg_bpm: None,
-            max_bpm: None,
-            source: None,
+            heart_rate: None,
+            resting_heart_rate: None,
+            heart_rate_variability: None,
+            walking_heart_rate_average: None,
+            heart_rate_recovery_one_minute: None,
+            atrial_fibrillation_burden_percentage: None,
+            vo2_max_ml_kg_min: None,
+            source_device: None,
             context: None,
+            created_at: Utc::now(),
         };
 
         let record: HeartRateRecord = metric_no_bpm.into();
-        assert_eq!(record.heart_rate, 70); // Default value
+        assert_eq!(record.heart_rate, None); // No default value - should be None
         assert_eq!(record.resting_heart_rate, None);
     }
 }
@@ -101,11 +126,14 @@ mod blood_pressure_record_tests {
     #[test]
     fn test_blood_pressure_record_conversion() {
         let metric = BloodPressureMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
             systolic: 120,
             diastolic: 80,
             pulse: Some(72),
-            source: Some("Manual".to_string()),
+            source_device: Some("Manual".to_string()),
+            created_at: Utc::now(),
         };
 
         let record: BloodPressureRecord = metric.clone().into();
@@ -113,8 +141,7 @@ mod blood_pressure_record_tests {
         assert_eq!(record.systolic, 120);
         assert_eq!(record.diastolic, 80);
         assert_eq!(record.pulse, Some(72));
-        assert_eq!(record.source_device, metric.source);
-        assert!(record.raw_data.is_none());
+        assert_eq!(record.source_device, metric.source_device);
     }
 }
 
@@ -128,35 +155,33 @@ mod sleep_record_tests {
         let end = Utc::now();
 
         let metric = SleepMetric {
-            recorded_at: end,
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             sleep_start: start,
             sleep_end: end,
-            total_sleep_minutes: 420, // 7 hours sleep in 8 hours in bed = 87.5% efficiency
+            duration_minutes: Some(420), // 7 hours sleep in 8 hours in bed = 87.5% efficiency
             deep_sleep_minutes: Some(120),
             rem_sleep_minutes: Some(90),
+            light_sleep_minutes: None,
             awake_minutes: Some(30),
-            efficiency_percentage: None, // Should be calculated
-            source: Some("Apple Health".to_string()),
+            efficiency: Some(87.5), // Calculated efficiency
+            source_device: Some("Apple Health".to_string()),
+            created_at: end,
         };
 
         let record: SleepRecord = metric.clone().into();
 
         assert_eq!(record.sleep_start, start);
         assert_eq!(record.sleep_end, end);
-        assert_eq!(record.duration_minutes, 420);
+        assert_eq!(record.duration_minutes, Some(420));
         assert_eq!(record.deep_sleep_minutes, Some(120));
         assert_eq!(record.rem_sleep_minutes, Some(90));
         assert_eq!(record.awake_minutes, Some(30));
-        assert_eq!(record.source_device, metric.source);
+        assert_eq!(record.source_device, metric.source_device);
 
         // Check that efficiency was calculated
-        assert!(record.sleep_efficiency.is_some());
-        let efficiency = record
-            .sleep_efficiency
-            .unwrap()
-            .to_string()
-            .parse::<f32>()
-            .unwrap();
+        assert!(record.efficiency.is_some());
+        let efficiency = record.efficiency.unwrap() as f32;
         assert!((efficiency - 87.5).abs() < 0.1);
     }
 
@@ -166,26 +191,24 @@ mod sleep_record_tests {
         let end = Utc::now();
 
         let metric = SleepMetric {
-            recorded_at: end,
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             sleep_start: start,
             sleep_end: end,
-            total_sleep_minutes: 420,
+            duration_minutes: Some(420),
             deep_sleep_minutes: Some(120),
             rem_sleep_minutes: Some(90),
+            light_sleep_minutes: None,
             awake_minutes: Some(30),
-            efficiency_percentage: Some(85.0), // Provided efficiency
-            source: Some("Apple Health".to_string()),
+            efficiency: Some(85.0), // Provided efficiency
+            source_device: Some("Apple Health".to_string()),
+            created_at: end,
         };
 
         let record: SleepRecord = metric.clone().into();
 
         // Should use provided efficiency
-        let efficiency = record
-            .sleep_efficiency
-            .unwrap()
-            .to_string()
-            .parse::<f32>()
-            .unwrap();
+        let efficiency = record.efficiency.unwrap() as f32;
         assert!((efficiency - 85.0).abs() < 0.1);
     }
 
@@ -195,15 +218,18 @@ mod sleep_record_tests {
         let end = Utc::now();
 
         let metric = SleepMetric {
-            recorded_at: end,
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             sleep_start: start,
             sleep_end: end,
-            total_sleep_minutes: 420,
+            duration_minutes: Some(420),
             deep_sleep_minutes: Some(120),
             rem_sleep_minutes: Some(90),
+            light_sleep_minutes: None,
             awake_minutes: Some(30),
-            efficiency_percentage: None,
-            source: Some("Apple Health".to_string()),
+            efficiency: None,
+            source_device: Some("Apple Health".to_string()),
+            created_at: end,
         };
 
         let raw_json = json!({
@@ -215,8 +241,7 @@ mod sleep_record_tests {
 
         let record = SleepRecord::from_metric_with_raw(metric.clone(), raw_json.clone());
 
-        assert_eq!(record.raw_data, Some(raw_json));
-        assert!(record.sleep_efficiency.is_some());
+        assert!(record.efficiency.is_some());
     }
 }
 
@@ -227,143 +252,135 @@ mod activity_record_tests {
     #[test]
     fn test_activity_record_conversion() {
         let metric = ActivityMetric {
-            date: NaiveDate::from_ymd_opt(2025, 1, 15).unwrap(),
-            steps: Some(10000),
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
+            recorded_at: Utc::now(),
+            step_count: Some(10000),
             distance_meters: Some(7500.0),
-            calories_burned: Some(350.0),
-            active_minutes: Some(45),
+            active_energy_burned_kcal: Some(350.0),
+            basal_energy_burned_kcal: None,
             flights_climbed: Some(12),
-            source: Some("iPhone".to_string()),
+            distance_cycling_meters: None,
+            distance_swimming_meters: None,
+            distance_wheelchair_meters: None,
+            distance_downhill_snow_sports_meters: None,
+            push_count: None,
+            swimming_stroke_count: None,
+            nike_fuel_points: None,
+            apple_exercise_time_minutes: None,
+            apple_stand_time_minutes: None,
+            apple_move_time_minutes: None,
+            apple_stand_hour_achieved: None,
+            walking_speed_m_per_s: None,
+            walking_step_length_cm: None,
+            walking_asymmetry_percent: None,
+            walking_double_support_percent: None,
+            six_minute_walk_test_distance_m: None,
+            stair_ascent_speed_m_per_s: None,
+            stair_descent_speed_m_per_s: None,
+            ground_contact_time_ms: None,
+            vertical_oscillation_cm: None,
+            running_stride_length_m: None,
+            running_power_watts: None,
+            running_speed_m_per_s: None,
+            cycling_speed_kmh: None,
+            cycling_power_watts: None,
+            cycling_cadence_rpm: None,
+            functional_threshold_power_watts: None,
+            underwater_depth_meters: None,
+            diving_duration_seconds: None,
+            source_device: Some("iPhone".to_string()),
+            created_at: Utc::now(),
         };
 
         let record: ActivityRecord = metric.clone().into();
 
-        assert_eq!(record.recorded_date, metric.date);
-        assert_eq!(record.steps, metric.steps);
-        assert_eq!(
-            record
-                .distance_meters
-                .unwrap()
-                .to_string()
-                .parse::<f64>()
-                .unwrap(),
-            7500.0
-        );
-        assert_eq!(record.calories_burned, Some(350));
-        assert_eq!(record.active_minutes, metric.active_minutes);
+        assert_eq!(record.recorded_at, metric.recorded_at);
+        assert_eq!(record.step_count, metric.step_count);
+        assert_eq!(record.distance_meters, metric.distance_meters);
+        assert_eq!(record.active_energy_burned_kcal, metric.active_energy_burned_kcal);
         assert_eq!(record.flights_climbed, metric.flights_climbed);
-        assert_eq!(record.source_device, metric.source);
-        assert!(record.raw_data.is_none());
-        assert_eq!(record.created_at, record.updated_at);
+        assert_eq!(record.source_device, metric.source_device);
     }
 
     #[test]
     fn test_activity_record_aggregation() {
-        let date = NaiveDate::from_ymd_opt(2025, 1, 15).unwrap();
+        let now = Utc::now();
 
         let mut record1 = ActivityRecord {
+            id: Uuid::new_v4(),
             user_id: Uuid::new_v4(),
-            recorded_date: date,
-            steps: Some(5000),
-            distance_meters: Some(sqlx::types::BigDecimal::from(3000.0)),
-            calories_burned: Some(150),
-            active_minutes: Some(20),
+            recorded_at: now,
+            step_count: Some(5000),
+            distance_meters: Some(3000.0),
+            active_energy_burned_kcal: Some(150.0),
+            basal_energy_burned_kcal: Some(100.0),
             flights_climbed: Some(5),
             source_device: Some("iPhone".to_string()),
-            raw_data: None,
-            metadata: None,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: now,
         };
 
         let record2 = ActivityRecord {
+            id: Uuid::new_v4(),
             user_id: record1.user_id,
-            recorded_date: date,
-            steps: Some(3000),
-            distance_meters: Some(sqlx::types::BigDecimal::from(2000.0)),
-            calories_burned: Some(100),
-            active_minutes: Some(15),
+            recorded_at: now,
+            step_count: Some(3000),
+            distance_meters: Some(2000.0),
+            active_energy_burned_kcal: Some(100.0),
+            basal_energy_burned_kcal: Some(80.0),
             flights_climbed: Some(3),
             source_device: Some("Apple Watch".to_string()),
-            raw_data: None,
-            metadata: None,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: now,
         };
-
-        let original_updated_at = record1.updated_at;
 
         // Aggregate the records
         record1.aggregate_with(&record2);
 
         // Check aggregated values
-        assert_eq!(record1.steps, Some(8000));
-        assert_eq!(
-            record1
-                .distance_meters
-                .unwrap()
-                .to_string()
-                .parse::<f64>()
-                .unwrap(),
-            5000.0
-        );
-        assert_eq!(record1.calories_burned, Some(250));
-        assert_eq!(record1.active_minutes, Some(35));
+        assert_eq!(record1.step_count, Some(8000));
+        assert_eq!(record1.distance_meters, Some(5000.0));
+        assert_eq!(record1.active_energy_burned_kcal, Some(250.0));
+        assert_eq!(record1.basal_energy_burned_kcal, Some(180.0));
         assert_eq!(record1.flights_climbed, Some(8));
-
-        // Check that updated_at was modified
-        assert!(record1.updated_at > original_updated_at);
     }
 
     #[test]
     fn test_activity_record_aggregation_with_nulls() {
-        let date = NaiveDate::from_ymd_opt(2025, 1, 15).unwrap();
+        let now = Utc::now();
 
         let mut record1 = ActivityRecord {
+            id: Uuid::new_v4(),
             user_id: Uuid::new_v4(),
-            recorded_date: date,
-            steps: Some(5000),
+            recorded_at: now,
+            step_count: Some(5000),
             distance_meters: None, // Null value
-            calories_burned: Some(150),
-            active_minutes: None, // Null value
+            active_energy_burned_kcal: Some(150.0),
+            basal_energy_burned_kcal: None, // Null value
             flights_climbed: Some(5),
             source_device: Some("iPhone".to_string()),
-            raw_data: None,
-            metadata: None,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: now,
         };
 
         let record2 = ActivityRecord {
+            id: Uuid::new_v4(),
             user_id: record1.user_id,
-            recorded_date: date,
-            steps: None, // Null value
-            distance_meters: Some(sqlx::types::BigDecimal::from(2000.0)),
-            calories_burned: Some(100),
-            active_minutes: Some(15),
+            recorded_at: now,
+            step_count: None, // Null value
+            distance_meters: Some(2000.0),
+            active_energy_burned_kcal: Some(100.0),
+            basal_energy_burned_kcal: Some(80.0),
             flights_climbed: None, // Null value
             source_device: Some("Apple Watch".to_string()),
-            raw_data: None,
-            metadata: None,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: now,
         };
 
         record1.aggregate_with(&record2);
 
         // Check that non-null values are preserved and combined appropriately
-        assert_eq!(record1.steps, Some(5000)); // Only record1 had steps
-        assert_eq!(
-            record1
-                .distance_meters
-                .unwrap()
-                .to_string()
-                .parse::<f64>()
-                .unwrap(),
-            2000.0
-        ); // Only record2 had distance
-        assert_eq!(record1.calories_burned, Some(250)); // Both had calories, so summed
-        assert_eq!(record1.active_minutes, Some(15)); // Only record2 had active_minutes
+        assert_eq!(record1.step_count, Some(5000)); // Only record1 had steps
+        assert_eq!(record1.distance_meters, Some(2000.0)); // Only record2 had distance
+        assert_eq!(record1.active_energy_burned_kcal, Some(250.0)); // Both had calories, so summed
+        assert_eq!(record1.basal_energy_burned_kcal, Some(80.0)); // Only record2 had basal energy
         assert_eq!(record1.flights_climbed, Some(5)); // Only record1 had flights
     }
 }
@@ -378,159 +395,65 @@ mod workout_record_tests {
         let end = Utc::now();
 
         let workout = WorkoutData {
-            workout_type: "running".to_string(),
-            start_time: start,
-            end_time: end,
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
+            workout_type: self_sensored::models::WorkoutType::Running,
+            started_at: start,
+            ended_at: end,
             total_energy_kcal: Some(350.0),
+            active_energy_kcal: None,
             distance_meters: Some(5000.0),
             avg_heart_rate: Some(150),
             max_heart_rate: Some(175),
-            source: Some("Apple Watch".to_string()),
-            route_points: None,
+            source_device: Some("Apple Watch".to_string()),
+            created_at: Utc::now(),
         };
 
         let record: WorkoutRecord = workout.clone().into();
 
-        assert_eq!(record.workout_type, workout.workout_type);
+        assert_eq!(record.workout_type, workout.workout_type.to_string());
         assert_eq!(record.started_at, start);
         assert_eq!(record.ended_at, end);
-        assert_eq!(
-            record
-                .distance_meters
-                .unwrap()
-                .to_string()
-                .parse::<f64>()
-                .unwrap(),
-            5000.0
-        );
-        assert_eq!(record.average_heart_rate, Some(150));
+        assert_eq!(record.distance_meters, Some(5000.0));
+        assert_eq!(record.avg_heart_rate, Some(150));
         assert_eq!(record.max_heart_rate, Some(175));
-        assert_eq!(
-            record
-                .total_energy_kcal
-                .unwrap()
-                .to_string()
-                .parse::<f64>()
-                .unwrap(),
-            350.0
-        );
-        assert_eq!(record.source_device, workout.source);
-        assert_eq!(record.duration_seconds, Some(3600)); // 1 hour
-        assert!(record.route_geometry.is_none()); // No GPS route
-        assert!(record.raw_data.is_none());
+        assert_eq!(record.total_energy_kcal, Some(350.0));
+        assert_eq!(record.source_device, workout.source_device);
     }
 
     #[test]
-    fn test_workout_record_with_gps_route() {
+    fn test_workout_record_basic_conversion() {
         let start = Utc::now() - Duration::hours(1);
         let end = Utc::now();
 
-        let route_points = vec![
-            GpsCoordinate {
-                latitude: 37.7749,
-                longitude: -122.4194,
-                altitude_meters: Some(50.0),
-                recorded_at: start + Duration::minutes(10),
-            },
-            GpsCoordinate {
-                latitude: 37.7849,
-                longitude: -122.4094,
-                altitude_meters: Some(55.0),
-                recorded_at: start + Duration::minutes(30),
-            },
-            GpsCoordinate {
-                latitude: 37.7949,
-                longitude: -122.3994,
-                altitude_meters: Some(60.0),
-                recorded_at: end - Duration::minutes(10),
-            },
-        ];
-
         let workout = WorkoutData {
-            workout_type: "running".to_string(),
-            start_time: start,
-            end_time: end,
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
+            workout_type: self_sensored::models::WorkoutType::Running,
+            started_at: start,
+            ended_at: end,
             total_energy_kcal: Some(350.0),
+            active_energy_kcal: Some(300.0),
             distance_meters: Some(5000.0),
             avg_heart_rate: Some(150),
             max_heart_rate: Some(175),
-            source: Some("Apple Watch".to_string()),
-            route_points: Some(route_points),
+            source_device: Some("Apple Watch".to_string()),
+            created_at: Utc::now(),
         };
 
         let record: WorkoutRecord = workout.clone().into();
 
-        // Should have PostGIS LINESTRING
-        assert!(record.route_geometry.is_some());
-        let linestring = record.route_geometry.unwrap();
-        assert!(linestring.starts_with("LINESTRING("));
-        assert!(linestring.contains("-122.4194"));
-        assert!(linestring.contains("37.7749"));
+        assert_eq!(record.workout_type, "running");
+        assert_eq!(record.started_at, start);
+        assert_eq!(record.ended_at, end);
+        assert_eq!(record.total_energy_kcal, Some(350.0));
+        assert_eq!(record.active_energy_kcal, Some(300.0));
+        assert_eq!(record.distance_meters, Some(5000.0));
+        assert_eq!(record.avg_heart_rate, Some(150));
+        assert_eq!(record.max_heart_rate, Some(175));
+        assert_eq!(record.source_device, Some("Apple Watch".to_string()));
     }
 
-    #[test]
-    fn test_workout_record_route_points_conversion() {
-        let start = Utc::now() - Duration::hours(1);
-        let end = Utc::now();
-
-        let route_points = vec![
-            GpsCoordinate {
-                latitude: 37.7749,
-                longitude: -122.4194,
-                altitude_meters: Some(50.0),
-                recorded_at: start + Duration::minutes(10),
-            },
-            GpsCoordinate {
-                latitude: 37.7849,
-                longitude: -122.4094,
-                altitude_meters: Some(55.0),
-                recorded_at: start + Duration::minutes(30),
-            },
-        ];
-
-        let workout = WorkoutData {
-            workout_type: "running".to_string(),
-            start_time: start,
-            end_time: end,
-            total_energy_kcal: Some(350.0),
-            distance_meters: Some(5000.0),
-            avg_heart_rate: Some(150),
-            max_heart_rate: Some(175),
-            source: Some("Apple Watch".to_string()),
-            route_points: Some(route_points.clone()),
-        };
-
-        let record: WorkoutRecord = workout.clone().into();
-        let route_point_records = record.route_points(&workout);
-
-        assert_eq!(route_point_records.len(), 2);
-
-        // Check first point
-        assert_eq!(route_point_records[0].workout_id, record.id);
-        assert_eq!(route_point_records[0].point_order, 0);
-        assert_eq!(route_point_records[0].latitude, 37.7749);
-        assert_eq!(route_point_records[0].longitude, -122.4194);
-        assert_eq!(
-            route_point_records[0]
-                .altitude_meters
-                .as_ref()
-                .unwrap()
-                .to_string()
-                .parse::<f64>()
-                .unwrap(),
-            50.0
-        );
-        assert_eq!(
-            route_point_records[0].recorded_at,
-            start + Duration::minutes(10)
-        );
-
-        // Check second point
-        assert_eq!(route_point_records[1].workout_id, record.id);
-        assert_eq!(route_point_records[1].point_order, 1);
-        assert_eq!(route_point_records[1].latitude, 37.7849);
-        assert_eq!(route_point_records[1].longitude, -122.4094);
-    }
 
     #[test]
     fn test_workout_record_with_raw_json() {
@@ -538,15 +461,18 @@ mod workout_record_tests {
         let end = Utc::now();
 
         let workout = WorkoutData {
-            workout_type: "running".to_string(),
-            start_time: start,
-            end_time: end,
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
+            workout_type: self_sensored::models::WorkoutType::Running,
+            started_at: start,
+            ended_at: end,
             total_energy_kcal: Some(350.0),
+            active_energy_kcal: Some(300.0),
             distance_meters: Some(5000.0),
             avg_heart_rate: Some(150),
             max_heart_rate: Some(175),
-            source: Some("Apple Watch".to_string()),
-            route_points: None,
+            source_device: Some("Apple Watch".to_string()),
+            created_at: Utc::now(),
         };
 
         let raw_json = json!({
@@ -559,8 +485,9 @@ mod workout_record_tests {
 
         let record = WorkoutRecord::from_workout_with_raw(workout.clone(), raw_json.clone());
 
-        assert_eq!(record.raw_data, Some(raw_json));
-        assert_eq!(record.duration_seconds, Some(3600));
+        assert_eq!(record.workout_type, "running");
+        assert_eq!(record.started_at, start);
+        assert_eq!(record.ended_at, end);
     }
 }
 

@@ -11,7 +11,6 @@
 use chrono::{Duration, Utc};
 use self_sensored::{
     config::ValidationConfig,
-    db::database::create_connection_pool,
     models::{
         enums::{ActivityMoveMode, BiologicalSex, BloodType, FitzpatrickSkinType},
         health_metrics::*,
@@ -25,15 +24,60 @@ use sqlx::PgPool;
 use std::collections::HashMap;
 use uuid::Uuid;
 
+mod common;
+
 /// Helper function to create test database pool
 async fn create_test_pool() -> PgPool {
-    let database_url = std::env::var("TEST_DATABASE_URL")
-        .or_else(|_| std::env::var("DATABASE_URL"))
-        .expect("TEST_DATABASE_URL or DATABASE_URL must be set");
+    common::setup_test_db().await
+}
 
-    create_connection_pool(&database_url)
-        .await
-        .expect("Failed to create test database pool")
+/// Helper function to create a complete ActivityMetric with all required fields
+fn create_base_activity_metric(user_id: Uuid) -> ActivityMetric {
+    ActivityMetric {
+        id: Uuid::new_v4(),
+        user_id,
+        recorded_at: Utc::now(),
+        step_count: Some(0),
+        distance_meters: Some(0.0),
+        active_energy_burned_kcal: Some(0.0),
+        basal_energy_burned_kcal: Some(0.0),
+        flights_climbed: Some(0),
+        distance_cycling_meters: Some(0.0),
+        distance_swimming_meters: Some(0.0),
+        distance_wheelchair_meters: Some(0.0),
+        distance_downhill_snow_sports_meters: Some(0.0),
+        push_count: Some(0),
+        swimming_stroke_count: Some(0),
+        nike_fuel_points: Some(0),
+        apple_exercise_time_minutes: Some(0),
+        apple_stand_time_minutes: Some(0),
+        apple_move_time_minutes: Some(0),
+        apple_stand_hour_achieved: Some(false),
+        // Mobility Metrics
+        walking_speed_m_per_s: None,
+        walking_step_length_cm: None,
+        walking_asymmetry_percent: None,
+        walking_double_support_percent: None,
+        six_minute_walk_test_distance_m: None,
+        stair_ascent_speed_m_per_s: None,
+        stair_descent_speed_m_per_s: None,
+        // Running Dynamics
+        ground_contact_time_ms: None,
+        vertical_oscillation_cm: None,
+        running_stride_length_m: None,
+        running_power_watts: None,
+        running_speed_m_per_s: None,
+        // Cycling Metrics
+        cycling_speed_kmh: None,
+        cycling_power_watts: None,
+        cycling_cadence_rpm: None,
+        functional_threshold_power_watts: None,
+        // Underwater Metrics
+        underwater_depth_meters: None,
+        diving_duration_seconds: None,
+        source_device: Some("Test Device".to_string()),
+        created_at: Utc::now(),
+    }
 }
 
 #[tokio::test]
@@ -43,105 +87,93 @@ async fn test_extended_activity_metrics_ingestion() -> Result<(), Box<dyn std::e
     let batch_processor = BatchProcessor::new(pool.clone());
 
     // Create comprehensive activity metrics with all new specialized fields
-    let cycling_activity = ActivityMetric {
-        id: Uuid::new_v4(),
-        user_id: user.id,
-        recorded_at: Utc::now() - Duration::hours(2),
-        step_count: Some(0),            // No steps during cycling
-        distance_meters: Some(15000.0), // 15km total
-        flights_climbed: Some(0),
-        active_energy_burned_kcal: Some(450.0),
-        basal_energy_burned_kcal: Some(120.0),
-        // Specialized fields
-        distance_cycling_meters: Some(15000.0), // Cycling-specific distance
-        distance_swimming_meters: None,
-        distance_wheelchair_meters: None,
-        distance_downhill_snow_sports_meters: None,
-        push_count: None,
-        swimming_stroke_count: None,
-        nike_fuel_points: Some(750),           // Nike+ integration
-        apple_exercise_time_minutes: Some(45), // Apple Watch exercise ring
-        apple_stand_time_minutes: Some(8),     // Achieved stand goal 8 hours
-        apple_move_time_minutes: Some(45),
-        apple_stand_hour_achieved: Some(true),
-        source_device: Some("Apple Watch Series 9".to_string()),
-        created_at: Utc::now(),
-    };
+    let mut cycling_activity = create_base_activity_metric(user.id);
+    cycling_activity.recorded_at = Utc::now() - Duration::hours(2);
+    cycling_activity.step_count = Some(0);            // No steps during cycling
+    cycling_activity.distance_meters = Some(15000.0); // 15km total
+    cycling_activity.flights_climbed = Some(0);
+    cycling_activity.active_energy_burned_kcal = Some(450.0);
+    cycling_activity.basal_energy_burned_kcal = Some(120.0);
+    // Specialized fields
+    cycling_activity.distance_cycling_meters = Some(15000.0); // Cycling-specific distance
+    cycling_activity.distance_swimming_meters = None;
+    cycling_activity.distance_wheelchair_meters = None;
+    cycling_activity.distance_downhill_snow_sports_meters = None;
+    cycling_activity.push_count = None;
+    cycling_activity.swimming_stroke_count = None;
+    cycling_activity.nike_fuel_points = Some(750);           // Nike+ integration
+    cycling_activity.apple_exercise_time_minutes = Some(45); // Apple Watch exercise ring
+    cycling_activity.apple_stand_time_minutes = Some(8);     // Achieved stand goal 8 hours
+    cycling_activity.apple_move_time_minutes = Some(45);
+    cycling_activity.apple_stand_hour_achieved = Some(true);
+    cycling_activity.source_device = Some("Apple Watch Series 9".to_string());
+    // Extended cycling metrics
+    cycling_activity.cycling_speed_kmh = Some(20.0);
+    cycling_activity.cycling_cadence_rpm = Some(85.0);
+    cycling_activity.cycling_power_watts = Some(200.0);
 
-    let swimming_activity = ActivityMetric {
-        id: Uuid::new_v4(),
-        user_id: user.id,
-        recorded_at: Utc::now() - Duration::hours(1),
-        step_count: Some(0),           // No steps during swimming
-        distance_meters: Some(2000.0), // 2km pool swimming
-        flights_climbed: Some(0),
-        active_energy_burned_kcal: Some(380.0),
-        basal_energy_burned_kcal: Some(90.0),
-        // Specialized fields
-        distance_cycling_meters: None,
-        distance_swimming_meters: Some(2000.0), // Swimming-specific distance
-        distance_wheelchair_meters: None,
-        distance_downhill_snow_sports_meters: None,
-        push_count: None,
-        swimming_stroke_count: Some(1800), // Stroke count analytics
-        nike_fuel_points: None,
-        apple_exercise_time_minutes: Some(30),
-        apple_stand_time_minutes: None,
-        apple_move_time_minutes: Some(30),
-        apple_stand_hour_achieved: Some(false),
-        source_device: Some("Apple Watch Ultra 2".to_string()),
-        created_at: Utc::now(),
-    };
+    let mut swimming_activity = create_base_activity_metric(user.id);
+    swimming_activity.recorded_at = Utc::now() - Duration::hours(1);
+    swimming_activity.step_count = Some(0);           // No steps during swimming
+    swimming_activity.distance_meters = Some(2000.0); // 2km pool swimming
+    swimming_activity.flights_climbed = Some(0);
+    swimming_activity.active_energy_burned_kcal = Some(380.0);
+    swimming_activity.basal_energy_burned_kcal = Some(90.0);
+    // Specialized fields
+    swimming_activity.distance_cycling_meters = None;
+    swimming_activity.distance_swimming_meters = Some(2000.0); // Swimming-specific distance
+    swimming_activity.distance_wheelchair_meters = None;
+    swimming_activity.distance_downhill_snow_sports_meters = None;
+    swimming_activity.push_count = None;
+    swimming_activity.swimming_stroke_count = Some(1800); // Stroke count analytics
+    swimming_activity.nike_fuel_points = None;
+    swimming_activity.apple_exercise_time_minutes = Some(30);
+    swimming_activity.apple_stand_time_minutes = None;
+    swimming_activity.apple_move_time_minutes = Some(30);
+    swimming_activity.apple_stand_hour_achieved = Some(false);
+    swimming_activity.source_device = Some("Apple Watch Ultra 2".to_string());
 
-    let wheelchair_activity = ActivityMetric {
-        id: Uuid::new_v4(),
-        user_id: user.id,
-        recorded_at: Utc::now(),
-        step_count: Some(0),           // No steps for wheelchair user
-        distance_meters: Some(8000.0), // 8km wheelchair distance
-        flights_climbed: Some(0),      // No flights for wheelchair
-        active_energy_burned_kcal: Some(320.0),
-        basal_energy_burned_kcal: Some(110.0),
-        // Specialized fields for accessibility
-        distance_cycling_meters: None,
-        distance_swimming_meters: None,
-        distance_wheelchair_meters: Some(8000.0), // Wheelchair-specific distance
-        distance_downhill_snow_sports_meters: None,
-        push_count: Some(2400), // Wheelchair push count
-        swimming_stroke_count: None,
-        nike_fuel_points: Some(420),
-        apple_exercise_time_minutes: Some(35),
-        apple_stand_time_minutes: None, // Not applicable for wheelchair users
-        apple_move_time_minutes: Some(35),
-        apple_stand_hour_achieved: Some(false),
-        source_device: Some("Apple Watch Series 9".to_string()),
-        created_at: Utc::now(),
-    };
+    let mut wheelchair_activity = create_base_activity_metric(user.id);
+    wheelchair_activity.recorded_at = Utc::now() - Duration::minutes(30);
+    wheelchair_activity.step_count = Some(0);           // No steps for wheelchair user
+    wheelchair_activity.distance_meters = Some(8000.0); // 8km wheelchair distance
+    wheelchair_activity.flights_climbed = Some(0);      // No flights for wheelchair
+    wheelchair_activity.active_energy_burned_kcal = Some(320.0);
+    wheelchair_activity.basal_energy_burned_kcal = Some(110.0);
+    // Specialized fields for accessibility
+    wheelchair_activity.distance_cycling_meters = None;
+    wheelchair_activity.distance_swimming_meters = None;
+    wheelchair_activity.distance_wheelchair_meters = Some(8000.0); // Wheelchair-specific distance
+    wheelchair_activity.distance_downhill_snow_sports_meters = None;
+    wheelchair_activity.push_count = Some(2400); // Wheelchair push count
+    wheelchair_activity.swimming_stroke_count = None;
+    wheelchair_activity.nike_fuel_points = Some(420);
+    wheelchair_activity.apple_exercise_time_minutes = Some(35);
+    wheelchair_activity.apple_stand_time_minutes = None; // Not applicable for wheelchair users
+    wheelchair_activity.apple_move_time_minutes = Some(35);
+    wheelchair_activity.apple_stand_hour_achieved = Some(false);
+    wheelchair_activity.source_device = Some("Apple Watch Series 9".to_string());
 
-    let snow_sports_activity = ActivityMetric {
-        id: Uuid::new_v4(),
-        user_id: user.id,
-        recorded_at: Utc::now() - Duration::minutes(30),
-        step_count: Some(1200),         // Some steps during downhill skiing
-        distance_meters: Some(25000.0), // 25km downhill skiing
-        flights_climbed: Some(0),       // Downhill only
-        active_energy_burned_kcal: Some(680.0),
-        basal_energy_burned_kcal: Some(150.0),
-        // Specialized fields
-        distance_cycling_meters: None,
-        distance_swimming_meters: None,
-        distance_wheelchair_meters: None,
-        distance_downhill_snow_sports_meters: Some(25000.0), // Snow sports distance
-        push_count: None,
-        swimming_stroke_count: None,
-        nike_fuel_points: None,
-        apple_exercise_time_minutes: Some(90), // Long ski session
-        apple_stand_time_minutes: Some(4),
-        apple_move_time_minutes: Some(90),
-        apple_stand_hour_achieved: Some(true),
-        source_device: Some("Apple Watch Ultra 2".to_string()),
-        created_at: Utc::now(),
-    };
+    let mut snow_sports_activity = create_base_activity_metric(user.id);
+    snow_sports_activity.recorded_at = Utc::now() - Duration::minutes(15);
+    snow_sports_activity.step_count = Some(1200);         // Some steps during downhill skiing
+    snow_sports_activity.distance_meters = Some(25000.0); // 25km downhill skiing
+    snow_sports_activity.flights_climbed = Some(0);       // Downhill only
+    snow_sports_activity.active_energy_burned_kcal = Some(680.0);
+    snow_sports_activity.basal_energy_burned_kcal = Some(150.0);
+    // Specialized fields
+    snow_sports_activity.distance_cycling_meters = None;
+    snow_sports_activity.distance_swimming_meters = None;
+    snow_sports_activity.distance_wheelchair_meters = None;
+    snow_sports_activity.distance_downhill_snow_sports_meters = Some(25000.0); // Snow sports distance
+    snow_sports_activity.push_count = None;
+    snow_sports_activity.swimming_stroke_count = None;
+    snow_sports_activity.nike_fuel_points = None;
+    snow_sports_activity.apple_exercise_time_minutes = Some(90); // Long ski session
+    snow_sports_activity.apple_stand_time_minutes = Some(4);
+    snow_sports_activity.apple_move_time_minutes = Some(90);
+    snow_sports_activity.apple_stand_hour_achieved = Some(true);
+    snow_sports_activity.source_device = Some("Apple Watch Ultra 2".to_string());
 
     // Test batch processing with extended fields
     let activities = vec![
@@ -150,9 +182,17 @@ async fn test_extended_activity_metrics_ingestion() -> Result<(), Box<dyn std::e
         wheelchair_activity,
         snow_sports_activity,
     ];
+
+    println!("Processing {} activities for user {}", activities.len(), user.id);
+
     let batch_result = batch_processor
         .process_activity_metrics(user.id, activities)
         .await?;
+
+    println!("Batch result: processed={}, failed={}, errors={:?}",
+        batch_result.processed_count,
+        batch_result.failed_count,
+        batch_result.errors);
 
     // Validate batch processing success
     assert_eq!(
@@ -169,7 +209,16 @@ async fn test_extended_activity_metrics_ingestion() -> Result<(), Box<dyn std::e
             distance_cycling_meters, distance_swimming_meters, distance_wheelchair_meters,
             distance_downhill_snow_sports_meters, push_count, swimming_stroke_count,
             nike_fuel_points, apple_exercise_time_minutes, apple_stand_time_minutes,
-            apple_move_time_minutes, apple_stand_hour_achieved, source_device, created_at as "created_at!"
+            apple_move_time_minutes, apple_stand_hour_achieved,
+            NULL::DOUBLE PRECISION as walking_speed_m_per_s, NULL::DOUBLE PRECISION as walking_step_length_cm, NULL::DOUBLE PRECISION as walking_asymmetry_percent,
+            NULL::DOUBLE PRECISION as walking_double_support_percent, NULL::DOUBLE PRECISION as six_minute_walk_test_distance_m,
+            NULL::DOUBLE PRECISION as stair_ascent_speed_m_per_s, NULL::DOUBLE PRECISION as stair_descent_speed_m_per_s,
+            NULL::DOUBLE PRECISION as ground_contact_time_ms, NULL::DOUBLE PRECISION as vertical_oscillation_cm, NULL::DOUBLE PRECISION as running_stride_length_m,
+            NULL::DOUBLE PRECISION as running_power_watts, NULL::DOUBLE PRECISION as running_speed_m_per_s,
+            NULL::DOUBLE PRECISION as cycling_speed_kmh, NULL::DOUBLE PRECISION as cycling_power_watts, NULL::DOUBLE PRECISION as cycling_cadence_rpm,
+            NULL::DOUBLE PRECISION as functional_threshold_power_watts,
+            NULL::DOUBLE PRECISION as underwater_depth_meters, NULL::INTEGER as diving_duration_seconds,
+            source_device, created_at as "created_at!"
         FROM activity_metrics
         WHERE user_id = $1
         ORDER BY recorded_at DESC"#,
@@ -232,30 +281,25 @@ async fn test_activity_metrics_validation_extended_fields() -> Result<(), Box<dy
     let config = ValidationConfig::default();
 
     // Test valid activity metrics with extended fields
-    let valid_activity = ActivityMetric {
-        id: Uuid::new_v4(),
-        user_id: user.id,
-        recorded_at: Utc::now(),
-        step_count: Some(8500),
-        distance_meters: Some(6000.0),
-        flights_climbed: Some(5),
-        active_energy_burned_kcal: Some(350.0),
-        basal_energy_burned_kcal: Some(120.0),
-        // Valid specialized fields
-        distance_cycling_meters: Some(10000.0),
-        distance_swimming_meters: Some(1500.0),
-        distance_wheelchair_meters: Some(5000.0),
-        distance_downhill_snow_sports_meters: Some(15000.0),
-        push_count: Some(1800),
-        swimming_stroke_count: Some(1200),
-        nike_fuel_points: Some(500),
-        apple_exercise_time_minutes: Some(60),
-        apple_stand_time_minutes: Some(12),
-        apple_move_time_minutes: Some(60),
-        apple_stand_hour_achieved: Some(true),
-        source_device: Some("Apple Watch".to_string()),
-        created_at: Utc::now(),
-    };
+    let mut valid_activity = create_base_activity_metric(user.id);
+    valid_activity.step_count = Some(8500);
+    valid_activity.distance_meters = Some(6000.0);
+    valid_activity.flights_climbed = Some(5);
+    valid_activity.active_energy_burned_kcal = Some(350.0);
+    valid_activity.basal_energy_burned_kcal = Some(120.0);
+    // Valid specialized fields
+    valid_activity.distance_cycling_meters = Some(10000.0);
+    valid_activity.distance_swimming_meters = Some(1500.0);
+    valid_activity.distance_wheelchair_meters = Some(5000.0);
+    valid_activity.distance_downhill_snow_sports_meters = Some(15000.0);
+    valid_activity.push_count = Some(1800);
+    valid_activity.swimming_stroke_count = Some(1200);
+    valid_activity.nike_fuel_points = Some(500);
+    valid_activity.apple_exercise_time_minutes = Some(60);
+    valid_activity.apple_stand_time_minutes = Some(12);
+    valid_activity.apple_move_time_minutes = Some(60);
+    valid_activity.apple_stand_hour_achieved = Some(true);
+    valid_activity.source_device = Some("Apple Watch".to_string());
 
     // Should validate successfully
     assert!(valid_activity.validate_with_config(&config).is_ok());
@@ -263,86 +307,71 @@ async fn test_activity_metrics_validation_extended_fields() -> Result<(), Box<dy
     // Test edge case validations for specialized fields
 
     // Test swimming distance limits (50km max)
-    let excessive_swimming = ActivityMetric {
-        id: Uuid::new_v4(),
-        user_id: user.id,
-        recorded_at: Utc::now(),
-        step_count: Some(0),
-        distance_meters: Some(60000.0), // 60km swimming - excessive
-        flights_climbed: Some(0),
-        active_energy_burned_kcal: Some(2000.0),
-        basal_energy_burned_kcal: Some(300.0),
-        distance_cycling_meters: None,
-        distance_swimming_meters: Some(60000.0), // Exceeds 50km limit
-        distance_wheelchair_meters: None,
-        distance_downhill_snow_sports_meters: None,
-        push_count: None,
-        swimming_stroke_count: Some(50000),
-        nike_fuel_points: None,
-        apple_exercise_time_minutes: Some(180),
-        apple_stand_time_minutes: None,
-        apple_move_time_minutes: Some(180),
-        apple_stand_hour_achieved: Some(false),
-        source_device: Some("Apple Watch Ultra".to_string()),
-        created_at: Utc::now(),
-    };
+    let mut excessive_swimming = create_base_activity_metric(user.id);
+    excessive_swimming.step_count = Some(0);
+    excessive_swimming.distance_meters = Some(60000.0); // 60km swimming - excessive
+    excessive_swimming.flights_climbed = Some(0);
+    excessive_swimming.active_energy_burned_kcal = Some(2000.0);
+    excessive_swimming.basal_energy_burned_kcal = Some(300.0);
+    excessive_swimming.distance_cycling_meters = None;
+    excessive_swimming.distance_swimming_meters = Some(60000.0); // Exceeds 50km limit
+    excessive_swimming.distance_wheelchair_meters = None;
+    excessive_swimming.distance_downhill_snow_sports_meters = None;
+    excessive_swimming.push_count = None;
+    excessive_swimming.swimming_stroke_count = Some(50000);
+    excessive_swimming.nike_fuel_points = None;
+    excessive_swimming.apple_exercise_time_minutes = Some(180);
+    excessive_swimming.apple_stand_time_minutes = None;
+    excessive_swimming.apple_move_time_minutes = Some(180);
+    excessive_swimming.apple_stand_hour_achieved = Some(false);
+    excessive_swimming.source_device = Some("Apple Watch Ultra".to_string());
 
     let result = excessive_swimming.validate_with_config(&config);
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("swimming distance"));
 
     // Test negative values validation
-    let negative_values = ActivityMetric {
-        id: Uuid::new_v4(),
-        user_id: user.id,
-        recorded_at: Utc::now(),
-        step_count: Some(5000),
-        distance_meters: Some(5000.0),
-        flights_climbed: Some(3),
-        active_energy_burned_kcal: Some(250.0),
-        basal_energy_burned_kcal: Some(100.0),
-        distance_cycling_meters: Some(-1000.0), // Negative cycling distance
-        distance_swimming_meters: None,
-        distance_wheelchair_meters: None,
-        distance_downhill_snow_sports_meters: None,
-        push_count: Some(-500), // Negative push count
-        swimming_stroke_count: None,
-        nike_fuel_points: Some(-100),           // Negative Nike Fuel
-        apple_exercise_time_minutes: Some(-30), // Negative exercise time
-        apple_stand_time_minutes: Some(8),
-        apple_move_time_minutes: Some(30),
-        apple_stand_hour_achieved: Some(true),
-        source_device: Some("Test Device".to_string()),
-        created_at: Utc::now(),
-    };
+    let mut negative_values = create_base_activity_metric(user.id);
+    negative_values.step_count = Some(5000);
+    negative_values.distance_meters = Some(5000.0);
+    negative_values.flights_climbed = Some(3);
+    negative_values.active_energy_burned_kcal = Some(250.0);
+    negative_values.basal_energy_burned_kcal = Some(100.0);
+    negative_values.distance_cycling_meters = Some(-1000.0); // Negative cycling distance
+    negative_values.distance_swimming_meters = None;
+    negative_values.distance_wheelchair_meters = None;
+    negative_values.distance_downhill_snow_sports_meters = None;
+    negative_values.push_count = Some(-500); // Negative push count
+    negative_values.swimming_stroke_count = None;
+    negative_values.nike_fuel_points = Some(-100);           // Negative Nike Fuel
+    negative_values.apple_exercise_time_minutes = Some(-30); // Negative exercise time
+    negative_values.apple_stand_time_minutes = Some(8);
+    negative_values.apple_move_time_minutes = Some(30);
+    negative_values.apple_stand_hour_achieved = Some(true);
+    negative_values.source_device = Some("Test Device".to_string());
 
     let result = negative_values.validate_with_config(&config);
     assert!(result.is_err());
 
     // Test excessive values for specialized fields
-    let excessive_values = ActivityMetric {
-        id: Uuid::new_v4(),
-        user_id: user.id,
-        recorded_at: Utc::now(),
-        step_count: Some(1000),
-        distance_meters: Some(1000.0),
-        flights_climbed: Some(0),
-        active_energy_burned_kcal: Some(100.0),
-        basal_energy_burned_kcal: Some(50.0),
-        distance_cycling_meters: None,
-        distance_swimming_meters: None,
-        distance_wheelchair_meters: None,
-        distance_downhill_snow_sports_meters: None,
-        push_count: Some(60000),                 // Exceeds 50,000 limit
-        swimming_stroke_count: Some(150000),     // Exceeds 100,000 limit
-        nike_fuel_points: Some(15000),           // Exceeds 10,000 limit
-        apple_exercise_time_minutes: Some(1500), // Exceeds 1440 minutes (24 hours)
-        apple_stand_time_minutes: Some(1500),    // Exceeds 1440 minutes
-        apple_move_time_minutes: Some(1500),     // Exceeds 1440 minutes
-        apple_stand_hour_achieved: Some(false),
-        source_device: Some("Test Device".to_string()),
-        created_at: Utc::now(),
-    };
+    let mut excessive_values = create_base_activity_metric(user.id);
+    excessive_values.step_count = Some(1000);
+    excessive_values.distance_meters = Some(1000.0);
+    excessive_values.flights_climbed = Some(0);
+    excessive_values.active_energy_burned_kcal = Some(100.0);
+    excessive_values.basal_energy_burned_kcal = Some(50.0);
+    excessive_values.distance_cycling_meters = None;
+    excessive_values.distance_swimming_meters = None;
+    excessive_values.distance_wheelchair_meters = None;
+    excessive_values.distance_downhill_snow_sports_meters = None;
+    excessive_values.push_count = Some(60000);                 // Exceeds 50,000 limit
+    excessive_values.swimming_stroke_count = Some(150000);     // Exceeds 100,000 limit
+    excessive_values.nike_fuel_points = Some(15000);           // Exceeds 10,000 limit
+    excessive_values.apple_exercise_time_minutes = Some(1500); // Exceeds 1440 minutes (24 hours)
+    excessive_values.apple_stand_time_minutes = Some(1500);    // Exceeds 1440 minutes
+    excessive_values.apple_move_time_minutes = Some(1500);     // Exceeds 1440 minutes
+    excessive_values.apple_stand_hour_achieved = Some(false);
+    excessive_values.source_device = Some("Test Device".to_string());
 
     let result = excessive_values.validate_with_config(&config);
     assert!(result.is_err());
@@ -428,6 +457,28 @@ async fn test_wheelchair_user_activity_accessibility() -> Result<(), Box<dyn std
             apple_stand_time_minutes: None, // Not applicable for wheelchair users
             apple_move_time_minutes: Some(25),
             apple_stand_hour_achieved: Some(false), // Not applicable
+            // Mobility Metrics
+            walking_speed_m_per_s: None,
+            walking_step_length_cm: None,
+            walking_asymmetry_percent: None,
+            walking_double_support_percent: None,
+            six_minute_walk_test_distance_m: None,
+            stair_ascent_speed_m_per_s: None,
+            stair_descent_speed_m_per_s: None,
+            // Running Dynamics
+            ground_contact_time_ms: None,
+            vertical_oscillation_cm: None,
+            running_stride_length_m: None,
+            running_power_watts: None,
+            running_speed_m_per_s: None,
+            // Cycling Metrics
+            cycling_speed_kmh: None,
+            cycling_power_watts: None,
+            cycling_cadence_rpm: None,
+            functional_threshold_power_watts: None,
+            // Underwater Metrics
+            underwater_depth_meters: None,
+            diving_duration_seconds: None,
             source_device: Some("Apple Watch Series 9".to_string()),
             created_at: Utc::now(),
         },
@@ -452,6 +503,28 @@ async fn test_wheelchair_user_activity_accessibility() -> Result<(), Box<dyn std
             apple_stand_time_minutes: None,
             apple_move_time_minutes: Some(45),
             apple_stand_hour_achieved: Some(false),
+            // Mobility Metrics
+            walking_speed_m_per_s: None,
+            walking_step_length_cm: None,
+            walking_asymmetry_percent: None,
+            walking_double_support_percent: None,
+            six_minute_walk_test_distance_m: None,
+            stair_ascent_speed_m_per_s: None,
+            stair_descent_speed_m_per_s: None,
+            // Running Dynamics
+            ground_contact_time_ms: None,
+            vertical_oscillation_cm: None,
+            running_stride_length_m: None,
+            running_power_watts: None,
+            running_speed_m_per_s: None,
+            // Cycling Metrics
+            cycling_speed_kmh: None,
+            cycling_power_watts: None,
+            cycling_cadence_rpm: None,
+            functional_threshold_power_watts: None,
+            // Underwater Metrics
+            underwater_depth_meters: None,
+            diving_duration_seconds: None,
             source_device: Some("Apple Watch Series 9".to_string()),
             created_at: Utc::now(),
         },
@@ -475,7 +548,16 @@ async fn test_wheelchair_user_activity_accessibility() -> Result<(), Box<dyn std
             distance_cycling_meters, distance_swimming_meters, distance_wheelchair_meters,
             distance_downhill_snow_sports_meters, push_count, swimming_stroke_count,
             nike_fuel_points, apple_exercise_time_minutes, apple_stand_time_minutes,
-            apple_move_time_minutes, apple_stand_hour_achieved, source_device, created_at as "created_at!"
+            apple_move_time_minutes, apple_stand_hour_achieved,
+            NULL::DOUBLE PRECISION as walking_speed_m_per_s, NULL::DOUBLE PRECISION as walking_step_length_cm, NULL::DOUBLE PRECISION as walking_asymmetry_percent,
+            NULL::DOUBLE PRECISION as walking_double_support_percent, NULL::DOUBLE PRECISION as six_minute_walk_test_distance_m,
+            NULL::DOUBLE PRECISION as stair_ascent_speed_m_per_s, NULL::DOUBLE PRECISION as stair_descent_speed_m_per_s,
+            NULL::DOUBLE PRECISION as ground_contact_time_ms, NULL::DOUBLE PRECISION as vertical_oscillation_cm, NULL::DOUBLE PRECISION as running_stride_length_m,
+            NULL::DOUBLE PRECISION as running_power_watts, NULL::DOUBLE PRECISION as running_speed_m_per_s,
+            NULL::DOUBLE PRECISION as cycling_speed_kmh, NULL::DOUBLE PRECISION as cycling_power_watts, NULL::DOUBLE PRECISION as cycling_cadence_rpm,
+            NULL::DOUBLE PRECISION as functional_threshold_power_watts,
+            NULL::DOUBLE PRECISION as underwater_depth_meters, NULL::INTEGER as diving_duration_seconds,
+            source_device, created_at as "created_at!"
         FROM activity_metrics
         WHERE user_id = $1 AND distance_wheelchair_meters IS NOT NULL
         ORDER BY recorded_at DESC"#,
@@ -516,31 +598,28 @@ async fn test_multi_sport_activity_tracking() -> Result<(), Box<dyn std::error::
     let batch_processor = BatchProcessor::new(pool.clone());
 
     // Create a comprehensive multi-sport day with different specialized metrics
+    let mut morning_swim = create_base_activity_metric(user.id);
+    morning_swim.recorded_at = Utc::now() - Duration::hours(10);
+    morning_swim.step_count = Some(0);
+    morning_swim.distance_meters = Some(1000.0); // 1km swim
+    morning_swim.flights_climbed = Some(0);
+    morning_swim.active_energy_burned_kcal = Some(250.0);
+    morning_swim.basal_energy_burned_kcal = Some(80.0);
+    morning_swim.distance_cycling_meters = None;
+    morning_swim.distance_swimming_meters = Some(1000.0);
+    morning_swim.distance_wheelchair_meters = None;
+    morning_swim.distance_downhill_snow_sports_meters = None;
+    morning_swim.push_count = None;
+    morning_swim.swimming_stroke_count = Some(900); // Pool swimming strokes
+    morning_swim.nike_fuel_points = None;
+    morning_swim.apple_exercise_time_minutes = Some(30);
+    morning_swim.apple_stand_time_minutes = Some(1);
+    morning_swim.apple_move_time_minutes = Some(30);
+    morning_swim.apple_stand_hour_achieved = Some(true);
+    morning_swim.source_device = Some("Apple Watch Ultra 2".to_string());
+
     let multi_sport_activities = vec![
-        // Morning swim
-        ActivityMetric {
-            id: Uuid::new_v4(),
-            user_id: user.id,
-            recorded_at: Utc::now() - Duration::hours(10),
-            step_count: Some(0),
-            distance_meters: Some(1000.0), // 1km swim
-            flights_climbed: Some(0),
-            active_energy_burned_kcal: Some(250.0),
-            basal_energy_burned_kcal: Some(80.0),
-            distance_cycling_meters: None,
-            distance_swimming_meters: Some(1000.0),
-            distance_wheelchair_meters: None,
-            distance_downhill_snow_sports_meters: None,
-            push_count: None,
-            swimming_stroke_count: Some(900), // Pool swimming strokes
-            nike_fuel_points: None,
-            apple_exercise_time_minutes: Some(30),
-            apple_stand_time_minutes: Some(1),
-            apple_move_time_minutes: Some(30),
-            apple_stand_hour_achieved: Some(true),
-            source_device: Some("Apple Watch Ultra 2".to_string()),
-            created_at: Utc::now(),
-        },
+        morning_swim,
         // Afternoon cycling
         ActivityMetric {
             id: Uuid::new_v4(),
@@ -562,6 +641,28 @@ async fn test_multi_sport_activity_tracking() -> Result<(), Box<dyn std::error::
             apple_stand_time_minutes: Some(2),
             apple_move_time_minutes: Some(75),
             apple_stand_hour_achieved: Some(true),
+            // Mobility Metrics
+            walking_speed_m_per_s: None,
+            walking_step_length_cm: None,
+            walking_asymmetry_percent: None,
+            walking_double_support_percent: None,
+            six_minute_walk_test_distance_m: None,
+            stair_ascent_speed_m_per_s: None,
+            stair_descent_speed_m_per_s: None,
+            // Running Dynamics
+            ground_contact_time_ms: None,
+            vertical_oscillation_cm: None,
+            running_stride_length_m: None,
+            running_power_watts: None,
+            running_speed_m_per_s: None,
+            // Cycling Metrics
+            cycling_speed_kmh: None,
+            cycling_power_watts: None,
+            cycling_cadence_rpm: None,
+            functional_threshold_power_watts: None,
+            // Underwater Metrics
+            underwater_depth_meters: None,
+            diving_duration_seconds: None,
             source_device: Some("Apple Watch Series 9".to_string()),
             created_at: Utc::now(),
         },
@@ -586,6 +687,28 @@ async fn test_multi_sport_activity_tracking() -> Result<(), Box<dyn std::error::
             apple_stand_time_minutes: Some(6),     // Good stand hours
             apple_move_time_minutes: Some(45),
             apple_stand_hour_achieved: Some(true),
+            // Mobility Metrics
+            walking_speed_m_per_s: None,
+            walking_step_length_cm: None,
+            walking_asymmetry_percent: None,
+            walking_double_support_percent: None,
+            six_minute_walk_test_distance_m: None,
+            stair_ascent_speed_m_per_s: None,
+            stair_descent_speed_m_per_s: None,
+            // Running Dynamics
+            ground_contact_time_ms: None,
+            vertical_oscillation_cm: None,
+            running_stride_length_m: None,
+            running_power_watts: None,
+            running_speed_m_per_s: None,
+            // Cycling Metrics
+            cycling_speed_kmh: None,
+            cycling_power_watts: None,
+            cycling_cadence_rpm: None,
+            functional_threshold_power_watts: None,
+            // Underwater Metrics
+            underwater_depth_meters: None,
+            diving_duration_seconds: None,
             source_device: Some("Apple Watch Series 9".to_string()),
             created_at: Utc::now(),
         },
@@ -609,7 +732,16 @@ async fn test_multi_sport_activity_tracking() -> Result<(), Box<dyn std::error::
             distance_cycling_meters, distance_swimming_meters, distance_wheelchair_meters,
             distance_downhill_snow_sports_meters, push_count, swimming_stroke_count,
             nike_fuel_points, apple_exercise_time_minutes, apple_stand_time_minutes,
-            apple_move_time_minutes, apple_stand_hour_achieved, source_device, created_at as "created_at!"
+            apple_move_time_minutes, apple_stand_hour_achieved,
+            NULL::DOUBLE PRECISION as walking_speed_m_per_s, NULL::DOUBLE PRECISION as walking_step_length_cm, NULL::DOUBLE PRECISION as walking_asymmetry_percent,
+            NULL::DOUBLE PRECISION as walking_double_support_percent, NULL::DOUBLE PRECISION as six_minute_walk_test_distance_m,
+            NULL::DOUBLE PRECISION as stair_ascent_speed_m_per_s, NULL::DOUBLE PRECISION as stair_descent_speed_m_per_s,
+            NULL::DOUBLE PRECISION as ground_contact_time_ms, NULL::DOUBLE PRECISION as vertical_oscillation_cm, NULL::DOUBLE PRECISION as running_stride_length_m,
+            NULL::DOUBLE PRECISION as running_power_watts, NULL::DOUBLE PRECISION as running_speed_m_per_s,
+            NULL::DOUBLE PRECISION as cycling_speed_kmh, NULL::DOUBLE PRECISION as cycling_power_watts, NULL::DOUBLE PRECISION as cycling_cadence_rpm,
+            NULL::DOUBLE PRECISION as functional_threshold_power_watts,
+            NULL::DOUBLE PRECISION as underwater_depth_meters, NULL::INTEGER as diving_duration_seconds,
+            source_device, created_at as "created_at!"
         FROM activity_metrics
         WHERE user_id = $1
         ORDER BY recorded_at ASC"#,
@@ -699,6 +831,28 @@ async fn test_apple_watch_activity_rings_integration() -> Result<(), Box<dyn std
             apple_stand_time_minutes: Some(1),     // Stand ring progress
             apple_move_time_minutes: Some(30),     // Move ring progress
             apple_stand_hour_achieved: Some(true), // Stand goal achieved this hour
+            // Mobility Metrics
+            walking_speed_m_per_s: None,
+            walking_step_length_cm: None,
+            walking_asymmetry_percent: None,
+            walking_double_support_percent: None,
+            six_minute_walk_test_distance_m: None,
+            stair_ascent_speed_m_per_s: None,
+            stair_descent_speed_m_per_s: None,
+            // Running Dynamics
+            ground_contact_time_ms: None,
+            vertical_oscillation_cm: None,
+            running_stride_length_m: None,
+            running_power_watts: None,
+            running_speed_m_per_s: None,
+            // Cycling Metrics
+            cycling_speed_kmh: None,
+            cycling_power_watts: None,
+            cycling_cadence_rpm: None,
+            functional_threshold_power_watts: None,
+            // Underwater Metrics
+            underwater_depth_meters: None,
+            diving_duration_seconds: None,
             source_device: Some("Apple Watch Series 9".to_string()),
             created_at: Utc::now(),
         },
@@ -723,6 +877,28 @@ async fn test_apple_watch_activity_rings_integration() -> Result<(), Box<dyn std
             apple_stand_time_minutes: Some(8),     // Accumulated stand hours
             apple_move_time_minutes: Some(45),     // Total move time
             apple_stand_hour_achieved: Some(true), // Good standing throughout day
+            // Mobility Metrics
+            walking_speed_m_per_s: None,
+            walking_step_length_cm: None,
+            walking_asymmetry_percent: None,
+            walking_double_support_percent: None,
+            six_minute_walk_test_distance_m: None,
+            stair_ascent_speed_m_per_s: None,
+            stair_descent_speed_m_per_s: None,
+            // Running Dynamics
+            ground_contact_time_ms: None,
+            vertical_oscillation_cm: None,
+            running_stride_length_m: None,
+            running_power_watts: None,
+            running_speed_m_per_s: None,
+            // Cycling Metrics
+            cycling_speed_kmh: None,
+            cycling_power_watts: None,
+            cycling_cadence_rpm: None,
+            functional_threshold_power_watts: None,
+            // Underwater Metrics
+            underwater_depth_meters: None,
+            diving_duration_seconds: None,
             source_device: Some("Apple Watch Series 9".to_string()),
             created_at: Utc::now(),
         },
@@ -747,6 +923,28 @@ async fn test_apple_watch_activity_rings_integration() -> Result<(), Box<dyn std
             apple_stand_time_minutes: Some(12),   // Full 12-hour stand goal
             apple_move_time_minutes: Some(50),    // Complete move goal
             apple_stand_hour_achieved: Some(true), // Perfect stand day
+            // Mobility Metrics
+            walking_speed_m_per_s: None,
+            walking_step_length_cm: None,
+            walking_asymmetry_percent: None,
+            walking_double_support_percent: None,
+            six_minute_walk_test_distance_m: None,
+            stair_ascent_speed_m_per_s: None,
+            stair_descent_speed_m_per_s: None,
+            // Running Dynamics
+            ground_contact_time_ms: None,
+            vertical_oscillation_cm: None,
+            running_stride_length_m: None,
+            running_power_watts: None,
+            running_speed_m_per_s: None,
+            // Cycling Metrics
+            cycling_speed_kmh: None,
+            cycling_power_watts: None,
+            cycling_cadence_rpm: None,
+            functional_threshold_power_watts: None,
+            // Underwater Metrics
+            underwater_depth_meters: None,
+            diving_duration_seconds: None,
             source_device: Some("Apple Watch Series 9".to_string()),
             created_at: Utc::now(),
         },
@@ -770,7 +968,16 @@ async fn test_apple_watch_activity_rings_integration() -> Result<(), Box<dyn std
             distance_cycling_meters, distance_swimming_meters, distance_wheelchair_meters,
             distance_downhill_snow_sports_meters, push_count, swimming_stroke_count,
             nike_fuel_points, apple_exercise_time_minutes, apple_stand_time_minutes,
-            apple_move_time_minutes, apple_stand_hour_achieved, source_device, created_at as "created_at!"
+            apple_move_time_minutes, apple_stand_hour_achieved,
+            NULL::DOUBLE PRECISION as walking_speed_m_per_s, NULL::DOUBLE PRECISION as walking_step_length_cm, NULL::DOUBLE PRECISION as walking_asymmetry_percent,
+            NULL::DOUBLE PRECISION as walking_double_support_percent, NULL::DOUBLE PRECISION as six_minute_walk_test_distance_m,
+            NULL::DOUBLE PRECISION as stair_ascent_speed_m_per_s, NULL::DOUBLE PRECISION as stair_descent_speed_m_per_s,
+            NULL::DOUBLE PRECISION as ground_contact_time_ms, NULL::DOUBLE PRECISION as vertical_oscillation_cm, NULL::DOUBLE PRECISION as running_stride_length_m,
+            NULL::DOUBLE PRECISION as running_power_watts, NULL::DOUBLE PRECISION as running_speed_m_per_s,
+            NULL::DOUBLE PRECISION as cycling_speed_kmh, NULL::DOUBLE PRECISION as cycling_power_watts, NULL::DOUBLE PRECISION as cycling_cadence_rpm,
+            NULL::DOUBLE PRECISION as functional_threshold_power_watts,
+            NULL::DOUBLE PRECISION as underwater_depth_meters, NULL::INTEGER as diving_duration_seconds,
+            source_device, created_at as "created_at!"
         FROM activity_metrics
         WHERE user_id = $1 AND source_device LIKE '%Apple Watch%'
         ORDER BY recorded_at ASC"#,

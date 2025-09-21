@@ -8,9 +8,11 @@ use uuid::Uuid;
 use self_sensored::{
     handlers::ingest::ingest_handler,
     models::{
-        ApiResponse, HealthMetric, HeartRateMetric, BloodPressureMetric, SleepMetric, 
-        ActivityMetric, WorkoutData, IngestPayload, IngestData, IngestResponse,
-        IosIngestPayload, IosIngestData, IosMetric, IosMetricData, IosWorkout,
+        health_metrics::{
+            HealthMetric, HeartRateMetric, BloodPressureMetric, SleepMetric,
+            ActivityMetric, WorkoutData, IngestPayload, IngestData, IngestResponse,
+        },
+        ios_models::{IosIngestPayload, IosIngestData, IosMetric, IosMetricData, IosWorkout},
         enums::{ActivityContext, WorkoutType}
     },
     services::auth::{AuthContext, User as AuthUser, ApiKey as AuthApiKey},
@@ -36,6 +38,10 @@ impl TestFixtures {
                         heart_rate: Some(75),
                         resting_heart_rate: Some(65),
                         heart_rate_variability: None,
+                        walking_heart_rate_average: None,
+                        heart_rate_recovery_one_minute: None,
+                        atrial_fibrillation_burden_percentage: None,
+                        vo2_max_ml_kg_min: None,
                         context: Some(ActivityContext::Resting),
                         source_device: Some("Apple Watch".to_string()),
                         created_at: now,
@@ -68,10 +74,9 @@ impl TestFixtures {
                     HealthMetric::Sleep(SleepMetric {
                         id: Uuid::new_v4(),
                         user_id: Uuid::new_v4(),
-                        recorded_at: now - chrono::Duration::hours(8),
                         sleep_start: now - chrono::Duration::hours(8),
                         sleep_end: now,
-                        duration_minutes: 480,
+                        duration_minutes: Some(480),
                         deep_sleep_minutes: Some(120),
                         rem_sleep_minutes: Some(90),
                         light_sleep_minutes: Some(240),
@@ -262,7 +267,7 @@ impl TestFixtures {
                         id: Uuid::new_v4(),
                         user_id: Uuid::new_v4(),
                         recorded_at: now,
-                        heart_rate: 400, // Invalid: too high
+                        heart_rate: Some(400), // Invalid: too high
                         resting_heart_rate: Some(75),
                         context: None,
                         source_device: Some("Test".to_string()),
@@ -316,7 +321,7 @@ impl TestFixtures {
                     WorkoutData {
                         id: Uuid::new_v4(),
                         user_id: Uuid::new_v4(),
-                        workout_type: "".to_string(), // Invalid: empty type
+                        workout_type: WorkoutType::Other, // Invalid: should not be Other without proper validation
                         started_at: now,
                         ended_at: now - chrono::Duration::hours(1), // Invalid: end before start
                         total_energy_kcal: Some(-100.0), // Invalid: negative
@@ -571,9 +576,9 @@ mod tests {
     fn test_auth_context_creation() {
         let auth_context = TestFixtures::create_test_auth_context();
         
-        assert!(!auth_context.user.username.is_empty());
-        assert!(auth_context.user.is_active);
-        assert!(auth_context.api_key.is_active);
+        assert!(!auth_context.user.email.is_empty());
+        assert!(auth_context.user.is_active.unwrap_or(false));
+        assert!(auth_context.api_key.is_active.unwrap_or(false));
         assert_eq!(auth_context.user.id, auth_context.api_key.user_id);
     }
 

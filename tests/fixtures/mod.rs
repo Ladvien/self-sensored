@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-use self_sensored::models::{HealthMetric, Workout, IngestPayload, IngestData};
+use self_sensored::models::{HealthMetric, WorkoutData, IngestPayload, IngestData};
 
 pub struct TestDataGenerator;
 
@@ -88,58 +88,102 @@ pub struct HealthMetricFixtures;
 
 impl HealthMetricFixtures {
     pub fn heart_rate_rest() -> HealthMetric {
-        HealthMetric::HeartRate {
+        HealthMetric::HeartRate(crate::models::HeartRateMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
-            heart_rate: TestDataGenerator::heart_rate("rest"),
-            context: Some("rest".to_string()),
-            confidence: Some(0.95),
-        }
+            heart_rate: Some(TestDataGenerator::heart_rate("rest") as i16),
+            resting_heart_rate: None,
+            heart_rate_variability: None,
+            walking_heart_rate_average: None,
+            heart_rate_recovery_one_minute: None,
+            atrial_fibrillation_burden_percentage: None,
+            vo2_max_ml_kg_min: None,
+            context: Some(crate::models::enums::ActivityContext::Resting),
+            source_device: Some("Test Device".to_string()),
+            created_at: Utc::now(),
+        })
     }
 
     pub fn heart_rate_exercise() -> HealthMetric {
-        HealthMetric::HeartRate {
+        HealthMetric::HeartRate(crate::models::HeartRateMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
-            heart_rate: TestDataGenerator::heart_rate("exercise"),
-            context: Some("exercise".to_string()),
-            confidence: Some(0.90),
-        }
+            heart_rate: Some(TestDataGenerator::heart_rate("exercise") as i16),
+            resting_heart_rate: None,
+            heart_rate_variability: None,
+            walking_heart_rate_average: None,
+            heart_rate_recovery_one_minute: None,
+            atrial_fibrillation_burden_percentage: None,
+            vo2_max_ml_kg_min: None,
+            context: Some(crate::models::enums::ActivityContext::Exercise),
+            source_device: Some("Test Device".to_string()),
+            created_at: Utc::now(),
+        })
     }
 
     pub fn heart_rate_invalid_high() -> HealthMetric {
-        HealthMetric::HeartRate {
+        HealthMetric::HeartRate(crate::models::HeartRateMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
-            heart_rate: 350, // Invalid
-            context: Some("test".to_string()),
-            confidence: Some(0.95),
-        }
+            heart_rate: Some(350), // Invalid
+            resting_heart_rate: None,
+            heart_rate_variability: None,
+            walking_heart_rate_average: None,
+            heart_rate_recovery_one_minute: None,
+            atrial_fibrillation_burden_percentage: None,
+            vo2_max_ml_kg_min: None,
+            context: Some(crate::models::enums::ActivityContext::Resting),
+            source_device: Some("Test Device".to_string()),
+            created_at: Utc::now(),
+        })
     }
 
     pub fn heart_rate_invalid_low() -> HealthMetric {
-        HealthMetric::HeartRate {
+        HealthMetric::HeartRate(crate::models::HeartRateMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
-            heart_rate: 20, // Invalid
-            context: Some("test".to_string()),
-            confidence: Some(0.95),
-        }
+            heart_rate: Some(20), // Invalid
+            resting_heart_rate: None,
+            heart_rate_variability: None,
+            walking_heart_rate_average: None,
+            heart_rate_recovery_one_minute: None,
+            atrial_fibrillation_burden_percentage: None,
+            vo2_max_ml_kg_min: None,
+            context: Some(crate::models::enums::ActivityContext::Resting),
+            source_device: Some("Test Device".to_string()),
+            created_at: Utc::now(),
+        })
     }
 
     pub fn blood_pressure_normal() -> HealthMetric {
         let (systolic, diastolic, pulse) = TestDataGenerator::blood_pressure();
-        HealthMetric::BloodPressure {
+        HealthMetric::BloodPressure(crate::models::BloodPressureMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
-            systolic,
-            diastolic,
-            pulse,
-        }
+            systolic: systolic as i16,
+            diastolic: diastolic as i16,
+            pulse: pulse.map(|p| p as i16),
+            source_device: Some("Test Device".to_string()),
+            created_at: Utc::now(),
+        })
     }
 
     pub fn blood_pressure_invalid() -> HealthMetric {
-        HealthMetric::BloodPressure {
+        HealthMetric::BloodPressure(crate::models::BloodPressureMetric {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
             recorded_at: Utc::now(),
             systolic: 80,  // Invalid: lower than diastolic
             diastolic: 120,
             pulse: Some(75),
-        }
+            source_device: Some("Test Device".to_string()),
+            created_at: Utc::now(),
+        })
     }
 
     pub fn sleep_normal() -> HealthMetric {

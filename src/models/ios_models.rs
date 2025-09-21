@@ -1225,7 +1225,7 @@ impl IosIngestPayload {
                 total_ios_metrics as u64,
                 total_internal_metrics as u64, // Successfully converted
                 total_internal_metrics as u64, // Same as converted for now
-                (total_ios_metrics - total_internal_metrics) as u64, // Lost metrics
+                total_ios_metrics.saturating_sub(total_internal_metrics) as u64, // Lost metrics (prevent underflow)
             );
         }
 

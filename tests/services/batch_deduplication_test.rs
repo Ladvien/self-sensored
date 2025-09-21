@@ -2,22 +2,30 @@ use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use self_sensored::models::health_metrics::{
+use self_sensored::models::{
     HeartRateMetric, BloodPressureMetric, SleepMetric, ActivityMetric, WorkoutData,
+    HealthMetric, IngestData, IngestPayload,
 };
-use self_sensored::models::{HealthMetric, IngestData, IngestPayload};
-use self_sensored::services::batch_processor::{BatchConfig, BatchProcessor, DeduplicationStats};
-use self_sensored::test_utilities::{create_test_pool, setup_test_database};
+use self_sensored::models::enums::{ActivityContext, WorkoutType};
+use self_sensored::config::BatchConfig;
+use self_sensored::services::batch_processor::{BatchProcessor, DeduplicationStats};
 
 /// Helper function to create a test heart rate metric
 fn create_test_heart_rate(recorded_at: DateTime<Utc>, bpm: i16) -> HeartRateMetric {
     HeartRateMetric {
+        id: uuid::Uuid::new_v4(),
+        user_id: uuid::Uuid::new_v4(), // Will be overridden in tests
         recorded_at,
-        min_bpm: Some(bpm - 5),
-        avg_bpm: Some(bpm),
-        max_bpm: Some(bpm + 5),
-        source: Some("test_device".to_string()),
-        context: Some("resting".to_string()),
+        heart_rate: Some(bpm),
+        resting_heart_rate: Some(bpm - 5),
+        heart_rate_variability: Some(40.0),
+        walking_heart_rate_average: Some(bpm + 10),
+        heart_rate_recovery_one_minute: Some(20),
+        atrial_fibrillation_burden_percentage: Some(rust_decimal::Decimal::new(0, 2)),
+        vo2_max_ml_kg_min: Some(rust_decimal::Decimal::new(350, 1)),
+        context: Some(ActivityContext::Resting),
+        source_device: Some("test_device".to_string()),
+        created_at: recorded_at,
     }
 }
 

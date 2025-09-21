@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 #[path = "../tests/common/mod.rs"]
 mod common;
-use common::{cleanup_test_db, setup_test_db};
+use common::{cleanup_test_data, setup_test_db};
 
 #[actix_web::test]
 async fn test_insert_valid_heart_rate_metrics() {
@@ -64,7 +64,7 @@ async fn test_insert_valid_heart_rate_metrics() {
         "Should have inserted 5 heart rate metrics"
     );
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -113,7 +113,7 @@ async fn test_heart_rate_boundary_values() {
         }
     }
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -177,7 +177,7 @@ async fn test_heart_rate_with_advanced_metrics() {
         vo2_str
     );
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -260,7 +260,7 @@ async fn test_heart_rate_duplicate_handling() {
         "Original value should be preserved"
     );
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -347,7 +347,7 @@ async fn test_load_heart_rate_fixture() {
         "Insert count mismatch"
     );
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -425,7 +425,7 @@ async fn test_heart_rate_time_series_query() {
         "Should have recent heart rate data"
     );
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 // Helper function to create test user

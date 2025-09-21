@@ -8,7 +8,7 @@ use self_sensored::{
 };
 
 mod common;
-use common::{cleanup_test_db, setup_test_db};
+use common::{cleanup_test_data, setup_test_db};
 
 #[actix_web::test]
 async fn test_validate_heart_rate_metrics() {
@@ -71,7 +71,7 @@ async fn test_validate_heart_rate_metrics() {
         }
     }
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -131,7 +131,7 @@ async fn test_validate_blood_pressure_metrics() {
         );
     }
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -192,7 +192,7 @@ async fn test_validate_activity_metrics() {
         );
     }
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -254,7 +254,7 @@ async fn test_validate_sleep_metrics() {
         );
     }
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -315,7 +315,7 @@ async fn test_validate_body_measurements() {
         );
     }
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 // Helper functions

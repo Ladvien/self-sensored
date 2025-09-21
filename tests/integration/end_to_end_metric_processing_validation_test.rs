@@ -15,6 +15,7 @@ use self_sensored::models::{
     MenstrualMetric, FertilityMetric, SymptomMetric, HygieneMetric,
 };
 use self_sensored::models::enums::*;
+use rust_decimal::Decimal;
 
 /// Integration test that validates end-to-end processing for each metric type
 #[tokio::test]
@@ -74,15 +75,15 @@ fn create_test_metrics_for_all_types() -> Vec<HealthMetric> {
             id, user_id, recorded_at: now, heart_rate: Some(75),
             resting_heart_rate: Some(65), heart_rate_variability: Some(45.0),
             walking_heart_rate_average: Some(85), heart_rate_recovery_one_minute: Some(25),
-            atrial_fibrillation_burden_percentage: Some(rust_decimal::Decimal::new(0, 0)),
-            vo2_max_ml_kg_min: Some(rust_decimal::Decimal::new(4500, 2)),
+            atrial_fibrillation_burden_percentage: Some(Decimal::new(0, 0)),
+            vo2_max_ml_kg_min: Some(Decimal::new(4500, 2)),
             source_device: Some("Apple Watch".to_string()), context: Some(ActivityContext::Resting),
             created_at: now,
         }),
 
         // 2. BloodPressure
         HealthMetric::BloodPressure(BloodPressureMetric {
-            id, user_id, recorded_at: now, systolic: Some(120), diastolic: Some(80),
+            id, user_id, recorded_at: now, systolic: 120, diastolic: 80,
             pulse: Some(72), source_device: Some("Omron".to_string()), created_at: now,
         }),
 
@@ -104,26 +105,29 @@ fn create_test_metrics_for_all_types() -> Vec<HealthMetric> {
             distance_wheelchair_meters: Some(0.0), distance_downhill_snow_sports_meters: Some(0.0),
             push_count: Some(0), swimming_stroke_count: Some(0), nike_fuel_points: Some(0),
             apple_exercise_time_minutes: Some(45), apple_stand_time_minutes: Some(720),
-            apple_move_time_minutes: Some(420), apple_stand_hour_achieved: Some(12),
+            apple_move_time_minutes: Some(420), apple_stand_hour_achieved: Some(true),
 
-            // Mobility metrics (SUB-010 enhancement)
+            // Mobility metrics (iOS 14+ HealthKit)
             walking_speed_m_per_s: Some(1.2), walking_step_length_cm: Some(65.0),
-            walking_asymmetry_percentage: Some(2.1), walking_double_support_percentage: Some(25.0),
-            six_minute_walk_test_distance_meters: Some(550.0), stair_ascent_speed_m_per_s: Some(0.8),
-            stair_descent_speed_m_per_s: Some(0.9), running_ground_contact_time_ms: Some(250.0),
-            running_vertical_oscillation_cm: Some(8.5), running_stride_length_meters: Some(1.4),
-            running_power_watts: Some(320.0),
+            walking_asymmetry_percent: Some(2.1), walking_double_support_percent: Some(25.0),
+            six_minute_walk_test_distance_m: Some(550.0), stair_ascent_speed_m_per_s: Some(0.8),
+            stair_descent_speed_m_per_s: Some(0.9), ground_contact_time_ms: Some(250.0),
+            vertical_oscillation_cm: Some(8.5), running_stride_length_m: Some(1.4),
+            running_power_watts: Some(320.0), running_speed_m_per_s: Some(5.0),
 
-            // Cycling metrics (SUB-011 enhancement)
+            // Cycling metrics (iOS 17+ HealthKit)
             cycling_speed_kmh: Some(25.0), cycling_power_watts: Some(280.0),
             cycling_cadence_rpm: Some(85.0), functional_threshold_power_watts: Some(250.0),
+
+            // Underwater metrics (iOS 16+ HealthKit)
+            underwater_depth_meters: Some(0.0), diving_duration_seconds: Some(0),
 
             source_device: Some("iPhone".to_string()), created_at: now,
         }),
 
         // 5. BodyMeasurement
         HealthMetric::BodyMeasurement(BodyMeasurementMetric {
-            id, user_id, recorded_at: now, weight_kg: Some(70.5), height_cm: Some(175.0),
+            id, user_id, recorded_at: now, body_weight_kg: Some(70.5), height_cm: Some(175.0),
             body_fat_percentage: Some(15.2), muscle_mass_kg: Some(55.8),
             bone_mass_kg: Some(3.2), water_percentage: Some(60.1),
             source_device: Some("Scale".to_string()), created_at: now,
@@ -255,7 +259,7 @@ fn create_test_metrics_for_all_types() -> Vec<HealthMetric> {
 /// Test that validates batch processing method existence for all metric types
 #[test]
 fn test_batch_processing_method_existence_validation() {
-    println!("=Ë BATCH PROCESSING METHOD VALIDATION:");
+    println!("=ï¿½ BATCH PROCESSING METHOD VALIDATION:");
 
     let batch_processing_methods = [
         "process_heart_rate_batch",        // HeartRate
@@ -296,7 +300,7 @@ fn test_batch_processing_method_existence_validation() {
 /// Test that validates database table existence for all metric types
 #[test]
 fn test_database_table_existence_validation() {
-    println!("=Ë DATABASE TABLE VALIDATION:");
+    println!("=ï¿½ DATABASE TABLE VALIDATION:");
 
     let database_tables = [
         "heart_rate_metrics",        // HeartRate

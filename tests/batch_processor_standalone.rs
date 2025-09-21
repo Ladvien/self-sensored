@@ -64,7 +64,7 @@ async fn test_batch_processor_compilation() {
 
     let config = BatchConfig::default();
     assert_eq!(config.max_retries, 3);
-    assert!(config.enable_parallel);
+    assert!(config.enable_parallel_processing);
     assert_eq!(config.memory_limit_mb, 500.0);
 
     // Test ProcessingStatus enum
@@ -95,13 +95,13 @@ async fn test_batch_config_custom() {
     config.max_retries = 5;
     config.initial_backoff_ms = 200;
     config.max_backoff_ms = 10000;
-    config.enable_parallel = false;
+    config.enable_parallel_processing = false;
     config.memory_limit_mb = 1000.0;
 
     assert_eq!(config.max_retries, 5);
     assert_eq!(config.initial_backoff_ms, 200);
     assert_eq!(config.max_backoff_ms, 10000);
-    assert!(!config.enable_parallel);
+    assert!(!config.enable_parallel_processing);
     assert_eq!(config.memory_limit_mb, 1000.0);
 }
 

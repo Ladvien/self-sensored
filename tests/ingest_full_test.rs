@@ -27,15 +27,15 @@ use self_sensored::{
         enums::{ActivityContext, WorkoutType},
         health_metrics::{
             ActivityMetric, BloodPressureMetric, HealthMetric, HeartRateMetric, SleepMetric,
+            WorkoutData, IngestData, IngestPayload, IngestResponse,
         },
-        IngestData, IngestPayload, IosIngestData, IosIngestPayload, IosMetric, IosMetricData,
-        IosWorkout, WorkoutData,
+        ios_models::{IosIngestData, IosIngestPayload, IosMetric, IosMetricData, IosWorkout},
     },
     services::auth::AuthContext,
 };
 
 mod common;
-use common::{cleanup_test_db, setup_test_db};
+use common::{cleanup_test_data, setup_test_db};
 
 /// Test configuration for ingest handler testing
 pub struct IngestTestConfig {
@@ -47,7 +47,7 @@ impl IngestTestConfig {
     pub async fn new() -> Self {
         let pool = setup_test_db().await;
         let user_id = Uuid::new_v4();
-        let auth_context = AuthContext::new_for_testing(user_id);
+        let auth_context = IngestTestConfig::create_test_auth_context(user_id);
 
         // Create test user in database
         sqlx::query!(
@@ -66,9 +66,39 @@ impl IngestTestConfig {
         Self { pool, auth_context }
     }
 
+    /// Create a test auth context for testing
+    pub fn create_test_auth_context(user_id: Uuid) -> AuthContext {
+        use self_sensored::services::auth::{User as AuthUser, ApiKey as AuthApiKey};
+        let api_key_id = Uuid::new_v4();
+        let now = chrono::Utc::now();
+
+        AuthContext {
+            user: AuthUser {
+                id: user_id,
+                email: format!("test_{}@example.com", user_id),
+                apple_health_id: None,
+                created_at: Some(now),
+                updated_at: Some(now),
+                is_active: Some(true),
+                metadata: None,
+            },
+            api_key: AuthApiKey {
+                id: api_key_id,
+                user_id,
+                name: Some("Test API Key".to_string()),
+                created_at: Some(now),
+                last_used_at: Some(now),
+                expires_at: None,
+                is_active: Some(true),
+                permissions: None,
+                rate_limit_per_hour: None,
+            },
+        }
+    }
+
     /// Clean up test data
     pub async fn cleanup(&self) {
-        cleanup_test_db(&self.pool, self.auth_context.user.id).await;
+        cleanup_test_data(&self.pool, self.auth_context.user.id).await;
     }
 }
 

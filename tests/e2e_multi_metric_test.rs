@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 #[path = "../tests/common/mod.rs"]
 mod common;
-use common::{cleanup_test_db, setup_test_db};
+use common::{cleanup_test_data, setup_test_db};
 
 #[actix_web::test]
 async fn test_mixed_metrics_insertion() {
@@ -139,7 +139,7 @@ async fn test_mixed_metrics_insertion() {
     assert_eq!(body_count, 1, "Should have 1 body measurement");
     assert_eq!(env_count, 1, "Should have 1 environmental metric");
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -204,7 +204,7 @@ async fn test_concurrent_metric_insertion() {
         "Should have 5 heart rate metrics"
     );
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -365,7 +365,7 @@ async fn test_load_mixed_fixture() {
         "Should have inserted at least some metrics from mixed fixture"
     );
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -427,7 +427,7 @@ async fn test_transaction_isolation() {
         "No data should be inserted due to failed transaction"
     );
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -479,7 +479,7 @@ async fn test_bulk_metric_performance() {
         "Bulk insertion should complete within 10 seconds"
     );
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 #[actix_web::test]
@@ -534,7 +534,7 @@ async fn test_cross_metric_queries() {
     assert_eq!(data.step_count, Some(2000));
     assert_eq!(data.active_energy_burned_kcal, Some(150.0));
 
-    cleanup_test_db(&pool, user_id).await;
+    cleanup_test_data(&pool, user_id).await;
 }
 
 // Helper function to create test user
