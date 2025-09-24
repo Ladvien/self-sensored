@@ -6,3 +6,6 @@ pub mod integration_test;
 
 // Re-export the old health_metrics_test for backwards compatibility
 pub mod health_metrics_test;
+
+// Test module for iOS models correct format
+pub mod ios_models_correct_format_test;

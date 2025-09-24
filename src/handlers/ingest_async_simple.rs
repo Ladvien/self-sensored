@@ -180,6 +180,7 @@ pub async fn ingest_async_optimized_handler(
             initial_backoff_ms: 50,
             max_backoff_ms: 1000,
             enable_parallel_processing: true,
+            max_concurrent_metric_types: 4, // Reduce concurrency for large batches
             chunk_size: 1000,
             memory_limit_mb: 1000.0,
             // Optimized chunk sizes for large batches - FIXED to prevent PostgreSQL parameter limit violations

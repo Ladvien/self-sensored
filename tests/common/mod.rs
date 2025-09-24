@@ -16,8 +16,13 @@ pub async fn setup_test_db() -> PgPool {
         .or_else(|_| env::var("DATABASE_URL"))
         .expect("TEST_DATABASE_URL or DATABASE_URL must be set in .env file");
 
+    let max_connections = env::var("TEST_DATABASE_MAX_CONNECTIONS")
+        .unwrap_or_else(|_| "200".to_string())
+        .parse::<u32>()
+        .unwrap_or(200);
+
     PgPoolOptions::new()
-        .max_connections(5)
+        .max_connections(max_connections)
         .connect(&database_url)
         .await
         .expect("Failed to connect to test database")

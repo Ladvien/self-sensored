@@ -159,7 +159,7 @@ impl IngestTestFixtures {
         let now = Utc::now();
         
         IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     IosMetric {
                         name: "HeartRate".to_string(),

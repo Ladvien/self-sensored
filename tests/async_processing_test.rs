@@ -33,7 +33,10 @@ async fn create_test_api_key(pool: &PgPool, user_id: Uuid) -> String {
     let api_key_id = Uuid::new_v4();
 
     // Hash the API key using Argon2 (same as production)
-    use argon2::{Argon2, password_hash::{PasswordHasher, SaltString, rand_core::OsRng}};
+    use argon2::{
+        password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
+        Argon2,
+    };
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
     let hashed_key = argon2
@@ -351,8 +354,7 @@ async fn test_async_vs_sync_response_difference() {
 
     let resp_small = test::call_service(&app, req_small).await;
     let body_small = test::read_body(resp_small).await;
-    let response_small: ApiResponse<IngestResponse> =
-        serde_json::from_slice(&body_small).unwrap();
+    let response_small: ApiResponse<IngestResponse> = serde_json::from_slice(&body_small).unwrap();
 
     // Test 2: Large payload (asynchronous)
     let large_payload = create_large_payload();
@@ -369,13 +371,14 @@ async fn test_async_vs_sync_response_difference() {
 
     // TEMPORARY: Handle HTTP 413 (Payload Too Large) gracefully
     if resp_large.status() == 413 {
-        println!("SKIPPING: Large payload too large (HTTP 413) - cannot test async vs sync difference");
+        println!(
+            "SKIPPING: Large payload too large (HTTP 413) - cannot test async vs sync difference"
+        );
         return; // Skip the rest of this test for now
     }
 
     let body_large = test::read_body(resp_large).await;
-    let response_large: ApiResponse<IngestResponse> =
-        serde_json::from_slice(&body_large).unwrap();
+    let response_large: ApiResponse<IngestResponse> = serde_json::from_slice(&body_large).unwrap();
 
     // CRITICAL COMPARISON: Verify different response patterns
     let small_data = response_small.data.unwrap();

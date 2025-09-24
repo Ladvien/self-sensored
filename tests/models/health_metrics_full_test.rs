@@ -4,12 +4,12 @@ use serde_json;
 use uuid::Uuid;
 
 use self_sensored::config::ValidationConfig;
+use self_sensored::models::health_metrics::*;
 use self_sensored::models::{
     ActivityContext, CardiacEventSeverity, CervicalMucusQuality, HeartRateEventType,
     HygieneEventType, MeditationType, MenstrualFlow, OvulationTestResult, PregnancyTestResult,
     StateOfMind, SymptomSeverity, SymptomType, TemperatureContext, WorkoutType,
 };
-use self_sensored::models::health_metrics::*;
 
 /// Helper to create a test user ID
 fn test_user_id() -> Uuid {

@@ -519,7 +519,7 @@ async fn test_ios_environmental_data_conversion() {
 
     // Create iOS-style environmental data payload
     let ios_payload = IosIngestPayload {
-        data: IosIngestData {
+        data: IosIngestData::Legacy {
             metrics: vec![
                 IosMetric {
                     name: "uv_exposure".to_string(),

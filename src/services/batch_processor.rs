@@ -14,9 +14,9 @@ use crate::config::{
     BatchConfig, ACTIVITY_PARAMS_PER_RECORD, AUDIO_EXPOSURE_PARAMS_PER_RECORD,
     BLOOD_PRESSURE_PARAMS_PER_RECORD, BODY_MEASUREMENT_PARAMS_PER_RECORD,
     ENVIRONMENTAL_PARAMS_PER_RECORD, HEART_RATE_PARAMS_PER_RECORD, HYGIENE_PARAMS_PER_RECORD,
-    MENTAL_HEALTH_PARAMS_PER_RECORD, MINDFULNESS_PARAMS_PER_RECORD, SAFETY_EVENT_PARAMS_PER_RECORD,
-    SAFE_PARAM_LIMIT, SLEEP_PARAMS_PER_RECORD, SYMPTOM_PARAMS_PER_RECORD,
-    WORKOUT_PARAMS_PER_RECORD,
+    MENTAL_HEALTH_PARAMS_PER_RECORD, METABOLIC_PARAMS_PER_RECORD, MINDFULNESS_PARAMS_PER_RECORD,
+    SAFETY_EVENT_PARAMS_PER_RECORD, SAFE_PARAM_LIMIT, SLEEP_PARAMS_PER_RECORD,
+    SYMPTOM_PARAMS_PER_RECORD, WORKOUT_PARAMS_PER_RECORD,
 };
 use crate::middleware::metrics::Metrics;
 use crate::models::{HealthMetric, IngestPayload, ProcessingError};
@@ -226,6 +226,14 @@ struct HygieneKey {
     event_type: String,
 }
 
+/// Unique key for nutrition metrics (user_id, recorded_at)
+/// Nutrition data is typically logged per meal/day, so timestamp-based deduplication is sufficient
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct NutritionKey {
+    user_id: Uuid,
+    recorded_at_millis: i64,
+}
+
 /// Progress tracking for chunked operations
 #[derive(Debug, Clone, Default)]
 pub struct ChunkProgress {
@@ -255,9 +263,9 @@ pub enum ProcessingStatus {
 
 impl BatchProcessor {
     pub fn new(pool: PgPool) -> Self {
-        // Limit concurrent DB operations to 10 (half of the 20 connection pool)
-        // This leaves room for other operations like auth checks
-        let db_semaphore = Arc::new(Semaphore::new(10));
+        // Optimized: Allow 20 concurrent DB operations for high-throughput batch processing
+        // Reserves ~55 connections for batch processing, leaves 20 for auth/health checks
+        let db_semaphore = Arc::new(Semaphore::new(20));
         Self {
             pool,
             config: BatchConfig::default(),
@@ -268,7 +276,8 @@ impl BatchProcessor {
     }
 
     pub fn with_config(pool: PgPool, config: BatchConfig) -> Self {
-        let db_semaphore = Arc::new(Semaphore::new(10));
+        // Match optimized semaphore size from new() method
+        let db_semaphore = Arc::new(Semaphore::new(20));
         Self {
             pool,
             config,
@@ -295,10 +304,17 @@ impl BatchProcessor {
             active_connections, pool_size, utilization
         );
 
-        // Warn if utilization is high
-        if utilization > 80.0 {
+        // Warn if utilization is high (lowered threshold for earlier detection)
+        if utilization > 70.0 {
+            warn!(
+                "High pool utilization detected: {utilization:.1}% ({active_connections}/{pool_size}) - consider reducing concurrent operations"
+            );
+        }
+
+        // Error if utilization is critical
+        if utilization > 90.0 {
             return Err(format!(
-                "High pool utilization: {utilization:.1}% ({active_connections}/{pool_size})"
+                "Critical pool utilization: {utilization:.1}% ({active_connections}/{pool_size})"
             ));
         }
 
@@ -310,6 +326,43 @@ impl BatchProcessor {
         }
 
         Ok(())
+    }
+
+    /// Diagnostic function to test connection acquisition performance
+    pub async fn diagnose_connection_acquisition(&self) -> Result<(u64, u64), String> {
+        let start = Instant::now();
+
+        // Test acquiring a connection
+        match self.pool.acquire().await {
+            Ok(mut conn) => {
+                let acquisition_time = start.elapsed().as_millis() as u64;
+
+                // Test a simple query
+                let query_start = Instant::now();
+                match sqlx::query("SELECT 1").fetch_one(&mut *conn).await {
+                    Ok(_) => {
+                        let query_time = query_start.elapsed().as_millis() as u64;
+                        info!(
+                            "Connection diagnostics: acquisition={}ms, query={}ms",
+                            acquisition_time, query_time
+                        );
+                        Ok((acquisition_time, query_time))
+                    }
+                    Err(e) => Err(format!("Query failed: {}", e)),
+                }
+            }
+            Err(e) => {
+                let timeout_duration = start.elapsed().as_millis() as u64;
+                error!(
+                    "Connection acquisition failed after {}ms: {}",
+                    timeout_duration, e
+                );
+                Err(format!(
+                    "Connection acquisition failed after {}ms: {}",
+                    timeout_duration, e
+                ))
+            }
+        }
     }
 
     /// Process a batch of health data with comprehensive error handling
@@ -453,7 +506,25 @@ impl BatchProcessor {
             let chunk_size = config.heart_rate_chunk_size;
             tasks.push(tokio::spawn(async move {
                 // Acquire permit before database operation
-                let _permit = semaphore.acquire().await.expect("Semaphore closed");
+                let _permit = match semaphore.acquire().await {
+                    Ok(permit) => permit,
+                    Err(e) => {
+                        error!("Failed to acquire database semaphore permit: {}", e);
+                        return (
+                            0,
+                            1,
+                            vec![ProcessingError {
+                                metric_type: "Semaphore".to_string(),
+                                error_message: format!(
+                                    "Database semaphore acquisition failed: {}",
+                                    e
+                                ),
+                                index: None,
+                            }],
+                            0,
+                        );
+                    }
+                };
                 Self::process_with_retry(
                     "HeartRate",
                     || {
@@ -474,8 +545,29 @@ impl BatchProcessor {
             let blood_pressures = std::mem::take(&mut grouped.blood_pressures);
             let pool = self.pool.clone();
             let config = self.config.clone();
+            let semaphore = self.db_semaphore.clone();
             let chunk_size = config.blood_pressure_chunk_size;
             tasks.push(tokio::spawn(async move {
+                // Acquire permit before database operation
+                let _permit = match semaphore.acquire().await {
+                    Ok(permit) => permit,
+                    Err(e) => {
+                        error!("Failed to acquire database semaphore permit: {}", e);
+                        return (
+                            0,
+                            1,
+                            vec![ProcessingError {
+                                metric_type: "Semaphore".to_string(),
+                                error_message: format!(
+                                    "Database semaphore acquisition failed: {}",
+                                    e
+                                ),
+                                index: None,
+                            }],
+                            0,
+                        );
+                    }
+                };
                 Self::process_with_retry(
                     "BloodPressure",
                     || {
@@ -496,8 +588,29 @@ impl BatchProcessor {
             let sleep_metrics = std::mem::take(&mut grouped.sleep_metrics);
             let pool = self.pool.clone();
             let config = self.config.clone();
+            let semaphore = self.db_semaphore.clone();
             let chunk_size = config.sleep_chunk_size;
             tasks.push(tokio::spawn(async move {
+                // Acquire permit before database operation
+                let _permit = match semaphore.acquire().await {
+                    Ok(permit) => permit,
+                    Err(e) => {
+                        error!("Failed to acquire database semaphore permit: {}", e);
+                        return (
+                            0,
+                            1,
+                            vec![ProcessingError {
+                                metric_type: "Semaphore".to_string(),
+                                error_message: format!(
+                                    "Database semaphore acquisition failed: {}",
+                                    e
+                                ),
+                                index: None,
+                            }],
+                            0,
+                        );
+                    }
+                };
                 Self::process_with_retry(
                     "Sleep",
                     || {
@@ -518,8 +631,29 @@ impl BatchProcessor {
             let activities = std::mem::take(&mut grouped.activities);
             let pool = self.pool.clone();
             let config = self.config.clone();
+            let semaphore = self.db_semaphore.clone();
             let chunk_size = config.activity_chunk_size;
             tasks.push(tokio::spawn(async move {
+                // Acquire permit before database operation
+                let _permit = match semaphore.acquire().await {
+                    Ok(permit) => permit,
+                    Err(e) => {
+                        error!("Failed to acquire database semaphore permit: {}", e);
+                        return (
+                            0,
+                            1,
+                            vec![ProcessingError {
+                                metric_type: "Semaphore".to_string(),
+                                error_message: format!(
+                                    "Database semaphore acquisition failed: {}",
+                                    e
+                                ),
+                                index: None,
+                            }],
+                            0,
+                        );
+                    }
+                };
                 Self::process_with_retry(
                     "Activity",
                     || {
@@ -540,8 +674,29 @@ impl BatchProcessor {
             let body_measurements = std::mem::take(&mut grouped.body_measurements);
             let pool = self.pool.clone();
             let config = self.config.clone();
+            let semaphore = self.db_semaphore.clone();
             let chunk_size = config.body_measurement_chunk_size;
             tasks.push(tokio::spawn(async move {
+                // Acquire permit before database operation
+                let _permit = match semaphore.acquire().await {
+                    Ok(permit) => permit,
+                    Err(e) => {
+                        error!("Failed to acquire database semaphore permit: {}", e);
+                        return (
+                            0,
+                            1,
+                            vec![ProcessingError {
+                                metric_type: "Semaphore".to_string(),
+                                error_message: format!(
+                                    "Database semaphore acquisition failed: {}",
+                                    e
+                                ),
+                                index: None,
+                            }],
+                            0,
+                        );
+                    }
+                };
                 Self::process_with_retry(
                     "BodyMeasurement",
                     || {
@@ -562,8 +717,29 @@ impl BatchProcessor {
             let temperature_metrics = std::mem::take(&mut grouped.temperature_metrics);
             let pool = self.pool.clone();
             let config = self.config.clone();
+            let semaphore = self.db_semaphore.clone();
             let chunk_size = config.temperature_chunk_size;
             tasks.push(tokio::spawn(async move {
+                // Acquire permit before database operation
+                let _permit = match semaphore.acquire().await {
+                    Ok(permit) => permit,
+                    Err(e) => {
+                        error!("Failed to acquire database semaphore permit: {}", e);
+                        return (
+                            0,
+                            1,
+                            vec![ProcessingError {
+                                metric_type: "Semaphore".to_string(),
+                                error_message: format!(
+                                    "Database semaphore acquisition failed: {}",
+                                    e
+                                ),
+                                index: None,
+                            }],
+                            0,
+                        );
+                    }
+                };
                 Self::process_with_retry(
                     "Temperature",
                     || {
@@ -584,8 +760,29 @@ impl BatchProcessor {
             let respiratory_metrics = std::mem::take(&mut grouped.respiratory_metrics);
             let pool = self.pool.clone();
             let config = self.config.clone();
+            let semaphore = self.db_semaphore.clone();
             let chunk_size = config.respiratory_chunk_size;
             tasks.push(tokio::spawn(async move {
+                // Acquire permit before database operation
+                let _permit = match semaphore.acquire().await {
+                    Ok(permit) => permit,
+                    Err(e) => {
+                        error!("Failed to acquire database semaphore permit: {}", e);
+                        return (
+                            0,
+                            1,
+                            vec![ProcessingError {
+                                metric_type: "Semaphore".to_string(),
+                                error_message: format!(
+                                    "Database semaphore acquisition failed: {}",
+                                    e
+                                ),
+                                index: None,
+                            }],
+                            0,
+                        );
+                    }
+                };
                 Self::process_with_retry(
                     "Respiratory",
                     || {
@@ -606,8 +803,29 @@ impl BatchProcessor {
             let blood_glucose = std::mem::take(&mut grouped.blood_glucose);
             let pool = self.pool.clone();
             let config = self.config.clone();
+            let semaphore = self.db_semaphore.clone();
             let chunk_size = config.blood_glucose_chunk_size;
             tasks.push(tokio::spawn(async move {
+                // Acquire permit before database operation
+                let _permit = match semaphore.acquire().await {
+                    Ok(permit) => permit,
+                    Err(e) => {
+                        error!("Failed to acquire database semaphore permit: {}", e);
+                        return (
+                            0,
+                            1,
+                            vec![ProcessingError {
+                                metric_type: "Semaphore".to_string(),
+                                error_message: format!(
+                                    "Database semaphore acquisition failed: {}",
+                                    e
+                                ),
+                                index: None,
+                            }],
+                            0,
+                        );
+                    }
+                };
                 Self::process_with_retry(
                     "BloodGlucose",
                     || {
@@ -631,7 +849,25 @@ impl BatchProcessor {
             let semaphore = self.db_semaphore.clone();
             let chunk_size = config.nutrition_chunk_size;
             tasks.push(tokio::spawn(async move {
-                let _permit = semaphore.acquire().await.expect("Semaphore closed");
+                let _permit = match semaphore.acquire().await {
+                    Ok(permit) => permit,
+                    Err(e) => {
+                        error!("Failed to acquire database semaphore permit: {}", e);
+                        return (
+                            0,
+                            1,
+                            vec![ProcessingError {
+                                metric_type: "Semaphore".to_string(),
+                                error_message: format!(
+                                    "Database semaphore acquisition failed: {}",
+                                    e
+                                ),
+                                index: None,
+                            }],
+                            0,
+                        );
+                    }
+                };
                 Self::process_with_retry(
                     "Nutrition",
                     || {
@@ -656,7 +892,25 @@ impl BatchProcessor {
             let semaphore = self.db_semaphore.clone();
             let chunk_size = config.environmental_chunk_size;
             tasks.push(tokio::spawn(async move {
-                let _permit = semaphore.acquire().await.expect("Semaphore closed");
+                let _permit = match semaphore.acquire().await {
+                    Ok(permit) => permit,
+                    Err(e) => {
+                        error!("Failed to acquire database semaphore permit: {}", e);
+                        return (
+                            0,
+                            1,
+                            vec![ProcessingError {
+                                metric_type: "Semaphore".to_string(),
+                                error_message: format!(
+                                    "Database semaphore acquisition failed: {}",
+                                    e
+                                ),
+                                index: None,
+                            }],
+                            0,
+                        );
+                    }
+                };
                 Self::process_with_retry(
                     "Environmental",
                     || {
@@ -680,7 +934,25 @@ impl BatchProcessor {
             let semaphore = self.db_semaphore.clone();
             let chunk_size = config.audio_exposure_chunk_size;
             tasks.push(tokio::spawn(async move {
-                let _permit = semaphore.acquire().await.expect("Semaphore closed");
+                let _permit = match semaphore.acquire().await {
+                    Ok(permit) => permit,
+                    Err(e) => {
+                        error!("Failed to acquire database semaphore permit: {}", e);
+                        return (
+                            0,
+                            1,
+                            vec![ProcessingError {
+                                metric_type: "Semaphore".to_string(),
+                                error_message: format!(
+                                    "Database semaphore acquisition failed: {}",
+                                    e
+                                ),
+                                index: None,
+                            }],
+                            0,
+                        );
+                    }
+                };
                 Self::process_with_retry(
                     "AudioExposure",
                     || {
@@ -705,7 +977,25 @@ impl BatchProcessor {
             let semaphore = self.db_semaphore.clone();
             let chunk_size = config.menstrual_chunk_size;
             tasks.push(tokio::spawn(async move {
-                let _permit = semaphore.acquire().await.expect("Semaphore closed");
+                let _permit = match semaphore.acquire().await {
+                    Ok(permit) => permit,
+                    Err(e) => {
+                        error!("Failed to acquire database semaphore permit: {}", e);
+                        return (
+                            0,
+                            1,
+                            vec![ProcessingError {
+                                metric_type: "Semaphore".to_string(),
+                                error_message: format!(
+                                    "Database semaphore acquisition failed: {}",
+                                    e
+                                ),
+                                index: None,
+                            }],
+                            0,
+                        );
+                    }
+                };
                 Self::process_with_retry(
                     "MenstrualHealth",
                     || {
@@ -729,7 +1019,25 @@ impl BatchProcessor {
             let semaphore = self.db_semaphore.clone();
             let chunk_size = config.fertility_chunk_size;
             tasks.push(tokio::spawn(async move {
-                let _permit = semaphore.acquire().await.expect("Semaphore closed");
+                let _permit = match semaphore.acquire().await {
+                    Ok(permit) => permit,
+                    Err(e) => {
+                        error!("Failed to acquire database semaphore permit: {}", e);
+                        return (
+                            0,
+                            1,
+                            vec![ProcessingError {
+                                metric_type: "Semaphore".to_string(),
+                                error_message: format!(
+                                    "Database semaphore acquisition failed: {}",
+                                    e
+                                ),
+                                index: None,
+                            }],
+                            0,
+                        );
+                    }
+                };
                 Self::process_with_retry(
                     "FertilityTracking",
                     || {
@@ -752,7 +1060,25 @@ impl BatchProcessor {
             let semaphore = self.db_semaphore.clone();
             let chunk_size = config.workout_chunk_size;
             tasks.push(tokio::spawn(async move {
-                let _permit = semaphore.acquire().await.expect("Semaphore closed");
+                let _permit = match semaphore.acquire().await {
+                    Ok(permit) => permit,
+                    Err(e) => {
+                        error!("Failed to acquire database semaphore permit: {}", e);
+                        return (
+                            0,
+                            1,
+                            vec![ProcessingError {
+                                metric_type: "Semaphore".to_string(),
+                                error_message: format!(
+                                    "Database semaphore acquisition failed: {}",
+                                    e
+                                ),
+                                index: None,
+                            }],
+                            0,
+                        );
+                    }
+                };
                 Self::process_with_retry(
                     "Workout",
                     || Self::insert_workouts_chunked(&pool, user_id, workouts.clone(), chunk_size),
@@ -762,8 +1088,25 @@ impl BatchProcessor {
             }));
         }
 
-        // Wait for all tasks to complete
-        let results = join_all(tasks).await;
+        // Process tasks with bounded concurrency to reduce connection pressure
+        let results = if self.config.max_concurrent_metric_types < tasks.len() {
+            // Process tasks in batches to limit concurrent connections
+            let mut all_results = Vec::new();
+            let mut remaining_tasks = tasks;
+            while !remaining_tasks.is_empty() {
+                let batch_size = self
+                    .config
+                    .max_concurrent_metric_types
+                    .min(remaining_tasks.len());
+                let current_batch = remaining_tasks.drain(..batch_size).collect::<Vec<_>>();
+                let chunk_results = join_all(current_batch).await;
+                all_results.extend(chunk_results);
+            }
+            all_results
+        } else {
+            // Process all tasks concurrently if under the limit
+            join_all(tasks).await
+        };
 
         // Aggregate results
         for task_result in results {
@@ -2238,7 +2581,8 @@ impl BatchProcessor {
                     .push_bind(&metric.source_device);
             });
 
-            query_builder.push(" ON CONFLICT (user_id, sleep_start, sleep_end) DO UPDATE SET
+            query_builder.push(" ON CONFLICT (user_id, sleep_start) DO UPDATE SET
+                sleep_end = EXCLUDED.sleep_end,
                 duration_minutes = GREATEST(EXCLUDED.duration_minutes, sleep_metrics.duration_minutes),
                 deep_sleep_minutes = COALESCE(EXCLUDED.deep_sleep_minutes, sleep_metrics.deep_sleep_minutes),
                 rem_sleep_minutes = COALESCE(EXCLUDED.rem_sleep_minutes, sleep_metrics.rem_sleep_minutes),
@@ -3021,13 +3365,13 @@ impl BatchProcessor {
                     .push_bind(&metric.source_device);
             });
 
-            // Use composite key for conflict resolution: user_id, recorded_at, temperature_source
-            // This allows multiple temperature readings at the same time from different sources
-            query_builder.push(" ON CONFLICT (user_id, recorded_at, temperature_source) DO UPDATE SET
+            // Fix: Use actual constraint from database schema: user_id, recorded_at
+            query_builder.push(" ON CONFLICT (user_id, recorded_at) DO UPDATE SET
                 body_temperature = COALESCE(EXCLUDED.body_temperature, temperature_metrics.body_temperature),
                 basal_body_temperature = COALESCE(EXCLUDED.basal_body_temperature, temperature_metrics.basal_body_temperature),
                 apple_sleeping_wrist_temperature = COALESCE(EXCLUDED.apple_sleeping_wrist_temperature, temperature_metrics.apple_sleeping_wrist_temperature),
                 water_temperature = COALESCE(EXCLUDED.water_temperature, temperature_metrics.water_temperature),
+                temperature_source = COALESCE(EXCLUDED.temperature_source, temperature_metrics.temperature_source),
                 source_device = COALESCE(EXCLUDED.source_device, temperature_metrics.source_device),
                 updated_at = NOW()");
 
@@ -3877,25 +4221,32 @@ impl BatchProcessor {
     }
 
     // ============================================================================
-    // STUB METHODS FOR MISSING METRIC TYPES - CRITICAL DATA LOSS PREVENTION
+    // METRIC TYPE INSERTION METHODS
     // ============================================================================
-    // TODO: These are temporary stub implementations to prevent data loss.
-    // Full implementations with proper database operations are needed urgently.
-    // See TODO_CRITICAL_METRIC_METHODS.md for implementation details.
 
-    /// STUB: Insert metabolic metrics - TODO: Implement full database operations
+    /// Insert metabolic metrics with chunked processing for PostgreSQL parameter limits
     async fn insert_metabolic_metrics(
         &self,
         user_id: uuid::Uuid,
         metrics: Vec<crate::models::MetabolicMetric>,
     ) -> Result<usize, sqlx::Error> {
-        warn!(
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        info!(
             user_id = %user_id,
             count = metrics.len(),
-            "STUB: Metabolic metrics processing not yet implemented - data being lost!"
+            "Processing metabolic metrics insertion"
         );
-        // TODO: Implement actual database insertion
-        Ok(0) // Return 0 to indicate no processing yet
+
+        Self::insert_metabolic_metrics_chunked(
+            &self.pool,
+            user_id,
+            metrics,
+            self.config.metabolic_chunk_size,
+        )
+        .await
     }
 
     /// Batch insert environmental metrics with comprehensive environmental data
@@ -4696,28 +5047,157 @@ impl BatchProcessor {
         Ok(total_inserted)
     }
 
+    /// Batch insert metabolic metrics in optimized chunks
+    async fn insert_metabolic_metrics_chunked(
+        pool: &PgPool,
+        user_id: Uuid,
+        metrics: Vec<crate::models::MetabolicMetric>,
+        chunk_size: usize,
+    ) -> Result<usize, sqlx::Error> {
+        if metrics.is_empty() {
+            return Ok(0);
+        }
+
+        let chunks: Vec<&[crate::models::MetabolicMetric]> = metrics.chunks(chunk_size).collect();
+        let mut total_inserted = 0;
+        let max_params_per_chunk = chunk_size * METABOLIC_PARAMS_PER_RECORD;
+
+        info!(
+            metric_type = "metabolic",
+            total_records = metrics.len(),
+            chunk_count = chunks.len(),
+            chunk_size = chunk_size,
+            max_params_per_chunk = max_params_per_chunk,
+            "Processing metabolic metrics in chunks"
+        );
+
+        for (chunk_idx, chunk) in chunks.iter().enumerate() {
+            let mut query_builder: QueryBuilder<Postgres> = QueryBuilder::new(
+                "INSERT INTO metabolic_metrics (user_id, recorded_at, blood_alcohol_content, insulin_delivery_units, delivery_method, source_device) "
+            );
+
+            query_builder.push_values(chunk.iter(), |mut b, metric| {
+                b.push_bind(user_id)
+                    .push_bind(metric.recorded_at)
+                    .push_bind(metric.blood_alcohol_content)
+                    .push_bind(metric.insulin_delivery_units)
+                    .push_bind(&metric.delivery_method)
+                    .push_bind(&metric.source_device);
+            });
+
+            query_builder.push(" ON CONFLICT (user_id, recorded_at) DO UPDATE SET
+                blood_alcohol_content = COALESCE(EXCLUDED.blood_alcohol_content, metabolic_metrics.blood_alcohol_content),
+                insulin_delivery_units = COALESCE(EXCLUDED.insulin_delivery_units, metabolic_metrics.insulin_delivery_units),
+                delivery_method = COALESCE(EXCLUDED.delivery_method, metabolic_metrics.delivery_method),
+                source_device = COALESCE(EXCLUDED.source_device, metabolic_metrics.source_device),
+                updated_at = NOW()");
+
+            let insert_result = query_builder.build().execute(pool).await;
+
+            match insert_result {
+                Ok(result) => {
+                    let rows_inserted = result.rows_affected() as usize;
+                    total_inserted += rows_inserted;
+                    info!(
+                        metric_type = "metabolic",
+                        chunk_idx = chunk_idx,
+                        chunk_size = chunk.len(),
+                        rows_inserted = rows_inserted,
+                        "Successfully inserted metabolic metrics chunk"
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        error = %e,
+                        metric_type = "metabolic",
+                        chunk_idx = chunk_idx,
+                        chunk_size = chunk.len(),
+                        "Failed to insert metabolic metrics chunk"
+                    );
+                    return Err(e);
+                }
+            }
+        }
+
+        Ok(total_inserted)
+    }
+
     // ============================================================================
     // STUB DEDUPLICATION METHODS FOR MISSING METRIC TYPES
     // ============================================================================
 
-    /// STUB: Deduplicate metabolic metrics - TODO: Implement proper deduplication
+    /// Deduplicate metabolic metrics using MetabolicKey (user_id, recorded_at)
     fn deduplicate_metabolic_metrics(
         &self,
         _user_id: uuid::Uuid,
         metrics: Vec<crate::models::MetabolicMetric>,
     ) -> Vec<crate::models::MetabolicMetric> {
-        // TODO: Implement proper deduplication using MetabolicKey
-        metrics // Return all for now - no deduplication yet
+        let mut seen_keys = HashSet::new();
+        let mut deduplicated = Vec::with_capacity(metrics.len());
+        let mut duplicates_removed = 0;
+
+        for metric in metrics {
+            let key = MetabolicKey {
+                user_id: metric.user_id,
+                recorded_at_millis: metric.recorded_at.timestamp_millis(),
+            };
+
+            if seen_keys.insert(key) {
+                deduplicated.push(metric);
+            } else {
+                duplicates_removed += 1;
+            }
+        }
+
+        if duplicates_removed > 0 {
+            info!(
+                metric_type = "metabolic",
+                original_count = seen_keys.len() + duplicates_removed,
+                deduplicated_count = deduplicated.len(),
+                duplicates_removed = duplicates_removed,
+                "Metabolic metrics deduplication completed"
+            );
+        }
+
+        deduplicated
     }
 
-    /// STUB: Deduplicate nutrition metrics - TODO: Implement proper deduplication
+    /// Deduplicate nutrition metrics using NutritionKey (user_id, recorded_at)
     fn deduplicate_nutrition_metrics(
         &self,
         _user_id: uuid::Uuid,
         metrics: Vec<crate::models::NutritionMetric>,
     ) -> Vec<crate::models::NutritionMetric> {
-        // TODO: Implement proper deduplication
-        metrics // Return all for now - no deduplication yet
+        let mut seen_keys = HashSet::new();
+        let mut deduplicated = Vec::with_capacity(metrics.len());
+        let mut duplicates_removed = 0;
+
+        for metric in metrics {
+            let key = NutritionKey {
+                user_id: metric.user_id,
+                recorded_at_millis: metric.recorded_at.timestamp_millis(),
+            };
+
+            if seen_keys.insert(key) {
+                // Key was not present, add metric
+                deduplicated.push(metric);
+            } else {
+                // Duplicate found, skip this metric
+                duplicates_removed += 1;
+            }
+        }
+
+        if duplicates_removed > 0 {
+            info!(
+                metric_type = "nutrition",
+                original_count = seen_keys.len() + duplicates_removed,
+                deduplicated_count = deduplicated.len(),
+                duplicates_removed = duplicates_removed,
+                "Nutrition metrics deduplication completed"
+            );
+        }
+
+        deduplicated
     }
 
     /// Deduplicate environmental metrics using EnvironmentalKey (user_id, recorded_at)
@@ -4796,54 +5276,190 @@ impl BatchProcessor {
         deduplicated
     }
 
-    /// STUB: Deduplicate safety event metrics - TODO: Implement proper deduplication
+    /// Deduplicate safety event metrics using SafetyEventKey (user_id, recorded_at, event_type)
     fn deduplicate_safety_event_metrics(
         &self,
         _user_id: uuid::Uuid,
         metrics: Vec<crate::models::SafetyEventMetric>,
     ) -> Vec<crate::models::SafetyEventMetric> {
-        // TODO: Implement proper deduplication using SafetyEventKey
-        metrics
+        let mut seen_keys = HashSet::new();
+        let mut deduplicated = Vec::with_capacity(metrics.len());
+        let mut duplicates_removed = 0;
+
+        for metric in metrics {
+            let key = SafetyEventKey {
+                user_id: metric.user_id,
+                recorded_at_millis: metric.recorded_at.timestamp_millis(),
+                event_type: metric.event_type.clone(),
+            };
+
+            if seen_keys.insert(key) {
+                deduplicated.push(metric);
+            } else {
+                duplicates_removed += 1;
+            }
+        }
+
+        if duplicates_removed > 0 {
+            info!(
+                metric_type = "safety_event",
+                original_count = seen_keys.len() + duplicates_removed,
+                deduplicated_count = deduplicated.len(),
+                duplicates_removed = duplicates_removed,
+                "Safety event metrics deduplication completed"
+            );
+        }
+
+        deduplicated
     }
 
-    /// STUB: Deduplicate mindfulness metrics - TODO: Implement proper deduplication
+    /// Deduplicate mindfulness metrics using MindfulnessKey (user_id, session_start, session_end)
     fn deduplicate_mindfulness_metrics(
         &self,
         _user_id: uuid::Uuid,
         metrics: Vec<crate::models::MindfulnessMetric>,
     ) -> Vec<crate::models::MindfulnessMetric> {
-        // TODO: Implement proper deduplication using MindfulnessKey
-        metrics
+        let mut seen_keys = HashSet::new();
+        let mut deduplicated = Vec::with_capacity(metrics.len());
+        let mut duplicates_removed = 0;
+
+        for metric in metrics {
+            let key = MindfulnessKey {
+                user_id: metric.user_id,
+                // Use recorded_at as session start, and calculate session end from duration
+                session_start_millis: metric.recorded_at.timestamp_millis(),
+                session_end_millis: metric.recorded_at.timestamp_millis()
+                    + (metric.session_duration_minutes.unwrap_or(0) as i64 * 60 * 1000),
+            };
+
+            if seen_keys.insert(key) {
+                deduplicated.push(metric);
+            } else {
+                duplicates_removed += 1;
+            }
+        }
+
+        if duplicates_removed > 0 {
+            info!(
+                metric_type = "mindfulness",
+                original_count = seen_keys.len() + duplicates_removed,
+                deduplicated_count = deduplicated.len(),
+                duplicates_removed = duplicates_removed,
+                "Mindfulness metrics deduplication completed"
+            );
+        }
+
+        deduplicated
     }
 
-    /// STUB: Deduplicate mental health metrics - TODO: Implement proper deduplication
+    /// Deduplicate mental health metrics using MentalHealthKey (user_id, recorded_at)
     fn deduplicate_mental_health_metrics(
         &self,
         _user_id: uuid::Uuid,
         metrics: Vec<crate::models::MentalHealthMetric>,
     ) -> Vec<crate::models::MentalHealthMetric> {
-        // TODO: Implement proper deduplication using MentalHealthKey
-        metrics
+        let mut seen_keys = HashSet::new();
+        let mut deduplicated = Vec::with_capacity(metrics.len());
+        let mut duplicates_removed = 0;
+
+        for metric in metrics {
+            let key = MentalHealthKey {
+                user_id: metric.user_id,
+                recorded_at_millis: metric.recorded_at.timestamp_millis(),
+            };
+
+            if seen_keys.insert(key) {
+                deduplicated.push(metric);
+            } else {
+                duplicates_removed += 1;
+            }
+        }
+
+        if duplicates_removed > 0 {
+            info!(
+                metric_type = "mental_health",
+                original_count = seen_keys.len() + duplicates_removed,
+                deduplicated_count = deduplicated.len(),
+                duplicates_removed = duplicates_removed,
+                "Mental health metrics deduplication completed"
+            );
+        }
+
+        deduplicated
     }
 
-    /// STUB: Deduplicate symptom metrics - TODO: Implement proper deduplication
+    /// Deduplicate symptom metrics using SymptomKey (user_id, recorded_at, symptom_type)
     fn deduplicate_symptom_metrics(
         &self,
         _user_id: uuid::Uuid,
         metrics: Vec<crate::models::SymptomMetric>,
     ) -> Vec<crate::models::SymptomMetric> {
-        // TODO: Implement proper deduplication using SymptomKey
-        metrics
+        let mut seen_keys = HashSet::new();
+        let mut deduplicated = Vec::with_capacity(metrics.len());
+        let mut duplicates_removed = 0;
+
+        for metric in metrics {
+            let key = SymptomKey {
+                user_id: metric.user_id,
+                recorded_at_millis: metric.recorded_at.timestamp_millis(),
+                symptom_type: metric.symptom_type.to_string(),
+            };
+
+            if seen_keys.insert(key) {
+                deduplicated.push(metric);
+            } else {
+                duplicates_removed += 1;
+            }
+        }
+
+        if duplicates_removed > 0 {
+            info!(
+                metric_type = "symptom",
+                original_count = seen_keys.len() + duplicates_removed,
+                deduplicated_count = deduplicated.len(),
+                duplicates_removed = duplicates_removed,
+                "Symptom metrics deduplication completed"
+            );
+        }
+
+        deduplicated
     }
 
-    /// STUB: Deduplicate hygiene metrics - TODO: Implement proper deduplication
+    /// Deduplicate hygiene metrics using HygieneKey (user_id, recorded_at, event_type)
     fn deduplicate_hygiene_metrics(
         &self,
         _user_id: uuid::Uuid,
         metrics: Vec<crate::models::HygieneMetric>,
     ) -> Vec<crate::models::HygieneMetric> {
-        // TODO: Implement proper deduplication using HygieneKey
-        metrics
+        let mut seen_keys = HashSet::new();
+        let mut deduplicated = Vec::with_capacity(metrics.len());
+        let mut duplicates_removed = 0;
+
+        for metric in metrics {
+            let key = HygieneKey {
+                user_id: metric.user_id,
+                recorded_at_millis: metric.recorded_at.timestamp_millis(),
+                event_type: metric.event_type.to_string(),
+            };
+
+            if seen_keys.insert(key) {
+                deduplicated.push(metric);
+            } else {
+                duplicates_removed += 1;
+            }
+        }
+
+        if duplicates_removed > 0 {
+            info!(
+                metric_type = "hygiene",
+                original_count = seen_keys.len() + duplicates_removed,
+                deduplicated_count = deduplicated.len(),
+                duplicates_removed = duplicates_removed,
+                "Hygiene metrics deduplication completed"
+            );
+        }
+
+        deduplicated
     }
 }
 

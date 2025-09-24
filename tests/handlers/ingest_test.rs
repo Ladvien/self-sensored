@@ -126,7 +126,7 @@ impl TestFixtures {
         let date_str = now.to_rfc3339();
         
         IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     // Heart rate data
                     IosMetric {

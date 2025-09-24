@@ -8,19 +8,19 @@ pub async fn create_connection_pool(database_url: &str) -> Result<PgPool, sqlx::
     info!("Creating optimized PostgreSQL connection pool");
 
     let max_connections = std::env::var("DATABASE_MAX_CONNECTIONS")
-        .unwrap_or_else(|_| "50".to_string()) // Increased from 20 for better concurrency
+        .unwrap_or_else(|_| "75".to_string()) // Optimized for high-concurrency batch processing
         .parse::<u32>()
-        .unwrap_or(50);
+        .unwrap_or(75);
 
     let min_connections = std::env::var("DATABASE_MIN_CONNECTIONS")
-        .unwrap_or_else(|_| "10".to_string()) // Increased from 5 to maintain ready connections
+        .unwrap_or_else(|_| "15".to_string()) // Ensure adequate warm connections for batch processing
         .parse::<u32>()
-        .unwrap_or(10);
+        .unwrap_or(15);
 
     let connect_timeout = std::env::var("DATABASE_CONNECT_TIMEOUT")
-        .unwrap_or_else(|_| "5".to_string()) // Reduced from 10 for faster failures
+        .unwrap_or_else(|_| "15".to_string()) // Increased for high-concurrency batch processing
         .parse::<u64>()
-        .unwrap_or(5);
+        .unwrap_or(15);
 
     let idle_timeout = std::env::var("DATABASE_IDLE_TIMEOUT")
         .unwrap_or_else(|_| "600".to_string()) // Increased from 300 to reduce connection churn

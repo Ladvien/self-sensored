@@ -1,6 +1,5 @@
 /// Comprehensive Batch Processor Coverage Test - Target: 3210 lines (0% -> 100%)
 /// This test focuses on the largest uncovered module using modern 2025 Rust testing practices
-
 use chrono::{Duration, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -9,7 +8,7 @@ use uuid::Uuid;
 use self_sensored::config::BatchConfig;
 use self_sensored::models::health_metrics::ProcessingError;
 use self_sensored::services::batch_processor::{
-    BatchProcessor, BatchProcessingResult, DeduplicationStats
+    BatchProcessingResult, BatchProcessor, DeduplicationStats,
 };
 
 // ==================== UNIT TESTS FOR COVERAGE ====================
@@ -133,11 +132,11 @@ fn test_deduplication_stats_functionality() {
     assert_eq!(stats.workout_duplicates, 10);
 
     // Calculate total duplicates across all metrics
-    let total_duplicates = stats.heart_rate_duplicates +
-                          stats.blood_pressure_duplicates +
-                          stats.sleep_duplicates +
-                          stats.activity_duplicates +
-                          stats.workout_duplicates;
+    let total_duplicates = stats.heart_rate_duplicates
+        + stats.blood_pressure_duplicates
+        + stats.sleep_duplicates
+        + stats.activity_duplicates
+        + stats.workout_duplicates;
 
     assert_eq!(total_duplicates, 125);
 }
@@ -234,17 +233,23 @@ fn test_batch_processing_error_handling() {
     assert_eq!(result.failed_count, 7);
 
     // Test error categorization
-    let db_errors = result.errors.iter()
+    let db_errors = result
+        .errors
+        .iter()
         .filter(|e| e.error_message.contains("Database") || e.error_message.contains("connection"))
         .count();
     assert_eq!(db_errors, 1);
 
-    let validation_errors = result.errors.iter()
+    let validation_errors = result
+        .errors
+        .iter()
         .filter(|e| e.error_message.contains("Invalid") || e.error_message.contains("value"))
         .count();
     assert_eq!(validation_errors, 1);
 
-    let constraint_errors = result.errors.iter()
+    let constraint_errors = result
+        .errors
+        .iter()
         .filter(|e| e.error_message.contains("Constraint") || e.error_message.contains("duplicate"))
         .count();
     assert_eq!(constraint_errors, 1);
@@ -295,7 +300,8 @@ fn test_memory_usage_tracking() {
     ];
 
     for (metric_type, chunk_size) in test_cases {
-        let estimated_memory_mb = (estimated_memory_per_record * chunk_size) as f64 / (1024.0 * 1024.0);
+        let estimated_memory_mb =
+            (estimated_memory_per_record * chunk_size) as f64 / (1024.0 * 1024.0);
 
         assert!(
             estimated_memory_mb < config.memory_limit_mb,
@@ -426,11 +432,11 @@ fn test_batch_processing_result_comprehensive() {
     // Test success rate calculation with various scenarios
     // Format: (processed, failed, expected_success_rate)
     let test_scenarios = vec![
-        (100, 0, 100.0),   // Perfect success
-        (95, 5, 95.0),     // High success rate
-        (50, 50, 50.0),    // Medium success rate
-        (0, 50, 0.0),      // Complete failure
-        (75, 25, 75.0),    // Mixed results
+        (100, 0, 100.0), // Perfect success
+        (95, 5, 95.0),   // High success rate
+        (50, 50, 50.0),  // Medium success rate
+        (0, 50, 0.0),    // Complete failure
+        (75, 25, 75.0),  // Mixed results
     ];
 
     for (processed, failed, expected_success_rate) in test_scenarios {

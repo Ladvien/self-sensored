@@ -26,8 +26,8 @@ use self_sensored::{
     models::{
         enums::{ActivityContext, WorkoutType},
         health_metrics::{
-            ActivityMetric, BloodPressureMetric, HealthMetric, HeartRateMetric, SleepMetric,
-            WorkoutData, IngestData, IngestPayload, IngestResponse,
+            ActivityMetric, BloodPressureMetric, HealthMetric, HeartRateMetric, IngestData,
+            IngestPayload, IngestResponse, SleepMetric, WorkoutData,
         },
         ios_models::{IosIngestData, IosIngestPayload, IosMetric, IosMetricData, IosWorkout},
     },
@@ -68,7 +68,7 @@ impl IngestTestConfig {
 
     /// Create a test auth context for testing
     pub fn create_test_auth_context(user_id: Uuid) -> AuthContext {
-        use self_sensored::services::auth::{User as AuthUser, ApiKey as AuthApiKey};
+        use self_sensored::services::auth::{ApiKey as AuthApiKey, User as AuthUser};
         let api_key_id = Uuid::new_v4();
         let now = chrono::Utc::now();
 
@@ -226,7 +226,7 @@ impl TestFixtures {
         let now = Utc::now();
 
         IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![IosMetric {
                     name: "HKQuantityTypeIdentifierHeartRate".to_string(),
                     units: Some("count/min".to_string()),

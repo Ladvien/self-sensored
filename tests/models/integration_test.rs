@@ -435,9 +435,7 @@ mod realistic_data_tests {
 
             // Check aggregated totals are reasonable
             assert_eq!(record1.step_count, Some(15000)); // 12547 + 2453
-            assert!(
-                (record1.distance_meters.unwrap() - 10625.0).abs() < 0.1
-            );
+            assert!((record1.distance_meters.unwrap() - 10625.0).abs() < 0.1);
             // Note: calories_burned and active_minutes are not direct fields in ActivityRecord
             // They would be calculated from active_energy_burned_kcal and other metrics
             assert_eq!(record1.flights_climbed, Some(21)); // 18 + 3
@@ -614,7 +612,11 @@ mod edge_case_tests {
                 atrial_fibrillation_burden_percentage: None,
                 vo2_max_ml_kg_min: None,
                 source_device: Some("Apple Watch".to_string()),
-                context: Some(if i % 10 < 7 { ActivityContext::Resting } else { ActivityContext::Exercise }),
+                context: Some(if i % 10 < 7 {
+                    ActivityContext::Resting
+                } else {
+                    ActivityContext::Exercise
+                }),
                 created_at: Utc::now(),
             });
             large_payload.data.metrics.push(hr_metric);

@@ -1,9 +1,14 @@
-use sqlx::{PgPool, postgres::PgPoolOptions};
+use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::env;
 
-use self_sensored::db::database::{create_connection_pool, test_database_connection, update_db_pool_metrics};
+use self_sensored::db::database::{
+    create_connection_pool, test_database_connection, update_db_pool_metrics,
+};
 
 async fn get_test_database_url() -> String {
+    // Load .env file if it exists
+    dotenv::dotenv().ok();
+
     env::var("TEST_DATABASE_URL")
         .or_else(|_| env::var("DATABASE_URL"))
         .expect("TEST_DATABASE_URL or DATABASE_URL must be set")
@@ -93,10 +98,7 @@ async fn test_database_connection_queries() {
     let pool = create_connection_pool(&database_url).await.unwrap();
 
     // Test basic SELECT 1 query
-    let result: (i32,) = sqlx::query_as("SELECT 1")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let result: (i32,) = sqlx::query_as("SELECT 1").fetch_one(&pool).await.unwrap();
 
     assert_eq!(result.0, 1);
 }
@@ -244,10 +246,7 @@ async fn test_connection_health_check() {
         assert!(conn.is_ok());
 
         // Use the connection
-        let result: (i32,) = sqlx::query_as("SELECT 1")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+        let result: (i32,) = sqlx::query_as("SELECT 1").fetch_one(&pool).await.unwrap();
         assert_eq!(result.0, 1);
     }
 }
@@ -311,10 +310,10 @@ async fn test_update_db_pool_metrics() {
 async fn test_environment_variable_parsing() {
     // Test various edge cases for environment variable parsing
     let test_cases = vec![
-        ("0", 50u32), // Invalid (0), should default to 50
-        ("1", 1u32),  // Valid minimum
+        ("0", 50u32),    // Invalid (0), should default to 50
+        ("1", 1u32),     // Valid minimum
         ("999", 999u32), // Large number
-        ("", 50u32),  // Empty string, should default
+        ("", 50u32),     // Empty string, should default
     ];
 
     for (env_val, _expected_or_default) in test_cases {

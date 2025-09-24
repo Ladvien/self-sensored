@@ -9,10 +9,10 @@ use tokio::sync::Mutex;
 use tokio::time::sleep;
 use uuid::Uuid;
 
-use self_sensored::services::cache::{
-    CacheConfig, CacheEntry, CacheKey, CacheService, CacheStats, generate_query_hash,
-};
 use self_sensored::handlers::query::QueryParams;
+use self_sensored::services::cache::{
+    generate_query_hash, CacheConfig, CacheEntry, CacheKey, CacheService, CacheStats,
+};
 
 // Test data structures
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -189,9 +189,7 @@ async fn test_basic_cache_operations() {
     };
 
     // Test cache miss
-    let result: Option<TestData> = cache_service
-        .get(&cache_key, "test_prefix")
-        .await;
+    let result: Option<TestData> = cache_service.get(&cache_key, "test_prefix").await;
     assert!(result.is_none());
 
     // Test cache set
@@ -201,9 +199,7 @@ async fn test_basic_cache_operations() {
     assert!(set_result);
 
     // Test cache hit
-    let cached_result: Option<TestData> = cache_service
-        .get(&cache_key, "test_prefix")
-        .await;
+    let cached_result: Option<TestData> = cache_service.get(&cache_key, "test_prefix").await;
     assert!(cached_result.is_some());
     assert_eq!(cached_result.unwrap(), test_data);
 }
@@ -226,23 +222,24 @@ async fn test_cache_ttl_expiration() {
 
     // Set data with short TTL
     let set_result = cache_service
-        .set(&cache_key, "test_prefix", test_data.clone(), Some(Duration::from_millis(500)))
+        .set(
+            &cache_key,
+            "test_prefix",
+            test_data.clone(),
+            Some(Duration::from_millis(500)),
+        )
         .await;
     assert!(set_result);
 
     // Immediate get should work
-    let cached_result: Option<TestData> = cache_service
-        .get(&cache_key, "test_prefix")
-        .await;
+    let cached_result: Option<TestData> = cache_service.get(&cache_key, "test_prefix").await;
     assert!(cached_result.is_some());
 
     // Wait for expiration
     sleep(Duration::from_millis(600)).await;
 
     // Should be expired
-    let expired_result: Option<TestData> = cache_service
-        .get(&cache_key, "test_prefix")
-        .await;
+    let expired_result: Option<TestData> = cache_service.get(&cache_key, "test_prefix").await;
     assert!(expired_result.is_none());
 }
 
@@ -265,21 +262,15 @@ async fn test_cache_deletion() {
         .await;
 
     // Verify it exists
-    let cached_result: Option<TestData> = cache_service
-        .get(&cache_key, "test_prefix")
-        .await;
+    let cached_result: Option<TestData> = cache_service.get(&cache_key, "test_prefix").await;
     assert!(cached_result.is_some());
 
     // Delete it
-    let delete_result = cache_service
-        .delete(&cache_key, "test_prefix")
-        .await;
+    let delete_result = cache_service.delete(&cache_key, "test_prefix").await;
     assert!(delete_result);
 
     // Verify it's gone
-    let deleted_result: Option<TestData> = cache_service
-        .get(&cache_key, "test_prefix")
-        .await;
+    let deleted_result: Option<TestData> = cache_service.get(&cache_key, "test_prefix").await;
     assert!(deleted_result.is_none());
 }
 
@@ -316,16 +307,12 @@ async fn test_user_cache_invalidation() {
     // Set all entries
     for (i, key) in keys.iter().enumerate() {
         let test_data = TestData::new(&format!("value_{}", i));
-        cache_service
-            .set(key, "test_prefix", test_data, None)
-            .await;
+        cache_service.set(key, "test_prefix", test_data, None).await;
     }
 
     // Verify all entries exist
     for key in &keys {
-        let result: Option<TestData> = cache_service
-            .get(key, "test_prefix")
-            .await;
+        let result: Option<TestData> = cache_service.get(key, "test_prefix").await;
         assert!(result.is_some());
     }
 
@@ -337,16 +324,12 @@ async fn test_user_cache_invalidation() {
 
     // Verify first user's entries are gone
     for key in &keys[0..3] {
-        let result: Option<TestData> = cache_service
-            .get(key, "test_prefix")
-            .await;
+        let result: Option<TestData> = cache_service.get(key, "test_prefix").await;
         assert!(result.is_none());
     }
 
     // Verify other user's entry still exists
-    let other_result: Option<TestData> = cache_service
-        .get(&keys[3], "test_prefix")
-        .await;
+    let other_result: Option<TestData> = cache_service.get(&keys[3], "test_prefix").await;
     assert!(other_result.is_some());
 }
 
@@ -378,9 +361,7 @@ async fn test_concurrent_cache_access() {
                 .await;
 
             // Get data back
-            let result: Option<TestData> = cache_service
-                .get(&cache_key, "test_prefix")
-                .await;
+            let result: Option<TestData> = cache_service.get(&cache_key, "test_prefix").await;
 
             result
         });
@@ -393,7 +374,9 @@ async fn test_concurrent_cache_access() {
 
     // Verify all operations succeeded
     for (i, result) in results.into_iter().enumerate() {
-        let data = result.expect("Task should complete").expect("Should have cached data");
+        let data = result
+            .expect("Task should complete")
+            .expect("Should have cached data");
         assert_eq!(data.value, format!("concurrent_value_{}", i));
     }
 }
@@ -427,10 +410,12 @@ async fn test_cache_memory_pressure() {
             metric_type: format!("large_data_{}", i),
         };
 
-        let result: Option<LargeTestData> = cache_service
-            .get(&cache_key, "test_prefix")
-            .await;
-        assert!(result.is_some(), "Should be able to get large data entry {}", i);
+        let result: Option<LargeTestData> = cache_service.get(&cache_key, "test_prefix").await;
+        assert!(
+            result.is_some(),
+            "Should be able to get large data entry {}",
+            i
+        );
 
         let data = result.unwrap();
         assert_eq!(data.values.len(), 1000);
@@ -467,32 +452,36 @@ async fn test_api_key_caching() {
         api_key_hash: api_key_hash.to_string(),
     };
 
-    let lookup_key = CacheKey::ApiKeyLookup {
-        api_key_id,
-    };
+    let lookup_key = CacheKey::ApiKeyLookup { api_key_id };
 
     // Cache API key data
     let set_auth_result = cache_service
-        .set(&auth_key, "health_export", api_data.clone(), Some(Duration::from_secs(300)))
+        .set(
+            &auth_key,
+            "health_export",
+            api_data.clone(),
+            Some(Duration::from_secs(300)),
+        )
         .await;
     assert!(set_auth_result);
 
     let set_lookup_result = cache_service
-        .set(&lookup_key, "health_export", api_data.clone(), Some(Duration::from_secs(300)))
+        .set(
+            &lookup_key,
+            "health_export",
+            api_data.clone(),
+            Some(Duration::from_secs(300)),
+        )
         .await;
     assert!(set_lookup_result);
 
     // Verify auth cache hit
-    let auth_result: Option<ApiKeyData> = cache_service
-        .get(&auth_key, "health_export")
-        .await;
+    let auth_result: Option<ApiKeyData> = cache_service.get(&auth_key, "health_export").await;
     assert!(auth_result.is_some());
     assert_eq!(auth_result.unwrap(), api_data);
 
     // Verify lookup cache hit
-    let lookup_result: Option<ApiKeyData> = cache_service
-        .get(&lookup_key, "health_export")
-        .await;
+    let lookup_result: Option<ApiKeyData> = cache_service.get(&lookup_key, "health_export").await;
     assert!(lookup_result.is_some());
     assert_eq!(lookup_result.unwrap(), api_data);
 }
@@ -534,12 +523,11 @@ async fn test_cache_entry_serialization() {
     };
 
     // Test serialization
-    let serialized = serde_json::to_string(&cache_entry)
-        .expect("Should serialize cache entry");
+    let serialized = serde_json::to_string(&cache_entry).expect("Should serialize cache entry");
 
     // Test deserialization
-    let deserialized: CacheEntry<TestData> = serde_json::from_str(&serialized)
-        .expect("Should deserialize cache entry");
+    let deserialized: CacheEntry<TestData> =
+        serde_json::from_str(&serialized).expect("Should deserialize cache entry");
 
     assert_eq!(deserialized.data, test_data);
     assert_eq!(deserialized.ttl_seconds, 300);
@@ -568,15 +556,11 @@ async fn test_disabled_cache_behavior() {
     assert!(!set_result);
 
     // Get operation should return None for disabled cache
-    let get_result: Option<TestData> = cache_service
-        .get(&cache_key, "test_prefix")
-        .await;
+    let get_result: Option<TestData> = cache_service.get(&cache_key, "test_prefix").await;
     assert!(get_result.is_none());
 
     // Delete operation should return false for disabled cache
-    let delete_result = cache_service
-        .delete(&cache_key, "test_prefix")
-        .await;
+    let delete_result = cache_service.delete(&cache_key, "test_prefix").await;
     assert!(!delete_result);
 
     // Invalidation should return false for disabled cache
@@ -619,22 +603,20 @@ async fn test_cache_error_handling() {
         .await;
     assert!(set_result);
 
-    let get_result: Option<TestData> = cache_service
-        .get(&cache_key, "test_prefix")
-        .await;
+    let get_result: Option<TestData> = cache_service.get(&cache_key, "test_prefix").await;
     assert!(get_result.is_some());
 }
 
 /// Helper function to create a test cache service
 async fn create_test_cache_service(config: CacheConfig) -> CacheService {
-    // For testing, we'll create a cache service that behaves like it's disabled
-    // since we don't have a real Redis instance in the test environment
-    let disabled_config = CacheConfig {
-        enabled: false,
-        ..config
-    };
+    // Load .env file for Redis URL
+    dotenv::dotenv().ok();
 
-    CacheService::new("redis://127.0.0.1:6379", disabled_config)
+    // Get Redis URL from environment or use default
+    let redis_url =
+        std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
+
+    CacheService::new(&redis_url, config)
         .await
         .expect("Failed to create test cache service")
 }

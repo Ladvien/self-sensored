@@ -39,6 +39,7 @@ pub struct BatchConfig {
     pub initial_backoff_ms: u64,
     pub max_backoff_ms: u64,
     pub enable_parallel_processing: bool,
+    pub max_concurrent_metric_types: usize, // Limit concurrent metric type processing to reduce connection pressure
     pub chunk_size: usize,
     pub memory_limit_mb: f64,
     // Chunking configurations to stay under PostgreSQL 65,535 parameter limit
@@ -86,6 +87,7 @@ impl Default for BatchConfig {
             initial_backoff_ms: 100,
             max_backoff_ms: 5000,
             enable_parallel_processing: true, // Keep parallel processing enabled
+            max_concurrent_metric_types: 8, // Limit to 8 concurrent metric types to reduce connection pressure
             chunk_size: 1000,
             memory_limit_mb: 500.0,
             // Optimized chunk sizes for maximum safe throughput - STORY-OPTIMIZATION-001
@@ -147,6 +149,10 @@ impl BatchConfig {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(true),
+            max_concurrent_metric_types: env::var("BATCH_MAX_CONCURRENT_METRIC_TYPES")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(8),
             chunk_size: env::var("BATCH_CHUNK_SIZE")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -280,7 +286,10 @@ impl BatchConfig {
         }
 
         if self.max_retries > 50 {
-            return Err("max_retries must not exceed 50 (excessive retries can cause performance issues)".to_string());
+            return Err(
+                "max_retries must not exceed 50 (excessive retries can cause performance issues)"
+                    .to_string(),
+            );
         }
 
         if self.initial_backoff_ms == 0 {

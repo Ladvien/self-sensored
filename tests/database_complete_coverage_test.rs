@@ -1,8 +1,10 @@
-use sqlx::{PgPool, postgres::PgPoolOptions};
+use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::env;
 use std::time::Duration;
 
-use self_sensored::db::database::{create_connection_pool, test_database_connection, update_db_pool_metrics};
+use self_sensored::db::database::{
+    create_connection_pool, test_database_connection, update_db_pool_metrics,
+};
 
 async fn get_test_database_url() -> String {
     env::var("TEST_DATABASE_URL")
@@ -32,10 +34,7 @@ async fn test_create_connection_pool_with_all_env_vars() {
     assert!(conn.is_ok());
 
     // Test query execution
-    let result: (i32,) = sqlx::query_as("SELECT 42")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let result: (i32,) = sqlx::query_as("SELECT 42").fetch_one(&pool).await.unwrap();
     assert_eq!(result.0, 42);
 
     // Clean up environment variables
@@ -82,11 +81,11 @@ async fn test_create_connection_pool_edge_case_env_values() {
     // Test with various edge case values
     let test_cases = vec![
         // (max_conn, min_conn, connect_timeout, expected_success)
-        ("1", "1", "1", true),      // Minimum values
-        ("0", "0", "0", true),      // Zero values (should default)
+        ("1", "1", "1", true),       // Minimum values
+        ("0", "0", "0", true),       // Zero values (should default)
         ("abc", "def", "xyz", true), // Non-numeric (should default)
-        ("", "", "", true),         // Empty strings (should default)
-        ("9999", "1", "30", true),  // Very large max connections
+        ("", "", "", true),          // Empty strings (should default)
+        ("9999", "1", "30", true),   // Very large max connections
     ];
 
     for (max_conn, min_conn, timeout, expected_success) in test_cases {
@@ -97,7 +96,13 @@ async fn test_create_connection_pool_edge_case_env_values() {
         let pool_result = create_connection_pool(&database_url).await;
 
         if expected_success {
-            assert!(pool_result.is_ok(), "Failed with values: max={}, min={}, timeout={}", max_conn, min_conn, timeout);
+            assert!(
+                pool_result.is_ok(),
+                "Failed with values: max={}, min={}, timeout={}",
+                max_conn,
+                min_conn,
+                timeout
+            );
 
             if let Ok(pool) = pool_result {
                 // Test that the pool actually works
@@ -129,7 +134,11 @@ async fn test_create_connection_pool_invalid_urls() {
 
     for invalid_url in invalid_urls {
         let result = create_connection_pool(invalid_url).await;
-        assert!(result.is_err(), "Should have failed for URL: {}", invalid_url);
+        assert!(
+            result.is_err(),
+            "Should have failed for URL: {}",
+            invalid_url
+        );
     }
 }
 
@@ -149,10 +158,7 @@ async fn test_database_basic_queries() {
     let pool = create_connection_pool(&database_url).await.unwrap();
 
     // Test basic SELECT 1
-    let result: (i32,) = sqlx::query_as("SELECT 1")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let result: (i32,) = sqlx::query_as("SELECT 1").fetch_one(&pool).await.unwrap();
     assert_eq!(result.0, 1);
 
     // Test SELECT with parameters
@@ -257,9 +263,9 @@ async fn test_postgis_extension_graceful_handling() {
             // PostGIS not available, which is acceptable
             let error_string = e.to_string();
             assert!(
-                error_string.contains("function") ||
-                error_string.contains("extension") ||
-                error_string.contains("does not exist")
+                error_string.contains("function")
+                    || error_string.contains("extension")
+                    || error_string.contains("does not exist")
             );
         }
     }
@@ -339,11 +345,7 @@ async fn test_multiple_independent_pools() {
     let pool3 = create_connection_pool(&database_url).await.unwrap();
 
     // Test that all pools work independently
-    let futures = vec![
-        pool1.acquire(),
-        pool2.acquire(),
-        pool3.acquire(),
-    ];
+    let futures = vec![pool1.acquire(), pool2.acquire(), pool3.acquire()];
 
     let results = futures::future::join_all(futures).await;
 
@@ -524,9 +526,7 @@ async fn test_database_error_handling() {
     let pool = create_connection_pool(&database_url).await.unwrap();
 
     // Test syntax error
-    let syntax_error = sqlx::query("SELECT INVALID SYNTAX")
-        .fetch_one(&pool)
-        .await;
+    let syntax_error = sqlx::query("SELECT INVALID SYNTAX").fetch_one(&pool).await;
     assert!(syntax_error.is_err());
 
     // Test invalid table access
@@ -558,10 +558,7 @@ async fn test_connection_pool_cleanup() {
         let pool = create_connection_pool(&database_url).await.unwrap();
 
         // Use the pool
-        let _result: (i32,) = sqlx::query_as("SELECT 1")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+        let _result: (i32,) = sqlx::query_as("SELECT 1").fetch_one(&pool).await.unwrap();
 
         // Pool should be dropped when it goes out of scope
     }
@@ -579,12 +576,12 @@ fn test_environment_variable_parsing_edge_cases() {
     // Test parsing behavior without actually connecting to database
 
     let test_cases = vec![
-        ("0", 50u32),       // Zero should default to 50
-        ("1", 1u32),        // Minimum valid value
-        ("65535", 65535u32), // Maximum reasonable value
-        ("", 50u32),        // Empty should default
-        ("abc", 50u32),     // Non-numeric should default
-        ("-5", 50u32),      // Negative should default
+        ("0", 50u32),                     // Zero should default to 50
+        ("1", 1u32),                      // Minimum valid value
+        ("65535", 65535u32),              // Maximum reasonable value
+        ("", 50u32),                      // Empty should default
+        ("abc", 50u32),                   // Non-numeric should default
+        ("-5", 50u32),                    // Negative should default
         ("999999999999999999999", 50u32), // Overflow should default
     ];
 

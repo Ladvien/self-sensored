@@ -2,6 +2,7 @@ use crate::middleware::metrics::Metrics;
 use crate::models::enums::WorkoutType;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Models that match the iOS Auto Health Export app JSON structure
 /// Root payload structure from iOS app
@@ -10,19 +11,78 @@ pub struct IosIngestPayload {
     pub data: IosIngestData,
 }
 
-/// Container for iOS health data - CRITICAL: iOS sends metrics as a HashMap, not Vec!
-/// The actual format is: "metrics": { "HKQuantityTypeIdentifierHeartRate": [...] }
+/// Container for iOS health data - supports both old and new formats
+/// New format: "metrics": { "HKQuantityTypeIdentifierHeartRate": [...] }
+/// Old format: "metrics": [{"name": "HKQuantityTypeIdentifierHeartRate", "data": [...]}]
 #[derive(Debug, Deserialize, Serialize)]
-pub struct IosIngestData {
-    // FIXME: This should be HashMap<String, Vec<IosMetricDataPoint>> to match actual iOS format
-    // Current format is wrong - iOS Auto Health Export sends grouped metrics by HealthKit identifier
-    pub metrics: Vec<IosMetric>, // This is the WRONG format - keeping for backward compatibility
-    // Correct format would be:
-    // pub metrics: std::collections::HashMap<String, Vec<IosMetricDataPoint>>,
+#[serde(untagged)]
+pub enum IosIngestData {
+    /// New correct format - iOS sends metrics as HashMap grouped by HealthKit identifier
+    Correct {
+        metrics: HashMap<String, Vec<IosMetricDataPoint>>,
+        #[serde(default)]
+        workouts: Vec<IosWorkout>,
+    },
+    /// Legacy format for backward compatibility
+    Legacy {
+        metrics: Vec<IosMetric>,
+        #[serde(default)]
+        workouts: Vec<IosWorkout>,
+    },
+}
 
-    // workouts may not be present in iOS app structure
-    #[serde(default)]
-    pub workouts: Vec<IosWorkout>,
+impl IosIngestData {
+    /// Convert to standardized format regardless of input format
+    pub fn normalize(self) -> (HashMap<String, Vec<IosMetricDataPoint>>, Vec<IosWorkout>) {
+        match self {
+            IosIngestData::Correct { metrics, workouts } => (metrics, workouts),
+            IosIngestData::Legacy { metrics, workouts } => {
+                // Convert legacy format to new format
+                let mut metric_map = HashMap::new();
+                for metric in metrics {
+                    let data_points: Vec<IosMetricDataPoint> = metric
+                        .data
+                        .into_iter()
+                        .map(|d| IosMetricDataPoint {
+                            source: d.source,
+                            date: d.date,
+                            start: d.start,
+                            end: d.end,
+                            qty: d.qty,
+                            value: d.value,
+                            units: metric.units.clone(),
+                            extra: d.extra,
+                        })
+                        .collect();
+                    metric_map.insert(metric.name, data_points);
+                }
+                (metric_map, workouts)
+            }
+        }
+    }
+}
+
+/// Correct iOS metric data point structure
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct IosMetricDataPoint {
+    // Common fields across all metrics
+    pub source: Option<String>,
+
+    // Time fields - iOS uses string dates
+    pub date: Option<String>,
+    pub start: Option<String>,
+    pub end: Option<String>,
+
+    // Value fields
+    pub qty: Option<f64>,
+    pub value: Option<String>, // For categorical data like "Incomplete"
+
+    // Units field (may be in the data point or at metric level)
+    pub units: Option<String>,
+
+    // Additional fields that may be present
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 /// DEPRECATED: iOS metric structure - this format is incorrect for actual iOS app
@@ -68,19 +128,25 @@ pub struct IosWorkout {
 
 impl IosIngestPayload {
     /// Convert iOS payload to our internal format
-    pub fn to_internal_format(&self, user_id: uuid::Uuid) -> crate::models::IngestPayload {
+    pub fn to_internal_format(self, user_id: uuid::Uuid) -> crate::models::IngestPayload {
         use crate::models::{HealthMetric, IngestData, IngestPayload, WorkoutData};
-        use std::collections::HashMap;
 
         let mut internal_metrics = Vec::new();
         let mut internal_workouts = Vec::new();
 
         // Track blood pressure readings by timestamp for pairing
-        let mut bp_readings: HashMap<String, (Option<i16>, Option<i16>)> = HashMap::new();
+        let mut bp_readings: HashMap<String, (Option<i16>, Option<i16>, DateTime<Utc>)> =
+            HashMap::new();
+
+        // Normalize the data to handle both old and new formats
+        let (metrics_map, ios_workouts) = self.data.normalize();
+
+        // Calculate total metrics count for statistics
+        let total_ios_metrics = metrics_map.values().map(|v| v.len()).sum::<usize>();
 
         // Convert iOS metrics to internal format
-        for ios_metric in &self.data.metrics {
-            for data_point in &ios_metric.data {
+        for (metric_name, data_points) in metrics_map {
+            for data_point in data_points {
                 // Parse dates with fallback to various timestamp fields
                 let recorded_at = parse_ios_date(&data_point.date)
                     .or_else(|| parse_ios_date(&data_point.start))
@@ -90,17 +156,17 @@ impl IosIngestPayload {
                 // CRITICAL LOGGING: Track all iOS metric names for STORY-DATA-002 audit
                 tracing::info!(
                     "Processing iOS metric: '{}' with units: {:?}",
-                    ios_metric.name,
-                    ios_metric.units
+                    metric_name,
+                    data_point.units
                 );
 
                 // STORY-DATA-005: Track iOS metric type distribution for monitoring
-                Metrics::record_ios_metric_type(&ios_metric.name, "encountered");
+                Metrics::record_ios_metric_type(&metric_name, "encountered");
 
                 // Convert based on metric name - now supporting ALL HealthKit identifiers from DATA.md
                 // CRITICAL: Handle both HealthKit identifiers (HKQuantityTypeIdentifierHeartRate)
                 // and simplified names (heart_rate) for backward compatibility
-                match ios_metric.name.as_str() {
+                match metric_name.as_str() {
                     // HEART RATE METRICS - HealthKit identifiers + backward compatibility
                     "HKQuantityTypeIdentifierHeartRate"
                     | "HKQuantityTypeIdentifierRestingHeartRate"
@@ -115,7 +181,7 @@ impl IosIngestPayload {
                         if let Some(qty) = data_point.qty {
                             if qty > 0.0 && qty <= 300.0 {
                                 // Basic validation
-                                let context_str = match ios_metric.name.to_lowercase().as_str() {
+                                let context_str = match metric_name.to_lowercase().as_str() {
                                     "resting_heart_rate" => Some("resting"),
                                     "walking_heart_rate" => Some("walking"),
                                     _ => data_point.extra.get("context").and_then(|v| v.as_str()),
@@ -150,11 +216,11 @@ impl IosIngestPayload {
                                 internal_metrics.push(HealthMetric::HeartRate(metric));
 
                                 // STORY-DATA-005: Track successful conversion
-                                Metrics::record_ios_metric_type(&ios_metric.name, "converted");
-                                Metrics::update_ios_conversion_success_rate(&ios_metric.name, "heart_rate", 1.0);
+                                Metrics::record_ios_metric_type(&metric_name, "converted");
+                                Metrics::update_ios_conversion_success_rate(&metric_name, "heart_rate", 1.0);
 
                                 // Track HealthKit identifier usage patterns
-                                let identifier_type = if ios_metric.name.starts_with("HKQuantityTypeIdentifier") {
+                                let identifier_type = if metric_name.starts_with("HKQuantityTypeIdentifier") {
                                     "healthkit_identifier"
                                 } else {
                                     "simplified_name"
@@ -168,13 +234,15 @@ impl IosIngestPayload {
                     | "blood_pressure_systolic"
                     | "systolic_blood_pressure" => {
                         if let Some(qty) = data_point.qty {
+                            // Use simple timestamp as key for pairing
                             let timestamp_key = recorded_at.to_rfc3339();
-                            let entry = bp_readings.entry(timestamp_key).or_default();
+                            let entry = bp_readings.entry(timestamp_key).or_insert((None, None, recorded_at));
                             entry.0 = Some(qty as i16);
+                            entry.2 = recorded_at; // Update timestamp
 
                             // STORY-DATA-005: Track blood pressure conversion
-                            Metrics::record_ios_metric_type(&ios_metric.name, "converted");
-                            let identifier_type = if ios_metric.name.starts_with("HKQuantityTypeIdentifier") {
+                            Metrics::record_ios_metric_type(&metric_name, "converted");
+                            let identifier_type = if metric_name.starts_with("HKQuantityTypeIdentifier") {
                                 "healthkit_identifier"
                             } else {
                                 "simplified_name"
@@ -186,13 +254,15 @@ impl IosIngestPayload {
                     | "blood_pressure_diastolic"
                     | "diastolic_blood_pressure" => {
                         if let Some(qty) = data_point.qty {
+                            // Use simple timestamp as key for pairing
                             let timestamp_key = recorded_at.to_rfc3339();
-                            let entry = bp_readings.entry(timestamp_key).or_default();
+                            let entry = bp_readings.entry(timestamp_key).or_insert((None, None, recorded_at));
                             entry.1 = Some(qty as i16);
+                            entry.2 = recorded_at; // Update timestamp
 
                             // STORY-DATA-005: Track blood pressure conversion
-                            Metrics::record_ios_metric_type(&ios_metric.name, "converted");
-                            let identifier_type = if ios_metric.name.starts_with("HKQuantityTypeIdentifier") {
+                            Metrics::record_ios_metric_type(&metric_name, "converted");
+                            let identifier_type = if metric_name.starts_with("HKQuantityTypeIdentifier") {
                                 "healthkit_identifier"
                             } else {
                                 "simplified_name"
@@ -246,10 +316,10 @@ impl IosIngestPayload {
                             internal_metrics.push(HealthMetric::Sleep(metric));
 
                             // STORY-DATA-005: Track successful sleep conversion
-                            Metrics::record_ios_metric_type(&ios_metric.name, "converted");
-                            Metrics::update_ios_conversion_success_rate(&ios_metric.name, "sleep", 1.0);
+                            Metrics::record_ios_metric_type(&metric_name, "converted");
+                            Metrics::update_ios_conversion_success_rate(&metric_name, "sleep", 1.0);
 
-                            let identifier_type = if ios_metric.name.starts_with("HKCategoryTypeIdentifier") {
+                            let identifier_type = if metric_name.starts_with("HKCategoryTypeIdentifier") {
                                 "healthkit_identifier"
                             } else {
                                 "simplified_name"
@@ -311,7 +381,7 @@ impl IosIngestPayload {
                                     user_id,
                                     recorded_at,
                                     step_count: if matches!(
-                                        ios_metric.name.as_str(),
+                                        metric_name.as_str(),
                                         "HKQuantityTypeIdentifierStepCount"
                                             | "steps"
                                             | "step_count"
@@ -321,7 +391,7 @@ impl IosIngestPayload {
                                         None
                                     },
                                     distance_meters: if matches!(
-                                        ios_metric.name.as_str(),
+                                        metric_name.as_str(),
                                         "HKQuantityTypeIdentifierDistanceWalkingRunning"
                                             | "distance_walking_running"
                                             | "distance"
@@ -331,7 +401,7 @@ impl IosIngestPayload {
                                         None
                                     },
                                     active_energy_burned_kcal: if matches!(
-                                        ios_metric.name.as_str(),
+                                        metric_name.as_str(),
                                         "HKQuantityTypeIdentifierActiveEnergyBurned"
                                             | "active_energy_burned"
                                             | "calories"
@@ -341,7 +411,7 @@ impl IosIngestPayload {
                                         None
                                     },
                                     basal_energy_burned_kcal: if matches!(
-                                        ios_metric.name.as_str(),
+                                        metric_name.as_str(),
                                         "HKQuantityTypeIdentifierBasalEnergyBurned"
                                             | "basal_energy_burned"
                                     ) {
@@ -350,7 +420,7 @@ impl IosIngestPayload {
                                         None
                                     },
                                     flights_climbed: if matches!(
-                                        ios_metric.name.as_str(),
+                                        metric_name.as_str(),
                                         "HKQuantityTypeIdentifierFlightsClimbed"
                                             | "flights_climbed"
                                     ) {
@@ -359,77 +429,77 @@ impl IosIngestPayload {
                                         None
                                     },
                                     // Extended activity metrics - now mapped from HealthKit identifiers
-                                    distance_cycling_meters: if ios_metric.name
+                                    distance_cycling_meters: if metric_name
                                         == "HKQuantityTypeIdentifierDistanceCycling"
                                     {
                                         Some(qty)
                                     } else {
                                         None
                                     },
-                                    distance_swimming_meters: if ios_metric.name
+                                    distance_swimming_meters: if metric_name
                                         == "HKQuantityTypeIdentifierDistanceSwimming"
                                     {
                                         Some(qty)
                                     } else {
                                         None
                                     },
-                                    distance_wheelchair_meters: if ios_metric.name
+                                    distance_wheelchair_meters: if metric_name
                                         == "HKQuantityTypeIdentifierDistanceWheelchair"
                                     {
                                         Some(qty)
                                     } else {
                                         None
                                     },
-                                    distance_downhill_snow_sports_meters: if ios_metric.name
+                                    distance_downhill_snow_sports_meters: if metric_name
                                         == "HKQuantityTypeIdentifierDistanceDownhillSnowSports"
                                     {
                                         Some(qty)
                                     } else {
                                         None
                                     },
-                                    push_count: if ios_metric.name
+                                    push_count: if metric_name
                                         == "HKQuantityTypeIdentifierPushCount"
                                     {
                                         Some(qty as i32)
                                     } else {
                                         None
                                     },
-                                    swimming_stroke_count: if ios_metric.name
+                                    swimming_stroke_count: if metric_name
                                         == "HKQuantityTypeIdentifierSwimmingStrokeCount"
                                     {
                                         Some(qty as i32)
                                     } else {
                                         None
                                     },
-                                    nike_fuel_points: if ios_metric.name
+                                    nike_fuel_points: if metric_name
                                         == "HKQuantityTypeIdentifierNikeFuel"
                                     {
                                         Some(qty as i32)
                                     } else {
                                         None
                                     },
-                                    apple_exercise_time_minutes: if ios_metric.name
+                                    apple_exercise_time_minutes: if metric_name
                                         == "HKQuantityTypeIdentifierAppleExerciseTime"
                                     {
                                         Some(qty as i32)
                                     } else {
                                         None
                                     },
-                                    apple_stand_time_minutes: if ios_metric.name
+                                    apple_stand_time_minutes: if metric_name
                                         == "HKQuantityTypeIdentifierAppleStandTime"
                                     {
                                         Some(qty as i32)
                                     } else {
                                         None
                                     },
-                                    apple_move_time_minutes: if ios_metric.name
+                                    apple_move_time_minutes: if metric_name
                                         == "HKQuantityTypeIdentifierAppleMoveTime"
                                     {
                                         Some(qty as i32)
                                     } else {
                                         None
                                     },
-                                    apple_stand_hour_achieved: if ios_metric.name
+                                    apple_stand_hour_achieved: if metric_name
                                         == "HKCategoryTypeIdentifierAppleStandHour"
                                     {
                                         Some(qty > 0.0) // Convert to boolean
@@ -438,95 +508,95 @@ impl IosIngestPayload {
                                     },
 
                                     // Mobility Metrics (iOS 14+ HealthKit) - now mapped from iOS data
-                                    walking_speed_m_per_s: if ios_metric.name == "HKQuantityTypeIdentifierWalkingSpeed" {
+                                    walking_speed_m_per_s: if metric_name == "HKQuantityTypeIdentifierWalkingSpeed" {
                                         Some(qty)
                                     } else {
                                         None
                                     },
-                                    walking_step_length_cm: if ios_metric.name == "HKQuantityTypeIdentifierWalkingStepLength" {
+                                    walking_step_length_cm: if metric_name == "HKQuantityTypeIdentifierWalkingStepLength" {
                                         Some(qty)
                                     } else {
                                         None
                                     },
-                                    walking_asymmetry_percent: if ios_metric.name == "HKQuantityTypeIdentifierWalkingAsymmetryPercentage" {
+                                    walking_asymmetry_percent: if metric_name == "HKQuantityTypeIdentifierWalkingAsymmetryPercentage" {
                                         Some(qty)
                                     } else {
                                         None
                                     },
-                                    walking_double_support_percent: if ios_metric.name == "HKQuantityTypeIdentifierWalkingDoubleSupportPercentage" {
+                                    walking_double_support_percent: if metric_name == "HKQuantityTypeIdentifierWalkingDoubleSupportPercentage" {
                                         Some(qty)
                                     } else {
                                         None
                                     },
-                                    six_minute_walk_test_distance_m: if ios_metric.name == "HKQuantityTypeIdentifierSixMinuteWalkTestDistance" {
+                                    six_minute_walk_test_distance_m: if metric_name == "HKQuantityTypeIdentifierSixMinuteWalkTestDistance" {
                                         Some(qty)
                                     } else {
                                         None
                                     },
 
                                     // Stair Metrics - now mapped from iOS data
-                                    stair_ascent_speed_m_per_s: if ios_metric.name == "HKQuantityTypeIdentifierStairAscentSpeed" {
+                                    stair_ascent_speed_m_per_s: if metric_name == "HKQuantityTypeIdentifierStairAscentSpeed" {
                                         Some(qty)
                                     } else {
                                         None
                                     },
-                                    stair_descent_speed_m_per_s: if ios_metric.name == "HKQuantityTypeIdentifierStairDescentSpeed" {
+                                    stair_descent_speed_m_per_s: if metric_name == "HKQuantityTypeIdentifierStairDescentSpeed" {
                                         Some(qty)
                                     } else {
                                         None
                                     },
 
                                     // Running Dynamics - now mapped from iOS data
-                                    ground_contact_time_ms: if ios_metric.name == "HKQuantityTypeIdentifierGroundContactTime" {
+                                    ground_contact_time_ms: if metric_name == "HKQuantityTypeIdentifierGroundContactTime" {
                                         Some(qty)
                                     } else {
                                         None
                                     },
-                                    vertical_oscillation_cm: if ios_metric.name == "HKQuantityTypeIdentifierVerticalOscillation" {
+                                    vertical_oscillation_cm: if metric_name == "HKQuantityTypeIdentifierVerticalOscillation" {
                                         Some(qty)
                                     } else {
                                         None
                                     },
-                                    running_stride_length_m: if ios_metric.name == "HKQuantityTypeIdentifierRunningStrideLength" {
+                                    running_stride_length_m: if metric_name == "HKQuantityTypeIdentifierRunningStrideLength" {
                                         Some(qty)
                                     } else {
                                         None
                                     },
-                                    running_power_watts: if ios_metric.name == "HKQuantityTypeIdentifierRunningPower" {
+                                    running_power_watts: if metric_name == "HKQuantityTypeIdentifierRunningPower" {
                                         Some(qty)
                                     } else {
                                         None
                                     },
-                                    running_speed_m_per_s: if ios_metric.name == "HKQuantityTypeIdentifierRunningSpeed" {
+                                    running_speed_m_per_s: if metric_name == "HKQuantityTypeIdentifierRunningSpeed" {
                                         Some(qty)
                                     } else {
                                         None
                                     },
 
                                     // Cycling Metrics (iOS 17+ HealthKit)
-                                    cycling_speed_kmh: if ios_metric.name == "HKQuantityTypeIdentifierCyclingSpeed" {
+                                    cycling_speed_kmh: if metric_name == "HKQuantityTypeIdentifierCyclingSpeed" {
                                         Some(qty)
                                     } else {
                                         None
                                     },
-                                    cycling_power_watts: if ios_metric.name == "HKQuantityTypeIdentifierCyclingPower" {
+                                    cycling_power_watts: if metric_name == "HKQuantityTypeIdentifierCyclingPower" {
                                         Some(qty)
                                     } else {
                                         None
                                     },
-                                    cycling_cadence_rpm: if ios_metric.name == "HKQuantityTypeIdentifierCyclingCadence" {
+                                    cycling_cadence_rpm: if metric_name == "HKQuantityTypeIdentifierCyclingCadence" {
                                         Some(qty)
                                     } else {
                                         None
                                     },
-                                    functional_threshold_power_watts: if ios_metric.name == "HKQuantityTypeIdentifierCyclingFunctionalThresholdPower" {
+                                    functional_threshold_power_watts: if metric_name == "HKQuantityTypeIdentifierCyclingFunctionalThresholdPower" {
                                         Some(qty)
                                     } else {
                                         None
                                     },
 
                                     // Underwater Metrics (iOS 16+ HealthKit)
-                                    underwater_depth_meters: if ios_metric.name == "HKQuantityTypeIdentifierUnderwaterDepth" {
+                                    underwater_depth_meters: if metric_name == "HKQuantityTypeIdentifierUnderwaterDepth" {
                                         Some(qty)
                                     } else {
                                         None
@@ -539,10 +609,10 @@ impl IosIngestPayload {
                                 internal_metrics.push(HealthMetric::Activity(metric));
 
                                 // STORY-DATA-005: Track successful activity conversion
-                                Metrics::record_ios_metric_type(&ios_metric.name, "converted");
-                                Metrics::update_ios_conversion_success_rate(&ios_metric.name, "activity", 1.0);
+                                Metrics::record_ios_metric_type(&metric_name, "converted");
+                                Metrics::update_ios_conversion_success_rate(&metric_name, "activity", 1.0);
 
-                                let identifier_type = if ios_metric.name.starts_with("HKQuantityTypeIdentifier") || ios_metric.name.starts_with("HKCategoryTypeIdentifier") {
+                                let identifier_type = if metric_name.starts_with("HKQuantityTypeIdentifier") || metric_name.starts_with("HKCategoryTypeIdentifier") {
                                     "healthkit_identifier"
                                 } else {
                                     "simplified_name"
@@ -570,7 +640,7 @@ impl IosIngestPayload {
                                     user_id,
                                     recorded_at,
                                     body_temperature: if matches!(
-                                        ios_metric.name.as_str(),
+                                        metric_name.as_str(),
                                         "HKQuantityTypeIdentifierBodyTemperature"
                                             | "body_temperature"
                                             | "temperature"
@@ -580,7 +650,7 @@ impl IosIngestPayload {
                                         None
                                     },
                                     basal_body_temperature: if matches!(
-                                        ios_metric.name.as_str(),
+                                        metric_name.as_str(),
                                         "HKQuantityTypeIdentifierBasalBodyTemperature"
                                             | "basal_body_temperature"
                                     ) {
@@ -589,7 +659,7 @@ impl IosIngestPayload {
                                         None
                                     },
                                     apple_sleeping_wrist_temperature: if matches!(
-                                        ios_metric.name.as_str(),
+                                        metric_name.as_str(),
                                         "HKQuantityTypeIdentifierAppleSleepingWristTemperature"
                                             | "apple_sleeping_wrist_temperature"
                                             | "wrist_temperature"
@@ -599,7 +669,7 @@ impl IosIngestPayload {
                                         None
                                     },
                                     water_temperature: if matches!(
-                                        ios_metric.name.as_str(),
+                                        metric_name.as_str(),
                                         "HKQuantityTypeIdentifierWaterTemperature"
                                             | "water_temperature"
                                     ) {
@@ -825,7 +895,7 @@ impl IosIngestPayload {
                     | "thigh" => {
                         if let Some(qty) = data_point.qty {
                             // Validate body measurement ranges
-                            let is_valid = match ios_metric.name.to_lowercase().as_str() {
+                            let is_valid = match metric_name.to_lowercase().as_str() {
                                 name if name.contains("weight") || name.contains("mass") => {
                                     (20.0..=500.0).contains(&qty)
                                 }
@@ -849,7 +919,7 @@ impl IosIngestPayload {
                                     recorded_at,
                                     // Weight & Body Composition
                                     body_weight_kg: if matches!(
-                                        ios_metric.name.as_str(),
+                                        metric_name.as_str(),
                                         "HKQuantityTypeIdentifierBodyMass"
                                             | "body_mass"
                                             | "weight"
@@ -861,7 +931,7 @@ impl IosIngestPayload {
                                         None
                                     },
                                     body_mass_index: if matches!(
-                                        ios_metric.name.as_str(),
+                                        metric_name.as_str(),
                                         "HKQuantityTypeIdentifierBodyMassIndex"
                                             | "body_mass_index"
                                             | "bmi"
@@ -871,7 +941,7 @@ impl IosIngestPayload {
                                         None
                                     },
                                     body_fat_percentage: if matches!(
-                                        ios_metric.name.as_str(),
+                                        metric_name.as_str(),
                                         "HKQuantityTypeIdentifierBodyFatPercentage"
                                             | "body_fat_percentage"
                                             | "body_fat"
@@ -881,7 +951,7 @@ impl IosIngestPayload {
                                         None
                                     },
                                     lean_body_mass_kg: if matches!(
-                                        ios_metric.name.as_str(),
+                                        metric_name.as_str(),
                                         "HKQuantityTypeIdentifierLeanBodyMass"
                                             | "lean_body_mass"
                                             | "lean_body_mass_kg"
@@ -893,7 +963,7 @@ impl IosIngestPayload {
                                     },
                                     // Physical Measurements
                                     height_cm: if matches!(
-                                        ios_metric.name.as_str(),
+                                        metric_name.as_str(),
                                         "HKQuantityTypeIdentifierHeight" | "height" | "height_cm"
                                     ) {
                                         Some(qty)
@@ -901,7 +971,7 @@ impl IosIngestPayload {
                                         None
                                     },
                                     waist_circumference_cm: if matches!(
-                                        ios_metric.name.as_str(),
+                                        metric_name.as_str(),
                                         "HKQuantityTypeIdentifierWaistCircumference"
                                             | "waist_circumference"
                                             | "waist"
@@ -911,7 +981,7 @@ impl IosIngestPayload {
                                         None
                                     },
                                     hip_circumference_cm: if matches!(
-                                        ios_metric.name.to_lowercase().as_str(),
+                                        metric_name.to_lowercase().as_str(),
                                         "hip_circumference" | "hip"
                                     ) {
                                         Some(qty)
@@ -919,7 +989,7 @@ impl IosIngestPayload {
                                         None
                                     },
                                     chest_circumference_cm: if matches!(
-                                        ios_metric.name.to_lowercase().as_str(),
+                                        metric_name.to_lowercase().as_str(),
                                         "chest_circumference" | "chest"
                                     ) {
                                         Some(qty)
@@ -927,7 +997,7 @@ impl IosIngestPayload {
                                         None
                                     },
                                     arm_circumference_cm: if matches!(
-                                        ios_metric.name.to_lowercase().as_str(),
+                                        metric_name.to_lowercase().as_str(),
                                         "arm_circumference" | "arm"
                                     ) {
                                         Some(qty)
@@ -935,7 +1005,7 @@ impl IosIngestPayload {
                                         None
                                     },
                                     thigh_circumference_cm: if matches!(
-                                        ios_metric.name.to_lowercase().as_str(),
+                                        metric_name.to_lowercase().as_str(),
                                         "thigh_circumference" | "thigh"
                                     ) {
                                         Some(qty)
@@ -955,7 +1025,7 @@ impl IosIngestPayload {
                             } else {
                                 tracing::warn!(
                                     "Invalid body measurement value for {}: {} (outside valid range)",
-                                    ios_metric.name, qty
+                                    metric_name, qty
                                 );
                             }
                         }
@@ -964,13 +1034,13 @@ impl IosIngestPayload {
                         // CRITICAL: Unknown metric type detected - potential data loss!
                         tracing::warn!(
                             "🚨 UNKNOWN iOS METRIC TYPE: '{}' with units: {:?}, qty: {:?} - POTENTIAL DATA LOSS!",
-                            ios_metric.name,
-                            ios_metric.units,
+                            metric_name,
+                            data_point.units,
                             data_point.qty
                         );
 
                         // STORY-DATA-005: Track unknown iOS metric type for monitoring
-                        Metrics::record_ios_metric_type(&ios_metric.name, "dropped");
+                        Metrics::record_ios_metric_type(&metric_name, "dropped");
 
                         // Log detailed information for iOS metric analysis
                         tracing::info!(
@@ -1027,76 +1097,76 @@ impl IosIngestPayload {
                             "HKCategoryTypeIdentifierIrregularHeartRhythmEvent",
                         ];
 
-                        if critical_missing_identifiers.contains(&ios_metric.name.as_str()) {
+                        if critical_missing_identifiers.contains(&metric_name.as_str()) {
                             tracing::error!(
                                 "🔥 CRITICAL: Missing mapping for high-priority HealthKit identifier '{}' - This is a known iOS metric type that needs immediate implementation!",
-                                ios_metric.name
+                                metric_name
                             );
 
                             // STORY-DATA-005: Track critical missing HealthKit identifiers
-                            Metrics::record_ios_unknown_metric_type(&ios_metric.name, "critical");
-                            Metrics::record_ios_metric_data_loss("missing_mapping", &ios_metric.name, "critical");
+                            Metrics::record_ios_unknown_metric_type(&metric_name, "critical");
+                            Metrics::record_ios_metric_data_loss("missing_mapping", &metric_name, "critical");
                         }
 
                         // Check if it might be a supported but unmapped metric type
-                        if ios_metric.name.starts_with("HKQuantityTypeIdentifier")
-                            || ios_metric.name.starts_with("HKCategoryTypeIdentifier")
+                        if metric_name.starts_with("HKQuantityTypeIdentifier")
+                            || metric_name.starts_with("HKCategoryTypeIdentifier")
                         {
                             tracing::error!(
                                 "💀 CRITICAL DATA LOSS: Valid HealthKit identifier '{}' has no mapping! This metric will be completely lost.",
-                                ios_metric.name
+                                metric_name
                             );
 
                             // STORY-DATA-005: Track unmapped HealthKit identifiers as high severity
-                            if !critical_missing_identifiers.contains(&ios_metric.name.as_str()) {
-                                Metrics::record_ios_unknown_metric_type(&ios_metric.name, "high");
-                                Metrics::record_ios_metric_data_loss("unmapped_healthkit_identifier", &ios_metric.name, "high");
+                            if !critical_missing_identifiers.contains(&metric_name.as_str()) {
+                                Metrics::record_ios_unknown_metric_type(&metric_name, "high");
+                                Metrics::record_ios_metric_data_loss("unmapped_healthkit_identifier", &metric_name, "high");
                             }
                         }
 
                         // Log patterns for future implementation
-                        if ios_metric.name.to_lowercase().contains("dietary") {
+                        if metric_name.to_lowercase().contains("dietary") {
                             tracing::warn!(
                                 "Missing nutrition metric mapping: '{}'",
-                                ios_metric.name
+                                metric_name
                             );
                             // STORY-DATA-005: Track nutrition metrics as medium priority
-                            Metrics::record_ios_unknown_metric_type(&ios_metric.name, "medium");
-                            Metrics::record_ios_metric_data_loss("missing_nutrition_mapping", &ios_metric.name, "medium");
+                            Metrics::record_ios_unknown_metric_type(&metric_name, "medium");
+                            Metrics::record_ios_metric_data_loss("missing_nutrition_mapping", &metric_name, "medium");
                             Metrics::record_ios_fallback_case("nutrition_pattern", "dietary");
-                        } else if ios_metric.name.to_lowercase().contains("symptom")
-                            || ios_metric.name.to_lowercase().contains("headache")
-                            || ios_metric.name.to_lowercase().contains("nausea")
+                        } else if metric_name.to_lowercase().contains("symptom")
+                            || metric_name.to_lowercase().contains("headache")
+                            || metric_name.to_lowercase().contains("nausea")
                         {
-                            tracing::warn!("Missing symptom metric mapping: '{}'", ios_metric.name);
+                            tracing::warn!("Missing symptom metric mapping: '{}'", metric_name);
                             // STORY-DATA-005: Track symptom metrics as high priority (medical importance)
-                            Metrics::record_ios_unknown_metric_type(&ios_metric.name, "high");
-                            Metrics::record_ios_metric_data_loss("missing_symptom_mapping", &ios_metric.name, "high");
+                            Metrics::record_ios_unknown_metric_type(&metric_name, "high");
+                            Metrics::record_ios_metric_data_loss("missing_symptom_mapping", &metric_name, "high");
                             Metrics::record_ios_fallback_case("symptom_pattern", "symptom_related");
-                        } else if ios_metric.name.to_lowercase().contains("menstrual")
-                            || ios_metric.name.to_lowercase().contains("ovulation")
+                        } else if metric_name.to_lowercase().contains("menstrual")
+                            || metric_name.to_lowercase().contains("ovulation")
                         {
                             tracing::warn!(
                                 "Missing reproductive health metric mapping: '{}'",
-                                ios_metric.name
+                                metric_name
                             );
                             // STORY-DATA-005: Track reproductive health as medium priority
-                            Metrics::record_ios_unknown_metric_type(&ios_metric.name, "medium");
-                            Metrics::record_ios_metric_data_loss("missing_reproductive_mapping", &ios_metric.name, "medium");
+                            Metrics::record_ios_unknown_metric_type(&metric_name, "medium");
+                            Metrics::record_ios_metric_data_loss("missing_reproductive_mapping", &metric_name, "medium");
                             Metrics::record_ios_fallback_case("reproductive_pattern", "reproductive_health");
-                        } else if ios_metric.name.to_lowercase().contains("mindful") {
+                        } else if metric_name.to_lowercase().contains("mindful") {
                             tracing::warn!(
                                 "Missing mindfulness metric mapping: '{}'",
-                                ios_metric.name
+                                metric_name
                             );
                             // STORY-DATA-005: Track mindfulness metrics as low priority
-                            Metrics::record_ios_unknown_metric_type(&ios_metric.name, "low");
-                            Metrics::record_ios_metric_data_loss("missing_mindfulness_mapping", &ios_metric.name, "low");
+                            Metrics::record_ios_unknown_metric_type(&metric_name, "low");
+                            Metrics::record_ios_metric_data_loss("missing_mindfulness_mapping", &metric_name, "low");
                             Metrics::record_ios_fallback_case("mindfulness_pattern", "mindful");
                         } else {
                             // STORY-DATA-005: Track other unknown metrics as medium priority
-                            Metrics::record_ios_unknown_metric_type(&ios_metric.name, "medium");
-                            Metrics::record_ios_metric_data_loss("unknown_metric_type", &ios_metric.name, "medium");
+                            Metrics::record_ios_unknown_metric_type(&metric_name, "medium");
+                            Metrics::record_ios_metric_data_loss("unknown_metric_type", &metric_name, "medium");
                             Metrics::record_ios_fallback_case("unknown_pattern", "other");
                         }
 
@@ -1118,26 +1188,32 @@ impl IosIngestPayload {
         }
 
         // Create blood pressure metrics from paired readings
-        for (timestamp_str, (systolic, diastolic)) in bp_readings {
+        for (timestamp_key, (systolic, diastolic, recorded_at)) in bp_readings {
             if let (Some(sys), Some(dia)) = (systolic, diastolic) {
-                if let Ok(timestamp) = DateTime::parse_from_rfc3339(&timestamp_str) {
-                    let metric = crate::models::BloodPressureMetric {
-                        id: uuid::Uuid::new_v4(),
-                        user_id,
-                        recorded_at: timestamp.with_timezone(&Utc),
-                        systolic: sys,
-                        diastolic: dia,
-                        pulse: None, // iOS might not provide pulse separately
-                        source_device: Some("Auto Health Export iOS".to_string()),
-                        created_at: Utc::now(),
-                    };
-                    internal_metrics.push(HealthMetric::BloodPressure(metric));
-                }
+                let metric = crate::models::BloodPressureMetric {
+                    id: uuid::Uuid::new_v4(),
+                    user_id,
+                    recorded_at,
+                    systolic: sys,
+                    diastolic: dia,
+                    pulse: None, // iOS might not provide pulse separately
+                    source_device: Some("Auto Health Export iOS".to_string()),
+                    created_at: Utc::now(),
+                };
+                internal_metrics.push(HealthMetric::BloodPressure(metric));
+            } else {
+                // Log unpaired readings for debugging
+                tracing::debug!(
+                    "Unpaired blood pressure reading at {}: systolic={:?}, diastolic={:?}",
+                    timestamp_key,
+                    systolic,
+                    diastolic
+                );
             }
         }
 
         // Convert workouts (if any)
-        for ios_workout in &self.data.workouts {
+        for ios_workout in &ios_workouts {
             let start_time = parse_ios_date(&ios_workout.start).unwrap_or_else(Utc::now);
             let end_time = parse_ios_date(&ios_workout.end).unwrap_or_else(Utc::now);
 
@@ -1207,7 +1283,6 @@ impl IosIngestPayload {
         );
 
         // STORY-DATA-005: Calculate and report iOS metric type coverage statistics
-        let total_ios_metrics = self.data.metrics.len();
         let total_internal_metrics = internal_metrics.len();
 
         if total_ios_metrics > 0 {

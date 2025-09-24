@@ -363,10 +363,10 @@ mod sleep_tests {
             sleep_start: start,
             sleep_end: end,
             duration_minutes: Some(420),
-            deep_sleep_minutes: Some(300), // 5 hours
-            rem_sleep_minutes: Some(200),  // 3.3 hours
+            deep_sleep_minutes: Some(300),  // 5 hours
+            rem_sleep_minutes: Some(200),   // 3.3 hours
             light_sleep_minutes: Some(100), // 1.7 hours
-            awake_minutes: Some(100),      // 1.7 hours - total > 8 hours
+            awake_minutes: Some(100),       // 1.7 hours - total > 8 hours
             efficiency: None,
             source_device: Some("test".to_string()),
             created_at: Utc::now(),
@@ -408,7 +408,11 @@ mod activity_tests {
         let metric = ActivityMetric {
             id: Uuid::new_v4(),
             user_id: Uuid::new_v4(),
-            recorded_at: NaiveDate::from_ymd_opt(2025, 1, 15).unwrap().and_hms_opt(12, 0, 0).unwrap().and_utc(),
+            recorded_at: NaiveDate::from_ymd_opt(2025, 1, 15)
+                .unwrap()
+                .and_hms_opt(12, 0, 0)
+                .unwrap()
+                .and_utc(),
             step_count: Some(10000),
             distance_meters: Some(7500.0),
             flights_climbed: Some(12),
@@ -456,7 +460,11 @@ mod activity_tests {
         let negative_steps = ActivityMetric {
             id: Uuid::new_v4(),
             user_id: Uuid::new_v4(),
-            recorded_at: NaiveDate::from_ymd_opt(2025, 1, 15).unwrap().and_hms_opt(12, 0, 0).unwrap().and_utc(),
+            recorded_at: NaiveDate::from_ymd_opt(2025, 1, 15)
+                .unwrap()
+                .and_hms_opt(12, 0, 0)
+                .unwrap()
+                .and_utc(),
             step_count: Some(-100),
             distance_meters: None,
             flights_climbed: None,
@@ -500,7 +508,11 @@ mod activity_tests {
         let negative_distance = ActivityMetric {
             id: Uuid::new_v4(),
             user_id: Uuid::new_v4(),
-            recorded_at: NaiveDate::from_ymd_opt(2025, 1, 15).unwrap().and_hms_opt(12, 0, 0).unwrap().and_utc(),
+            recorded_at: NaiveDate::from_ymd_opt(2025, 1, 15)
+                .unwrap()
+                .and_hms_opt(12, 0, 0)
+                .unwrap()
+                .and_utc(),
             step_count: None,
             distance_meters: Some(-1000.0),
             flights_climbed: None,
@@ -544,7 +556,11 @@ mod activity_tests {
         let negative_calories = ActivityMetric {
             id: Uuid::new_v4(),
             user_id: Uuid::new_v4(),
-            recorded_at: NaiveDate::from_ymd_opt(2025, 1, 15).unwrap().and_hms_opt(12, 0, 0).unwrap().and_utc(),
+            recorded_at: NaiveDate::from_ymd_opt(2025, 1, 15)
+                .unwrap()
+                .and_hms_opt(12, 0, 0)
+                .unwrap()
+                .and_utc(),
             step_count: None,
             distance_meters: None,
             flights_climbed: None,
@@ -810,7 +826,11 @@ mod health_metric_integration_tests {
         let activity = HealthMetric::Activity(ActivityMetric {
             id: Uuid::new_v4(),
             user_id: Uuid::new_v4(),
-            recorded_at: NaiveDate::from_ymd_opt(2025, 1, 15).unwrap().and_hms_opt(12, 0, 0).unwrap().and_utc(),
+            recorded_at: NaiveDate::from_ymd_opt(2025, 1, 15)
+                .unwrap()
+                .and_hms_opt(12, 0, 0)
+                .unwrap()
+                .and_utc(),
             step_count: Some(10000),
             distance_meters: Some(7500.0),
             flights_climbed: Some(12),

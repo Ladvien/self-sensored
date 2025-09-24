@@ -1,10 +1,7 @@
 /// Simple Batch Processor Coverage Test - Basic functionality coverage
-
 use self_sensored::config::BatchConfig;
-use self_sensored::services::batch_processor::{
-    BatchProcessingResult, DeduplicationStats
-};
 use self_sensored::models::ProcessingError;
+use self_sensored::services::batch_processor::{BatchProcessingResult, DeduplicationStats};
 
 #[test]
 fn test_batch_config_basic() {
@@ -180,7 +177,10 @@ fn test_batch_result_memory_tracking() {
 fn test_clone_and_debug_traits() {
     let config = BatchConfig::default();
     let cloned_config = config.clone();
-    assert_eq!(config.heart_rate_chunk_size, cloned_config.heart_rate_chunk_size);
+    assert_eq!(
+        config.heart_rate_chunk_size,
+        cloned_config.heart_rate_chunk_size
+    );
 
     let debug_str = format!("{:?}", config);
     assert!(debug_str.contains("BatchConfig"));

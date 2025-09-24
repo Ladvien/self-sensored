@@ -179,19 +179,27 @@ PostgreSQL has a parameter limit of 65,535 per query. Our batch processor implem
 
 **Environment Variable Configuration:**
 ```bash
+# Database Connection Pool Settings (Optimized for High Concurrency)
+DATABASE_MAX_CONNECTIONS=75           # Increased from 50 for batch processing
+DATABASE_MIN_CONNECTIONS=15           # Ensure warm connections available
+DATABASE_CONNECT_TIMEOUT=15           # Increased from 5s for high load
+DATABASE_IDLE_TIMEOUT=600             # Keep connections alive longer
+DATABASE_MAX_LIFETIME=1800            # Connection refresh cycle
+
 # Batch Processing Settings
 BATCH_MAX_RETRIES=3
 BATCH_INITIAL_BACKOFF_MS=100
 BATCH_MAX_BACKOFF_MS=5000
 BATCH_ENABLE_PARALLEL=true
+BATCH_MAX_CONCURRENT_METRIC_TYPES=8   # Limit concurrent tasks to reduce connection pressure
 BATCH_MEMORY_LIMIT_MB=500.0
 
-# Metric-Specific Chunk Sizes (Environment Configurable)
-BATCH_HEART_RATE_CHUNK_SIZE=8000      # 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000
-BATCH_BLOOD_PRESSURE_CHUNK_SIZE=8000  # 6 params: 65,535 ÷ 6 × 0.8 ≈ 8,000  
-BATCH_SLEEP_CHUNK_SIZE=6000           # 10 params: 65,535 ÷ 10 × 0.8 ≈ 6,000
-BATCH_ACTIVITY_CHUNK_SIZE=2700        # 19 params: 65,535 ÷ 19 × 0.8 ≈ 2,700
-BATCH_WORKOUT_CHUNK_SIZE=5000         # 10 params: 65,535 ÷ 10 × 0.8 ≈ 5,000
+# Metric-Specific Chunk Sizes (PostgreSQL Parameter Limit Optimized)
+BATCH_HEART_RATE_CHUNK_SIZE=4766      # 11 params: 52,426 params (safe limit)
+BATCH_BLOOD_PRESSURE_CHUNK_SIZE=8738  # 6 params: 52,428 params (safe limit)
+BATCH_SLEEP_CHUNK_SIZE=5242           # 10 params: 52,420 params (safe limit)
+BATCH_ACTIVITY_CHUNK_SIZE=1450        # 36 params: 52,200 params (safe limit)
+BATCH_WORKOUT_CHUNK_SIZE=5000         # 10 params: ~50,000 params
 
 BATCH_ENABLE_PROGRESS_TRACKING=true   # Track progress for large batches
 BATCH_ENABLE_DEDUPLICATION=true       # Enable intra-batch deduplication

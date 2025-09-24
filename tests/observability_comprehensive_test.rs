@@ -1,4 +1,4 @@
-use actix_web::{test, web, App, HttpResponse, Result, middleware::Logger};
+use actix_web::{middleware::Logger, test, web, App, HttpResponse, Result};
 use chrono::Utc;
 use prometheus::{Encoder, TextEncoder};
 use serde_json::{json, Value};
@@ -7,17 +7,20 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Barrier;
-use tracing::{info, warn, error, debug};
+use tracing::{debug, error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
 
 use self_sensored::{
-    config::{LoggingConfig, ValidationConfig, BatchConfig},
+    config::{BatchConfig, LoggingConfig, ValidationConfig},
     db::database::create_connection_pool,
     handlers::health::{api_status, health_check, liveness_probe, readiness_probe},
     middleware::{
-        metrics::{Metrics, MetricsMiddleware, metrics_handler},
-        logging::{StructuredLogger, mask_sensitive_data, mask_sensitive_string, PerformanceTimer, get_request_id},
+        logging::{
+            get_request_id, mask_sensitive_data, mask_sensitive_string, PerformanceTimer,
+            StructuredLogger,
+        },
+        metrics::{metrics_handler, Metrics, MetricsMiddleware},
         request_logger::RequestLogger,
     },
     models::health_metrics::*,
@@ -66,7 +69,7 @@ fn init_test_tracing() {
                     .with_file(true)
                     .with_line_number(true)
                     .json()
-                    .with_test_writer()
+                    .with_test_writer(),
             )
             .init();
     });
@@ -182,8 +185,9 @@ async fn test_comprehensive_prometheus_metrics_collection() {
             .route("/sensitive", web::post().to(sensitive_data_handler))
             .route("/metrics", web::get().to(metrics_handler))
             .route("/health", web::get().to(health_check))
-            .route("/health/ready", web::get().to(readiness_probe))
-    ).await;
+            .route("/health/ready", web::get().to(readiness_probe)),
+    )
+    .await;
 
     // Generate diverse traffic patterns
     let mut request_scenarios = vec![
@@ -237,11 +241,7 @@ async fn test_comprehensive_prometheus_metrics_collection() {
     ];
 
     for metric in &expected_metrics {
-        assert!(
-            metrics_text.contains(metric),
-            "Missing metric: {}",
-            metric
-        );
+        assert!(metrics_text.contains(metric), "Missing metric: {}", metric);
     }
 
     // Verify Prometheus format
@@ -265,22 +265,26 @@ async fn test_structured_logging_with_correlation_ids() {
         App::new()
             .wrap(StructuredLogger)
             .app_data(web::Data::new(config.pool.clone()))
-            .route("/test", web::get().to(|req: actix_web::HttpRequest| async move {
-                let request_id = get_request_id(&req);
+            .route(
+                "/test",
+                web::get().to(|req: actix_web::HttpRequest| async move {
+                    let request_id = get_request_id(&req);
 
-                info!(
-                    event = "correlation_test",
-                    request_id = ?request_id,
-                    component = "test_handler",
-                    message = "Testing correlation ID propagation"
-                );
+                    info!(
+                        event = "correlation_test",
+                        request_id = ?request_id,
+                        component = "test_handler",
+                        message = "Testing correlation ID propagation"
+                    );
 
-                HttpResponse::Ok().json(json!({
-                    "request_id": request_id.map(|id| id.to_string()),
-                    "status": "success"
-                }))
-            }))
-    ).await;
+                    HttpResponse::Ok().json(json!({
+                        "request_id": request_id.map(|id| id.to_string()),
+                        "status": "success"
+                    }))
+                }),
+            ),
+    )
+    .await;
 
     // Test with provided correlation ID
     let test_correlation_id = Uuid::new_v4();
@@ -298,9 +302,7 @@ async fn test_structured_logging_with_correlation_ids() {
     assert_eq!(returned_id, test_correlation_id.to_string());
 
     // Test without correlation ID (should generate one)
-    let req = test::TestRequest::get()
-        .uri("/test")
-        .to_request();
+    let req = test::TestRequest::get().uri("/test").to_request();
 
     let resp = test::call_service(&app, req).await;
     assert!(resp.status().is_success());
@@ -356,26 +358,53 @@ async fn test_sensitive_data_masking_comprehensive() {
     assert_eq!(masked["user_profile"]["password"], json!("[MASKED]"));
     assert_eq!(masked["user_profile"]["api_key"], json!("[MASKED]"));
     assert_eq!(masked["user_profile"]["email"], json!("[MASKED]"));
-    assert_eq!(masked["user_profile"]["preferences"]["token"], json!("[MASKED]"));
-    assert_eq!(masked["user_profile"]["preferences"]["secret"], json!("[MASKED]"));
+    assert_eq!(
+        masked["user_profile"]["preferences"]["token"],
+        json!("[MASKED]")
+    );
+    assert_eq!(
+        masked["user_profile"]["preferences"]["secret"],
+        json!("[MASKED]")
+    );
     assert_eq!(masked["authentication"]["auth"], json!("[MASKED]"));
     assert_eq!(masked["authentication"]["credential"], json!("[MASKED]"));
     assert_eq!(masked["health_data"][0]["api_key"], json!("[MASKED]"));
 
     // Verify non-sensitive fields are preserved
     assert_eq!(masked["user_profile"]["username"], json!("john_doe"));
-    assert_eq!(masked["user_profile"]["preferences"]["public_setting"], json!("light_mode"));
-    assert_eq!(masked["authentication"]["session_id"], json!("safe_session_123"));
+    assert_eq!(
+        masked["user_profile"]["preferences"]["public_setting"],
+        json!("light_mode")
+    );
+    assert_eq!(
+        masked["authentication"]["session_id"],
+        json!("safe_session_123")
+    );
     assert_eq!(masked["health_data"][0]["heart_rate"], json!(72));
-    assert_eq!(masked["health_data"][0]["source_device"], json!("Apple Watch"));
-    assert_eq!(masked["metadata"]["request_timestamp"], json!("2023-01-01T00:00:00Z"));
+    assert_eq!(
+        masked["health_data"][0]["source_device"],
+        json!("Apple Watch")
+    );
+    assert_eq!(
+        masked["metadata"]["request_timestamp"],
+        json!("2023-01-01T00:00:00Z")
+    );
     assert_eq!(masked["metadata"]["processing_node"], json!("node-1"));
 
     // Test string masking for URLs and headers
     let sensitive_urls = vec![
-        ("https://api.example.com/data?api_key=secret123&user=john", "https://api.example.com/data?api_key=[MASKED]&user=john"),
-        ("Authorization: Bearer token_abc123", "authorization: [MASKED]"),
-        ("password=secret&other=value&token=xyz", "password=[MASKED]&other=value&token=xyz"),
+        (
+            "https://api.example.com/data?api_key=secret123&user=john",
+            "https://api.example.com/data?api_key=[MASKED]&user=john",
+        ),
+        (
+            "Authorization: Bearer token_abc123",
+            "authorization: [MASKED]",
+        ),
+        (
+            "password=secret&other=value&token=xyz",
+            "password=[MASKED]&other=value&token=xyz",
+        ),
     ];
 
     for (input, expected) in &sensitive_urls {
@@ -401,25 +430,32 @@ async fn test_performance_monitoring_and_alerting() {
             .wrap(MetricsMiddleware)
             .wrap(StructuredLogger)
             .app_data(web::Data::new(config.pool.clone()))
-            .route("/fast", web::get().to(|| async {
-                let timer = PerformanceTimer::new("fast_endpoint", None);
-                tokio::time::sleep(Duration::from_millis(1)).await;
-                let duration = timer.finish();
-                HttpResponse::Ok().json(json!({"duration_ms": duration}))
-            }))
-            .route("/slow", web::get().to(|| async {
-                let timer = PerformanceTimer::new("slow_endpoint", None);
-                tokio::time::sleep(Duration::from_millis(150)).await;
-                let duration = timer.finish();
-                warn!(
-                    event = "slow_response_detected",
-                    duration_ms = duration,
-                    threshold_ms = 100,
-                    message = "Response time exceeded threshold"
-                );
-                HttpResponse::Ok().json(json!({"duration_ms": duration}))
-            }))
-    ).await;
+            .route(
+                "/fast",
+                web::get().to(|| async {
+                    let timer = PerformanceTimer::new("fast_endpoint", None);
+                    tokio::time::sleep(Duration::from_millis(1)).await;
+                    let duration = timer.finish();
+                    HttpResponse::Ok().json(json!({"duration_ms": duration}))
+                }),
+            )
+            .route(
+                "/slow",
+                web::get().to(|| async {
+                    let timer = PerformanceTimer::new("slow_endpoint", None);
+                    tokio::time::sleep(Duration::from_millis(150)).await;
+                    let duration = timer.finish();
+                    warn!(
+                        event = "slow_response_detected",
+                        duration_ms = duration,
+                        threshold_ms = 100,
+                        message = "Response time exceeded threshold"
+                    );
+                    HttpResponse::Ok().json(json!({"duration_ms": duration}))
+                }),
+            ),
+    )
+    .await;
 
     // Test fast endpoint
     let req = test::TestRequest::get().uri("/fast").to_request();
@@ -460,8 +496,9 @@ async fn test_health_check_monitoring_comprehensive() {
             .route("/health", web::get().to(health_check))
             .route("/health/ready", web::get().to(readiness_probe))
             .route("/health/live", web::get().to(liveness_probe))
-            .route("/api/v1/status", web::get().to(api_status))
-    ).await;
+            .route("/api/v1/status", web::get().to(api_status)),
+    )
+    .await;
 
     // Test all health endpoints
     let health_endpoints = vec![
@@ -479,7 +516,11 @@ async fn test_health_check_monitoring_comprehensive() {
         let resp = test::call_service(&app, req).await;
         let duration = start.elapsed();
 
-        assert!(resp.status().is_success(), "Health endpoint {} failed", endpoint);
+        assert!(
+            resp.status().is_success(),
+            "Health endpoint {} failed",
+            endpoint
+        );
 
         let body: Value = test::read_body_json(resp).await;
 
@@ -752,30 +793,50 @@ async fn test_alert_trigger_conditions() {
 
     // Test various alert-worthy conditions
     let alert_scenarios: Vec<(&str, Box<dyn Fn()>)> = vec![
-        ("high_error_rate", Box::new(|| {
-            for _ in 0..100 {
-                Metrics::record_error("validation", "/api/v1/ingest", "error");
-            }
-        })),
-        ("rate_limit_exhaustion", Box::new(|| {
-            for i in 0..10 {
-                Metrics::record_rate_limited_request("/api/v1/ingest", &format!("user_{}", i));
-            }
-        })),
-        ("slow_database", Box::new(|| {
-            Metrics::record_db_connection_wait_time("slow_query", Duration::from_millis(5000));
-            Metrics::record_db_connection_wait_time("timeout", Duration::from_millis(10000));
-        })),
-        ("large_payload_security", Box::new(|| {
-            // Simulate large payload detection
-            Metrics::record_large_request("/api/v1/ingest", 150 * 1024 * 1024); // 150MB
-            Metrics::record_security_event("extremely_large_payload", "/api/v1/ingest", "high");
-        })),
-        ("validation_failures", Box::new(|| {
-            Metrics::record_validation_error("heart_rate", "range_violation", "/api/v1/ingest");
-            Metrics::record_validation_error("blood_pressure", "invalid_format", "/api/v1/ingest");
-            Metrics::record_validation_error_rate("/api/v1/ingest", "activity", 0.95); // 95% error rate
-        })),
+        (
+            "high_error_rate",
+            Box::new(|| {
+                for _ in 0..100 {
+                    Metrics::record_error("validation", "/api/v1/ingest", "error");
+                }
+            }),
+        ),
+        (
+            "rate_limit_exhaustion",
+            Box::new(|| {
+                for i in 0..10 {
+                    Metrics::record_rate_limited_request("/api/v1/ingest", &format!("user_{}", i));
+                }
+            }),
+        ),
+        (
+            "slow_database",
+            Box::new(|| {
+                Metrics::record_db_connection_wait_time("slow_query", Duration::from_millis(5000));
+                Metrics::record_db_connection_wait_time("timeout", Duration::from_millis(10000));
+            }),
+        ),
+        (
+            "large_payload_security",
+            Box::new(|| {
+                // Simulate large payload detection
+                Metrics::record_large_request("/api/v1/ingest", 150 * 1024 * 1024); // 150MB
+                Metrics::record_security_event("extremely_large_payload", "/api/v1/ingest", "high");
+            }),
+        ),
+        (
+            "validation_failures",
+            Box::new(|| {
+                Metrics::record_validation_error("heart_rate", "range_violation", "/api/v1/ingest");
+                Metrics::record_validation_error(
+                    "blood_pressure",
+                    "invalid_format",
+                    "/api/v1/ingest",
+                );
+                Metrics::record_validation_error_rate("/api/v1/ingest", "activity", 0.95);
+                // 95% error rate
+            }),
+        ),
     ];
 
     for (scenario_name, scenario_fn) in alert_scenarios {
@@ -845,15 +906,19 @@ async fn test_observability_slo_compliance() {
             .wrap(MetricsMiddleware)
             .wrap(StructuredLogger)
             .app_data(web::Data::new(config.pool.clone()))
-            .route("/slo-test", web::get().to(|| async {
-                // Simulate variable response times
-                let delay = rand::random::<u64>() % 50 + 10; // 10-60ms
-                tokio::time::sleep(Duration::from_millis(delay)).await;
-                HttpResponse::Ok().json(json!({"delay_ms": delay}))
-            }))
+            .route(
+                "/slo-test",
+                web::get().to(|| async {
+                    // Simulate variable response times
+                    let delay = rand::random::<u64>() % 50 + 10; // 10-60ms
+                    tokio::time::sleep(Duration::from_millis(delay)).await;
+                    HttpResponse::Ok().json(json!({"delay_ms": delay}))
+                }),
+            )
             .route("/health", web::get().to(health_check))
-            .route("/metrics", web::get().to(metrics_handler))
-    ).await;
+            .route("/metrics", web::get().to(metrics_handler)),
+    )
+    .await;
 
     const TOTAL_REQUESTS: usize = 1000;
     let mut response_times = Vec::with_capacity(TOTAL_REQUESTS);

@@ -865,7 +865,7 @@ impl AuthService {
     /// Revoke an API key
     pub async fn revoke_api_key(&self, api_key_id: Uuid, user_id: Uuid) -> Result<bool, AuthError> {
         let result = sqlx::query!(
-            "UPDATE api_keys SET is_active = false WHERE id = $1 AND user_id = $2",
+            "UPDATE api_keys SET is_active = false WHERE id = $1 AND user_id = $2 AND (is_active IS NULL OR is_active = true)",
             api_key_id,
             user_id
         )

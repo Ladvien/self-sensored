@@ -1474,7 +1474,7 @@ impl IosIngestPayload {
         ];
 
         IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics,
                 workouts: vec![],
             },
@@ -1508,7 +1508,7 @@ impl IosIngestPayload {
         ];
 
         IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics,
                 workouts: vec![],
             },

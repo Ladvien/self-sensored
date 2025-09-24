@@ -1077,7 +1077,7 @@ impl SymptomType {
             "loss_of_smell" | "lossofsmell" | "anosmia" => Some(Self::LossOfSmell),
             "loss_of_taste" | "lossoftaste" | "ageusia" => Some(Self::LossOfTaste),
             "lower_back_pain" | "lowerbackpain" | "lumbar_pain" => Some(Self::LowerBackPain),
-            "memory_lapse" | "memorylapse" | "forgetfulness" | "memory_loss" => {
+            "memory_lapse" | "memorylapse" | "memory_loss" => {
                 Some(Self::MemoryLapse)
             }
             "sinus_congestion" | "sinuscongestion" | "sinus_pressure" => {

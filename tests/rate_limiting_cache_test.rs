@@ -1,6 +1,6 @@
 // Comprehensive Rate Limiting Cache Tests
 use chrono::{Duration as ChronoDuration, Utc};
-use redis::{AsyncCommands, Client as RedisClient, aio::ConnectionManager};
+use redis::{aio::ConnectionManager, AsyncCommands, Client as RedisClient};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -84,7 +84,10 @@ async fn test_rate_limit_status_checking() {
 
     // Check status multiple times - should not increment
     for _ in 0..5 {
-        let status = rate_limiter.get_rate_limit_status(api_key_id).await.unwrap();
+        let status = rate_limiter
+            .get_rate_limit_status(api_key_id)
+            .await
+            .unwrap();
         assert_eq!(status.requests_remaining, 7); // 10 - 3 = 7
         assert_eq!(status.requests_limit, 10);
         assert!(status.retry_after.is_none());
@@ -95,7 +98,10 @@ async fn test_rate_limit_status_checking() {
     assert_eq!(after_request.requests_remaining, 6); // Now 6 remaining
 
     // Status should reflect the change
-    let final_status = rate_limiter.get_rate_limit_status(api_key_id).await.unwrap();
+    let final_status = rate_limiter
+        .get_rate_limit_status(api_key_id)
+        .await
+        .unwrap();
     assert_eq!(final_status.requests_remaining, 6);
 }
 
@@ -144,7 +150,10 @@ async fn test_concurrent_rate_limiting() {
     assert_eq!(failed_requests, 0);
 
     // Final status should show 50 remaining
-    let final_status = rate_limiter.get_rate_limit_status(api_key_id).await.unwrap();
+    let final_status = rate_limiter
+        .get_rate_limit_status(api_key_id)
+        .await
+        .unwrap();
     assert_eq!(final_status.requests_remaining, 50);
 }
 
@@ -263,7 +272,10 @@ async fn test_rate_limit_reset_time() {
     // Reset time should be approximately retry_after seconds from now
     let expected_reset = Utc::now() + ChronoDuration::seconds(retry_after_seconds as i64);
     let time_diff = (reset_time - expected_reset).num_seconds().abs();
-    assert!(time_diff <= 2, "Reset time calculation should be accurate within 2 seconds");
+    assert!(
+        time_diff <= 2,
+        "Reset time calculation should be accurate within 2 seconds"
+    );
 }
 
 /// Test rate limiter memory cleanup
@@ -302,7 +314,8 @@ async fn test_rate_limiter_memory_cleanup() {
 #[tokio::test]
 async fn test_redis_specific_features() {
     // This test will try to use Redis features if available, otherwise skip
-    let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/1".to_string());
+    let redis_url =
+        std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/1".to_string());
 
     let rate_limiter_result = RateLimiter::new(&redis_url).await;
 
@@ -321,7 +334,10 @@ async fn test_redis_specific_features() {
             let rate_limiter_2 = RateLimiter::new(&redis_url).await.unwrap();
 
             // Should see the same rate limit state
-            let status = rate_limiter_2.get_rate_limit_status(api_key_id).await.unwrap();
+            let status = rate_limiter_2
+                .get_rate_limit_status(api_key_id)
+                .await
+                .unwrap();
             assert!(status.requests_remaining < 100); // Should reflect previous usage
 
             // Clean up
@@ -387,12 +403,20 @@ async fn test_high_concurrency_rate_limiting() {
     assert_eq!(total_failed, 0);
 
     // Performance check - operations should be fast
-    assert!(max_duration < Duration::from_millis(100),
-        "Rate limiting operations should be fast even under high concurrency");
+    assert!(
+        max_duration < Duration::from_millis(100),
+        "Rate limiting operations should be fast even under high concurrency"
+    );
 
     // Final status should show correct remaining count
-    let final_status = rate_limiter.get_rate_limit_status(api_key_id).await.unwrap();
-    assert_eq!(final_status.requests_remaining, 1000 - total_requests as i32);
+    let final_status = rate_limiter
+        .get_rate_limit_status(api_key_id)
+        .await
+        .unwrap();
+    assert_eq!(
+        final_status.requests_remaining,
+        1000 - total_requests as i32
+    );
 }
 
 /// Test cache stampede prevention in rate limiting
@@ -449,10 +473,14 @@ async fn test_rate_limit_cache_stampede_prevention() {
     assert_eq!(rate_limited_count, 50);
 
     // Operations should complete reasonably quickly even under stampede
-    assert!(total_time < Duration::from_secs(5),
-        "Cache stampede should not cause excessive delays");
-    assert!(max_request_time < Duration::from_millis(100),
-        "Individual requests should remain fast during stampede");
+    assert!(
+        total_time < Duration::from_secs(5),
+        "Cache stampede should not cause excessive delays"
+    );
+    assert!(
+        max_request_time < Duration::from_millis(100),
+        "Individual requests should remain fast during stampede"
+    );
 }
 
 /// Test rate limit information accuracy
@@ -479,7 +507,10 @@ async fn test_rate_limit_info_accuracy() {
     assert!(limited_result.retry_after.unwrap() > 0);
 
     // Status check should match the limited state
-    let status = rate_limiter.get_rate_limit_status(api_key_id).await.unwrap();
+    let status = rate_limiter
+        .get_rate_limit_status(api_key_id)
+        .await
+        .unwrap();
     assert_eq!(status.requests_remaining, 0);
     assert_eq!(status.requests_limit, 10);
     assert!(status.retry_after.is_some());

@@ -89,7 +89,7 @@ async fn test_extended_activity_metrics_ingestion() -> Result<(), Box<dyn std::e
     // Create comprehensive activity metrics with all new specialized fields
     let mut cycling_activity = create_base_activity_metric(user.id);
     cycling_activity.recorded_at = Utc::now() - Duration::hours(2);
-    cycling_activity.step_count = Some(0);            // No steps during cycling
+    cycling_activity.step_count = Some(0); // No steps during cycling
     cycling_activity.distance_meters = Some(15000.0); // 15km total
     cycling_activity.flights_climbed = Some(0);
     cycling_activity.active_energy_burned_kcal = Some(450.0);
@@ -101,9 +101,9 @@ async fn test_extended_activity_metrics_ingestion() -> Result<(), Box<dyn std::e
     cycling_activity.distance_downhill_snow_sports_meters = None;
     cycling_activity.push_count = None;
     cycling_activity.swimming_stroke_count = None;
-    cycling_activity.nike_fuel_points = Some(750);           // Nike+ integration
+    cycling_activity.nike_fuel_points = Some(750); // Nike+ integration
     cycling_activity.apple_exercise_time_minutes = Some(45); // Apple Watch exercise ring
-    cycling_activity.apple_stand_time_minutes = Some(8);     // Achieved stand goal 8 hours
+    cycling_activity.apple_stand_time_minutes = Some(8); // Achieved stand goal 8 hours
     cycling_activity.apple_move_time_minutes = Some(45);
     cycling_activity.apple_stand_hour_achieved = Some(true);
     cycling_activity.source_device = Some("Apple Watch Series 9".to_string());
@@ -114,7 +114,7 @@ async fn test_extended_activity_metrics_ingestion() -> Result<(), Box<dyn std::e
 
     let mut swimming_activity = create_base_activity_metric(user.id);
     swimming_activity.recorded_at = Utc::now() - Duration::hours(1);
-    swimming_activity.step_count = Some(0);           // No steps during swimming
+    swimming_activity.step_count = Some(0); // No steps during swimming
     swimming_activity.distance_meters = Some(2000.0); // 2km pool swimming
     swimming_activity.flights_climbed = Some(0);
     swimming_activity.active_energy_burned_kcal = Some(380.0);
@@ -135,9 +135,9 @@ async fn test_extended_activity_metrics_ingestion() -> Result<(), Box<dyn std::e
 
     let mut wheelchair_activity = create_base_activity_metric(user.id);
     wheelchair_activity.recorded_at = Utc::now() - Duration::minutes(30);
-    wheelchair_activity.step_count = Some(0);           // No steps for wheelchair user
+    wheelchair_activity.step_count = Some(0); // No steps for wheelchair user
     wheelchair_activity.distance_meters = Some(8000.0); // 8km wheelchair distance
-    wheelchair_activity.flights_climbed = Some(0);      // No flights for wheelchair
+    wheelchair_activity.flights_climbed = Some(0); // No flights for wheelchair
     wheelchair_activity.active_energy_burned_kcal = Some(320.0);
     wheelchair_activity.basal_energy_burned_kcal = Some(110.0);
     // Specialized fields for accessibility
@@ -156,9 +156,9 @@ async fn test_extended_activity_metrics_ingestion() -> Result<(), Box<dyn std::e
 
     let mut snow_sports_activity = create_base_activity_metric(user.id);
     snow_sports_activity.recorded_at = Utc::now() - Duration::minutes(15);
-    snow_sports_activity.step_count = Some(1200);         // Some steps during downhill skiing
+    snow_sports_activity.step_count = Some(1200); // Some steps during downhill skiing
     snow_sports_activity.distance_meters = Some(25000.0); // 25km downhill skiing
-    snow_sports_activity.flights_climbed = Some(0);       // Downhill only
+    snow_sports_activity.flights_climbed = Some(0); // Downhill only
     snow_sports_activity.active_energy_burned_kcal = Some(680.0);
     snow_sports_activity.basal_energy_burned_kcal = Some(150.0);
     // Specialized fields
@@ -183,16 +183,20 @@ async fn test_extended_activity_metrics_ingestion() -> Result<(), Box<dyn std::e
         snow_sports_activity,
     ];
 
-    println!("Processing {} activities for user {}", activities.len(), user.id);
+    println!(
+        "Processing {} activities for user {}",
+        activities.len(),
+        user.id
+    );
 
     let batch_result = batch_processor
         .process_activity_metrics(user.id, activities)
         .await?;
 
-    println!("Batch result: processed={}, failed={}, errors={:?}",
-        batch_result.processed_count,
-        batch_result.failed_count,
-        batch_result.errors);
+    println!(
+        "Batch result: processed={}, failed={}, errors={:?}",
+        batch_result.processed_count, batch_result.failed_count, batch_result.errors
+    );
 
     // Validate batch processing success
     assert_eq!(
@@ -343,7 +347,7 @@ async fn test_activity_metrics_validation_extended_fields() -> Result<(), Box<dy
     negative_values.distance_downhill_snow_sports_meters = None;
     negative_values.push_count = Some(-500); // Negative push count
     negative_values.swimming_stroke_count = None;
-    negative_values.nike_fuel_points = Some(-100);           // Negative Nike Fuel
+    negative_values.nike_fuel_points = Some(-100); // Negative Nike Fuel
     negative_values.apple_exercise_time_minutes = Some(-30); // Negative exercise time
     negative_values.apple_stand_time_minutes = Some(8);
     negative_values.apple_move_time_minutes = Some(30);
@@ -364,12 +368,12 @@ async fn test_activity_metrics_validation_extended_fields() -> Result<(), Box<dy
     excessive_values.distance_swimming_meters = None;
     excessive_values.distance_wheelchair_meters = None;
     excessive_values.distance_downhill_snow_sports_meters = None;
-    excessive_values.push_count = Some(60000);                 // Exceeds 50,000 limit
-    excessive_values.swimming_stroke_count = Some(150000);     // Exceeds 100,000 limit
-    excessive_values.nike_fuel_points = Some(15000);           // Exceeds 10,000 limit
+    excessive_values.push_count = Some(60000); // Exceeds 50,000 limit
+    excessive_values.swimming_stroke_count = Some(150000); // Exceeds 100,000 limit
+    excessive_values.nike_fuel_points = Some(15000); // Exceeds 10,000 limit
     excessive_values.apple_exercise_time_minutes = Some(1500); // Exceeds 1440 minutes (24 hours)
-    excessive_values.apple_stand_time_minutes = Some(1500);    // Exceeds 1440 minutes
-    excessive_values.apple_move_time_minutes = Some(1500);     // Exceeds 1440 minutes
+    excessive_values.apple_stand_time_minutes = Some(1500); // Exceeds 1440 minutes
+    excessive_values.apple_move_time_minutes = Some(1500); // Exceeds 1440 minutes
     excessive_values.apple_stand_hour_achieved = Some(false);
     excessive_values.source_device = Some("Test Device".to_string());
 

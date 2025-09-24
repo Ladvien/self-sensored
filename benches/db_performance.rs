@@ -1,9 +1,9 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
+use chrono::{DateTime, Utc};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use sqlx::{PgPool, Row};
 use std::time::Duration;
 use tokio::runtime::Runtime;
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
 use self_sensored::db::database::create_connection_pool;
 use self_sensored::models::db::*;
@@ -19,7 +19,9 @@ async fn setup_benchmark_data(pool: &PgPool) -> (Uuid, Vec<Uuid>) {
     sqlx::query!(
         "INSERT INTO users (id, email, full_name, is_active) VALUES ($1, $2, $3, true)
          ON CONFLICT (id) DO NOTHING",
-        user_id, email, "Benchmark User"
+        user_id,
+        email,
+        "Benchmark User"
     )
     .execute(pool)
     .await
@@ -41,7 +43,10 @@ async fn setup_benchmark_data(pool: &PgPool) -> (Uuid, Vec<Uuid>) {
             VALUES ($1, $2, $3, $4, 'resting', 'Benchmark Device')
             ON CONFLICT (user_id, recorded_at) DO NOTHING
             "#,
-            user_id, recorded_at, heart_rate, Some(resting_hr)
+            user_id,
+            recorded_at,
+            heart_rate,
+            Some(resting_hr)
         )
         .execute(pool)
         .await
@@ -63,7 +68,10 @@ async fn setup_benchmark_data(pool: &PgPool) -> (Uuid, Vec<Uuid>) {
             VALUES ($1, $2, $3, $4, 'Benchmark Device')
             ON CONFLICT (user_id, recorded_at) DO NOTHING
             "#,
-            user_id, recorded_at, steps, Some((steps as f64 * 0.7) as i32)
+            user_id,
+            recorded_at,
+            steps,
+            Some((steps as f64 * 0.7) as i32)
         )
         .execute(pool)
         .await;
@@ -93,7 +101,9 @@ fn bench_heart_rate_queries(c: &mut Criterion) {
         dotenv::dotenv().ok();
         let database_url = std::env::var("TEST_DATABASE_URL")
             .expect("TEST_DATABASE_URL must be set for benchmarks");
-        create_connection_pool(&database_url).await.expect("Failed to create pool")
+        create_connection_pool(&database_url)
+            .await
+            .expect("Failed to create pool")
     });
 
     let (user_id, _) = rt.block_on(setup_benchmark_data(&pool));
@@ -124,13 +134,12 @@ fn bench_heart_rate_queries(c: &mut Criterion) {
     // Benchmark: Pagination count query
     group.bench_function("count_query", |b| {
         b.to_async(&rt).iter(|| async {
-            let count: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM heart_rate_metrics WHERE user_id = $1"
-            )
-            .bind(user_id)
-            .fetch_one(&pool)
-            .await
-            .expect("Count query failed");
+            let count: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM heart_rate_metrics WHERE user_id = $1")
+                    .bind(user_id)
+                    .fetch_one(&pool)
+                    .await
+                    .expect("Count query failed");
 
             black_box(count)
         })
@@ -177,10 +186,11 @@ fn bench_connection_pool_performance(c: &mut Criterion) {
     group.bench_function("pool_creation", |b| {
         b.to_async(&rt).iter(|| async {
             dotenv::dotenv().ok();
-            let database_url = std::env::var("TEST_DATABASE_URL")
-                .expect("TEST_DATABASE_URL must be set");
+            let database_url =
+                std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL must be set");
 
-            let pool = create_connection_pool(&database_url).await
+            let pool = create_connection_pool(&database_url)
+                .await
                 .expect("Failed to create pool");
 
             black_box(pool)
@@ -195,9 +205,11 @@ fn bench_connection_pool_performance(c: &mut Criterion) {
             |b, &concurrency| {
                 let pool = rt.block_on(async {
                     dotenv::dotenv().ok();
-                    let database_url = std::env::var("TEST_DATABASE_URL")
-                        .expect("TEST_DATABASE_URL must be set");
-                    create_connection_pool(&database_url).await.expect("Failed to create pool")
+                    let database_url =
+                        std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL must be set");
+                    create_connection_pool(&database_url)
+                        .await
+                        .expect("Failed to create pool")
                 });
 
                 b.to_async(&rt).iter(|| async {
@@ -205,7 +217,8 @@ fn bench_connection_pool_performance(c: &mut Criterion) {
                         .map(|_| {
                             let pool = pool.clone();
                             tokio::spawn(async move {
-                                let _conn = pool.acquire().await.expect("Failed to acquire connection");
+                                let _conn =
+                                    pool.acquire().await.expect("Failed to acquire connection");
                                 tokio::time::sleep(Duration::from_millis(1)).await;
                             })
                         })
@@ -226,9 +239,11 @@ fn bench_index_effectiveness(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let pool = rt.block_on(async {
         dotenv::dotenv().ok();
-        let database_url = std::env::var("TEST_DATABASE_URL")
-            .expect("TEST_DATABASE_URL must be set");
-        create_connection_pool(&database_url).await.expect("Failed to create pool")
+        let database_url =
+            std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL must be set");
+        create_connection_pool(&database_url)
+            .await
+            .expect("Failed to create pool")
     });
 
     let (user_id, _) = rt.block_on(setup_benchmark_data(&pool));
@@ -239,13 +254,11 @@ fn bench_index_effectiveness(c: &mut Criterion) {
     // Test query with user_id index
     group.bench_function("user_id_index_scan", |b| {
         b.to_async(&rt).iter(|| async {
-            let result = sqlx::query(
-                "SELECT COUNT(*) FROM heart_rate_metrics WHERE user_id = $1"
-            )
-            .bind(user_id)
-            .fetch_one(&pool)
-            .await
-            .expect("Query failed");
+            let result = sqlx::query("SELECT COUNT(*) FROM heart_rate_metrics WHERE user_id = $1")
+                .bind(user_id)
+                .fetch_one(&pool)
+                .await
+                .expect("Query failed");
 
             black_box(result)
         })
@@ -259,7 +272,7 @@ fn bench_index_effectiveness(c: &mut Criterion) {
 
             let result = sqlx::query(
                 "SELECT COUNT(*) FROM heart_rate_metrics
-                 WHERE recorded_at BETWEEN $1 AND $2"
+                 WHERE recorded_at BETWEEN $1 AND $2",
             )
             .bind(start_date)
             .bind(end_date)
@@ -281,7 +294,7 @@ fn bench_index_effectiveness(c: &mut Criterion) {
                 "SELECT * FROM heart_rate_metrics
                  WHERE user_id = $1 AND recorded_at BETWEEN $2 AND $3
                  ORDER BY recorded_at DESC
-                 LIMIT 50"
+                 LIMIT 50",
             )
             .bind(user_id)
             .bind(start_date)
@@ -302,9 +315,11 @@ fn bench_batch_insert_performance(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let pool = rt.block_on(async {
         dotenv::dotenv().ok();
-        let database_url = std::env::var("TEST_DATABASE_URL")
-            .expect("TEST_DATABASE_URL must be set");
-        create_connection_pool(&database_url).await.expect("Failed to create pool")
+        let database_url =
+            std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL must be set");
+        create_connection_pool(&database_url)
+            .await
+            .expect("Failed to create pool")
     });
 
     let mut group = c.benchmark_group("batch_inserts");
@@ -371,9 +386,11 @@ fn bench_query_complexity(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let pool = rt.block_on(async {
         dotenv::dotenv().ok();
-        let database_url = std::env::var("TEST_DATABASE_URL")
-            .expect("TEST_DATABASE_URL must be set");
-        create_connection_pool(&database_url).await.expect("Failed to create pool")
+        let database_url =
+            std::env::var("TEST_DATABASE_URL").expect("TEST_DATABASE_URL must be set");
+        create_connection_pool(&database_url)
+            .await
+            .expect("Failed to create pool")
     });
 
     let (user_id, _) = rt.block_on(setup_benchmark_data(&pool));
@@ -384,11 +401,13 @@ fn bench_query_complexity(c: &mut Criterion) {
     // Simple query
     group.bench_function("simple_select", |b| {
         b.to_async(&rt).iter(|| async {
-            let result = sqlx::query("SELECT heart_rate FROM heart_rate_metrics WHERE user_id = $1 LIMIT 100")
-                .bind(user_id)
-                .fetch_all(&pool)
-                .await
-                .expect("Query failed");
+            let result = sqlx::query(
+                "SELECT heart_rate FROM heart_rate_metrics WHERE user_id = $1 LIMIT 100",
+            )
+            .bind(user_id)
+            .fetch_all(&pool)
+            .await
+            .expect("Query failed");
 
             black_box(result)
         })

@@ -89,6 +89,17 @@ impl StreamingJsonParser {
         self.parse_complete_json()
     }
 
+    /// Validate JSON bytes without parsing - for efficient large payload validation
+    pub fn validate_json_bytes(&mut self, bytes: &[u8]) -> Result<(), String> {
+        // Copy bytes to buffer for validation
+        self.buffer.clear();
+        self.buffer.extend_from_slice(bytes);
+        self.total_size = bytes.len();
+
+        // Validate structure
+        self.validate_json_structure()
+    }
+
     /// Parse complete JSON buffer with detailed error reporting
     fn parse_complete_json<T: DeserializeOwned>(&self) -> ActixResult<T> {
         // First, validate that we have complete JSON by checking basic structure

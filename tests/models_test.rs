@@ -9,9 +9,9 @@ use common::fixtures::{
     create_test_heart_rate_metric, create_test_sleep_metric, create_test_workout_metric,
 };
 use self_sensored::models::{
+    enums::{ActivityContext, WorkoutType},
     ActivityMetric, BloodPressureMetric, HealthMetric, HeartRateMetric, IngestData, IngestPayload,
     IosIngestData, IosIngestPayload, IosMetric, IosMetricData, SleepMetric, WorkoutData,
-    enums::{ActivityContext, WorkoutType},
 };
 
 #[test]
@@ -69,7 +69,7 @@ fn test_ios_payload_conversion() {
     let date_str = now.to_rfc3339();
 
     let ios_payload = IosIngestPayload {
-        data: IosIngestData {
+        data: IosIngestData::Legacy {
             metrics: vec![
                 IosMetric {
                     name: "heart_rate".to_string(),

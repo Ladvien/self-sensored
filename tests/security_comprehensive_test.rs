@@ -14,7 +14,7 @@ use self_sensored::{
     services::{
         auth::{ApiKey, AuthContext, AuthService, User},
         cache::{CacheConfig, CacheService},
-        rate_limiter::{RateLimiter, RateLimitError},
+        rate_limiter::{RateLimitError, RateLimiter},
     },
 };
 use serde_json::json;
@@ -43,7 +43,8 @@ async fn get_test_pool() -> PgPool {
 // Mock Redis setup for testing
 async fn setup_mock_redis() -> Option<String> {
     // Try to connect to a test Redis instance
-    let redis_url = std::env::var("TEST_REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/1".to_string());
+    let redis_url =
+        std::env::var("TEST_REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/1".to_string());
 
     // Test if Redis is available
     if let Ok(client) = RedisClient::open(redis_url.as_str()) {
@@ -109,7 +110,8 @@ impl TestUserSetup {
 
     async fn create_admin_user(&self) -> (String, ApiKey) {
         // Create admin API key
-        let (plain_key, api_key) = self.auth_service
+        let (plain_key, api_key) = self
+            .auth_service
             .create_api_key(
                 self.user.id,
                 Some("Admin Test Key"),
@@ -146,15 +148,24 @@ async fn test_api_key_generation_security() {
         let key = AuthService::generate_api_key();
 
         // Verify format
-        assert!(key.starts_with("hea_"), "API key should have correct prefix");
+        assert!(
+            key.starts_with("hea_"),
+            "API key should have correct prefix"
+        );
         assert_eq!(key.len(), 36, "API key should be correct length");
 
         // Verify uniqueness
         assert!(keys.insert(key.clone()), "API keys should be unique");
 
         // Verify it's properly random (no predictable patterns)
-        assert!(!key.contains("0000"), "API key shouldn't contain obvious patterns");
-        assert!(!key.contains("1111"), "API key shouldn't contain obvious patterns");
+        assert!(
+            !key.contains("0000"),
+            "API key shouldn't contain obvious patterns"
+        );
+        assert!(
+            !key.contains("1111"),
+            "API key shouldn't contain obvious patterns"
+        );
     }
 }
 
@@ -174,21 +185,30 @@ async fn test_argon2_hashing_security() {
 
     for password in test_cases {
         // Hash the password
-        let hash = auth_service.hash_api_key(password).expect("Hashing should succeed");
+        let hash = auth_service
+            .hash_api_key(password)
+            .expect("Hashing should succeed");
 
         // Verify hash format (Argon2)
         assert!(hash.starts_with("$argon2"), "Hash should use Argon2 format");
-        assert!(hash.matches('$').count() >= 5, "Hash should have proper structure");
+        assert!(
+            hash.matches('$').count() >= 5,
+            "Hash should have proper structure"
+        );
 
         // Verify correct password
         assert!(
-            auth_service.verify_api_key(password, &hash).expect("Verification should succeed"),
+            auth_service
+                .verify_api_key(password, &hash)
+                .expect("Verification should succeed"),
             "Correct password should verify"
         );
 
         // Verify incorrect password
         assert!(
-            !auth_service.verify_api_key("wrong_password", &hash).expect("Verification should succeed"),
+            !auth_service
+                .verify_api_key("wrong_password", &hash)
+                .expect("Verification should succeed"),
             "Incorrect password should not verify"
         );
 
@@ -197,7 +217,9 @@ async fn test_argon2_hashing_security() {
             let uppercase = password.to_uppercase();
             if uppercase != password {
                 assert!(
-                    !auth_service.verify_api_key(&uppercase, &hash).expect("Verification should succeed"),
+                    !auth_service
+                        .verify_api_key(&uppercase, &hash)
+                        .expect("Verification should succeed"),
                     "Password verification should be case sensitive"
                 );
             }
@@ -210,12 +232,14 @@ async fn test_timing_attack_resistance() {
     let auth_service = AuthService::new(get_test_pool().await);
 
     let valid_password = "test_password_123";
-    let hash = auth_service.hash_api_key(valid_password).expect("Hashing should succeed");
+    let hash = auth_service
+        .hash_api_key(valid_password)
+        .expect("Hashing should succeed");
 
     let test_passwords = vec![
         "wrong_password",
         "test_password_124", // One character different
-        "", // Empty password
+        "",                  // Empty password
         "completely_different_password_that_is_much_longer",
     ];
 
@@ -237,8 +261,15 @@ async fn test_timing_attack_resistance() {
         // Verify that timing is relatively consistent (within reasonable bounds)
         // This is a basic timing attack resistance test
         let avg_time = timings.iter().sum::<StdDuration>() / timings.len() as u32;
-        let max_deviation = timings.iter()
-            .map(|t| if *t > avg_time { *t - avg_time } else { avg_time - *t })
+        let max_deviation = timings
+            .iter()
+            .map(|t| {
+                if *t > avg_time {
+                    *t - avg_time
+                } else {
+                    avg_time - *t
+                }
+            })
             .max()
             .unwrap_or(StdDuration::from_nanos(0));
 
@@ -256,7 +287,8 @@ async fn test_api_key_lifecycle_security() {
     let setup = TestUserSetup::new().await;
 
     // Test API key creation
-    let (plain_key, api_key) = setup.auth_service
+    let (plain_key, api_key) = setup
+        .auth_service
         .create_api_key(
             setup.user.id,
             Some("Lifecycle Test Key"),
@@ -268,7 +300,8 @@ async fn test_api_key_lifecycle_security() {
         .expect("API key creation should succeed");
 
     // Test authentication with new key
-    let auth_context = setup.auth_service
+    let auth_context = setup
+        .auth_service
         .authenticate(&plain_key, None, None)
         .await
         .expect("Authentication should succeed");
@@ -277,7 +310,8 @@ async fn test_api_key_lifecycle_security() {
     assert_eq!(auth_context.user.id, setup.user.id);
 
     // Test API key revocation
-    let revoked = setup.auth_service
+    let revoked = setup
+        .auth_service
         .revoke_api_key(api_key.id, setup.user.id)
         .await
         .expect("Revocation should succeed");
@@ -285,14 +319,19 @@ async fn test_api_key_lifecycle_security() {
     assert!(revoked, "API key should be revoked");
 
     // Test authentication fails after revocation
-    let auth_result = setup.auth_service
+    let auth_result = setup
+        .auth_service
         .authenticate(&plain_key, None, None)
         .await;
 
-    assert!(auth_result.is_err(), "Authentication should fail after revocation");
+    assert!(
+        auth_result.is_err(),
+        "Authentication should fail after revocation"
+    );
 
     // Test double revocation (should be idempotent)
-    let revoked_again = setup.auth_service
+    let revoked_again = setup
+        .auth_service
         .revoke_api_key(api_key.id, setup.user.id)
         .await
         .expect("Second revocation should succeed");
@@ -307,7 +346,8 @@ async fn test_api_key_expiration_security() {
     let setup = TestUserSetup::new().await;
 
     // Create expired API key
-    let (plain_key, _api_key) = setup.auth_service
+    let (plain_key, _api_key) = setup
+        .auth_service
         .create_api_key(
             setup.user.id,
             Some("Expired Key"),
@@ -319,11 +359,15 @@ async fn test_api_key_expiration_security() {
         .expect("API key creation should succeed");
 
     // Test authentication with expired key
-    let auth_result = setup.auth_service
+    let auth_result = setup
+        .auth_service
         .authenticate(&plain_key, None, None)
         .await;
 
-    assert!(matches!(auth_result, Err(self_sensored::services::auth::AuthError::ApiKeyExpired)));
+    assert!(matches!(
+        auth_result,
+        Err(self_sensored::services::auth::AuthError::ApiKeyExpired)
+    ));
 
     setup.cleanup().await;
 }
@@ -339,21 +383,30 @@ async fn test_rate_limiter_in_memory_security() {
 
     // Test normal operation
     for i in 0..5 {
-        let result = rate_limiter.check_rate_limit(api_key_id).await.expect("Rate limit check should succeed");
+        let result = rate_limiter
+            .check_rate_limit(api_key_id)
+            .await
+            .expect("Rate limit check should succeed");
         assert_eq!(result.requests_remaining, 4 - i);
         assert_eq!(result.requests_limit, 5);
         assert!(result.retry_after.is_none());
     }
 
     // Test rate limit enforcement
-    let result = rate_limiter.check_rate_limit(api_key_id).await.expect("Rate limit check should succeed");
+    let result = rate_limiter
+        .check_rate_limit(api_key_id)
+        .await
+        .expect("Rate limit check should succeed");
     assert_eq!(result.requests_remaining, 0);
     assert!(result.retry_after.is_some());
     assert!(result.retry_after.unwrap() > 0);
 
     // Test multiple blocked requests
     for _ in 0..3 {
-        let result = rate_limiter.check_rate_limit(api_key_id).await.expect("Rate limit check should succeed");
+        let result = rate_limiter
+            .check_rate_limit(api_key_id)
+            .await
+            .expect("Rate limit check should succeed");
         assert_eq!(result.requests_remaining, 0);
         assert!(result.retry_after.is_some());
     }
@@ -367,20 +420,26 @@ async fn test_rate_limiter_ip_based_security() {
         "192.168.1.100",
         "10.0.0.1",
         "172.16.0.1",
-        "::1", // IPv6 localhost
+        "::1",         // IPv6 localhost
         "2001:db8::1", // IPv6 example
     ];
 
     for ip in test_ips {
         // Test normal operation for each IP
         for i in 0..3 {
-            let result = rate_limiter.check_ip_rate_limit(ip).await.expect("IP rate limit check should succeed");
+            let result = rate_limiter
+                .check_ip_rate_limit(ip)
+                .await
+                .expect("IP rate limit check should succeed");
             assert_eq!(result.requests_remaining, 2 - i);
             assert_eq!(result.requests_limit, 3);
         }
 
         // Test rate limit enforcement for each IP
-        let result = rate_limiter.check_ip_rate_limit(ip).await.expect("IP rate limit check should succeed");
+        let result = rate_limiter
+            .check_ip_rate_limit(ip)
+            .await
+            .expect("IP rate limit check should succeed");
         assert_eq!(result.requests_remaining, 0);
         assert!(result.retry_after.is_some());
     }
@@ -418,7 +477,9 @@ async fn test_rate_limiter_isolation() {
 #[tokio::test]
 async fn test_redis_rate_limiter_security() {
     if let Some(redis_url) = setup_mock_redis().await {
-        let rate_limiter = RateLimiter::new(&redis_url).await.expect("Redis rate limiter should initialize");
+        let rate_limiter = RateLimiter::new(&redis_url)
+            .await
+            .expect("Redis rate limiter should initialize");
 
         if !rate_limiter.is_using_redis() {
             println!("Skipping Redis test - using in-memory fallback");
@@ -428,11 +489,17 @@ async fn test_redis_rate_limiter_security() {
         let api_key_id = Uuid::new_v4();
 
         // Clear any existing state
-        rate_limiter.clear_all().await.expect("Clear should succeed");
+        rate_limiter
+            .clear_all()
+            .await
+            .expect("Clear should succeed");
 
         // Test Redis-backed rate limiting
         for i in 0..100 {
-            let result = rate_limiter.check_rate_limit(api_key_id).await.expect("Rate limit check should succeed");
+            let result = rate_limiter
+                .check_rate_limit(api_key_id)
+                .await
+                .expect("Rate limit check should succeed");
             if result.requests_remaining == 0 {
                 // Hit the limit
                 assert!(result.retry_after.is_some());
@@ -443,10 +510,15 @@ async fn test_redis_rate_limiter_security() {
         }
 
         // Test rate limit persistence across "connections" (new rate limiter instance)
-        let rate_limiter2 = RateLimiter::new(&redis_url).await.expect("Second rate limiter should initialize");
+        let rate_limiter2 = RateLimiter::new(&redis_url)
+            .await
+            .expect("Second rate limiter should initialize");
 
         if rate_limiter2.is_using_redis() {
-            let result = rate_limiter2.check_rate_limit(api_key_id).await.expect("Rate limit check should succeed");
+            let result = rate_limiter2
+                .check_rate_limit(api_key_id)
+                .await
+                .expect("Rate limit check should succeed");
             // Should still be rate limited
             assert_eq!(result.requests_remaining, 0);
             assert!(result.retry_after.is_some());
@@ -481,8 +553,9 @@ async fn test_auth_middleware_valid_token() {
         App::new()
             .app_data(web::Data::new(setup.auth_service.clone()))
             .wrap(AuthMiddleware)
-            .route("/test", web::get().to(test_handler_with_auth))
-    ).await;
+            .route("/test", web::get().to(test_handler_with_auth)),
+    )
+    .await;
 
     let req = TestRequest::get()
         .uri("/test")
@@ -507,8 +580,9 @@ async fn test_auth_middleware_invalid_token() {
         App::new()
             .app_data(web::Data::new(setup.auth_service.clone()))
             .wrap(AuthMiddleware)
-            .route("/test", web::get().to(test_handler_with_auth))
-    ).await;
+            .route("/test", web::get().to(test_handler_with_auth)),
+    )
+    .await;
 
     let tampered_key = format!("{}_tampered", setup.plain_key);
     let invalid_tokens = vec![
@@ -527,7 +601,12 @@ async fn test_auth_middleware_invalid_token() {
             .to_request();
 
         let resp = test::call_service(&app, req).await;
-        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED, "Token '{}' should be rejected", invalid_token);
+        assert_eq!(
+            resp.status(),
+            StatusCode::UNAUTHORIZED,
+            "Token '{}' should be rejected",
+            invalid_token
+        );
     }
 
     setup.cleanup().await;
@@ -541,8 +620,9 @@ async fn test_auth_middleware_missing_token() {
         App::new()
             .app_data(web::Data::new(setup.auth_service.clone()))
             .wrap(AuthMiddleware)
-            .route("/test", web::get().to(test_handler_with_auth))
-    ).await;
+            .route("/test", web::get().to(test_handler_with_auth)),
+    )
+    .await;
 
     // Test missing Authorization header
     let req = TestRequest::get().uri("/test").to_request();
@@ -576,9 +656,16 @@ async fn test_auth_middleware_health_endpoint_bypass() {
         App::new()
             .app_data(web::Data::new(setup.auth_service.clone()))
             .wrap(AuthMiddleware)
-            .route("/health", web::get().to(|| async { HttpResponse::Ok().json("healthy") }))
-            .route("/api/v1/status", web::get().to(|| async { HttpResponse::Ok().json("status") }))
-    ).await;
+            .route(
+                "/health",
+                web::get().to(|| async { HttpResponse::Ok().json("healthy") }),
+            )
+            .route(
+                "/api/v1/status",
+                web::get().to(|| async { HttpResponse::Ok().json("status") }),
+            ),
+    )
+    .await;
 
     // Health endpoints should bypass authentication
     let health_req = TestRequest::get().uri("/health").to_request();
@@ -610,8 +697,9 @@ async fn test_admin_middleware_with_admin_permissions() {
             .app_data(web::Data::new(setup.auth_service.clone()))
             .wrap(AdminMiddleware)
             .wrap(AuthMiddleware) // Admin middleware requires auth middleware first
-            .route("/admin/test", web::get().to(test_admin_handler))
-    ).await;
+            .route("/admin/test", web::get().to(test_admin_handler)),
+    )
+    .await;
 
     let req = TestRequest::get()
         .uri("/admin/test")
@@ -636,8 +724,9 @@ async fn test_admin_middleware_without_admin_permissions() {
             .app_data(web::Data::new(setup.auth_service.clone()))
             .wrap(AdminMiddleware)
             .wrap(AuthMiddleware)
-            .route("/admin/test", web::get().to(test_admin_handler))
-    ).await;
+            .route("/admin/test", web::get().to(test_admin_handler)),
+    )
+    .await;
 
     // Regular user (non-admin) should be denied
     let req = TestRequest::get()
@@ -660,8 +749,9 @@ async fn test_admin_middleware_without_auth() {
             .app_data(web::Data::new(setup.auth_service.clone()))
             .wrap(AdminMiddleware)
             // Note: No AuthMiddleware - this tests the case where admin middleware is called without auth
-            .route("/admin/test", web::get().to(test_admin_handler))
-    ).await;
+            .route("/admin/test", web::get().to(test_admin_handler)),
+    )
+    .await;
 
     let req = TestRequest::get()
         .uri("/admin/test")
@@ -689,8 +779,9 @@ async fn test_rate_limit_middleware_enforcement() {
             .app_data(rate_limiter.clone())
             .wrap(RateLimitMiddleware)
             .wrap(AuthMiddleware)
-            .route("/test", web::get().to(test_handler_with_auth))
-    ).await;
+            .route("/test", web::get().to(test_handler_with_auth)),
+    )
+    .await;
 
     // Clear rate limiter state
     rate_limiter.clear_all().await.unwrap();
@@ -704,7 +795,12 @@ async fn test_rate_limit_middleware_enforcement() {
             .to_request();
 
         let resp = test::call_service(&app, req).await;
-        assert_eq!(resp.status(), StatusCode::OK, "Request {} should succeed", i + 1);
+        assert_eq!(
+            resp.status(),
+            StatusCode::OK,
+            "Request {} should succeed",
+            i + 1
+        );
 
         // Check rate limit headers
         assert!(resp.headers().contains_key("x-ratelimit-limit"));
@@ -745,8 +841,9 @@ async fn test_rate_limit_middleware_different_ips() {
             .app_data(rate_limiter.clone())
             .wrap(RateLimitMiddleware)
             .wrap(AuthMiddleware)
-            .route("/test", web::get().to(test_handler_with_auth))
-    ).await;
+            .route("/test", web::get().to(test_handler_with_auth)),
+    )
+    .await;
 
     rate_limiter.clear_all().await.unwrap();
 
@@ -761,7 +858,12 @@ async fn test_rate_limit_middleware_different_ips() {
             .to_request();
 
         let resp = test::call_service(&app, req).await;
-        assert_eq!(resp.status(), StatusCode::OK, "Request from IP {} should succeed", ip);
+        assert_eq!(
+            resp.status(),
+            StatusCode::OK,
+            "Request from IP {} should succeed",
+            ip
+        );
     }
 
     // Second request from first IP should be rate limited
@@ -785,9 +887,16 @@ async fn test_rate_limit_middleware_health_bypass() {
         App::new()
             .app_data(rate_limiter)
             .wrap(RateLimitMiddleware)
-            .route("/health", web::get().to(|| async { HttpResponse::Ok().json("healthy") }))
-            .route("/metrics", web::get().to(|| async { HttpResponse::Ok().json("metrics") }))
-    ).await;
+            .route(
+                "/health",
+                web::get().to(|| async { HttpResponse::Ok().json("healthy") }),
+            )
+            .route(
+                "/metrics",
+                web::get().to(|| async { HttpResponse::Ok().json("metrics") }),
+            ),
+    )
+    .await;
 
     // Health and metrics endpoints should bypass rate limiting
     let health_req = TestRequest::get().uri("/health").to_request();
@@ -838,7 +947,10 @@ async fn test_auth_cache_security() {
             assert_eq!(auth_context1.api_key.id, auth_context2.api_key.id);
 
             // Cache should generally be faster (though not guaranteed in test environments)
-            println!("First auth: {:?}, Second auth: {:?}", first_duration, second_duration);
+            println!(
+                "First auth: {:?}, Second auth: {:?}",
+                first_duration, second_duration
+            );
 
             // Test cache invalidation
             auth_service.invalidate_user_auth_cache(setup.user.id).await;
@@ -906,7 +1018,11 @@ async fn test_sql_injection_prevention() {
 
         // Test in authentication (should never succeed with these values)
         let auth_result = setup.auth_service.authenticate(injection, None, None).await;
-        assert!(auth_result.is_err(), "SQL injection attempt should fail: {}", injection);
+        assert!(
+            auth_result.is_err(),
+            "SQL injection attempt should fail: {}",
+            injection
+        );
     }
 
     setup.cleanup().await;
@@ -920,8 +1036,9 @@ async fn test_xss_prevention_in_responses() {
         App::new()
             .app_data(web::Data::new(setup.auth_service.clone()))
             .wrap(AuthMiddleware)
-            .route("/test", web::get().to(test_handler_with_auth))
-    ).await;
+            .route("/test", web::get().to(test_handler_with_auth)),
+    )
+    .await;
 
     let req = TestRequest::get()
         .uri("/test")
@@ -951,11 +1068,12 @@ async fn test_cors_security_headers() {
                     .allowed_origin("https://trusted-domain.com")
                     .allowed_methods(vec!["GET", "POST"])
                     .allowed_headers(vec![header::AUTHORIZATION, header::CONTENT_TYPE])
-                    .max_age(3600)
+                    .max_age(3600),
             )
             .wrap(AuthMiddleware)
-            .route("/test", web::get().to(test_handler_with_auth))
-    ).await;
+            .route("/test", web::get().to(test_handler_with_auth)),
+    )
+    .await;
 
     // Test preflight request
     let preflight_req = TestRequest::default()
@@ -968,7 +1086,9 @@ async fn test_cors_security_headers() {
     let preflight_resp = test::call_service(&app, preflight_req).await;
 
     // Should allow trusted origin
-    assert!(preflight_resp.headers().contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN));
+    assert!(preflight_resp
+        .headers()
+        .contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN));
 
     // Test actual request
     let req = TestRequest::get()
@@ -995,13 +1115,15 @@ async fn test_audit_logging_for_authentication() {
     let user_agent = "TestAgent/1.0";
 
     // Test successful authentication audit
-    let _auth_context = setup.auth_service
+    let _auth_context = setup
+        .auth_service
         .authenticate(&setup.plain_key, Some(client_ip), Some(user_agent))
         .await
         .expect("Authentication should succeed");
 
     // Test failed authentication audit
-    let _failed_result = setup.auth_service
+    let _failed_result = setup
+        .auth_service
         .authenticate("invalid_key", Some(client_ip), Some(user_agent))
         .await;
 
@@ -1055,9 +1177,16 @@ async fn test_concurrent_authentication_security() {
     let final_error = error_count.load(Ordering::Relaxed);
 
     // Should have ~45 successes and ~5 errors
-    assert!(final_success >= 40, "Should have sufficient successful authentications");
+    assert!(
+        final_success >= 40,
+        "Should have sufficient successful authentications"
+    );
     assert!(final_error >= 3, "Should have some failed authentications");
-    assert_eq!(final_success + final_error, 50, "Total should equal number of attempts");
+    assert_eq!(
+        final_success + final_error,
+        50,
+        "Total should equal number of attempts"
+    );
 
     setup.cleanup().await;
 }
@@ -1107,7 +1236,10 @@ async fn test_rate_limiter_under_load() {
     assert_eq!(final_success, 10, "Should allow exactly the rate limit");
     assert_eq!(final_limited, 90, "Should rate limit excess requests");
 
-    println!("Load test results: {} successful, {} rate limited", final_success, final_limited);
+    println!(
+        "Load test results: {} successful, {} rate limited",
+        final_success, final_limited
+    );
 }
 
 // =============================
@@ -1127,13 +1259,17 @@ async fn test_full_security_pipeline() {
                 actix_cors::Cors::default()
                     .allowed_origin("https://example.com")
                     .allowed_methods(vec!["GET", "POST"])
-                    .allowed_headers(vec![header::AUTHORIZATION, header::CONTENT_TYPE])
+                    .allowed_headers(vec![header::AUTHORIZATION, header::CONTENT_TYPE]),
             )
             .wrap(RateLimitMiddleware)
             .wrap(AuthMiddleware)
             .route("/api/data", web::get().to(test_handler_with_auth))
-            .route("/health", web::get().to(|| async { HttpResponse::Ok().json("healthy") }))
-    ).await;
+            .route(
+                "/health",
+                web::get().to(|| async { HttpResponse::Ok().json("healthy") }),
+            ),
+    )
+    .await;
 
     rate_limiter.clear_all().await.unwrap();
 
@@ -1194,8 +1330,9 @@ async fn test_admin_security_pipeline() {
             .wrap(RateLimitMiddleware)
             .wrap(AdminMiddleware)
             .wrap(AuthMiddleware)
-            .route("/admin/users", web::get().to(test_admin_handler))
-    ).await;
+            .route("/admin/users", web::get().to(test_admin_handler)),
+    )
+    .await;
 
     // Test 1: Regular user should be denied
     let regular_req = TestRequest::get()

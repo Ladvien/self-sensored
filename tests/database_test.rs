@@ -95,9 +95,7 @@ mod database_unit_tests {
         assert!(pool.size() <= 50, "Should use default max connections (50)");
 
         // Test basic functionality
-        let result = sqlx::query("SELECT 1 as test_value")
-            .fetch_one(&pool)
-            .await;
+        let result = sqlx::query("SELECT 1 as test_value").fetch_one(&pool).await;
         assert!(result.is_ok(), "Basic query should succeed with defaults");
 
         pool.close().await;
@@ -246,9 +244,7 @@ mod database_unit_tests {
             .expect("Should create pool for component tests");
 
         // Test basic connection
-        let basic_result = sqlx::query("SELECT 1 as basic_test")
-            .fetch_one(&pool)
-            .await;
+        let basic_result = sqlx::query("SELECT 1 as basic_test").fetch_one(&pool).await;
         assert!(basic_result.is_ok(), "Basic SELECT should work");
 
         // Test PostgreSQL version query
@@ -283,7 +279,9 @@ mod database_unit_tests {
                 // PostGIS not available - acceptable for unit tests
                 let error_msg = e.to_string();
                 assert!(
-                    error_msg.contains("postgis") || error_msg.contains("PostGIS") || error_msg.contains("does not exist"),
+                    error_msg.contains("postgis")
+                        || error_msg.contains("PostGIS")
+                        || error_msg.contains("does not exist"),
                     "Should be a PostGIS-related error: {}",
                     error_msg
                 );
@@ -316,26 +314,29 @@ mod database_unit_tests {
         .execute(&mut *tx)
         .await;
 
-        assert!(insert_result.is_ok(), "Insert should succeed in transaction");
+        assert!(
+            insert_result.is_ok(),
+            "Insert should succeed in transaction"
+        );
 
         let commit_result = tx.commit().await;
         assert!(commit_result.is_ok(), "Transaction commit should succeed");
 
         // Verify data was committed
-        let count: i64 = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM users WHERE id = $1",
-            user_id
-        )
-        .fetch_one(&pool)
-        .await
-        .expect("Count query should succeed")
-        .unwrap_or(0);
+        let count: i64 = sqlx::query_scalar!("SELECT COUNT(*) FROM users WHERE id = $1", user_id)
+            .fetch_one(&pool)
+            .await
+            .expect("Count query should succeed")
+            .unwrap_or(0);
 
         assert_eq!(count, 1, "User should exist after commit");
 
         // Test transaction rollback
         let rollback_user_id = Uuid::new_v4();
-        let mut rollback_tx = pool.begin().await.expect("Should start rollback transaction");
+        let mut rollback_tx = pool
+            .begin()
+            .await
+            .expect("Should start rollback transaction");
 
         let rollback_insert = sqlx::query!(
             "INSERT INTO users (id, email, created_at, updated_at) VALUES ($1, $2, NOW(), NOW())",
@@ -345,20 +346,21 @@ mod database_unit_tests {
         .execute(&mut *rollback_tx)
         .await;
 
-        assert!(rollback_insert.is_ok(), "Insert should succeed before rollback");
+        assert!(
+            rollback_insert.is_ok(),
+            "Insert should succeed before rollback"
+        );
 
         let rollback_result = rollback_tx.rollback().await;
         assert!(rollback_result.is_ok(), "Rollback should succeed");
 
         // Verify data was not committed
-        let rollback_count: i64 = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM users WHERE id = $1",
-            rollback_user_id
-        )
-        .fetch_one(&pool)
-        .await
-        .expect("Rollback count query should succeed")
-        .unwrap_or(0);
+        let rollback_count: i64 =
+            sqlx::query_scalar!("SELECT COUNT(*) FROM users WHERE id = $1", rollback_user_id)
+                .fetch_one(&pool)
+                .await
+                .expect("Rollback count query should succeed")
+                .unwrap_or(0);
 
         assert_eq!(rollback_count, 0, "User should not exist after rollback");
 
@@ -387,8 +389,14 @@ mod database_unit_tests {
             .expect("Should create pool with short timeout");
 
         // Acquire connections to potentially exhaust pool
-        let _conn1 = pool.acquire().await.expect("Should acquire first connection");
-        let _conn2 = pool.acquire().await.expect("Should acquire second connection");
+        let _conn1 = pool
+            .acquire()
+            .await
+            .expect("Should acquire first connection");
+        let _conn2 = pool
+            .acquire()
+            .await
+            .expect("Should acquire second connection");
 
         // Try to acquire another connection with timeout
         let start_time = std::time::Instant::now();
@@ -426,7 +434,10 @@ mod database_unit_tests {
         let initial_idle = pool.num_idle();
 
         assert!(initial_size >= 2, "Should have minimum connections");
-        assert!(initial_idle <= initial_size as usize, "Idle should not exceed total");
+        assert!(
+            initial_idle <= initial_size as usize,
+            "Idle should not exceed total"
+        );
 
         // Call metrics update function (tests the function exists and runs)
         update_db_pool_metrics(&pool);
@@ -580,7 +591,10 @@ mod database_unit_tests {
         // Wait for all operations to complete
         for handle in handles {
             let task_result = handle.await.expect("Task should complete");
-            assert!(task_result >= 0 && task_result < 4, "Task ID should be valid");
+            assert!(
+                task_result >= 0 && task_result < 4,
+                "Task ID should be valid"
+            );
         }
 
         // Test metrics after concurrent operations
@@ -680,7 +694,10 @@ mod database_unit_tests {
         let closed_result = sqlx::query("SELECT 'after_close' as test")
             .fetch_one(&pool)
             .await;
-        assert!(closed_result.is_err(), "Pool should be unusable after close");
+        assert!(
+            closed_result.is_err(),
+            "Pool should be unusable after close"
+        );
 
         cleanup_test_env();
     }

@@ -501,8 +501,10 @@ mod tests {
     async fn test_create_user_characteristics() {
         // Load database URL from environment
         dotenv::dotenv().ok();
-        let database_url = std::env::var("TEST_DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://self_sensored:37om3i*t3XfSZ0@192.168.1.104:5432/self_sensored_test".to_string());
+        let database_url = std::env::var("TEST_DATABASE_URL").unwrap_or_else(|_| {
+            "postgresql://self_sensored:37om3i*t3XfSZ0@192.168.1.104:5432/self_sensored_test"
+                .to_string()
+        });
 
         let pool = PgPool::connect(&database_url).await.unwrap();
         let service = UserCharacteristicsService::new(pool.clone());
@@ -512,7 +514,7 @@ mod tests {
         sqlx::query(
             "INSERT INTO users (id, email, created_at, updated_at)
              VALUES ($1, $2, NOW(), NOW())
-             ON CONFLICT (id) DO NOTHING"
+             ON CONFLICT (id) DO NOTHING",
         )
         .bind(user_id)
         .bind(format!("test_{}@example.com", user_id))
@@ -554,8 +556,10 @@ mod tests {
     async fn test_get_validation_ranges() {
         // Load database URL from environment
         dotenv::dotenv().ok();
-        let database_url = std::env::var("TEST_DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://self_sensored:37om3i*t3XfSZ0@192.168.1.104:5432/self_sensored_test".to_string());
+        let database_url = std::env::var("TEST_DATABASE_URL").unwrap_or_else(|_| {
+            "postgresql://self_sensored:37om3i*t3XfSZ0@192.168.1.104:5432/self_sensored_test"
+                .to_string()
+        });
 
         let pool = PgPool::connect(&database_url).await.unwrap();
         let service = UserCharacteristicsService::new(pool.clone());
@@ -565,7 +569,7 @@ mod tests {
         sqlx::query(
             "INSERT INTO users (id, email, created_at, updated_at)
              VALUES ($1, $2, NOW(), NOW())
-             ON CONFLICT (id) DO NOTHING"
+             ON CONFLICT (id) DO NOTHING",
         )
         .bind(user_id)
         .bind(format!("test_{}@example.com", user_id))

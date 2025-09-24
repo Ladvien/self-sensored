@@ -15,7 +15,6 @@
 /// - Error response formatting
 /// - Rate limiting scenarios
 /// - Performance edge cases
-
 use actix_web::{http::header, test, web};
 use chrono::Utc;
 use serde_json::json;
@@ -28,12 +27,12 @@ use self_sensored::{
     models::{
         enums::{ActivityContext, WorkoutType},
         health_metrics::{
-            ActivityMetric, BloodPressureMetric, HealthMetric, HeartRateMetric, SleepMetric,
-            WorkoutData, IngestData, IngestPayload, IngestResponse,
+            ActivityMetric, BloodPressureMetric, HealthMetric, HeartRateMetric, IngestData,
+            IngestPayload, IngestResponse, SleepMetric, WorkoutData,
         },
         ios_models::{IosIngestData, IosIngestPayload, IosMetric, IosMetricData, IosWorkout},
     },
-    services::auth::{AuthContext, User as AuthUser, ApiKey as AuthApiKey},
+    services::auth::{ApiKey as AuthApiKey, AuthContext, User as AuthUser},
 };
 
 mod common;
@@ -142,7 +141,9 @@ impl IngestFixtures {
                         heart_rate_variability: Some(35.2),
                         walking_heart_rate_average: Some(85),
                         heart_rate_recovery_one_minute: Some(20),
-                        atrial_fibrillation_burden_percentage: Some(rust_decimal::Decimal::new(0, 0)),
+                        atrial_fibrillation_burden_percentage: Some(rust_decimal::Decimal::new(
+                            0, 0,
+                        )),
                         vo2_max_ml_kg_min: Some(rust_decimal::Decimal::new(4500, 2)), // 45.00
                         context: Some(ActivityContext::Resting),
                         source_device: Some("Apple Watch".to_string()),
@@ -163,7 +164,6 @@ impl IngestFixtures {
                         source_device: Some("Apple Watch".to_string()),
                         created_at: now,
                     }),
-
                     // Blood pressure metrics
                     HealthMetric::BloodPressure(BloodPressureMetric {
                         id: Uuid::new_v4(),
@@ -185,7 +185,6 @@ impl IngestFixtures {
                         source_device: Some("Blood Pressure Monitor".to_string()),
                         created_at: now,
                     }),
-
                     // Sleep metrics
                     HealthMetric::Sleep(SleepMetric {
                         id: Uuid::new_v4(),
@@ -201,12 +200,12 @@ impl IngestFixtures {
                         source_device: Some("Sleep Tracker".to_string()),
                         created_at: now,
                     }),
-
                     // Activity metrics with comprehensive data
                     HealthMetric::Activity(ActivityMetric {
                         id: Uuid::new_v4(),
                         user_id,
-                        recorded_at: now.date_naive()
+                        recorded_at: now
+                            .date_naive()
                             .and_time(chrono::NaiveTime::from_hms_opt(23, 59, 59).unwrap())
                             .and_utc(),
                         step_count: Some(10000),
@@ -286,7 +285,7 @@ impl IngestFixtures {
         let now = Utc::now();
 
         IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     IosMetric {
                         name: "HKQuantityTypeIdentifierHeartRate".to_string(),
@@ -457,8 +456,8 @@ impl IngestFixtures {
                         id: Uuid::new_v4(),
                         user_id,
                         recorded_at: now,
-                        heart_rate: Some(0), // Invalid: too low
-                        resting_heart_rate: Some(400), // Invalid: too high
+                        heart_rate: Some(0),                 // Invalid: too low
+                        resting_heart_rate: Some(400),       // Invalid: too high
                         heart_rate_variability: Some(-10.0), // Invalid: negative
                         walking_heart_rate_average: None,
                         heart_rate_recovery_one_minute: None,
@@ -479,22 +478,20 @@ impl IngestFixtures {
                         created_at: now,
                     }),
                 ],
-                workouts: vec![
-                    WorkoutData {
-                        id: Uuid::new_v4(),
-                        user_id,
-                        workout_type: WorkoutType::Running,
-                        started_at: now,
-                        ended_at: now - chrono::Duration::hours(2), // Invalid: end before start
-                        total_energy_kcal: Some(-100.0), // Invalid: negative
-                        active_energy_kcal: Some(-90.0), // Invalid: negative
-                        distance_meters: Some(-1000.0), // Invalid: negative
-                        avg_heart_rate: Some(500), // Invalid: too high
-                        max_heart_rate: Some(600), // Invalid: too high
-                        source_device: Some("Test Device".to_string()),
-                        created_at: now,
-                    },
-                ],
+                workouts: vec![WorkoutData {
+                    id: Uuid::new_v4(),
+                    user_id,
+                    workout_type: WorkoutType::Running,
+                    started_at: now,
+                    ended_at: now - chrono::Duration::hours(2), // Invalid: end before start
+                    total_energy_kcal: Some(-100.0),            // Invalid: negative
+                    active_energy_kcal: Some(-90.0),            // Invalid: negative
+                    distance_meters: Some(-1000.0),             // Invalid: negative
+                    avg_heart_rate: Some(500),                  // Invalid: too high
+                    max_heart_rate: Some(600),                  // Invalid: too high
+                    source_device: Some("Test Device".to_string()),
+                    created_at: now,
+                }],
             },
         }
     }
@@ -600,7 +597,10 @@ async fn test_successful_ingest_comprehensive_metrics() {
     // For now, just check that we got some metrics stored to verify the handler is working
     // This proves the test infrastructure is working and the ingest handler can process data
     println!("Heart rate count: {}", heart_rate_count.count.unwrap());
-    println!("Blood pressure count: {}", blood_pressure_count.count.unwrap());
+    println!(
+        "Blood pressure count: {}",
+        blood_pressure_count.count.unwrap()
+    );
     println!("Sleep count: {}", sleep_count.count.unwrap());
 
     // Check if raw ingestion was stored (this should always happen)
@@ -614,8 +614,13 @@ async fn test_successful_ingest_comprehensive_metrics() {
     println!("Raw ingestions count: {}", raw_count.count.unwrap());
 
     // Just check that at least the raw ingestion was stored (proving the handler ran)
-    let total_metrics = heart_rate_count.count.unwrap() + blood_pressure_count.count.unwrap() + sleep_count.count.unwrap();
-    assert!(raw_count.count.unwrap() > 0, "Expected at least one raw ingestion to be stored");
+    let total_metrics = heart_rate_count.count.unwrap()
+        + blood_pressure_count.count.unwrap()
+        + sleep_count.count.unwrap();
+    assert!(
+        raw_count.count.unwrap() > 0,
+        "Expected at least one raw ingestion to be stored"
+    );
 
     // If we have raw ingestion but no processed metrics, that's still a success for basic test
     println!("Total processed metrics: {}", total_metrics);
@@ -786,7 +791,8 @@ async fn test_malformed_json_rejection() {
     let config = IngestTestConfig::new().await;
 
     // Create corrupted JSON payload
-    let corrupted_json = r#"{"data": {"metrics": [{"type": "heart_rate", "value": 75, "unclosed": true"#;
+    let corrupted_json =
+        r#"{"data": {"metrics": [{"type": "heart_rate", "value": 75, "unclosed": true"#;
     let payload_bytes = web::Bytes::from(corrupted_json);
 
     let req = test::TestRequest::post()
@@ -966,12 +972,12 @@ async fn test_processing_status_tracking() {
 
     // Accept various valid processing statuses that indicate the handler processed the request
     assert!(
-        status == "processed" ||
-        status == "partial_success" ||
-        status == "pending" ||
-        status == "completed" ||
-        status == "success" ||
-        status == "error",  // Error is also a valid status - means it was processed but had issues
+        status == "processed"
+            || status == "partial_success"
+            || status == "pending"
+            || status == "completed"
+            || status == "success"
+            || status == "error", // Error is also a valid status - means it was processed but had issues
         "Unexpected processing status: {}",
         status
     );
@@ -993,7 +999,7 @@ async fn test_edge_case_extreme_values() {
                     id: Uuid::new_v4(),
                     user_id,
                     recorded_at: now,
-                    heart_rate: Some(299), // Maximum valid heart rate
+                    heart_rate: Some(299),        // Maximum valid heart rate
                     resting_heart_rate: Some(15), // Minimum valid resting HR
                     heart_rate_variability: Some(0.1), // Very low but valid HRV
                     walking_heart_rate_average: None,
@@ -1008,8 +1014,8 @@ async fn test_edge_case_extreme_values() {
                     id: Uuid::new_v4(),
                     user_id,
                     recorded_at: now,
-                    systolic: 249, // Maximum valid systolic
-                    diastolic: 149, // Maximum valid diastolic
+                    systolic: 249,    // Maximum valid systolic
+                    diastolic: 149,   // Maximum valid diastolic
                     pulse: Some(299), // Maximum valid pulse
                     source_device: Some("Edge Case Test".to_string()),
                     created_at: now,
@@ -1150,51 +1156,50 @@ async fn test_zero_and_null_value_handling() {
 
     let payload = IngestPayload {
         data: IngestData {
-            metrics: vec![
-                HealthMetric::Activity(ActivityMetric {
-                    id: Uuid::new_v4(),
-                    user_id,
-                    recorded_at: now.date_naive()
-                        .and_time(chrono::NaiveTime::from_hms_opt(23, 59, 59).unwrap())
-                        .and_utc(),
-                    step_count: Some(0), // Zero steps might be valid (rest day)
-                    distance_meters: Some(0.0),
-                    active_energy_burned_kcal: Some(0.0),
-                    basal_energy_burned_kcal: None, // Null values
-                    flights_climbed: None,
-                    distance_cycling_meters: None,
-                    distance_swimming_meters: None,
-                    distance_wheelchair_meters: None,
-                    distance_downhill_snow_sports_meters: None,
-                    push_count: None,
-                    swimming_stroke_count: None,
-                    nike_fuel_points: None,
-                    apple_exercise_time_minutes: None,
-                    apple_stand_time_minutes: None,
-                    apple_move_time_minutes: None,
-                    apple_stand_hour_achieved: None,
-                    walking_speed_m_per_s: None,
-                    walking_step_length_cm: None,
-                    walking_asymmetry_percent: None,
-                    walking_double_support_percent: None,
-                    six_minute_walk_test_distance_m: None,
-                    stair_ascent_speed_m_per_s: None,
-                    stair_descent_speed_m_per_s: None,
-                    ground_contact_time_ms: None,
-                    vertical_oscillation_cm: None,
-                    running_stride_length_m: None,
-                    running_power_watts: None,
-                    running_speed_m_per_s: None,
-                    cycling_speed_kmh: None,
-                    cycling_power_watts: None,
-                    cycling_cadence_rpm: None,
-                    functional_threshold_power_watts: None,
-                    underwater_depth_meters: None,
-                    diving_duration_seconds: None,
-                    source_device: Some("Test Device".to_string()),
-                    created_at: now,
-                }),
-            ],
+            metrics: vec![HealthMetric::Activity(ActivityMetric {
+                id: Uuid::new_v4(),
+                user_id,
+                recorded_at: now
+                    .date_naive()
+                    .and_time(chrono::NaiveTime::from_hms_opt(23, 59, 59).unwrap())
+                    .and_utc(),
+                step_count: Some(0), // Zero steps might be valid (rest day)
+                distance_meters: Some(0.0),
+                active_energy_burned_kcal: Some(0.0),
+                basal_energy_burned_kcal: None, // Null values
+                flights_climbed: None,
+                distance_cycling_meters: None,
+                distance_swimming_meters: None,
+                distance_wheelchair_meters: None,
+                distance_downhill_snow_sports_meters: None,
+                push_count: None,
+                swimming_stroke_count: None,
+                nike_fuel_points: None,
+                apple_exercise_time_minutes: None,
+                apple_stand_time_minutes: None,
+                apple_move_time_minutes: None,
+                apple_stand_hour_achieved: None,
+                walking_speed_m_per_s: None,
+                walking_step_length_cm: None,
+                walking_asymmetry_percent: None,
+                walking_double_support_percent: None,
+                six_minute_walk_test_distance_m: None,
+                stair_ascent_speed_m_per_s: None,
+                stair_descent_speed_m_per_s: None,
+                ground_contact_time_ms: None,
+                vertical_oscillation_cm: None,
+                running_stride_length_m: None,
+                running_power_watts: None,
+                running_speed_m_per_s: None,
+                cycling_speed_kmh: None,
+                cycling_power_watts: None,
+                cycling_cadence_rpm: None,
+                functional_threshold_power_watts: None,
+                underwater_depth_meters: None,
+                diving_duration_seconds: None,
+                source_device: Some("Test Device".to_string()),
+                created_at: now,
+            })],
             workouts: vec![],
         },
     };

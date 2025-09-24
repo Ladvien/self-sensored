@@ -3,11 +3,11 @@ use serde_json::json;
 use uuid::Uuid;
 
 use self_sensored::models::{
+    enums::{ActivityContext, WorkoutType},
     health_metrics::{
-        HealthMetric, WorkoutData, HeartRateMetric, BloodPressureMetric,
-        SleepMetric, ActivityMetric,
+        ActivityMetric, BloodPressureMetric, HealthMetric, HeartRateMetric, SleepMetric,
+        WorkoutData,
     },
-    enums::{ActivityContext, WorkoutType}
 };
 
 // Helper function to create a default ActivityMetric with all required fields
@@ -389,7 +389,7 @@ fn test_activity_validation() {
         (Some(2000), Some(1500.0), Some(100.0)), // walking activity
         (Some(8000), Some(5000.0), Some(300.0)), // running activity
         (None, Some(15000.0), Some(400.0)),      // cycling activity
-        (Some(500), Some(1000.0), Some(250.0)), // swimming activity
+        (Some(500), Some(1000.0), Some(250.0)),  // swimming activity
     ];
 
     for (steps, distance, calories) in valid_activities {
@@ -404,10 +404,7 @@ fn test_activity_validation() {
         activity.apple_move_time_minutes = Some(30);
         activity.apple_stand_hour_achieved = Some(true);
         let activity = HealthMetric::Activity(activity);
-        assert!(
-            activity.validate().is_ok(),
-            "Activity should be valid"
-        );
+        assert!(activity.validate().is_ok(), "Activity should be valid");
     }
 }
 
@@ -560,10 +557,7 @@ fn test_workout_validation() {
             source_device: None,
             created_at: Utc::now(),
         };
-        assert!(
-            workout.validate().is_ok(),
-            "Workout type should be valid"
-        );
+        assert!(workout.validate().is_ok(), "Workout type should be valid");
     }
 }
 
@@ -808,10 +802,7 @@ fn test_context_validation() {
             context: Some(context),
             created_at: Utc::now(),
         });
-        assert!(
-            heart_rate.validate().is_ok(),
-            "Context should be valid"
-        );
+        assert!(heart_rate.validate().is_ok(), "Context should be valid");
     }
 
     // None context should be valid (optional field)

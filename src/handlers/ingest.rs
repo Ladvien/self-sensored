@@ -224,9 +224,14 @@ pub async fn ingest_handler(
             error!("Enhanced JSON parse error: {}", parse_error);
             Metrics::record_error("enhanced_json_parse", "/api/v1/ingest", "error");
 
-            // TODO: Implement save_corrupted_payload function
-            // For now, just log the error and continue
-            warn!("Corrupted payload detected - not saved (function not implemented)");
+            // Save corrupted payload for later recovery
+            if let Err(save_err) =
+                save_corrupted_payload(&pool, &auth, &raw_payload, &parse_error.to_string()).await
+            {
+                error!("Failed to save corrupted payload: {}", save_err);
+            } else {
+                info!("Corrupted payload saved for later recovery");
+            }
 
             return Ok(
                 HttpResponse::BadRequest().json(ApiResponse::<()>::error(format!(
@@ -894,14 +899,32 @@ async fn parse_ios_payload_enhanced(
         );
     }
 
-    // Skip JSON structure validation for large payloads (too slow)
-    // TODO: Implement streaming validation or size-based validation
-    // if let Err(validation_error) = validate_json_structure_basic(raw_payload) {
-    //     error!("JSON structure validation failed: {}", validation_error);
-    //     return Err(actix_web::error::ErrorBadRequest(format!(
-    //         "Malformed JSON detected: {validation_error}"
-    //     )));
-    // }
+    // Use streaming validation for large payloads, basic validation for small ones
+    if payload_size > 10 * 1024 * 1024 {
+        // For payloads > 10MB, use streaming validation
+        debug!("Using streaming validation for large payload");
+
+        // Create a streaming parser
+        let mut parser = crate::services::streaming_parser::StreamingJsonParser::with_max_size(
+            200 * 1024 * 1024, // 200MB max
+        );
+
+        // Validate JSON structure efficiently without full parsing
+        if let Err(validation_error) = parser.validate_json_bytes(raw_payload) {
+            error!("Streaming JSON validation failed: {}", validation_error);
+            return Err(actix_web::error::ErrorBadRequest(format!(
+                "Malformed JSON detected: {validation_error}"
+            )));
+        }
+    } else {
+        // For smaller payloads, use basic validation
+        if let Err(validation_error) = validate_json_structure_basic(raw_payload) {
+            error!("JSON structure validation failed: {}", validation_error);
+            return Err(actix_web::error::ErrorBadRequest(format!(
+                "Malformed JSON detected: {validation_error}"
+            )));
+        }
+    }
 
     // Try iOS format first with enhanced error reporting
     match parse_with_error_context::<IosIngestPayload>(raw_payload, "iOS format") {

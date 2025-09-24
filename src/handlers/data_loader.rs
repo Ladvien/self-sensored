@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use tokio::sync::OnceCell;
@@ -5,7 +6,7 @@ use tracing::{error, info, warn};
 
 /// Lazy-loaded data mapping for Apple HealthKit types
 /// Replaces the large static DATA.md file loaded at compile time
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataMappingEntry {
     pub healthkit_identifier: String,
     pub description: String,
@@ -14,9 +15,11 @@ pub struct DataMappingEntry {
     pub notes: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SupportLevel {
     FullySupported,
+    Partial,
+    Planned,
     PartialUncertain,
     NotSupported,
 }
@@ -34,6 +37,8 @@ impl SupportLevel {
     pub fn to_symbol(&self) -> &'static str {
         match self {
             SupportLevel::FullySupported => "✅",
+            SupportLevel::Partial => "⚠️",
+            SupportLevel::Planned => "📋",
             SupportLevel::PartialUncertain => "⚠️",
             SupportLevel::NotSupported => "❌",
         }
@@ -69,6 +74,8 @@ pub struct LazyDataLoader {
     config: DataLoaderConfig,
     cache: Arc<RwLock<Option<HashMap<String, DataMappingEntry>>>>,
     last_loaded: Arc<RwLock<Option<std::time::Instant>>>,
+    pool: Option<sqlx::PgPool>,
+    redis_client: Option<Arc<crate::services::cache::CacheService>>,
 }
 
 impl LazyDataLoader {
@@ -77,7 +84,19 @@ impl LazyDataLoader {
             config,
             cache: Arc::new(RwLock::new(None)),
             last_loaded: Arc::new(RwLock::new(None)),
+            pool: None,
+            redis_client: None,
         }
+    }
+
+    pub fn with_database(mut self, pool: sqlx::PgPool) -> Self {
+        self.pool = Some(pool);
+        self
+    }
+
+    pub fn with_redis(mut self, redis_client: Arc<crate::services::cache::CacheService>) -> Self {
+        self.redis_client = Some(redis_client);
+        self
     }
 
     pub fn with_default_config() -> Self {
@@ -184,7 +203,10 @@ impl LazyDataLoader {
                         stats.total_count += 1;
                         match entry.support_level {
                             SupportLevel::FullySupported => stats.fully_supported += 1,
-                            SupportLevel::PartialUncertain => stats.partial_uncertain += 1,
+                            SupportLevel::Partial | SupportLevel::PartialUncertain => {
+                                stats.partial_uncertain += 1
+                            }
+                            SupportLevel::Planned => stats.partial_uncertain += 1, // Count planned as partial for stats
                             SupportLevel::NotSupported => stats.not_supported += 1,
                         }
 
@@ -278,13 +300,80 @@ impl LazyDataLoader {
         Ok(())
     }
 
-    /// Load data from database (future implementation)
+    /// Load data from database with Redis caching
     async fn load_from_database(
         &self,
     ) -> Result<HashMap<String, DataMappingEntry>, Box<dyn std::error::Error + Send + Sync>> {
-        // TODO: Implement database loading
-        warn!("Database loading not yet implemented, falling back to static data");
-        self.load_static_data().await
+        // Check if database is available
+        let pool = match &self.pool {
+            Some(p) => p,
+            None => {
+                warn!("No database connection available, falling back to static data");
+                return self.load_static_data().await;
+            }
+        };
+
+        // Check Redis cache first (simplified - skip for now as cache requires CacheKey)
+        // TODO: Implement proper cache key structure for data mappings
+
+        // Load from database using dynamic query (table may not exist at compile time)
+        let mappings_result =
+            sqlx::query_as::<_, (String, String, String, String, Option<String>)>(
+                r#"
+            SELECT
+                healthkit_identifier,
+                description,
+                support_level,
+                category,
+                notes
+            FROM data_mappings
+            WHERE is_active = true
+            ORDER BY healthkit_identifier
+            "#,
+            )
+            .fetch_all(pool)
+            .await;
+
+        match mappings_result {
+            Ok(rows) => {
+                let mut mappings = HashMap::new();
+
+                for (healthkit_identifier, description, support_level_str, category, notes) in rows
+                {
+                    let support_level = match support_level_str.as_str() {
+                        "fully_supported" => SupportLevel::FullySupported,
+                        "partial" => SupportLevel::Partial,
+                        "planned" => SupportLevel::Planned,
+                        "not_supported" => SupportLevel::NotSupported,
+                        _ => SupportLevel::NotSupported,
+                    };
+
+                    let entry = DataMappingEntry {
+                        healthkit_identifier: healthkit_identifier.clone(),
+                        description,
+                        support_level,
+                        category,
+                        notes,
+                    };
+
+                    mappings.insert(healthkit_identifier, entry);
+                }
+
+                info!("Loaded {} data mappings from database", mappings.len());
+
+                // Cache in Redis for 1 hour (simplified - skip for now as cache requires CacheKey)
+                // TODO: Implement proper cache key structure for data mappings
+
+                Ok(mappings)
+            }
+            Err(e) => {
+                warn!(
+                    "Failed to load from database: {}, falling back to static data",
+                    e
+                );
+                self.load_static_data().await
+            }
+        }
     }
 
     /// Load essential static data (reduced set instead of full DATA.md)

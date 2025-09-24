@@ -395,7 +395,9 @@ mod validation_config_comprehensive_tests {
         config.heart_rate_max = 200;
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("heart_rate_min must be less than heart_rate_max"));
+        assert!(result
+            .unwrap_err()
+            .contains("heart_rate_min must be less than heart_rate_max"));
 
         // Test workout heart rate validation
         config = ValidationConfig::default();
@@ -403,7 +405,9 @@ mod validation_config_comprehensive_tests {
         config.workout_heart_rate_max = 300;
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("workout_heart_rate_min must be less than workout_heart_rate_max"));
+        assert!(result
+            .unwrap_err()
+            .contains("workout_heart_rate_min must be less than workout_heart_rate_max"));
     }
 
     #[test]
@@ -415,7 +419,9 @@ mod validation_config_comprehensive_tests {
         config.systolic_max = 200;
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("systolic_min must be less than systolic_max"));
+        assert!(result
+            .unwrap_err()
+            .contains("systolic_min must be less than systolic_max"));
 
         // Test diastolic validation
         config = ValidationConfig::default();
@@ -423,7 +429,9 @@ mod validation_config_comprehensive_tests {
         config.diastolic_max = 100;
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("diastolic_min must be less than diastolic_max"));
+        assert!(result
+            .unwrap_err()
+            .contains("diastolic_min must be less than diastolic_max"));
     }
 
     #[test]
@@ -434,7 +442,9 @@ mod validation_config_comprehensive_tests {
         config.sleep_efficiency_max = 100.0;
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("sleep_efficiency_min must be less than sleep_efficiency_max"));
+        assert!(result
+            .unwrap_err()
+            .contains("sleep_efficiency_min must be less than sleep_efficiency_max"));
     }
 
     #[test]
@@ -445,7 +455,9 @@ mod validation_config_comprehensive_tests {
         config.step_count_max = 50_000;
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("step_count_min must be less than step_count_max"));
+        assert!(result
+            .unwrap_err()
+            .contains("step_count_min must be less than step_count_max"));
     }
 
     #[test]
@@ -457,7 +469,9 @@ mod validation_config_comprehensive_tests {
         config.latitude_max = 90.0;
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("latitude_min must be less than latitude_max"));
+        assert!(result
+            .unwrap_err()
+            .contains("latitude_min must be less than latitude_max"));
 
         // Test longitude validation
         config = ValidationConfig::default();
@@ -465,7 +479,9 @@ mod validation_config_comprehensive_tests {
         config.longitude_max = 180.0;
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("longitude_min must be less than longitude_max"));
+        assert!(result
+            .unwrap_err()
+            .contains("longitude_min must be less than longitude_max"));
     }
 
     #[test]
@@ -477,7 +493,9 @@ mod validation_config_comprehensive_tests {
         config.body_temperature_max = 40.0;
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("body_temperature_min must be less than body_temperature_max"));
+        assert!(result
+            .unwrap_err()
+            .contains("body_temperature_min must be less than body_temperature_max"));
 
         // Test basal body temperature validation
         config = ValidationConfig::default();
@@ -485,7 +503,9 @@ mod validation_config_comprehensive_tests {
         config.basal_body_temperature_max = 35.0;
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("basal_body_temperature_min must be less than basal_body_temperature_max"));
+        assert!(result
+            .unwrap_err()
+            .contains("basal_body_temperature_min must be less than basal_body_temperature_max"));
 
         // Test wrist temperature validation
         config = ValidationConfig::default();
@@ -493,7 +513,9 @@ mod validation_config_comprehensive_tests {
         config.wrist_temperature_max = 40.0;
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("wrist_temperature_min must be less than wrist_temperature_max"));
+        assert!(result
+            .unwrap_err()
+            .contains("wrist_temperature_min must be less than wrist_temperature_max"));
 
         // Test water temperature validation
         config = ValidationConfig::default();
@@ -501,7 +523,9 @@ mod validation_config_comprehensive_tests {
         config.water_temperature_max = 100.0;
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("water_temperature_min must be less than water_temperature_max"));
+        assert!(result
+            .unwrap_err()
+            .contains("water_temperature_min must be less than water_temperature_max"));
     }
 
     #[test]
@@ -513,7 +537,9 @@ mod validation_config_comprehensive_tests {
         config.body_weight_max_kg = 500.0;
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("body_weight_min_kg must be less than body_weight_max_kg"));
+        assert!(result
+            .unwrap_err()
+            .contains("body_weight_min_kg must be less than body_weight_max_kg"));
 
         // Test BMI validation
         config = ValidationConfig::default();
@@ -521,7 +547,9 @@ mod validation_config_comprehensive_tests {
         config.bmi_max = 50.0;
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("bmi_min must be less than bmi_max"));
+        assert!(result
+            .unwrap_err()
+            .contains("bmi_min must be less than bmi_max"));
 
         // Test body fat validation
         config = ValidationConfig::default();
@@ -529,7 +557,9 @@ mod validation_config_comprehensive_tests {
         config.body_fat_max_percent = 50.0;
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("body_fat_min_percent must be less than body_fat_max_percent"));
+        assert!(result
+            .unwrap_err()
+            .contains("body_fat_min_percent must be less than body_fat_max_percent"));
 
         // Test body temperature celsius validation
         config = ValidationConfig::default();
@@ -537,7 +567,9 @@ mod validation_config_comprehensive_tests {
         config.body_temperature_max_celsius = 45.0;
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("body_temperature_min_celsius must be less than body_temperature_max_celsius"));
+        assert!(result.unwrap_err().contains(
+            "body_temperature_min_celsius must be less than body_temperature_max_celsius"
+        ));
     }
 
     #[test]
@@ -549,14 +581,18 @@ mod validation_config_comprehensive_tests {
         config.blood_glucose_max = 600.0;
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("blood_glucose_min must be less than blood_glucose_max"));
+        assert!(result
+            .unwrap_err()
+            .contains("blood_glucose_min must be less than blood_glucose_max"));
 
         // Test negative insulin validation
         config = ValidationConfig::default();
         config.insulin_max_units = -10.0;
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("insulin_max_units must be positive"));
+        assert!(result
+            .unwrap_err()
+            .contains("insulin_max_units must be positive"));
     }
 
     #[test]
@@ -568,7 +604,9 @@ mod validation_config_comprehensive_tests {
         config.menstrual_cycle_day_max = 45;
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("menstrual_cycle_day_min must be less than menstrual_cycle_day_max"));
+        assert!(result
+            .unwrap_err()
+            .contains("menstrual_cycle_day_min must be less than menstrual_cycle_day_max"));
 
         // Test menstrual cramps severity validation
         config = ValidationConfig::default();
@@ -584,7 +622,9 @@ mod validation_config_comprehensive_tests {
         config.menstrual_mood_rating_max = 5;
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("menstrual_mood_rating_min must be less than or equal to menstrual_mood_rating_max"));
+        assert!(result.unwrap_err().contains(
+            "menstrual_mood_rating_min must be less than or equal to menstrual_mood_rating_max"
+        ));
 
         // Test menstrual energy level validation
         config = ValidationConfig::default();
@@ -592,7 +632,9 @@ mod validation_config_comprehensive_tests {
         config.menstrual_energy_level_max = 5;
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("menstrual_energy_level_min must be less than or equal to menstrual_energy_level_max"));
+        assert!(result.unwrap_err().contains(
+            "menstrual_energy_level_min must be less than or equal to menstrual_energy_level_max"
+        ));
     }
 
     #[test]
@@ -604,7 +646,9 @@ mod validation_config_comprehensive_tests {
         config.fertility_basal_temp_max = 39.0;
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("fertility_basal_temp_min must be less than fertility_basal_temp_max"));
+        assert!(result
+            .unwrap_err()
+            .contains("fertility_basal_temp_min must be less than fertility_basal_temp_max"));
 
         // Test fertility cervix firmness validation
         config = ValidationConfig::default();
@@ -628,7 +672,9 @@ mod validation_config_comprehensive_tests {
         config.fertility_lh_level_max = 100.0;
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("fertility_lh_level_min must be less than fertility_lh_level_max"));
+        assert!(result
+            .unwrap_err()
+            .contains("fertility_lh_level_min must be less than fertility_lh_level_max"));
     }
 
     // ========================================
@@ -831,7 +877,9 @@ mod validation_config_comprehensive_tests {
 
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("heart_rate_min must be less than heart_rate_max"));
+        assert!(result
+            .unwrap_err()
+            .contains("heart_rate_min must be less than heart_rate_max"));
     }
 
     #[test]

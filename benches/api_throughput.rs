@@ -1,10 +1,10 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use futures::future::join_all;
 use reqwest::{Client, Response};
 use serde_json::{json, Value};
 use std::time::Duration;
 use tokio::runtime::Runtime;
 use uuid::Uuid;
-use futures::future::join_all;
 
 /// API Throughput Benchmarks
 /// Tests API response times against <100ms p95 latency target
@@ -50,15 +50,25 @@ impl ApiTestServer {
 
     async fn query_heart_rate(&self, limit: usize) -> Result<Response, reqwest::Error> {
         self.client
-            .get(&format!("{}/api/v1/data/heart-rate?limit={}", self.base_url, limit))
+            .get(&format!(
+                "{}/api/v1/data/heart-rate?limit={}",
+                self.base_url, limit
+            ))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
             .await
     }
 
-    async fn export_data(&self, metric_type: &str, limit: usize) -> Result<Response, reqwest::Error> {
+    async fn export_data(
+        &self,
+        metric_type: &str,
+        limit: usize,
+    ) -> Result<Response, reqwest::Error> {
         self.client
-            .get(&format!("{}/api/v1/export/{}?limit={}", self.base_url, metric_type, limit))
+            .get(&format!(
+                "{}/api/v1/export/{}?limit={}",
+                self.base_url, metric_type, limit
+            ))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Accept-Encoding", "gzip")
             .send()
@@ -278,9 +288,7 @@ fn bench_concurrent_requests(c: &mut Criterion) {
 
                     let tasks: Vec<_> = servers
                         .iter()
-                        .map(|server| async move {
-                            server.health_check().await
-                        })
+                        .map(|server| async move { server.health_check().await })
                         .collect();
 
                     let results = join_all(tasks).await;
@@ -299,9 +307,7 @@ fn bench_concurrent_requests(c: &mut Criterion) {
 
                     let tasks: Vec<_> = servers
                         .iter()
-                        .map(|server| async move {
-                            server.ingest_data(&payload).await
-                        })
+                        .map(|server| async move { server.ingest_data(&payload).await })
                         .collect();
 
                     let results = join_all(tasks).await;
@@ -403,17 +409,11 @@ fn bench_sustained_load(c: &mut Criterion) {
             let mut tasks = Vec::new();
 
             for payload in &payloads {
-                tasks.push(async move {
-                    server.ingest_data(payload).await
-                });
+                tasks.push(async move { server.ingest_data(payload).await });
 
-                tasks.push(async move {
-                    server.health_check().await
-                });
+                tasks.push(async move { server.health_check().await });
 
-                tasks.push(async move {
-                    server.query_heart_rate(50).await
-                });
+                tasks.push(async move { server.query_heart_rate(50).await });
             }
 
             let results = join_all(tasks).await;

@@ -298,7 +298,10 @@ mod activity_record_tests {
         assert_eq!(record.recorded_at, metric.recorded_at);
         assert_eq!(record.step_count, metric.step_count);
         assert_eq!(record.distance_meters, metric.distance_meters);
-        assert_eq!(record.active_energy_burned_kcal, metric.active_energy_burned_kcal);
+        assert_eq!(
+            record.active_energy_burned_kcal,
+            metric.active_energy_burned_kcal
+        );
         assert_eq!(record.flights_climbed, metric.flights_climbed);
         assert_eq!(record.source_device, metric.source_device);
     }
@@ -453,7 +456,6 @@ mod workout_record_tests {
         assert_eq!(record.max_heart_rate, Some(175));
         assert_eq!(record.source_device, Some("Apple Watch".to_string()));
     }
-
 
     #[test]
     fn test_workout_record_with_raw_json() {

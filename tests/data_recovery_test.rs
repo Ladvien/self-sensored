@@ -6,7 +6,7 @@ use tracing::info;
 use uuid::Uuid;
 
 use self_sensored::config::BatchConfig;
-use self_sensored::models::{HealthMetric, IngestPayload, IngestData};
+use self_sensored::models::{HealthMetric, IngestData, IngestPayload};
 
 /// Integration tests for data recovery functionality
 #[cfg(test)]
@@ -77,24 +77,26 @@ mod data_recovery_tests {
 
     /// Helper to create test health metrics
     fn create_test_health_metrics(user_id: Uuid, count: usize) -> Vec<HealthMetric> {
-        use self_sensored::models::{HeartRateMetric, enums::ActivityContext};
+        use self_sensored::models::{enums::ActivityContext, HeartRateMetric};
 
         (0..count)
-            .map(|i| HealthMetric::HeartRate(HeartRateMetric {
-                id: Uuid::new_v4(),
-                user_id,
-                recorded_at: Utc::now(),
-                heart_rate: Some(70 + (i % 30) as i16),
-                resting_heart_rate: Some(60),
-                heart_rate_variability: Some(50.0),
-                walking_heart_rate_average: None,
-                heart_rate_recovery_one_minute: None,
-                atrial_fibrillation_burden_percentage: None,
-                vo2_max_ml_kg_min: None,
-                context: Some(ActivityContext::Resting),
-                source_device: Some("test_device".to_string()),
-                created_at: Utc::now(),
-            }))
+            .map(|i| {
+                HealthMetric::HeartRate(HeartRateMetric {
+                    id: Uuid::new_v4(),
+                    user_id,
+                    recorded_at: Utc::now(),
+                    heart_rate: Some(70 + (i % 30) as i16),
+                    resting_heart_rate: Some(60),
+                    heart_rate_variability: Some(50.0),
+                    walking_heart_rate_average: None,
+                    heart_rate_recovery_one_minute: None,
+                    atrial_fibrillation_burden_percentage: None,
+                    vo2_max_ml_kg_min: None,
+                    context: Some(ActivityContext::Resting),
+                    source_device: Some("test_device".to_string()),
+                    created_at: Utc::now(),
+                })
+            })
             .collect()
     }
 
@@ -501,14 +503,12 @@ mod data_recovery_tests {
         .unwrap_or(None)
         .unwrap_or(0);
 
-        let workout_count = sqlx::query_scalar!(
-            "SELECT COUNT(*) FROM workouts WHERE user_id = $1",
-            user_id
-        )
-        .fetch_one(pool)
-        .await
-        .unwrap_or(None)
-        .unwrap_or(0);
+        let workout_count =
+            sqlx::query_scalar!("SELECT COUNT(*) FROM workouts WHERE user_id = $1", user_id)
+                .fetch_one(pool)
+                .await
+                .unwrap_or(None)
+                .unwrap_or(0);
 
         heart_rate_count + blood_pressure_count + sleep_count + activity_count + workout_count
     }

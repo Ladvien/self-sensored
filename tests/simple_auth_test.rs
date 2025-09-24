@@ -1,9 +1,12 @@
-use sqlx::{PgPool, postgres::PgPoolOptions};
+use sqlx::{postgres::PgPoolOptions, PgPool};
 use uuid::Uuid;
 
-use self_sensored::services::auth::{AuthService, User, ApiKey};
+use self_sensored::services::auth::{ApiKey, AuthService, User};
 
 async fn get_test_pool() -> PgPool {
+    // Load .env file
+    dotenv::dotenv().ok();
+
     let database_url = std::env::var("TEST_DATABASE_URL")
         .or_else(|_| std::env::var("DATABASE_URL"))
         .expect("DATABASE_URL must be set");
@@ -81,7 +84,10 @@ async fn test_user_creation(pool: PgPool) -> sqlx::Result<()> {
     let auth_service = AuthService::new(pool);
     let email = "test@example.com";
 
-    let user = auth_service.create_user(email, None, None).await?;
+    let user = auth_service
+        .create_user(email, None, None)
+        .await
+        .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
 
     assert_eq!(user.email, email);
     assert!(user.is_active.unwrap_or(false));
@@ -101,10 +107,16 @@ async fn test_get_user_by_email(pool: PgPool) -> sqlx::Result<()> {
     let email = "test_lookup@example.com";
 
     // Create user
-    let created_user = auth_service.create_user(email, None, None).await?;
+    let created_user = auth_service
+        .create_user(email, None, None)
+        .await
+        .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
 
     // Find user by email
-    let found_user = auth_service.get_user_by_email(email).await?;
+    let found_user = auth_service
+        .get_user_by_email(email)
+        .await
+        .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
 
     assert!(found_user.is_some());
     let found_user = found_user.unwrap();
@@ -112,7 +124,10 @@ async fn test_get_user_by_email(pool: PgPool) -> sqlx::Result<()> {
     assert_eq!(found_user.email, email);
 
     // Test non-existent email
-    let not_found = auth_service.get_user_by_email("nonexistent@example.com").await?;
+    let not_found = auth_service
+        .get_user_by_email("nonexistent@example.com")
+        .await
+        .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
     assert!(not_found.is_none());
 
     // Clean up
@@ -129,16 +144,16 @@ async fn test_create_and_list_api_keys(pool: PgPool) -> sqlx::Result<()> {
     let email = "test_keys@example.com";
 
     // Create user
-    let user = auth_service.create_user(email, None, None).await?;
+    let user = auth_service
+        .create_user(email, None, None)
+        .await
+        .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
 
     // Create API key
-    let (raw_key, api_key) = auth_service.create_api_key(
-        user.id,
-        Some("Test Key"),
-        None,
-        None,
-        Some(100)
-    ).await?;
+    let (raw_key, api_key) = auth_service
+        .create_api_key(user.id, Some("Test Key"), None, None, Some(100))
+        .await
+        .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
 
     assert!(!raw_key.is_empty());
     assert_eq!(api_key.user_id, user.id);
@@ -146,7 +161,10 @@ async fn test_create_and_list_api_keys(pool: PgPool) -> sqlx::Result<()> {
     assert_eq!(api_key.rate_limit_per_hour, Some(100));
 
     // List keys
-    let keys = auth_service.list_api_keys(user.id).await?;
+    let keys = auth_service
+        .list_api_keys(user.id)
+        .await
+        .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
     assert_eq!(keys.len(), 1);
     assert_eq!(keys[0].id, api_key.id);
 
@@ -182,6 +200,12 @@ fn test_has_admin_permission() {
     assert!(!self_sensored::services::auth::AuthService::has_admin_permission(&auth_context));
 
     // Test has_permission with non-admin permission
-    assert!(!self_sensored::services::auth::AuthService::has_permission(&auth_context, "admin"));
-    assert!(!self_sensored::services::auth::AuthService::has_permission(&auth_context, "read"));
+    assert!(!self_sensored::services::auth::AuthService::has_permission(
+        &auth_context,
+        "admin"
+    ));
+    assert!(!self_sensored::services::auth::AuthService::has_permission(
+        &auth_context,
+        "read"
+    ));
 }

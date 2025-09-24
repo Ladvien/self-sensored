@@ -24,7 +24,10 @@ fn test_heart_rate_metric_valid_validation() {
     metric.resting_heart_rate = Some(65); // Valid resting heart rate
     metric.heart_rate_variability = Some(45.0); // Valid HRV
 
-    assert!(metric.validate().is_ok(), "Valid heart rate metric should pass validation");
+    assert!(
+        metric.validate().is_ok(),
+        "Valid heart rate metric should pass validation"
+    );
 }
 
 /// Test heart rate metric validation with invalid values
@@ -92,10 +95,13 @@ fn test_heart_rate_metric_serialization() {
 fn test_blood_pressure_metric_valid_validation() {
     let mut metric = create_test_blood_pressure_metric();
     metric.systolic = 120; // Valid systolic
-    metric.diastolic = 80;  // Valid diastolic
+    metric.diastolic = 80; // Valid diastolic
     metric.pulse = Some(70); // Valid pulse
 
-    assert!(metric.validate().is_ok(), "Valid blood pressure metric should pass validation");
+    assert!(
+        metric.validate().is_ok(),
+        "Valid blood pressure metric should pass validation"
+    );
 }
 
 /// Test blood pressure metric validation with invalid values
@@ -158,7 +164,8 @@ fn test_blood_pressure_metric_serialization() {
     assert!(json.contains("\"pulse\":68"));
 
     // Test deserialization
-    let deserialized: BloodPressureMetric = serde_json::from_str(&json).expect("Should deserialize");
+    let deserialized: BloodPressureMetric =
+        serde_json::from_str(&json).expect("Should deserialize");
     assert_eq!(deserialized.systolic, 135);
     assert_eq!(deserialized.diastolic, 85);
     assert_eq!(deserialized.pulse, Some(68));
@@ -175,7 +182,10 @@ fn test_sleep_metric_valid_validation() {
     metric.duration_minutes = Some(480); // 8 hours
     metric.efficiency = Some(85.0); // Valid efficiency
 
-    assert!(metric.validate().is_ok(), "Valid sleep metric should pass validation");
+    assert!(
+        metric.validate().is_ok(),
+        "Valid sleep metric should pass validation"
+    );
 }
 
 /// Test sleep metric validation with invalid values
@@ -253,7 +263,10 @@ fn test_activity_metric_valid_validation() {
     metric.active_energy_burned_kcal = Some(500.0);
     metric.basal_energy_burned_kcal = Some(1800.0);
 
-    assert!(metric.validate().is_ok(), "Valid activity metric should pass validation");
+    assert!(
+        metric.validate().is_ok(),
+        "Valid activity metric should pass validation"
+    );
 }
 
 /// Test activity metric validation with invalid values
@@ -330,7 +343,10 @@ fn test_workout_data_valid_validation() {
     workout.avg_heart_rate = Some(145);
     workout.max_heart_rate = Some(175);
 
-    assert!(workout.validate().is_ok(), "Valid workout data should pass validation");
+    assert!(
+        workout.validate().is_ok(),
+        "Valid workout data should pass validation"
+    );
 }
 
 /// Test workout data validation with invalid values
@@ -426,11 +442,17 @@ fn test_metric_edge_cases() {
         source_device: None,
         created_at: now,
     };
-    assert!(hr_metric.validate().is_ok(), "Heart rate metric with None values should be valid");
+    assert!(
+        hr_metric.validate().is_ok(),
+        "Heart rate metric with None values should be valid"
+    );
 
     // Test activity metric with only minimal fields
     let minimal_activity = create_minimal_activity_metric(user_id);
-    assert!(minimal_activity.validate().is_ok(), "Minimal activity metric should be valid");
+    assert!(
+        minimal_activity.validate().is_ok(),
+        "Minimal activity metric should be valid"
+    );
 
     // Test sleep with minimal duration that matches calculated duration
     let mut minimal_sleep = create_test_sleep_metric();
@@ -442,7 +464,10 @@ fn test_metric_edge_cases() {
     minimal_sleep.rem_sleep_minutes = Some(10);
     minimal_sleep.light_sleep_minutes = Some(5);
     minimal_sleep.awake_minutes = Some(5); // Total: 30 minutes
-    assert!(minimal_sleep.validate().is_ok(), "Short sleep duration should be valid");
+    assert!(
+        minimal_sleep.validate().is_ok(),
+        "Short sleep duration should be valid"
+    );
 }
 
 /// Test validation with custom configuration
@@ -452,7 +477,7 @@ fn test_metric_validation_with_custom_config() {
         heart_rate_min: 30,
         heart_rate_max: 250, // Lower maximum
         systolic_min: 60,
-        systolic_max: 200, // Lower maximum
+        systolic_max: 200,              // Lower maximum
         workout_max_duration_hours: 12, // Shorter maximum
         ..ValidationConfig::default()
     };

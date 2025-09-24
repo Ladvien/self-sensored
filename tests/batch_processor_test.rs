@@ -9,7 +9,6 @@
 /// - Memory usage tracking
 /// - Performance benchmarks
 /// - Deduplication strategies
-
 use chrono::Utc;
 use futures;
 use rust_decimal::Decimal;
@@ -18,23 +17,20 @@ use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 use self_sensored::config::{
-    BatchConfig, SAFE_PARAM_LIMIT,
-    HEART_RATE_PARAMS_PER_RECORD, BLOOD_PRESSURE_PARAMS_PER_RECORD,
-    SLEEP_PARAMS_PER_RECORD, ACTIVITY_PARAMS_PER_RECORD,
-    BODY_MEASUREMENT_PARAMS_PER_RECORD, TEMPERATURE_PARAMS_PER_RECORD,
-    RESPIRATORY_PARAMS_PER_RECORD, WORKOUT_PARAMS_PER_RECORD,
-    BLOOD_GLUCOSE_PARAMS_PER_RECORD, METABOLIC_PARAMS_PER_RECORD,
-    NUTRITION_PARAMS_PER_RECORD, MENSTRUAL_PARAMS_PER_RECORD,
-    FERTILITY_PARAMS_PER_RECORD, ENVIRONMENTAL_PARAMS_PER_RECORD,
-    AUDIO_EXPOSURE_PARAMS_PER_RECORD, SAFETY_EVENT_PARAMS_PER_RECORD,
-    MINDFULNESS_PARAMS_PER_RECORD, MENTAL_HEALTH_PARAMS_PER_RECORD,
-    SYMPTOM_PARAMS_PER_RECORD, HYGIENE_PARAMS_PER_RECORD,
-};
-use self_sensored::models::{
-    HeartRateMetric, BloodPressureMetric, SleepMetric, HealthMetric,
-    IngestData, IngestPayload, WorkoutData,
+    BatchConfig, ACTIVITY_PARAMS_PER_RECORD, AUDIO_EXPOSURE_PARAMS_PER_RECORD,
+    BLOOD_GLUCOSE_PARAMS_PER_RECORD, BLOOD_PRESSURE_PARAMS_PER_RECORD,
+    BODY_MEASUREMENT_PARAMS_PER_RECORD, ENVIRONMENTAL_PARAMS_PER_RECORD,
+    FERTILITY_PARAMS_PER_RECORD, HEART_RATE_PARAMS_PER_RECORD, HYGIENE_PARAMS_PER_RECORD,
+    MENSTRUAL_PARAMS_PER_RECORD, MENTAL_HEALTH_PARAMS_PER_RECORD, METABOLIC_PARAMS_PER_RECORD,
+    MINDFULNESS_PARAMS_PER_RECORD, NUTRITION_PARAMS_PER_RECORD, RESPIRATORY_PARAMS_PER_RECORD,
+    SAFETY_EVENT_PARAMS_PER_RECORD, SAFE_PARAM_LIMIT, SLEEP_PARAMS_PER_RECORD,
+    SYMPTOM_PARAMS_PER_RECORD, TEMPERATURE_PARAMS_PER_RECORD, WORKOUT_PARAMS_PER_RECORD,
 };
 use self_sensored::models::enums::{ActivityContext, WorkoutType};
+use self_sensored::models::{
+    BloodPressureMetric, HealthMetric, HeartRateMetric, IngestData, IngestPayload, SleepMetric,
+    WorkoutData,
+};
 use self_sensored::services::batch_processor::BatchProcessor;
 
 /// Test helper to create a test database pool
@@ -45,8 +41,14 @@ use self_sensored::services::batch_processor::BatchProcessor;
 /// To run without database (parameter limit tests only):
 /// cargo test test_postgresql_parameter_limits_all_metrics --test batch_processor_test
 async fn create_test_pool() -> PgPool {
+    // Load .env file
+    dotenv::dotenv().ok();
+
     let database_url = std::env::var("TEST_DATABASE_URL")
-        .unwrap_or_else(|_| "postgresql://postgres:password@localhost:5432/health_export_test".to_string());
+        .or_else(|_| std::env::var("DATABASE_URL"))
+        .unwrap_or_else(|_| {
+            "postgresql://postgres:password@localhost:5432/health_export_test".to_string()
+        });
 
     PgPool::connect(&database_url)
         .await
@@ -72,13 +74,27 @@ async fn create_test_user(pool: &PgPool) -> Uuid {
 /// Test helper to clean up test data
 async fn cleanup_test_data(pool: &PgPool, user_id: Uuid) {
     let tables = vec![
-        "heart_rate_metrics", "blood_pressure_metrics", "sleep_metrics",
-        "activity_metrics", "body_measurements", "temperature_metrics",
-        "respiratory_metrics", "workouts", "blood_glucose_metrics",
-        "metabolic_metrics", "nutrition_metrics", "menstrual_health",
-        "fertility_tracking", "environmental_metrics", "audio_exposure_metrics",
-        "safety_events", "mindfulness_sessions", "mental_health_metrics",
-        "symptom_tracking", "hygiene_events", "users"
+        "heart_rate_metrics",
+        "blood_pressure_metrics",
+        "sleep_metrics",
+        "activity_metrics",
+        "body_measurements",
+        "temperature_metrics",
+        "respiratory_metrics",
+        "workouts",
+        "blood_glucose_metrics",
+        "metabolic_metrics",
+        "nutrition_metrics",
+        "menstrual_health",
+        "fertility_tracking",
+        "environmental_metrics",
+        "audio_exposure_metrics",
+        "safety_events",
+        "mindfulness_sessions",
+        "mental_health_metrics",
+        "symptom_tracking",
+        "hygiene_events",
+        "users",
     ];
 
     for table in tables {
@@ -107,26 +123,102 @@ async fn test_postgresql_parameter_limits_all_metrics() {
 
     // Test that all chunk sizes respect PostgreSQL 65,535 parameter limit
     let test_cases = vec![
-        ("heart_rate", config.heart_rate_chunk_size, HEART_RATE_PARAMS_PER_RECORD),
-        ("blood_pressure", config.blood_pressure_chunk_size, BLOOD_PRESSURE_PARAMS_PER_RECORD),
+        (
+            "heart_rate",
+            config.heart_rate_chunk_size,
+            HEART_RATE_PARAMS_PER_RECORD,
+        ),
+        (
+            "blood_pressure",
+            config.blood_pressure_chunk_size,
+            BLOOD_PRESSURE_PARAMS_PER_RECORD,
+        ),
         ("sleep", config.sleep_chunk_size, SLEEP_PARAMS_PER_RECORD),
-        ("activity", config.activity_chunk_size, ACTIVITY_PARAMS_PER_RECORD),
-        ("body_measurement", config.body_measurement_chunk_size, BODY_MEASUREMENT_PARAMS_PER_RECORD),
-        ("temperature", config.temperature_chunk_size, TEMPERATURE_PARAMS_PER_RECORD),
-        ("respiratory", config.respiratory_chunk_size, RESPIRATORY_PARAMS_PER_RECORD),
-        ("workout", config.workout_chunk_size, WORKOUT_PARAMS_PER_RECORD),
-        ("blood_glucose", config.blood_glucose_chunk_size, BLOOD_GLUCOSE_PARAMS_PER_RECORD),
-        ("metabolic", config.metabolic_chunk_size, METABOLIC_PARAMS_PER_RECORD),
-        ("nutrition", config.nutrition_chunk_size, NUTRITION_PARAMS_PER_RECORD),
-        ("menstrual", config.menstrual_chunk_size, MENSTRUAL_PARAMS_PER_RECORD),
-        ("fertility", config.fertility_chunk_size, FERTILITY_PARAMS_PER_RECORD),
-        ("environmental", config.environmental_chunk_size, ENVIRONMENTAL_PARAMS_PER_RECORD),
-        ("audio_exposure", config.audio_exposure_chunk_size, AUDIO_EXPOSURE_PARAMS_PER_RECORD),
-        ("safety_event", config.safety_event_chunk_size, SAFETY_EVENT_PARAMS_PER_RECORD),
-        ("mindfulness", config.mindfulness_chunk_size, MINDFULNESS_PARAMS_PER_RECORD),
-        ("mental_health", config.mental_health_chunk_size, MENTAL_HEALTH_PARAMS_PER_RECORD),
-        ("symptom", config.symptom_chunk_size, SYMPTOM_PARAMS_PER_RECORD),
-        ("hygiene", config.hygiene_chunk_size, HYGIENE_PARAMS_PER_RECORD),
+        (
+            "activity",
+            config.activity_chunk_size,
+            ACTIVITY_PARAMS_PER_RECORD,
+        ),
+        (
+            "body_measurement",
+            config.body_measurement_chunk_size,
+            BODY_MEASUREMENT_PARAMS_PER_RECORD,
+        ),
+        (
+            "temperature",
+            config.temperature_chunk_size,
+            TEMPERATURE_PARAMS_PER_RECORD,
+        ),
+        (
+            "respiratory",
+            config.respiratory_chunk_size,
+            RESPIRATORY_PARAMS_PER_RECORD,
+        ),
+        (
+            "workout",
+            config.workout_chunk_size,
+            WORKOUT_PARAMS_PER_RECORD,
+        ),
+        (
+            "blood_glucose",
+            config.blood_glucose_chunk_size,
+            BLOOD_GLUCOSE_PARAMS_PER_RECORD,
+        ),
+        (
+            "metabolic",
+            config.metabolic_chunk_size,
+            METABOLIC_PARAMS_PER_RECORD,
+        ),
+        (
+            "nutrition",
+            config.nutrition_chunk_size,
+            NUTRITION_PARAMS_PER_RECORD,
+        ),
+        (
+            "menstrual",
+            config.menstrual_chunk_size,
+            MENSTRUAL_PARAMS_PER_RECORD,
+        ),
+        (
+            "fertility",
+            config.fertility_chunk_size,
+            FERTILITY_PARAMS_PER_RECORD,
+        ),
+        (
+            "environmental",
+            config.environmental_chunk_size,
+            ENVIRONMENTAL_PARAMS_PER_RECORD,
+        ),
+        (
+            "audio_exposure",
+            config.audio_exposure_chunk_size,
+            AUDIO_EXPOSURE_PARAMS_PER_RECORD,
+        ),
+        (
+            "safety_event",
+            config.safety_event_chunk_size,
+            SAFETY_EVENT_PARAMS_PER_RECORD,
+        ),
+        (
+            "mindfulness",
+            config.mindfulness_chunk_size,
+            MINDFULNESS_PARAMS_PER_RECORD,
+        ),
+        (
+            "mental_health",
+            config.mental_health_chunk_size,
+            MENTAL_HEALTH_PARAMS_PER_RECORD,
+        ),
+        (
+            "symptom",
+            config.symptom_chunk_size,
+            SYMPTOM_PARAMS_PER_RECORD,
+        ),
+        (
+            "hygiene",
+            config.hygiene_chunk_size,
+            HYGIENE_PARAMS_PER_RECORD,
+        ),
     ];
 
     for (metric_type, chunk_size, params_per_record) in test_cases {
@@ -135,12 +227,21 @@ async fn test_postgresql_parameter_limits_all_metrics() {
         assert!(
             total_params <= SAFE_PARAM_LIMIT,
             "{} chunk size {} * {} params = {} exceeds safe limit {}",
-            metric_type, chunk_size, params_per_record, total_params, SAFE_PARAM_LIMIT
+            metric_type,
+            chunk_size,
+            params_per_record,
+            total_params,
+            SAFE_PARAM_LIMIT
         );
 
-        println!("{}: {} chunks * {} params = {} total params ({}% of limit)",
-            metric_type, chunk_size, params_per_record, total_params,
-            (total_params * 100) / SAFE_PARAM_LIMIT);
+        println!(
+            "{}: {} chunks * {} params = {} total params ({}% of limit)",
+            metric_type,
+            chunk_size,
+            params_per_record,
+            total_params,
+            (total_params * 100) / SAFE_PARAM_LIMIT
+        );
     }
 }
 
@@ -160,7 +261,9 @@ async fn test_maximum_safe_chunk_sizes() {
     };
 
     // Validate config is safe
-    config.validate().expect("Maximum safe chunk sizes should be valid");
+    config
+        .validate()
+        .expect("Maximum safe chunk sizes should be valid");
 
     let processor = BatchProcessor::with_config(pool.clone(), config);
 
@@ -175,8 +278,14 @@ async fn test_maximum_safe_chunk_sizes() {
 
     let result = processor.process_batch(user_id, payload).await;
 
-    assert!(result.processed_count > 0, "Should process large batch with max chunk sizes");
-    assert_eq!(result.failed_count, 0, "Should have no failures with safe chunk sizes");
+    assert!(
+        result.processed_count > 0,
+        "Should process large batch with max chunk sizes"
+    );
+    assert_eq!(
+        result.failed_count, 0,
+        "Should have no failures with safe chunk sizes"
+    );
 
     cleanup_test_data(&pool, user_id).await;
 }
@@ -228,10 +337,21 @@ async fn test_chunk_size_optimization_performance() {
         let result = processor.process_batch(user_id, payload).await;
         let elapsed = start.elapsed();
 
-        assert!(result.processed_count > 0, "Config {} should process metrics", i);
-        assert_eq!(result.failed_count, 0, "Config {} should have no failures", i);
+        assert!(
+            result.processed_count > 0,
+            "Config {} should process metrics",
+            i
+        );
+        assert_eq!(
+            result.failed_count, 0,
+            "Config {} should have no failures",
+            i
+        );
 
-        println!("Config {}: Processed {} metrics in {:?}", i, result.processed_count, elapsed);
+        println!(
+            "Config {}: Processed {} metrics in {:?}",
+            i, result.processed_count, elapsed
+        );
 
         // Clean up between tests
         cleanup_test_data(&pool, user_id).await;
@@ -270,8 +390,14 @@ async fn test_parallel_vs_sequential_processing() {
     let sequential_result = processor.process_batch(user_id, payload).await;
     let sequential_time = start.elapsed();
 
-    assert!(sequential_result.processed_count > 0, "Sequential processing should work");
-    assert_eq!(sequential_result.failed_count, 0, "Sequential processing should have no failures");
+    assert!(
+        sequential_result.processed_count > 0,
+        "Sequential processing should work"
+    );
+    assert_eq!(
+        sequential_result.failed_count, 0,
+        "Sequential processing should have no failures"
+    );
 
     // Clean up and reset
     cleanup_test_data(&pool, user_id).await;
@@ -295,12 +421,24 @@ async fn test_parallel_vs_sequential_processing() {
     let parallel_result = processor.process_batch(user_id, payload).await;
     let parallel_time = start.elapsed();
 
-    assert!(parallel_result.processed_count > 0, "Parallel processing should work");
-    assert_eq!(parallel_result.failed_count, 0, "Parallel processing should have no failures");
+    assert!(
+        parallel_result.processed_count > 0,
+        "Parallel processing should work"
+    );
+    assert_eq!(
+        parallel_result.failed_count, 0,
+        "Parallel processing should have no failures"
+    );
 
     // Compare performance
-    println!("Sequential: {:?}, Parallel: {:?}", sequential_time, parallel_time);
-    println!("Parallel speedup: {:.2}x", sequential_time.as_millis() as f64 / parallel_time.as_millis() as f64);
+    println!(
+        "Sequential: {:?}, Parallel: {:?}",
+        sequential_time, parallel_time
+    );
+    println!(
+        "Parallel speedup: {:.2}x",
+        sequential_time.as_millis() as f64 / parallel_time.as_millis() as f64
+    );
 
     // Parallel should typically be faster for large batches, but allow some variance
     // Don't assert this as it depends on system resources and database performance
@@ -314,26 +452,28 @@ async fn test_concurrent_batch_processing() {
     let pool = create_test_pool().await;
 
     // Create multiple users for concurrent testing
-    let user_ids: Vec<Uuid> = futures::future::join_all(
-        (0..3).map(|_| create_test_user(&pool))
-    ).await;
+    let user_ids: Vec<Uuid> =
+        futures::future::join_all((0..3).map(|_| create_test_user(&pool))).await;
 
     // Create concurrent batch processing tasks
-    let tasks: Vec<_> = user_ids.iter().map(|&user_id| {
-        let pool_clone = pool.clone();
-        let metrics = create_sample_mixed_metrics(500);
-        let payload = IngestPayload {
-            data: IngestData {
-                metrics,
-                workouts: vec![],
-            },
-        };
+    let tasks: Vec<_> = user_ids
+        .iter()
+        .map(|&user_id| {
+            let pool_clone = pool.clone();
+            let metrics = create_sample_mixed_metrics(500);
+            let payload = IngestPayload {
+                data: IngestData {
+                    metrics,
+                    workouts: vec![],
+                },
+            };
 
-        tokio::spawn(async move {
-            let processor = BatchProcessor::new(pool_clone);
-            processor.process_batch(user_id, payload).await
+            tokio::spawn(async move {
+                let processor = BatchProcessor::new(pool_clone);
+                processor.process_batch(user_id, payload).await
+            })
         })
-    }).collect();
+        .collect();
 
     // Wait for all tasks to complete
     let results = futures::future::join_all(tasks).await;
@@ -341,8 +481,16 @@ async fn test_concurrent_batch_processing() {
     // Verify all batches processed successfully
     for (i, result) in results.into_iter().enumerate() {
         let batch_result = result.expect("Task should complete");
-        assert!(batch_result.processed_count > 0, "Batch {} should process metrics", i);
-        assert_eq!(batch_result.failed_count, 0, "Batch {} should have no failures", i);
+        assert!(
+            batch_result.processed_count > 0,
+            "Batch {} should process metrics",
+            i
+        );
+        assert_eq!(
+            batch_result.failed_count, 0,
+            "Batch {} should have no failures",
+            i
+        );
     }
 
     // Clean up all users
@@ -389,7 +537,10 @@ async fn test_retry_logic_with_backoff() {
     assert_eq!(result.retry_attempts, 0, "Should not retry valid data");
 
     // Test should complete quickly without retries
-    assert!(elapsed < Duration::from_millis(1000), "Valid data should process quickly");
+    assert!(
+        elapsed < Duration::from_millis(1000),
+        "Valid data should process quickly"
+    );
 
     cleanup_test_data(&pool, user_id).await;
 }
@@ -420,7 +571,10 @@ async fn test_memory_limit_enforcement() {
     let result = processor.process_batch(user_id, payload).await;
 
     // Should still process successfully (memory limit is guidance, not hard limit)
-    assert!(result.processed_count > 0, "Should process within memory constraints");
+    assert!(
+        result.processed_count > 0,
+        "Should process within memory constraints"
+    );
 
     // Memory tracking should be available
     if let Some(memory_peak) = result.memory_peak_mb {
@@ -457,7 +611,10 @@ async fn test_error_handling_invalid_data() {
     let result = processor.process_batch(user_id, payload).await;
 
     // Should handle gracefully - individual metric failures don't fail the whole batch
-    assert!(result.processed_count > 0 || result.failed_count > 0, "Should handle invalid data gracefully");
+    assert!(
+        result.processed_count > 0 || result.failed_count > 0,
+        "Should handle invalid data gracefully"
+    );
 
     // Check if any errors were reported
     if !result.errors.is_empty() {
@@ -495,10 +652,7 @@ async fn benchmark_10k_metrics_all_types() {
     let workouts = create_sample_workouts(500);
 
     let payload = IngestPayload {
-        data: IngestData {
-            metrics,
-            workouts,
-        },
+        data: IngestData { metrics, workouts },
     };
 
     println!("Starting 10K+ metrics benchmark...");
@@ -507,15 +661,24 @@ async fn benchmark_10k_metrics_all_types() {
     let elapsed = start.elapsed();
 
     // Performance requirements
-    assert_eq!(result.processed_count, 10500, "Should process all 10,500 items");
+    assert_eq!(
+        result.processed_count, 10500,
+        "Should process all 10,500 items"
+    );
     assert_eq!(result.failed_count, 0, "Should have no failures");
-    assert!(elapsed < Duration::from_secs(30),
-        "10K+ metrics should process in <30s, took {:?}", elapsed);
+    assert!(
+        elapsed < Duration::from_secs(30),
+        "10K+ metrics should process in <30s, took {:?}",
+        elapsed
+    );
 
     println!("BENCHMARK RESULTS:");
     println!("  Total items: 10,500 (10K metrics + 500 workouts)");
     println!("  Processing time: {:?}", elapsed);
-    println!("  Throughput: {:.2} items/sec", 10500.0 / elapsed.as_secs_f64());
+    println!(
+        "  Throughput: {:.2} items/sec",
+        10500.0 / elapsed.as_secs_f64()
+    );
     println!("  Memory peak: {:?} MB", result.memory_peak_mb);
     println!("  Retry attempts: {}", result.retry_attempts);
 
@@ -534,13 +697,15 @@ async fn test_maximum_parameter_usage() {
 
     // Create config that uses larger chunk sizes to test parameter limits
     let config = BatchConfig {
-        heart_rate_chunk_size: 4000, // 11 params per record = 44,000 params
+        heart_rate_chunk_size: 4000,     // 11 params per record = 44,000 params
         blood_pressure_chunk_size: 8000, // 6 params per record = 48,000 params
         enable_parallel_processing: true,
         ..BatchConfig::default()
     };
 
-    config.validate().expect("Config should be within PostgreSQL limits");
+    config
+        .validate()
+        .expect("Config should be within PostgreSQL limits");
 
     let processor = BatchProcessor::with_config(pool.clone(), config);
 
@@ -559,8 +724,14 @@ async fn test_maximum_parameter_usage() {
     let elapsed = start.elapsed();
 
     assert_eq!(result.processed_count, 3000, "Should process all metrics");
-    assert_eq!(result.failed_count, 0, "Should handle large batch without failure");
-    assert!(elapsed < Duration::from_secs(20), "Should process efficiently");
+    assert_eq!(
+        result.failed_count, 0,
+        "Should handle large batch without failure"
+    );
+    assert!(
+        elapsed < Duration::from_secs(20),
+        "Should process efficiently"
+    );
 
     println!("Processed 3K metrics in {:?}", elapsed);
 
@@ -663,4 +834,3 @@ fn create_sample_workouts(count: usize) -> Vec<WorkoutData> {
         })
         .collect()
 }
-

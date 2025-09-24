@@ -6,14 +6,12 @@ use std::collections::HashMap;
 use std::time::Duration;
 use uuid::Uuid;
 
-use self_sensored::handlers::query::{
-    HealthSummary, PaginationInfo, QueryParams, QueryResponse,
-};
+use self_sensored::handlers::query::{HealthSummary, PaginationInfo, QueryParams, QueryResponse};
 use self_sensored::models::db::HeartRateRecord;
+use self_sensored::models::db::User;
 use self_sensored::services::auth::AuthContext;
 use self_sensored::services::cache::{CacheConfig, CacheService};
 use self_sensored::services::cached_queries::CachedQueryService;
-use self_sensored::models::db::User;
 
 // Test database setup helpers
 async fn setup_test_database() -> PgPool {
@@ -76,11 +74,7 @@ async fn test_cached_query_service_creation() {
     let cache_service = create_test_cache_service().await;
     let cache_prefix = "test_health_export".to_string();
 
-    let cached_query_service = CachedQueryService::new(
-        pool.clone(),
-        cache_service,
-        cache_prefix,
-    );
+    let cached_query_service = CachedQueryService::new(pool.clone(), cache_service, cache_prefix);
 
     // Service should be created successfully
     // We can't test much more without a real database connection
@@ -146,7 +140,7 @@ async fn test_query_params_consistency() {
 /// Test cache key generation for different query types
 #[tokio::test]
 async fn test_cache_key_generation_for_queries() {
-    use self_sensored::services::cache::{CacheKey, generate_query_hash};
+    use self_sensored::services::cache::{generate_query_hash, CacheKey};
 
     let user_id = Uuid::new_v4();
     let params = QueryParams {
@@ -242,11 +236,7 @@ async fn test_cache_invalidation_scenarios() {
     let cache_service = create_test_cache_service().await;
     let cache_prefix = "test_health_export".to_string();
 
-    let cached_query_service = CachedQueryService::new(
-        pool,
-        cache_service,
-        cache_prefix,
-    );
+    let cached_query_service = CachedQueryService::new(pool, cache_service, cache_prefix);
 
     let user_id = Uuid::new_v4();
 
@@ -265,11 +255,7 @@ async fn test_cache_statistics_retrieval() {
     let cache_service = create_test_cache_service().await;
     let cache_prefix = "test_health_export".to_string();
 
-    let cached_query_service = CachedQueryService::new(
-        pool,
-        cache_service,
-        cache_prefix,
-    );
+    let cached_query_service = CachedQueryService::new(pool, cache_service, cache_prefix);
 
     let stats = cached_query_service.get_cache_stats().await;
 
@@ -320,12 +306,11 @@ async fn test_query_response_structure() {
     };
 
     // Test serialization
-    let serialized = serde_json::to_string(&response)
-        .expect("Should serialize QueryResponse");
+    let serialized = serde_json::to_string(&response).expect("Should serialize QueryResponse");
 
     // Test deserialization
-    let deserialized: QueryResponse<HeartRateRecord> = serde_json::from_str(&serialized)
-        .expect("Should deserialize QueryResponse");
+    let deserialized: QueryResponse<HeartRateRecord> =
+        serde_json::from_str(&serialized).expect("Should deserialize QueryResponse");
 
     assert_eq!(deserialized.data.len(), 2);
     assert_eq!(deserialized.pagination.page, 1);
@@ -336,8 +321,8 @@ async fn test_query_response_structure() {
 #[tokio::test]
 async fn test_health_summary_structure() {
     use self_sensored::handlers::query::{
-        ActivitySummary, BloodPressureSummary, DateRange,
-        HeartRateSummary, SleepSummary, WorkoutSummary,
+        ActivitySummary, BloodPressureSummary, DateRange, HeartRateSummary, SleepSummary,
+        WorkoutSummary,
     };
 
     let user_id = Uuid::new_v4();
@@ -397,12 +382,12 @@ async fn test_health_summary_structure() {
     };
 
     // Test serialization
-    let serialized = serde_json::to_string(&health_summary)
-        .expect("Should serialize HealthSummary");
+    let serialized =
+        serde_json::to_string(&health_summary).expect("Should serialize HealthSummary");
 
     // Test deserialization
-    let deserialized: HealthSummary = serde_json::from_str(&serialized)
-        .expect("Should deserialize HealthSummary");
+    let deserialized: HealthSummary =
+        serde_json::from_str(&serialized).expect("Should deserialize HealthSummary");
 
     assert_eq!(deserialized.user_id, user_id);
     assert!(deserialized.heart_rate.is_some());
@@ -494,18 +479,14 @@ async fn test_cache_ttl_scenarios() {
     let cache_service = create_test_cache_service().await;
     let cache_prefix = "test_health_export".to_string();
 
-    let _cached_query_service = CachedQueryService::new(
-        pool,
-        cache_service,
-        cache_prefix,
-    );
+    let _cached_query_service = CachedQueryService::new(pool, cache_service, cache_prefix);
 
     // Test TTL values for different types of cached data
     let ttl_scenarios = vec![
-        ("query_data", Duration::from_secs(600)),     // 10 minutes for query data
-        ("summary_data", Duration::from_secs(1800)),  // 30 minutes for summaries
-        ("api_key_data", Duration::from_secs(300)),   // 5 minutes for API keys
-        ("user_data", Duration::from_secs(600)),      // 10 minutes for user data
+        ("query_data", Duration::from_secs(600)), // 10 minutes for query data
+        ("summary_data", Duration::from_secs(1800)), // 30 minutes for summaries
+        ("api_key_data", Duration::from_secs(300)), // 5 minutes for API keys
+        ("user_data", Duration::from_secs(600)),  // 10 minutes for user data
     ];
 
     for (data_type, expected_ttl) in ttl_scenarios {
@@ -592,8 +573,11 @@ async fn test_cache_with_query_parameter_variations() {
     // Verify all hashes are unique (different parameters should produce different hashes)
     for i in 0..hashes.len() {
         for j in i + 1..hashes.len() {
-            assert_ne!(hashes[i], hashes[j],
-                "Hash collision detected between query variations {} and {}", i, j);
+            assert_ne!(
+                hashes[i], hashes[j],
+                "Hash collision detected between query variations {} and {}",
+                i, j
+            );
         }
     }
 
@@ -612,11 +596,7 @@ async fn test_cache_service_integration() {
     let cache_service = create_test_cache_service().await;
     let cache_prefix = "test_health_export".to_string();
 
-    let cached_query_service = CachedQueryService::new(
-        pool,
-        cache_service,
-        cache_prefix,
-    );
+    let cached_query_service = CachedQueryService::new(pool, cache_service, cache_prefix);
 
     // Test that the service integrates properly with cache and database
     // In a real test environment, we would test actual query caching
@@ -636,11 +616,7 @@ async fn test_cached_query_error_handling() {
     let cache_service = create_test_cache_service().await;
     let cache_prefix = "test_health_export".to_string();
 
-    let _cached_query_service = CachedQueryService::new(
-        pool,
-        cache_service,
-        cache_prefix,
-    );
+    let _cached_query_service = CachedQueryService::new(pool, cache_service, cache_prefix);
 
     // Test scenarios where cache operations might fail
     // With disabled cache, operations should gracefully handle the lack of caching
@@ -697,8 +673,10 @@ async fn test_cache_consistency_across_data_types() {
     // All keys should be unique
     for i in 0..redis_keys.len() {
         for j in i + 1..redis_keys.len() {
-            assert_ne!(redis_keys[i], redis_keys[j],
-                "Cache key collision detected between types");
+            assert_ne!(
+                redis_keys[i], redis_keys[j],
+                "Cache key collision detected between types"
+            );
         }
     }
 

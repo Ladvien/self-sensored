@@ -16,7 +16,7 @@ mod transformation_utils {
         let timestamp = Utc::now().to_rfc3339();
 
         IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     // Heart Rate
                     IosMetric {
@@ -169,7 +169,7 @@ mod ios_to_internal_transformation_tests {
     fn test_heart_rate_transformation() {
         let user_id = Uuid::new_v4();
         let ios_payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     IosMetric {
                         name: "HKQuantityTypeIdentifierHeartRate".to_string(),
@@ -210,7 +210,7 @@ mod ios_to_internal_transformation_tests {
         let timestamp = Utc::now().to_rfc3339();
 
         let ios_payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     IosMetric {
                         name: "HKQuantityTypeIdentifierBloodPressureSystolic".to_string(),
@@ -266,7 +266,7 @@ mod ios_to_internal_transformation_tests {
         let sleep_end = Utc::now();
 
         let ios_payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     IosMetric {
                         name: "HKCategoryTypeIdentifierSleepAnalysis".to_string(),
@@ -308,7 +308,7 @@ mod ios_to_internal_transformation_tests {
     fn test_activity_metrics_transformation() {
         let user_id = Uuid::new_v4();
         let ios_payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     create_metric_with_units("HKQuantityTypeIdentifierStepCount", 12000.0, "count"),
                     create_metric_with_units("HKQuantityTypeIdentifierDistanceWalkingRunning", 8500.0, "m"),
@@ -343,7 +343,7 @@ mod ios_to_internal_transformation_tests {
         let workout_end = Utc::now();
 
         let ios_payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![],
                 workouts: vec![
                     IosWorkout {
@@ -390,7 +390,7 @@ mod unit_conversion_transformation_tests {
 
         // Test meters to meters (no conversion)
         let meters_payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     create_metric_with_units("HKQuantityTypeIdentifierDistanceWalkingRunning", 5000.0, "m")
                 ],
@@ -406,7 +406,7 @@ mod unit_conversion_transformation_tests {
 
         // Test kilometers to meters
         let km_payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     create_metric_with_units("HKQuantityTypeIdentifierDistanceWalkingRunning", 5.0, "km")
                 ],
@@ -422,7 +422,7 @@ mod unit_conversion_transformation_tests {
 
         // Test miles to meters
         let miles_payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     create_metric_with_units("HKQuantityTypeIdentifierDistanceWalkingRunning", 3.1, "mi")
                 ],
@@ -444,7 +444,7 @@ mod unit_conversion_transformation_tests {
 
         // Test kcal (no conversion needed)
         let kcal_payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     create_metric_with_units("HKQuantityTypeIdentifierActiveEnergyBurned", 300.0, "kcal")
                 ],
@@ -460,7 +460,7 @@ mod unit_conversion_transformation_tests {
 
         // Test kJ to kcal conversion
         let kj_payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     create_metric_with_units("HKQuantityTypeIdentifierActiveEnergyBurned", 1255.2, "kJ")
                 ],
@@ -482,7 +482,7 @@ mod unit_conversion_transformation_tests {
 
         // Test kilograms (no conversion)
         let kg_payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     create_metric_with_units("HKQuantityTypeIdentifierBodyMass", 70.0, "kg")
                 ],
@@ -496,7 +496,7 @@ mod unit_conversion_transformation_tests {
 
         // Test pounds to kilograms
         let lb_payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     create_metric_with_units("HKQuantityTypeIdentifierBodyMass", 154.32, "lb")
                 ],
@@ -514,7 +514,7 @@ mod unit_conversion_transformation_tests {
 
         // Test Celsius (no conversion)
         let celsius_payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     create_metric_with_units("HKQuantityTypeIdentifierBodyTemperature", 37.0, "degC")
                 ],
@@ -526,7 +526,7 @@ mod unit_conversion_transformation_tests {
 
         // Test Fahrenheit to Celsius
         let fahrenheit_payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     create_metric_with_units("HKQuantityTypeIdentifierBodyTemperature", 98.6, "degF")
                 ],
@@ -559,7 +559,7 @@ mod timestamp_transformation_tests {
 
         for date_str in &date_formats {
             let payload = IosIngestPayload {
-                data: IosIngestData {
+                data: IosIngestData::Legacy {
                     metrics: vec![
                         IosMetric {
                             name: "HKQuantityTypeIdentifierHeartRate".to_string(),
@@ -600,7 +600,7 @@ mod timestamp_transformation_tests {
         let end_time = Utc::now();
 
         let payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     IosMetric {
                         name: "HKCategoryTypeIdentifierSleepAnalysis".to_string(),
@@ -638,7 +638,7 @@ mod timestamp_transformation_tests {
         let user_id = Uuid::new_v4();
 
         let payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     IosMetric {
                         name: "HKQuantityTypeIdentifierHeartRate".to_string(),
@@ -681,7 +681,7 @@ mod data_aggregation_transformation_tests {
 
         // Multiple blood pressure readings at the same time should be aggregated
         let payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     IosMetric {
                         name: "HKQuantityTypeIdentifierBloodPressureSystolic".to_string(),
@@ -759,7 +759,7 @@ mod data_aggregation_transformation_tests {
 
         // Multiple activity readings for the same day
         let payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     IosMetric {
                         name: "HKQuantityTypeIdentifierStepCount".to_string(),
@@ -841,7 +841,7 @@ mod data_aggregation_transformation_tests {
 
         // Multiple sleep stages for the same sleep session
         let payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     IosMetric {
                         name: "HKCategoryTypeIdentifierSleepAnalysis".to_string(),
@@ -909,7 +909,7 @@ mod error_handling_transformation_tests {
         let user_id = Uuid::new_v4();
 
         let payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     IosMetric {
                         name: "UnknownMetricType".to_string(),
@@ -942,7 +942,7 @@ mod error_handling_transformation_tests {
         let user_id = Uuid::new_v4();
 
         let payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     IosMetric {
                         name: "HKQuantityTypeIdentifierHeartRate".to_string(),
@@ -974,7 +974,7 @@ mod error_handling_transformation_tests {
         let user_id = Uuid::new_v4();
 
         let payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     IosMetric {
                         name: "HKQuantityTypeIdentifierHeartRate".to_string(),
@@ -1017,7 +1017,7 @@ mod error_handling_transformation_tests {
         let user_id = Uuid::new_v4();
 
         let payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     transformation_utils::create_metric_with_units("HKQuantityTypeIdentifierStepCount", -100.0, "count"),
                     transformation_utils::create_metric_with_units("HKQuantityTypeIdentifierHeartRate", -50.0, "count/min"),

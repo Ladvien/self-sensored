@@ -209,9 +209,18 @@ fn test_clone_implementation() {
 
     assert_eq!(config.max_processing_seconds, cloned.max_processing_seconds);
     assert_eq!(config.large_batch_threshold, cloned.large_batch_threshold);
-    assert_eq!(config.json_parse_timeout_secs, cloned.json_parse_timeout_secs);
-    assert_eq!(config.connection_timeout_secs, cloned.connection_timeout_secs);
-    assert_eq!(config.background_job_threshold, cloned.background_job_threshold);
+    assert_eq!(
+        config.json_parse_timeout_secs,
+        cloned.json_parse_timeout_secs
+    );
+    assert_eq!(
+        config.connection_timeout_secs,
+        cloned.connection_timeout_secs
+    );
+    assert_eq!(
+        config.background_job_threshold,
+        cloned.background_job_threshold
+    );
 }
 
 #[tokio::test]

@@ -113,7 +113,7 @@ mod test_utils {
 
     pub fn create_ios_payload_with_heart_rate(bpm: f64) -> IosIngestPayload {
         IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![IosMetric {
                     name: "HKQuantityTypeIdentifierHeartRate".to_string(),
                     units: Some("count/min".to_string()),
@@ -138,7 +138,7 @@ mod test_utils {
     ) -> IosIngestPayload {
         let timestamp = Utc::now().to_rfc3339();
         IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![
                     IosMetric {
                         name: "HKQuantityTypeIdentifierBloodPressureSystolic".to_string(),
@@ -1214,7 +1214,7 @@ mod data_format_validation_tests {
     fn test_malformed_json_structures() {
         // Test empty metrics array
         let empty_payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![],
                 workouts: vec![],
             },
@@ -1224,7 +1224,7 @@ mod data_format_validation_tests {
 
         // Test metric with empty data array
         let empty_data_payload = IosIngestPayload {
-            data: IosIngestData {
+            data: IosIngestData::Legacy {
                 metrics: vec![IosMetric {
                     name: "HKQuantityTypeIdentifierHeartRate".to_string(),
                     units: Some("count/min".to_string()),

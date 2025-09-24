@@ -185,6 +185,7 @@ pub fn create_test_batch_config() -> BatchConfig {
         enable_dual_write_activity_metrics: false,
         enable_reproductive_health_encryption: true,
         reproductive_health_audit_logging: true,
+        max_concurrent_metric_types: 8,
     }
 }
 
