@@ -1,3 +1,11 @@
+> ## Archived — consolidated
+>
+> This project has been superseded and archived on 2026-04-18. Active development
+> has moved into a single monorepo (iOS app + REST API + database DDLs + MCP server):
+> **[home-still/apple_health_source](https://github.com/home-still/apple_health_source)**.
+>
+> No further commits will be accepted here. The code and history remain for reference.
+
 # Self-Sensored Health Export API
 
 A production-ready REST API built in Rust for receiving and storing health data from the Auto Health Export iOS application. Designed for high data integrity, scalability, and comprehensive health metrics processing.
